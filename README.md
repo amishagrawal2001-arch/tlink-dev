@@ -18,11 +18,16 @@
 
 ----
 
-### Downloads:
+### About Tlink AI
 
-* [Latest release](https://github.com/Eugeny/tlink/releases/latest)
-* [Repositories](https://packagecloud.io/eugeny/tlink): [Debian/Ubuntu-based](https://packagecloud.io/eugeny/tlink/install#bash-deb), [RPM-based](https://packagecloud.io/eugeny/tlink/install#bash-rpm)
-* [Latest nightly build](https://nightly.link/Eugeny/tlink/workflows/build/master)
+Tlink AI is a fork of [Tlink](https://tlink.sh) with enhanced AI capabilities, integrated code editor, and business-focused features. See [BUSINESS_ENHANCEMENTS.md](./BUSINESS_ENHANCEMENTS.md) for detailed enhancement plans.
+
+### Key Features
+
+* **AI-Powered Terminal Assistant** - Context-aware command suggestions and automated troubleshooting
+* **Integrated Code Editor** - Monaco-based editor with directory explorer, file management, and run-in-terminal capabilities
+* **Enhanced Collaboration** - Workspace management and team features (coming soon)
+* **All Original Tlink Features** - SSH, serial terminal, theming, split panes, and more
 
 <br/>
 <p align="center">
@@ -31,7 +36,7 @@ This README is also available in: <a  href="./README.es-ES.md">:es: Spanish</a> 
 
 ----
 
-[**Tlink**](https://tlink.sh) (formerly **Terminus**) is a highly configurable terminal emulator, SSH and serial client for Windows 10, macOS and Linux
+[**Tlink AI**](https://github.com/amishagrawal2001-arch/tlink-ai) is an enhanced version of Tlink (formerly Terminus) with AI-powered features, integrated code editor, and advanced terminal capabilities for Windows 10, macOS and Linux
 
 * Integrated SSH and Telnet client and connection manager
 * Integrated serial terminal
