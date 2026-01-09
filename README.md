@@ -1,4 +1,4 @@
-[![](docs/readme.png)](https://tlink.sh)
+# Tlink AI
 
 
 <p align="center">
