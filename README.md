@@ -38,7 +38,7 @@ This README is also available in: <a  href="./README.es-ES.md">:es: Spanish</a> 
 
 ----
 
-[**Tlink AI**](https://github.com/amishagrawal2001-arch/tlink-ai) is an enhanced version of Tlink (formerly Terminus) with AI-powered features, integrated code editor, and advanced terminal capabilities for Windows 10, macOS and Linux
+[**Tlink AI**](https://github.com/amishagrawal2001-arch/tlink-ai) is an enhanced version of Tlink with AI-powered features, integrated code editor, and advanced terminal capabilities for Windows 10, macOS and Linux
 
 * Integrated SSH and Telnet client and connection manager
 * Integrated serial terminal
