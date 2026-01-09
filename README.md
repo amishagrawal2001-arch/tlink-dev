@@ -67,9 +67,9 @@ This README is also available in: <a  href="./README.es-ES.md">:es: Spanish</a> 
 
 # What Tlink is and isn't
 
-* **Tlink is** an alternative to Windows' standard terminal (conhost), PowerShell ISE, PuTTY, macOS Terminal.app and iTerm
+* **Tlink AI is** an enhanced terminal emulator with AI integration, code editing capabilities, and advanced features - an alternative to Windows' standard terminal (conhost), PowerShell ISE, PuTTY, macOS Terminal.app and iTerm
 
-* **Tlink is not** a new shell or a MinGW or Cygwin replacement. Neither is it lightweight - if RAM usage is of importance, consider [Conemu](https://conemu.github.io) or [Alacritty](https://github.com/jwilm/alacritty)
+* **Tlink AI is not** a new shell or a MinGW or Cygwin replacement. Neither is it lightweight - if RAM usage is of importance, consider [Conemu](https://conemu.github.io) or [Alacritty](https://github.com/jwilm/alacritty)
 
 <a name="terminal"></a>
 
