@@ -1,0 +1,296 @@
+:host {
+    display: flex;
+    flex-direction: column;
+    flex: auto;
+    min-height: 0;
+    background: var(--theme-bg);
+    color: var(--theme-fg);
+}
+
+.command-body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px;
+    flex: 1;
+    min-height: 0;
+}
+
+.command-body.is-collapsed {
+    gap: 0;
+    padding-top: 10px;
+}
+
+.command-content {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 0;
+}
+
+.command-header {
+    display: flex;
+    align-items: center;
+}
+
+.command-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--theme-fg-more);
+}
+
+.command-separator {
+    height: 1px;
+    width: 100%;
+    background: var(--theme-fg-less);
+}
+
+.command-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+}
+
+.command-panel-footer {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-top: 0;
+    border-top: none;
+}
+
+.panel-status {
+    font-size: 11px;
+    color: var(--theme-fg-more);
+    margin-left: auto;
+}
+
+.panel-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 6px;
+}
+
+.panel-actions .btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    line-height: 1;
+
+    i {
+        font-size: 12px;
+    }
+}
+
+.command-targets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+
+    .field {
+        flex: 1 1 220px;
+        min-width: 200px;
+    }
+
+    .meta {
+        min-width: 260px;
+        flex: 2 1 280px;
+    }
+}
+
+.command-editor {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    position: relative;
+
+    textarea {
+        flex: 1 1 auto;
+        min-height: 140px;
+        font-family: 'Source Code Pro', monospace;
+        resize: vertical;
+    }
+}
+
+:host.command-window-tab {
+    .command-editor {
+        textarea {
+            min-height: 660px;
+        }
+    }
+}
+
+:host.command-window-bottom,
+:host-context(.bottom-panel) {
+    background: var(--theme-bg);
+    color: var(--theme-fg);
+}
+
+:host.command-window-bottom .command-editor,
+:host-context(.bottom-panel) .command-editor {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+:host.command-window-bottom .command-editor textarea,
+:host-context(.bottom-panel) .command-editor textarea {
+    flex: 1 1 auto;
+    min-height: 96px;
+    max-height: 100%;
+    height: auto;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px 40px;
+    border: 1px solid var(--theme-bg-less);
+    overflow: auto;
+    resize: vertical !important;
+}
+
+:host.command-window-bottom .command-panel-footer,
+:host-context(.bottom-panel) .command-panel-footer {
+    position: absolute;
+    left: 1px;
+    right: 1px;
+    bottom: 1px;
+    padding: 4px 6px;
+    background: var(--theme-bg);
+    border-top: 0.5px solid var(--theme-bg-less);
+    min-height: 24px;
+    justify-content: flex-start;
+    z-index: 1;
+}
+
+:host.command-window-bottom .panel-actions,
+:host-context(.bottom-panel) .panel-actions {
+    margin-left: 0;
+}
+
+:host.command-window-bottom .panel-actions .btn-icon,
+:host-context(.bottom-panel) .panel-actions .btn-icon {
+    width: 20px;
+    height: 20px;
+
+    i {
+        font-size: 11px;
+    }
+}
+
+:host.command-window-bottom .panel-status,
+:host-context(.bottom-panel) .panel-status {
+    font-size: 10px;
+}
+
+:host.command-window-bottom .command-editor textarea:focus,
+:host-context(.bottom-panel) .command-editor textarea:focus {
+    border-color: var(--theme-primary);
+    box-shadow: 0 0 0 2px rgba(var(--bs-primary-rgb), 0.2);
+}
+
+:host.command-window-bottom .command-body,
+:host-context(.bottom-panel) .command-body {
+    padding: 8px 12px 6px;
+    gap: 8px;
+    overflow: hidden;
+    min-height: 0;
+    flex: 1 1 auto;
+    box-sizing: border-box;
+}
+
+:host.command-window-bottom .command-content,
+:host-context(.bottom-panel) .command-content {
+    gap: 8px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding-bottom: 4px;
+}
+
+:host.command-window-bottom .command-panel,
+:host-context(.bottom-panel) .command-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 6px 8px 6px;
+    border: none;
+    overflow: hidden;
+}
+
+:host.command-window-bottom .command-footer,
+:host-context(.bottom-panel) .command-footer {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+    flex: 0 0 auto;
+}
+
+:host.command-window-bottom .command-editor,
+:host-context(.bottom-panel) .command-editor {
+    min-height: 0;
+}
+
+:host.command-window-bottom .command-editor .form-text,
+:host-context(.bottom-panel) .command-editor .form-text {
+    display: none;
+}
+
+:host.command-window-bottom .btn-outline-secondary,
+:host-context(.bottom-panel) .btn-outline-secondary {
+    color: var(--theme-fg);
+    border-color: var(--theme-fg-less);
+    background: transparent;
+}
+
+:host.command-window-bottom .btn-outline-secondary:hover,
+:host-context(.bottom-panel) .btn-outline-secondary:hover {
+    color: var(--theme-fg);
+    background: var(--theme-bg-less);
+}
+
+:host.command-window-bottom .btn-outline-secondary:disabled,
+:host-context(.bottom-panel) .btn-outline-secondary:disabled {
+    opacity: 0.6;
+}
+
+.form-label {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.command-footer {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: auto;
+
+    .hint {
+        font-size: 12px;
+        color: var(--theme-fg-more);
+    }
+
+    .status {
+        font-size: 11px;
+        color: var(--theme-fg-more);
+        padding: 2px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--theme-bg-more-2);
+        background: var(--theme-bg-more-2);
+    }
+
+    .actions {
+        margin-left: auto;
+        display: flex;
+        gap: 8px;
+    }
+}
+
+.command-footer {
+    display: none;
+}

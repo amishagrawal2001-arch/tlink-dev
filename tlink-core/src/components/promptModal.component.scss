@@ -1,0 +1,30 @@
+.checkbox-footer {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.checkbox-wrapper {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    padding: 6px 12px;
+    margin-right: auto;
+    transition: background 0.2s;
+
+    &:hover {
+        background: rgba(255, 255, 255, 0.12);
+    }
+
+    .form-check {
+        margin: 0;
+    }
+
+    .form-check-label {
+        color: inherit;
+        margin-left: 8px;
+        font-size: 0.9rem;
+    }
+
+    .form-check-input {
+        margin-top: 0.25em;
+    }
+}
+

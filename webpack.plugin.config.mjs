@@ -24,7 +24,7 @@ export default options => {
     const sourceMapOptions = {
         exclude: [/node_modules/, /vendor/],
         filename: '[file].map',
-        moduleFilenameTemplate: `webpack-tabby-${options.name}:///[resource-path]`,
+        moduleFilenameTemplate: `webpack-tlink-${options.name}:///[resource-path]`,
     }
     let devtoolPlugin = wp.SourceMapDevToolPlugin
 
@@ -32,11 +32,11 @@ export default options => {
         sourceMapOptions.append = '\n//# sourceMappingURL=../../../app.asar.unpacked/assets/webpack/[url]'
     }
 
-    if ((process.platform === 'win32' || process.platform === 'linux') && process.env.TABBY_DEV) {
+    if ((process.platform === 'win32' || process.platform === 'linux') && process.env.TLINK_DEV) {
         devtoolPlugin = wp.EvalSourceMapDevToolPlugin
     }
 
-    const isDev = !!process.env.TABBY_DEV
+    const isDev = !!process.env.TLINK_DEV
     const config = {
         target: 'node',
         entry: 'src/index.ts',
@@ -136,6 +136,10 @@ export default options => {
                         { loader: 'po-gettext-loader' },
                     ],
                 },
+                {
+                    test: /\.(png|jpe?g|gif)(\?v=[0-9]\.[0-9]\.[0-9])?$/,
+                    type: 'asset',
+                },
             ],
         },
         externals: [
@@ -166,7 +170,7 @@ export default options => {
             /^@angular(?!\/common\/locales)/,
             /^@ng-bootstrap/,
             /^rxjs/,
-            /^tabby-/,
+            /^tlink-/,
             ...options.externals || [],
         ],
         plugins: [

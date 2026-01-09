@@ -28,7 +28,7 @@
         "dist",
         "node_modules",
         "*/node_modules",
-        "tabby*",
+        "tlink*",
         "platforms"
     ]
 }

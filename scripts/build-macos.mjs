@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
 import { build as builder } from 'electron-builder'
 import * as vars from './vars.mjs'
+import { getArtifactSuffix, getExtraResources, isOllamaBundleEnabled } from './bundle-ollama.mjs'
 
 const isTag = (process.env.GITHUB_REF || '').startsWith('refs/tags/')
 
@@ -16,6 +17,10 @@ if (process.env.GITHUB_HEAD_REF) {
 process.env.APPLE_ID ??= process.env.APPSTORE_USERNAME
 process.env.APPLE_APP_SPECIFIC_PASSWORD ??= process.env.APPSTORE_PASSWORD
 
+const bundleOllama = isOllamaBundleEnabled()
+const artifactSuffix = getArtifactSuffix(bundleOllama)
+const extraResources = getExtraResources(bundleOllama)
+
 builder({
     dir: true,
     mac: ['dmg', 'zip'],
@@ -26,9 +31,11 @@ builder({
             version: vars.version,
             teamId: process.env.APPLE_TEAM_ID,
         },
+        ...(extraResources ? { extraResources } : {}),
         mac: {
             identity: !process.env.CI || process.env.CSC_LINK ? undefined : null,
             notarize: !!process.env.APPLE_TEAM_ID,
+            artifactName: `tlink-\${version}-macos-\${arch}${artifactSuffix}.\${ext}`,
         },
         npmRebuild: process.env.ARCH !== 'arm64',
         publish: process.env.KEYGEN_TOKEN ? [

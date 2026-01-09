@@ -1,22 +1,77 @@
-import { app, ipcMain, Menu, dialog } from 'electron'
+import { app, ipcMain, Menu, dialog, nativeImage } from 'electron'
+import * as path from 'path'
+import * as fs from 'fs'
+import * as nodeModule from 'module'
 
 // set userData Path on portable version
 import './portable'
 
+const packagedNodeModules = app.isPackaged ? path.join(process.resourcesPath, 'node_modules') : null
+if (packagedNodeModules && fs.existsSync(packagedNodeModules)) {
+    const nodePathEntries = (process.env.NODE_PATH ? process.env.NODE_PATH.split(path.delimiter) : []).filter(Boolean)
+    if (!nodePathEntries.includes(packagedNodeModules)) {
+        nodePathEntries.push(packagedNodeModules)
+        process.env.NODE_PATH = nodePathEntries.join(path.delimiter)
+        ;(nodeModule as any)._initPaths()
+    }
+}
+
+require('dotenv/config')
+
 // set defaults of environment variables
-import 'dotenv/config'
-process.env.TABBY_PLUGINS ??= ''
-process.env.TABBY_CONFIG_DIRECTORY ??= app.getPath('userData')
 
+const bundledCAFile = app.isPackaged
+    ? path.join(process.resourcesPath, 'certs', 'corp-root.pem')
+    : path.join(app.getAppPath(), '..', 'build', 'certs', 'corp-root.pem')
+const extraCAFile = process.env.TLINK_NPM_CAFILE
+const resolvedExtraCAFile = extraCAFile && fs.existsSync(extraCAFile) ? extraCAFile : undefined
+const resolvedCAFile = resolvedExtraCAFile ?? (fs.existsSync(bundledCAFile) ? bundledCAFile : undefined)
+if (resolvedCAFile && !process.env.NODE_EXTRA_CA_CERTS) {
+    process.env.NODE_EXTRA_CA_CERTS = resolvedCAFile
+}
+if (resolvedCAFile && !process.env.NPM_CONFIG_CAFILE) {
+    process.env.NPM_CONFIG_CAFILE = resolvedCAFile
+}
+const npmRegistry = process.env.TLINK_NPM_REGISTRY
+if (npmRegistry && !process.env.NPM_CONFIG_REGISTRY) {
+    process.env.NPM_CONFIG_REGISTRY = npmRegistry
+}
+const npmStrictSSL = process.env.TLINK_NPM_STRICT_SSL
+if (npmStrictSSL && !process.env.NPM_CONFIG_STRICT_SSL) {
+    process.env.NPM_CONFIG_STRICT_SSL = npmStrictSSL
+}
 
-import 'v8-compile-cache'
-import 'source-map-support/register'
-import './sentry'
-import './lru'
-import { parseArgs } from './cli'
-import { Application } from './app'
-import electronDebug = require('electron-debug')
-import { loadConfig } from './config'
+const appName = 'Tlink'
+app.setName(appName)
+if (process.platform === 'darwin') {
+    app.setAboutPanelOptions({ applicationName: appName })
+}
+
+process.env.TLINK_PLUGINS ??= ''
+process.env.TLINK_CONFIG_DIRECTORY ??= app.getPath('userData')
+
+require('v8-compile-cache')
+require('source-map-support/register')
+require('./sentry')
+require('./lru')
+
+// Silence a noisy deprecation warning from electron-debug on newer Electron:
+// "session.getAllExtensions is deprecated" (moved to session.extensions.getAllExtensions)
+process.on('warning', warning => {
+    if (warning?.name === 'DeprecationWarning' && String(warning?.message ?? '').includes('session.getAllExtensions')) {
+        return
+    }
+    // Re-emit other warnings as usual
+    console.warn(warning)
+})
+
+const { ensureBundledOllama } = require('./ollama')
+
+const { parseArgs } = require('./cli')
+const { Application } = require('./app')
+const electronDebug = require('electron-debug')
+const { loadConfig } = require('./config')
+
 
 
 const argv = parseArgs(process.argv, process.cwd())
@@ -70,7 +125,14 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 app.on('ready', async () => {
+    ensureBundledOllama()
+
     if (process.platform === 'darwin') {
+        const dockIconPath = path.join(app.getAppPath(), '..', 'build', 'icons', 'Tlink-logo.png')
+        const dockIcon = nativeImage.createFromPath(dockIconPath)
+        if (!dockIcon.isEmpty()) {
+            app.dock.setIcon(dockIcon)
+        }
         app.dock.setMenu(Menu.buildFromTemplate([
             {
                 label: 'New window',

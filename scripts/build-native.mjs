@@ -14,7 +14,7 @@ if (process.platform === 'win32' || process.platform === 'linux') {
 }
 
 let lifecycles = []
-for (let dir of ['app', 'tabby-core', 'tabby-local', 'tabby-ssh', 'tabby-terminal']) {
+for (let dir of ['app', 'tlink-core', 'tlink-local', 'tlink-ssh', 'tlink-terminal']) {
     const build = rebuild({
         buildPath: path.resolve(__dirname, '../' + dir),
         electronVersion: vars.electronVersion,

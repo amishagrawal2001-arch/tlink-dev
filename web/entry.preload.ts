@@ -46,7 +46,7 @@ async function prefetchURL (url) {
     await (await fetch(url)).text()
 }
 
-const Tabby = {
+const Tlink = {
     registerMock: (name, mod) => {
         mocks[name] = mod
     },
@@ -59,30 +59,30 @@ const Tabby = {
         return { ...pkg, url }
     },
     registerPluginModule: (packageName, module) => {
-        Tabby.registerModule(`resources/builtin-plugins/${packageName}`, module)
-        Tabby.registerModule(packageName, module)
+        Tlink.registerModule(`resources/builtin-plugins/${packageName}`, module)
+        Tlink.registerModule(packageName, module)
     },
     loadPlugin: async (url) => {
-        const info = await Tabby.resolvePluginInfo(url)
+        const info = await Tlink.resolvePluginInfo(url)
         const module = await webRequire(info.url)
-        Tabby.registerPluginModule(info.name, module)
+        Tlink.registerPluginModule(info.name, module)
         return module
     },
     loadPlugins: async (urls, progressCallback) => {
-        const infos: any[] = await Promise.all(urls.map(Tabby.resolvePluginInfo))
+        const infos: any[] = await Promise.all(urls.map(Tlink.resolvePluginInfo))
         progressCallback?.(0, 1)
         await Promise.all(infos.map(x => prefetchURL(x.url)))
         const pluginModules = []
         for (const info of infos) {
             const module = await webRequire(info.url)
-            Tabby.registerPluginModule(info.name, module)
+            Tlink.registerPluginModule(info.name, module)
             pluginModules.push(module)
             progressCallback?.(infos.indexOf(info), infos.length)
         }
         progressCallback?.(1, 1)
         return pluginModules
     },
-    bootstrap: (...args) => window['bootstrapTabby'](...args),
+    bootstrap: (...args) => window['bootstrapTlink'](...args),
     webRequire,
 }
 
@@ -91,12 +91,12 @@ Object.assign(window, {
     module: {
         paths: [],
     },
-    Tabby,
+    Tlink,
     __filename: '',
     __dirname: '',
     process: {
         env: { },
-        argv: ['tabby'],
+        argv: ['tlink'],
         platform: 'darwin',
         on: () => null,
         stdout: {},

@@ -19,32 +19,33 @@ if (version.includes('-c')) {
 }
 
 export const builtinPlugins = [
-    'tabby-core',
-    'tabby-settings',
-    'tabby-terminal',
-    'tabby-web',
-    'tabby-community-color-schemes',
-    'tabby-ssh',
-    'tabby-serial',
-    'tabby-telnet',
-    'tabby-local',
-    'tabby-electron',
-    'tabby-plugin-manager',
-    'tabby-linkifier',
-    'tabby-auto-sudo-password',
+    'tlink-core',
+    'tlink-settings',
+    'tlink-terminal',
+    'tlink-web',
+    'tlink-community-color-schemes',
+    'tlink-ssh',
+    'tlink-serial',
+    'tlink-telnet',
+    'tlink-local',
+    'tlink-electron',
+    'tlink-plugin-manager',
+    'tlink-linkifier',
+    'tlink-auto-sudo-password',
+    'tlink-chatgpt',
 ]
 
 export const packagesWithDocs = [
-    ['.', 'tabby-core'],
-    ['terminal', 'tabby-terminal'],
-    ['local', 'tabby-local'],
-    ['settings', 'tabby-settings'],
+    ['.', 'tlink-core'],
+    ['terminal', 'tlink-terminal'],
+    ['local', 'tlink-local'],
+    ['settings', 'tlink-settings'],
 ]
 
 export const allPackages = [
     ...builtinPlugins,
     'web',
-    'tabby-web-demo',
+    'tlink-web-demo',
 ]
 
 export const bundledModules = [

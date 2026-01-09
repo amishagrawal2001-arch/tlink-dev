@@ -8,7 +8,7 @@ try {
     release = require('@electron/remote').app.getVersion()
 }
 
-if (!process.env.TABBY_DEV) {
+if (!process.env.TLINK_DEV) {
     init({
         dsn: SENTRY_DSN,
         release,

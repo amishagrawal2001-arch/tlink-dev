@@ -5,12 +5,12 @@ import * as url from 'url'
 const __dirname = url.fileURLToPath(new URL('.', import.meta.url))
 
 const config = {
-    name: 'tabby-main',
+    name: 'tlink-main',
     target: 'electron-main',
     entry: {
         main: path.resolve(__dirname, 'lib/index.ts'),
     },
-    mode: process.env.TABBY_DEV ? 'development' : 'production',
+    mode: process.env.TLINK_DEV ? 'development' : 'production',
     context: __dirname,
     devtool: 'source-map',
     output: {

@@ -5,7 +5,7 @@ settings:
     typescript:
       project:
       - tsconfig.json
-      - tabby-*/tsconfig.json
+      - tlink-*/tsconfig.json
     node: true
 
 env:

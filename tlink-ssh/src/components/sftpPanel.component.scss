@@ -1,0 +1,112 @@
+:host {
+    display: flex;
+    flex-direction: column;
+
+    > .resize-handle {
+        height: 6px;
+        flex: none;
+        cursor: ns-resize;
+        background: rgba(255, 255, 255, 0.06);
+    }
+
+    > .resize-handle:hover {
+        background: rgba(255, 255, 255, 0.12);
+    }
+
+    > .header {
+        padding: 5px 15px 0 20px;
+        display: flex;
+        align-items: center;
+        flex: none;
+    }
+
+    > .filter-bar {
+        flex: none;
+    }
+
+    > .body {
+        padding: 10px 20px;
+        flex: 1 1 0;
+        overflow-y: auto;
+    }
+
+    .breadcrumb {
+        background: none;
+        padding: 0;
+        margin: 0;
+        color: #cfd6dd;
+    }
+
+    .breadcrumb-item {
+        cursor: pointer;
+        color: inherit;
+    }
+
+    .breadcrumb-item a {
+        color: inherit;
+    }
+
+    .breadcrumb-item + .breadcrumb-item::before {
+        color: #8a97a4;
+    }
+
+    .path-button {
+        display: inline-flex;
+        align-items: center;
+        background: rgba(255, 255, 255, 0.06);
+        border-radius: 4px;
+        padding: 2px 8px;
+        color: #cfd6dd;
+        max-width: 320px;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .path-button:hover {
+        background: rgba(255, 255, 255, 0.12);
+        color: #fff;
+    }
+
+    .path-button .path-label {
+        opacity: 0.7;
+        margin-right: 6px;
+    }
+
+    .path-button .path-value {
+        font-family: monospace;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .breadcrumb-item:first-child {
+        font-weight: bold;
+    }
+
+    .list-group-item-action {
+        &:hover {
+            background: rgba(white, .05);
+        }
+    }
+
+    .mode, .size, .date {
+        font-family: monospace;
+        opacity: .5;
+        font-size: 12px;
+        text-align: right;
+        margin-left: 20px;
+    }
+
+    .size {
+        width: 100px;
+    }
+
+    .date {
+        width: 200px;
+    }
+}
+
+.btn-link svg {
+    width: 12px;
+}

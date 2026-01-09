@@ -15,7 +15,7 @@ sh.mkdir('-p', target)
 fs.writeFileSync(path.join(target, 'package.json'), '{}')
 sh.cd(target)
 vars.builtinPlugins.forEach(plugin => {
-    if (plugin === 'tabby-web') {
+    if (plugin === 'tlink-web') {
         return
     }
     log.info('install', plugin)

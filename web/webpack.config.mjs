@@ -1,6 +1,24 @@
 import * as path from 'path'
 import * as url from 'url'
+import * as fs from 'fs'
+import { createRequire } from 'module'
 const __dirname = url.fileURLToPath(new URL('.', import.meta.url))
+const require = createRequire(import.meta.url)
+
+function copyMonacoAssets () {
+    try {
+        const monacoRoot = path.dirname(require.resolve('monaco-editor/package.json'))
+        const src = path.join(monacoRoot, 'min')
+        const dest = path.join(__dirname, 'dist/assets/monaco')
+        fs.rmSync(dest, { recursive: true, force: true })
+        fs.mkdirSync(dest, { recursive: true })
+        fs.cpSync(src, dest, { recursive: true })
+    } catch (err) {
+        console.warn('Monaco assets not copied:', err?.message ?? err)
+    }
+}
+
+copyMonacoAssets()
 
 
 const externals = {}
@@ -24,13 +42,13 @@ for (const key of [
 }
 
 const config = {
-    name: 'tabby-web-entry',
+    name: 'tlink-web-entry',
     target: 'web',
     entry: {
         preload: path.resolve(__dirname, 'entry.preload.ts'),
         bundle: path.resolve(__dirname, 'entry.ts'),
     },
-    mode: process.env.TABBY_DEV ? 'development' : 'production',
+    mode: process.env.TLINK_DEV ? 'development' : 'production',
     optimization:{
         minimize: false,
     },

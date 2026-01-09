@@ -2,7 +2,9 @@ import * as fs from 'fs'
 import * as path from 'path'
 import wp from 'webpack'
 import * as url from 'url'
+import { createRequire } from 'module'
 const __dirname = url.fileURLToPath(new URL('.', import.meta.url))
+const require = createRequire(import.meta.url)
 
 import { AngularWebpackPlugin } from '@ngtools/webpack'
 import { createEs2015LinkerPlugin } from '@angular/compiler-cli/linker/babel'
@@ -17,8 +19,23 @@ const linkerPlugin = createEs2015LinkerPlugin({
     },
 })
 
+function copyMonacoAssets () {
+    try {
+        const monacoRoot = path.dirname(require.resolve('monaco-editor/package.json'))
+        const src = path.join(monacoRoot, 'min')
+        const dest = path.join(__dirname, 'dist/assets/monaco')
+        fs.rmSync(dest, { recursive: true, force: true })
+        fs.mkdirSync(dest, { recursive: true })
+        fs.cpSync(src, dest, { recursive: true })
+    } catch (err) {
+        console.warn('Monaco assets not copied:', err?.message ?? err)
+    }
+}
+
+copyMonacoAssets()
+
 export default () => ({
-    name: 'tabby',
+    name: 'tlink',
     target: 'node',
     entry: {
         'index.ignore': 'file-loader?name=index.html!pug-html-loader!' + path.resolve(__dirname, './index.pug'),
@@ -26,7 +43,7 @@ export default () => ({
         preload: path.resolve(__dirname, 'src/entry.preload.ts'),
         bundle: path.resolve(__dirname, 'src/entry.ts'),
     },
-    mode: process.env.TABBY_DEV ? 'development' : 'production',
+    mode: process.env.TLINK_DEV ? 'development' : 'production',
     optimization:{
         minimize: false,
     },
@@ -61,6 +78,10 @@ export default () => ({
                 use: {
                     loader: '@ngtools/webpack',
                 },
+            },
+            {
+                test: /monaco-editor[\\/].*\\.ttf$/,
+                type: 'asset/resource',
             },
             { test: /\.scss$/, use: ['style-loader', 'css-loader', 'sass-loader'] },
             { test: /\.css$/, use: ['style-loader', 'css-loader', 'sass-loader'] },

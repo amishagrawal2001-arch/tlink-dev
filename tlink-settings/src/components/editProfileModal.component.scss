@@ -1,0 +1,19 @@
+.log-field {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    min-height: auto;
+
+    .header {
+        margin-right: 0;
+    }
+
+    & > .form-control,
+    & > .input-group {
+        width: 100%;
+    }
+
+    .input-group .form-control {
+        min-width: 0;
+    }
+}

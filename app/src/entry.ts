@@ -14,7 +14,7 @@ import { platformBrowserDynamic } from '@angular/platform-browser-dynamic'
 import { ipcRenderer } from 'electron'
 
 import { getRootModule } from './app.module'
-import { BootstrapData, BOOTSTRAP_DATA, PluginInfo } from '../../tabby-core/src/api/mainProcess'
+import { BootstrapData, BOOTSTRAP_DATA, PluginInfo } from '../../tlink-core/src/api/mainProcess'
 
 // Always land on the start view
 location.hash = ''
@@ -25,7 +25,7 @@ if (process.platform === 'win32' && !('HOME' in process.env)) {
     process.env.HOME = `${process.env.HOMEDRIVE}${process.env.HOMEPATH}`
 }
 
-if (process.env.TABBY_DEV && !process.env.TABBY_FORCE_ANGULAR_PROD) {
+if (process.env.TLINK_DEV && !process.env.TLINK_FORCE_ANGULAR_PROD) {
     console.warn('Running in debug mode')
 } else {
     enableProdMode()
@@ -46,7 +46,7 @@ async function bootstrap (bootstrapData: BootstrapData, plugins: PluginInfo[], s
     const moduleRef = await platformBrowserDynamic([
         { provide: BOOTSTRAP_DATA, useValue: bootstrapData },
     ]).bootstrapModule(module)
-    if (process.env.TABBY_DEV) {
+    if (process.env.TLINK_DEV) {
         const applicationRef = moduleRef.injector.get(ApplicationRef)
         const componentRef = applicationRef.components[0]
         enableDebugTools(componentRef)

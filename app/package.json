@@ -1,18 +1,18 @@
 {
-  "name": "tabby",
+  "name": "tlink",
   "description": "A terminal for a modern age",
   "private": true,
-  "repository": "https://github.com/Eugeny/tabby",
+  "repository": "https://github.com/Eugeny/tlink",
   "author": {
-    "name": "Tabby Developers",
+    "name": "Tlink Developers",
     "email": "e@ajenti.org"
   },
   "main": "dist/main.js",
   "version": "1.0.0-alpha.1",
   "scripts": {
     "postinstall": "patch-package",
-    "build": "webpack --progress --color --display-modules",
-    "watch": "webpack --progress --color --watch"
+    "build": "node ../node_modules/webpack/bin/webpack.js --progress --color",
+    "watch": "node ../node_modules/webpack/bin/webpack.js --progress --color --watch"
   },
   "dependencies": {
     "@electron/remote": "^2",
@@ -53,15 +53,15 @@
     "ngx-filesize": "^3.0.2"
   },
   "peerDependencies": {
-    "tabby-community-color-schemes": "*",
-    "tabby-core": "*",
-    "tabby-electron": "*",
-    "tabby-local": "*",
-    "tabby-plugin-manager": "*",
-    "tabby-serial": "*",
-    "tabby-settings": "*",
-    "tabby-ssh": "*",
-    "tabby-terminal": "*"
+    "tlink-community-color-schemes": "*",
+    "tlink-core": "*",
+    "tlink-electron": "*",
+    "tlink-local": "*",
+    "tlink-plugin-manager": "*",
+    "tlink-serial": "*",
+    "tlink-settings": "*",
+    "tlink-ssh": "*",
+    "tlink-terminal": "*"
   },
   "resolutions": {
     "node-abi": "4.9.0",

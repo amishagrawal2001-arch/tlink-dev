@@ -1,0 +1,14 @@
+div.terminal-button-bar(*ngIf='isEnabled', (contextmenu)='openContextMenu($event)')
+    button.btn.btn-sm.button-bar-btn(
+        *ngFor='let button of buttons; trackBy: trackByIndex',
+        type='button',
+        [ngClass]='getButtonClass(button)',
+        [disabled]='!tab?.session?.open',
+        [title]='getTooltip(button)',
+        (click)='sendButton(button)',
+        (contextmenu)='openContextMenu($event, button)'
+    )
+        span.button-dot([ngClass]='getDotClass(button)')
+        span.button-label {{getButtonLabel(button)}}
+    .button-bar-empty(*ngIf='!buttons.length')
+        span(translate) Button bar is empty. Add buttons in Settings > Terminal.

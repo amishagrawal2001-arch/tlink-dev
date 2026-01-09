@@ -1,0 +1,64 @@
+terminal-toolbar([tab]='this')
+    i.fas.fa-xs.fa-circle.text-success.me-2(*ngIf='session && session.open')
+    i.fas.fa-xs.fa-circle.text-danger.me-2(*ngIf='!session || !session.open')
+    strong.me-auto(
+        style='user-select: text; cursor: text;'
+        onclick='event.stopPropagation()'
+    ) {{profile.options.user}}@{{profile.options.host}}:{{profile.options.port}}
+
+    .me-2(*ngIf='session')
+        button.btn.btn-sm.btn-link(
+            (click)='openSessionLogDirectory()',
+            [ngbTooltip]='"Session log directory"|translate',
+            container='body'
+        )
+            i.far.fa-lightbulb.text-primary
+        button.btn.btn-sm.btn-link(
+            (click)='openSessionLogFile()',
+            [ngbTooltip]='"Session log file"|translate',
+            container='body'
+        )
+            i.far.fa-file-alt.text-primary
+
+    button.btn.btn-sm.btn-link.me-2(
+        (click)='reconnect()',
+        [ngbTooltip]='"Reconnect"|translate',
+        container='body'
+    )
+        i.fas.fa-redo
+
+    button.btn.btn-sm.btn-link.me-2(
+        (click)='openSFTP()',
+        *ngIf='session && session.open',
+        [ngbTooltip]='"SFTP"|translate',
+        container='body'
+    )
+        i.far.fa-folder-open
+
+    button.btn.btn-sm.btn-link(
+        *ngIf='session && session.open && hostApp.platform !== Platform.Web',
+        (click)='showPortForwarding()',
+        [ngbTooltip]='"Ports"|translate',
+        container='body'
+    )
+        i.fas.fa-plug
+
+
+sftp-panel.bg-dark(
+    @panelSlide,
+    [@.disabled]='!config.store.accessibility.animations',
+    [(path)]='sftpPath',
+    *ngIf='sftpPanelVisible && sshSession',
+    (click)='$event.stopPropagation()',
+    [session]='sshSession!',
+    [cwdDetectionAvailable]='session?.supportsWorkingDirectory() ?? false',
+    (closed)='sftpPanelVisible = false'
+)
+
+keyboard-interactive-auth-panel.bg-dark(
+    *ngIf='activeKIPrompt',
+    [prompt]='activeKIPrompt',
+    [profile]='profile',
+    (click)='$event.stopPropagation()',
+    (done)='activeKIPrompt = null; frontend?.focus()'
+)

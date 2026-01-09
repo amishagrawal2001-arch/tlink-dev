@@ -1,8 +1,12 @@
 ---
-appId: org.tabby
-productName: Tabby
+appId: org.tlink
+productName: Tlink
+directories:
+  app: app
 compression: normal
 npmRebuild: false
+electronDist: node_modules/electron/dist
+afterPack: scripts/adhoc-sign-macos.mjs
 files:
 - '**/*'
 - dist
@@ -18,7 +22,6 @@ files:
 - '!**/node_modules/**/include/node'
 - '!**/node_modules/.bin'
 - '!**/node_modules/*/*/{esm5,fesm5,esm2015,fesm2015,_esm2015,_fesm2015}'
-- '!**/*.{woff,ttf,otf,eot}'
 - '!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}'
 - '!.editorconfig'
 - '!**/._*'
@@ -30,25 +33,28 @@ files:
 extraResources:
 - builtin-plugins
 - extras
+- build/certs
+- from: app/node_modules
+  to: node_modules
 asarUnpack:
 - 'dist/*.map'
 - node_modules/keytar/build/Release/*.node
 - node_modules/**/*.node
 win:
   icon: "./build/windows/icon.ico"
-  artifactName: tabby-${version}-portable-${env.ARCH}.${ext}
+  artifactName: tlink-${version}-portable-${arch}.${ext}
   signtoolOptions:
     rfc3161TimeStampServer: http://timestamp.sectigo.com
 nsis:
   oneClick: false
-  artifactName: tabby-${version}-setup-${env.ARCH}.${ext}
+  artifactName: tlink-${version}-setup-${arch}.${ext}
   installerIcon: "./build/windows/icon.ico"
   allowToChangeInstallationDirectory: true
-  shortcutName: Tabby Terminal
+  shortcutName: Tlink Terminal
 mac:
   category: public.app-category.utilities
   icon: "./build/mac/icon.icns"
-  artifactName: tabby-${version}-macos-${env.ARCH}.${ext}
+  artifactName: tlink-${version}-macos-${arch}.${ext}
   hardenedRuntime: true
   entitlements: "./build/mac/entitlements.plist"
   entitlementsInherit: "./build/mac/entitlements.plist"
@@ -65,15 +71,16 @@ mac:
     NSRemovableVolumesUsageDescription: 'A subprocess requests access to files on a removable volume.'
     NSAppleEventsUsageDescription: 'A subprocess requests permission to send AppleScript events to another application.'
 
+  identity: "Tyllink Netstruct"
 linux:
   category: "Utility;TerminalEmulator;System"
   icon: "./build/icons"
-  artifactName: tabby-${version}-linux-${env.ARCH}.${ext}
+  artifactName: tlink-${version}-linux-${arch}.${ext}
   executableArgs:
   - "--no-sandbox"
   desktop:
     entry:
-      StartupWMClass: tabby
+      StartupWMClass: tlink
 snap:
   plugs:
   - default

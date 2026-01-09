@@ -60,7 +60,7 @@ export class Window {
         const bwOptions: BrowserWindowConstructorOptions = {
             width: 800,
             height: 600,
-            title: 'Tabby',
+            title: app.getName(),
             minWidth: 400,
             minHeight: 300,
             webPreferences: {

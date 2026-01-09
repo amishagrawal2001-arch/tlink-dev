@@ -1,4 +1,4 @@
-import { app, ipcMain, Menu, Tray, shell, screen, globalShortcut, MenuItemConstructorOptions, WebContents } from 'electron'
+import { app, ipcMain, Menu, Tray, shell, screen, globalShortcut, MenuItemConstructorOptions, WebContents, nativeImage } from 'electron'
 import promiseIpc from 'electron-promise-ipc'
 import * as remote from '@electron/remote/main'
 import { exec } from 'mz/child_process'
@@ -187,11 +187,19 @@ export class Application {
             return
         }
 
+        const customTrayPath = path.join(app.getAppPath(), '..', 'build', 'icons', 'Tlink-logo.png')
+        const customTrayIcon = nativeImage.createFromPath(customTrayPath)
+        const hasCustomTrayIcon = !customTrayIcon.isEmpty()
+
         if (process.platform === 'darwin') {
-            this.tray = new Tray(`${app.getAppPath()}/assets/tray-darwinTemplate.png`)
-            this.tray.setPressedImage(`${app.getAppPath()}/assets/tray-darwinHighlightTemplate.png`)
+            if (hasCustomTrayIcon) {
+                this.tray = new Tray(customTrayIcon)
+            } else {
+                this.tray = new Tray(`${app.getAppPath()}/assets/tray-darwinTemplate.png`)
+                this.tray.setPressedImage(`${app.getAppPath()}/assets/tray-darwinHighlightTemplate.png`)
+            }
         } else {
-            this.tray = new Tray(`${app.getAppPath()}/assets/tray.png`)
+            this.tray = new Tray(hasCustomTrayIcon ? customTrayIcon : `${app.getAppPath()}/assets/tray.png`)
         }
 
         this.tray.on('click', () => setTimeout(() => this.focus()))
@@ -205,7 +213,7 @@ export class Application {
             this.tray.setContextMenu(contextMenu)
         }
 
-        this.tray.setToolTip(`Tabby ${app.getVersion()}`)
+        this.tray.setToolTip(`${app.getName()} ${app.getVersion()}`)
     }
 
     disableTray (): void {
@@ -249,7 +257,7 @@ export class Application {
             {
                 label: 'Application',
                 submenu: [
-                    { role: 'about', label: 'About Tabby' },
+                    { role: 'about', label: `About ${app.getName()}` },
                     { type: 'separator' },
                     {
                         label: 'Preferences',
@@ -295,6 +303,47 @@ export class Application {
             {
                 label: 'View',
                 submenu: [
+                    {
+                        label: 'Command Window',
+                        click: async () => {
+                            if (!this.hasWindows()) {
+                                await this.newWindow()
+                            }
+                            const target = this.windows.find(window => window.isFocused()) ?? this.windows[0]
+                            target?.send('host:command-window')
+                        },
+                    },
+                    {
+                        label: 'Command Window (Bottom)',
+                        click: async () => {
+                            if (!this.hasWindows()) {
+                                await this.newWindow()
+                            }
+                            const target = this.windows.find(window => window.isFocused()) ?? this.windows[0]
+                            target?.send('host:command-window-bottom')
+                        },
+                    },
+                    {
+                        label: 'Button Bar',
+                        click: async () => {
+                            if (!this.hasWindows()) {
+                                await this.newWindow()
+                            }
+                            const target = this.windows.find(window => window.isFocused()) ?? this.windows[0]
+                            target?.send('host:button-bar')
+                        },
+                    },
+                    {
+                        label: 'Session Manager',
+                        click: async () => {
+                            if (!this.hasWindows()) {
+                                await this.newWindow()
+                            }
+                            const target = this.windows.find(window => window.isFocused()) ?? this.windows[0]
+                            target?.send('host:session-manager')
+                        },
+                    },
+                    { type: 'separator' },
                     { role: 'toggleDevTools' },
                     { type: 'separator' },
                     { role: 'togglefullscreen' },
@@ -315,14 +364,14 @@ export class Application {
                     {
                         label: 'Website',
                         click () {
-                            shell.openExternal('https://eugeny.github.io/tabby')
+                            shell.openExternal('https://eugeny.github.io/tlink')
                         },
                     },
                 ],
             },
         ]
 
-        if (process.env.TABBY_DEV) {
+        if (process.env.TLINK_DEV) {
             template[2].submenu['unshift']({ role: 'reload' })
         }
 

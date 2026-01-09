@@ -3,6 +3,7 @@
 import { build as builder } from 'electron-builder'
 import * as vars from './vars.mjs'
 import { execSync } from 'child_process'
+import { getArtifactSuffix, getExtraResources, isOllamaBundleEnabled } from './bundle-ollama.mjs'
 
 const isTag = (process.env.GITHUB_REF || process.env.BUILD_SOURCEBRANCH || '').startsWith('refs/tags/')
 const keypair = process.env.SM_KEYPAIR_ALIAS
@@ -10,6 +11,10 @@ const keypair = process.env.SM_KEYPAIR_ALIAS
 process.env.ARCH = process.env.ARCH || process.arch
 
 console.log('Signing enabled:', !!keypair)
+
+const bundleOllama = isOllamaBundleEnabled()
+const artifactSuffix = getArtifactSuffix(bundleOllama)
+const extraResources = getExtraResources(bundleOllama)
 
 builder({
     dir: true,
@@ -19,6 +24,7 @@ builder({
         extraMetadata: {
             version: vars.version,
         },
+        ...(extraResources ? { extraResources } : {}),
         publish: process.env.KEYGEN_TOKEN ? [
             vars.keygenConfig,
             {
@@ -28,6 +34,7 @@ builder({
         ] : undefined,
         forceCodeSigning: !!keypair,
         win: {
+            artifactName: `tlink-\${version}-portable-\${arch}${artifactSuffix}.\${ext}`,
             signtoolOptions: {
                 certificateSha1: process.env.SM_CODE_SIGNING_CERT_SHA1_HASH,
                 publisherName: process.env.SM_PUBLISHER_NAME,
@@ -57,6 +64,9 @@ builder({
                     }
                 } : undefined,
             },
+        },
+        nsis: {
+            artifactName: `tlink-\${version}-setup-\${arch}${artifactSuffix}.\${ext}`,
         },
     },
 

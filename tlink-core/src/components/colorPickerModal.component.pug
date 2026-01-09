@@ -1,0 +1,23 @@
+.modal-body
+    h5.mb-3(*ngIf='title') {{ title }}
+    .d-flex.align-items-center.gap-3
+        input.form-control.form-control-color(
+            type='color',
+            [(ngModel)]='value'
+        )
+        span.text-muted {{ value }}
+
+.modal-footer
+    button.btn.btn-outline-secondary(
+        *ngIf='canReset',
+        (click)='reset()',
+        translate
+    ) Reset
+    button.btn.btn-primary(
+        (click)='apply()',
+        translate
+    ) Apply
+    button.btn.btn-secondary(
+        (click)='cancel()',
+        translate
+    ) Cancel

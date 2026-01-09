@@ -1,0 +1,28 @@
+.modal-header
+    h5.modal-title {{ prompt || 'Enter value' }}
+    button.btn.btn-sm.btn-link.p-0(
+        type='button',
+        (click)='cancel()',
+        aria-label='Close',
+        style='width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;'
+    )
+        i.fas.fa-times
+.modal-body
+    input.form-control(
+        [type]='password ? "password" : "text"',
+        autofocus,
+        [(ngModel)]='value',
+        #input,
+        [placeholder]='prompt',
+        (keyup.enter)='ok()',
+        (keyup.esc)='cancel()',
+    )
+    .d-flex.align-items-center.mt-3.pt-2.checkbox-footer
+        checkbox.checkbox-wrapper(
+            *ngIf='showRememberCheckbox',
+            [(ngModel)]='remember',
+            text='Remember'
+        )
+        button.btn.btn-primary(
+            (click)='ok()',
+        ) OK

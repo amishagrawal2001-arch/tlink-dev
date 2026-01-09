@@ -37,3 +37,10 @@ sentry-symbols.js
 
 crowdin.yml
 .crowdin.env
+
+# Build artifacts and large files
+dist/
+dist2/
+dist3/
+dist4/
+extras-ollama/

@@ -13,55 +13,55 @@ updates:
     time: "04:00"
   open-pull-requests-limit: 20
 - package-ecosystem: npm
-  directory: "/tabby-core"
+  directory: "/tlink-core"
   schedule:
     interval: daily
     time: "04:00"
   open-pull-requests-limit: 20
 - package-ecosystem: npm
-  directory: "/tabby-settings"
+  directory: "/tlink-settings"
   schedule:
     interval: daily
     time: "04:00"
   open-pull-requests-limit: 20
 - package-ecosystem: npm
-  directory: "/tabby-terminal"
+  directory: "/tlink-terminal"
   schedule:
     interval: daily
     time: "04:00"
   open-pull-requests-limit: 20
 - package-ecosystem: npm
-  directory: "/tabby-local"
+  directory: "/tlink-local"
   schedule:
     interval: daily
     time: "04:00"
   open-pull-requests-limit: 20
 - package-ecosystem: npm
-  directory: "/tabby-community-color-schemes"
+  directory: "/tlink-community-color-schemes"
   schedule:
     interval: daily
     time: "04:00"
   open-pull-requests-limit: 20
 - package-ecosystem: npm
-  directory: "/tabby-electron"
+  directory: "/tlink-electron"
   schedule:
     interval: daily
     time: "04:00"
   open-pull-requests-limit: 20
 - package-ecosystem: npm
-  directory: "/tabby-web"
+  directory: "/tlink-web"
   schedule:
     interval: daily
     time: "04:00"
   open-pull-requests-limit: 20
 - package-ecosystem: npm
-  directory: "/tabby-plugin-manager"
+  directory: "/tlink-plugin-manager"
   schedule:
     interval: daily
     time: "04:00"
   open-pull-requests-limit: 20
 - package-ecosystem: npm
-  directory: "/tabby-ssh"
+  directory: "/tlink-ssh"
   schedule:
     interval: daily
     time: "04:00"

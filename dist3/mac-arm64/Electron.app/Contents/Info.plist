@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>CFBundleDisplayName</key>
+    <string>Tlink</string>
+    <key>CFBundleExecutable</key>
+    <string>Tlink</string>
+    <key>CFBundleIconFile</key>
+    <string>icon.icns</string>
+    <key>CFBundleIdentifier</key>
+    <string>org.tlink</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>Tlink</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0-alpha.1</string>
+    <key>CFBundleVersion</key>
+    <string>1.0.0-alpha.1</string>
+    <key>DTCompiler</key>
+    <string>com.apple.compilers.llvm.clang.1_0</string>
+    <key>DTSDKBuild</key>
+    <string>23F73</string>
+    <key>DTSDKName</key>
+    <string>macosx14.5</string>
+    <key>DTXcode</key>
+    <string>1540</string>
+    <key>DTXcodeBuild</key>
+    <string>15F31d</string>
+    <key>ElectronAsarIntegrity</key>
+    <dict>
+      <key>Resources/app.asar</key>
+      <dict>
+        <key>algorithm</key>
+        <string>SHA256</string>
+        <key>hash</key>
+        <string>13b798a8b2b7c461fc6166db8691477a8753aefc7959989680f2c4022e3fdc34</string>
+      </dict>
+    </dict>
+    <key>ElectronTeamID</key>
+    <string>${teamId}</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.utilities</string>
+    <key>LSEnvironment</key>
+    <dict>
+      <key>MallocNanoZone</key>
+      <string>0</string>
+    </dict>
+    <key>LSMinimumSystemVersion</key>
+    <string>12.0</string>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+      <key>NSAllowsArbitraryLoads</key>
+      <true/>
+      <key>NSAllowsLocalNetworking</key>
+      <true/>
+      <key>NSExceptionDomains</key>
+      <dict>
+        <key>127.0.0.1</key>
+        <dict>
+          <key>NSIncludesSubdomains</key>
+          <false/>
+          <key>NSTemporaryExceptionAllowsInsecureHTTPLoads</key>
+          <true/>
+          <key>NSTemporaryExceptionAllowsInsecureHTTPSLoads</key>
+          <false/>
+          <key>NSTemporaryExceptionMinimumTLSVersion</key>
+          <string>1.0</string>
+          <key>NSTemporaryExceptionRequiresForwardSecrecy</key>
+          <false/>
+        </dict>
+        <key>localhost</key>
+        <dict>
+          <key>NSIncludesSubdomains</key>
+          <false/>
+          <key>NSTemporaryExceptionAllowsInsecureHTTPLoads</key>
+          <true/>
+          <key>NSTemporaryExceptionAllowsInsecureHTTPSLoads</key>
+          <false/>
+          <key>NSTemporaryExceptionMinimumTLSVersion</key>
+          <string>1.0</string>
+          <key>NSTemporaryExceptionRequiresForwardSecrecy</key>
+          <false/>
+        </dict>
+      </dict>
+    </dict>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>A subprocess requests permission to send AppleScript events to another application.</string>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>This app needs access to Bluetooth</string>
+    <key>NSBluetoothPeripheralUsageDescription</key>
+    <string>This app needs access to Bluetooth</string>
+    <key>NSCameraUsageDescription</key>
+    <string>A subprocess requests access to the device's camera.</string>
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>A subprocess requests access to the user's Desktop folder.</string>
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>A subprocess requests access to the user's Documents folder.</string>
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>A subprocess requests access to the user's Downloads folder.</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2025 Tlink Developers</string>
+    <key>NSLocationUsageDescription</key>
+    <string>A subprocess requests access to the user's location information.</string>
+    <key>NSMainNibFile</key>
+    <string>MainMenu</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>A subprocess requests access to the device's microphone.</string>
+    <key>NSNetworkVolumesUsageDescription</key>
+    <string>A subprocess requests access to files on a network volume.</string>
+    <key>NSPrefersDisplaySafeAreaCompatibilityMode</key>
+    <false/>
+    <key>NSPrincipalClass</key>
+    <string>AtomApplication</string>
+    <key>NSQuitAlwaysKeepsWindows</key>
+    <false/>
+    <key>NSRemovableVolumesUsageDescription</key>
+    <string>A subprocess requests access to files on a removable volume.</string>
+    <key>NSRequiresAquaSystemAppearance</key>
+    <false/>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+  </dict>
+</plist>

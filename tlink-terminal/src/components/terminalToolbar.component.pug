@@ -1,0 +1,40 @@
+.content(
+    cdkDropList
+    cdkAutoDropGroup='app-tabs'
+)
+    i.fas.fa-grip-vertical.drag-handle(
+        *ngIf='shouldShowDragHandle',
+        cdkDrag,
+        [cdkDragData]='tab',
+        (cdkDragStarted)='onTabDragStart()',
+        (cdkDragEnded)='onTabDragEnd()'
+    )
+
+    button.btn.btn-sm.btn-link.pane-close-button(
+        *ngIf='tab?.showPaneClose',
+        (click)='tab.closePane()',
+        [ngbTooltip]='"Close pane"|translate',
+        container='body',
+        aria-label='Close pane'
+    )
+        i.fas.fa-times
+
+    ng-content
+
+    button.btn.btn-sm.btn-link(
+        *ngIf='tab?.enableToolbar',
+        (click)='newWithProfile()',
+        [ngbTooltip]='"New with profile"|translate',
+        container='body'
+    )
+        i.fas.fa-user-friends
+
+    button.btn.btn-sm.btn-link(
+        *ngIf='tab.enableToolbar',
+        (click)='tab.togglePinToolbar()',
+        (mouseenter)='tab.showToolbar()',
+        (mouseleave)='tab.hideToolbar()',
+        [ngbTooltip]='tab.pinToolbar ? ("Unpin"|translate) : ("Pin"|translate)',
+        container='body'
+    )
+        i.fas.fa-thumbtack

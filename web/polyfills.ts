@@ -5,7 +5,7 @@
 import './polyfills.buffer'
 import { Duplex } from 'stream-browserify'
 
-const Tabby = window['Tabby']
+const Tlink = window['Tlink']
 
 export class SocketProxy extends Duplex {
     socket: any
@@ -41,7 +41,7 @@ export class SocketProxy extends Duplex {
     }
 }
 
-Tabby.registerMock('fs', {
+Tlink.registerMock('fs', {
     rmdirSync: () => null,
     realpathSync: () => null,
     readdir: () => null,
@@ -49,26 +49,26 @@ Tabby.registerMock('fs', {
     appendFile: () => null,
     constants: {},
 })
-Tabby.registerMock('fs/promises', {})
-Tabby.registerMock('tls', {})
-Tabby.registerMock('module', {
+Tlink.registerMock('fs/promises', {})
+Tlink.registerMock('tls', {})
+Tlink.registerMock('module', {
     globalPaths: [],
     prototype: { require: window['require'] },
 })
 
-Tabby.registerMock('http', {
+Tlink.registerMock('http', {
     Agent: class {},
     request: {},
 })
-Tabby.registerMock('https', {
+Tlink.registerMock('https', {
     Agent: class {},
     request: {},
 })
-Tabby.registerMock('querystring', {})
-Tabby.registerMock('tty', { isatty: () => false })
-Tabby.registerMock('child_process', {})
-Tabby.registerMock('readable-stream', {})
-Tabby.registerMock('os', {
+Tlink.registerMock('querystring', {})
+Tlink.registerMock('tty', { isatty: () => false })
+Tlink.registerMock('child_process', {})
+Tlink.registerMock('readable-stream', {})
+Tlink.registerMock('os', {
     arch: () => 'web',
     platform: () => 'web',
     homedir: () => '/home',
@@ -77,10 +77,10 @@ Tabby.registerMock('os', {
         errno: {},
     },
 })
-Tabby.registerModule('buffer', {
+Tlink.registerModule('buffer', {
     Buffer: window['Buffer'],
 })
-Tabby.registerModule('crypto', {
+Tlink.registerModule('crypto', {
     ...require('crypto-browserify'),
     getHashes () {
         return ['sha1', 'sha224', 'sha256', 'sha384', 'sha512', 'md5', 'rmd160']
@@ -89,66 +89,66 @@ Tabby.registerModule('crypto', {
         return a.equals(b)
     },
 })
-Tabby.registerMock('dns', {})
-Tabby.registerMock('@luminati-io/socksv5', {})
-Tabby.registerMock('util', require('util/'))
-Tabby.registerMock('keytar', {
+Tlink.registerMock('dns', {})
+Tlink.registerMock('@luminati-io/socksv5', {})
+Tlink.registerMock('util', require('util/'))
+Tlink.registerMock('keytar', {
     getPassword: () => null,
 })
-Tabby.registerMock('@serialport/bindings', {})
-Tabby.registerMock('@serialport/bindings-cpp', {})
-Tabby.registerMock('tmp', {})
+Tlink.registerMock('@serialport/bindings', {})
+Tlink.registerMock('@serialport/bindings-cpp', {})
+Tlink.registerMock('tmp', {})
 
-Tabby.registerModule('net', {
+Tlink.registerModule('net', {
     Socket: SocketProxy,
 })
-Tabby.registerModule('events', require('events'))
-Tabby.registerModule('path', require('path-browserify'))
-Tabby.registerModule('url', {
+Tlink.registerModule('events', require('events'))
+Tlink.registerModule('path', require('path-browserify'))
+Tlink.registerModule('url', {
     ...require('url'),
     pathToFileURL: x => `file://${x}`,
 })
-Tabby.registerModule('zlib', {
+Tlink.registerModule('zlib', {
     ...require('browserify-zlib'),
     constants: require('browserify-zlib'),
 })
-Tabby.registerModule('assert', Object.assign(
+Tlink.registerModule('assert', Object.assign(
     require('assert'),
     {
         assertNotStrictEqual: () => true,
         notStrictEqual: () => true,
     },
 ))
-Tabby.registerModule('constants', require('constants-browserify'))
-Tabby.registerModule('stream', require('stream-browserify'))
-Tabby.registerModule('readline', {
+Tlink.registerModule('constants', require('constants-browserify'))
+Tlink.registerModule('stream', require('stream-browserify'))
+Tlink.registerModule('readline', {
     ...require('readline-browserify'),
     cursorTo: () => null,
     clearLine: stream => stream.write('\r'),
 })
 
-Tabby.registerModule('@angular/core', require('@angular/core'))
-Tabby.registerModule('@angular/cdk', require('@angular/cdk'))
-Tabby.registerModule('@angular/cdk/clipboard', require('@angular/cdk/clipboard'))
-Tabby.registerModule('@angular/cdk/drag-drop', require('@angular/cdk/drag-drop'))
-Tabby.registerModule('@angular/compiler', require('@angular/compiler'))
-Tabby.registerModule('@angular/common', require('@angular/common'))
-Tabby.registerModule('@angular/forms', require('@angular/forms'))
-Tabby.registerModule('@angular/platform-browser', require('@angular/platform-browser'))
-Tabby.registerModule('@angular/platform-browser/animations', require('@angular/platform-browser/animations'))
-Tabby.registerModule('@angular/platform-browser-dynamic', require('@angular/platform-browser-dynamic'))
-Tabby.registerModule('@angular/animations', require('@angular/animations'))
-Tabby.registerModule('@angular/localize', require('@angular/localize'))
-Tabby.registerModule('@angular/localize/init', require('@angular/localize/init'))
-Tabby.registerModule('@ng-bootstrap/ng-bootstrap', require('@ng-bootstrap/ng-bootstrap'))
-Tabby.registerModule('ngx-toastr', require('ngx-toastr'))
-Tabby.registerModule('deepmerge', require('deepmerge'))
-Tabby.registerModule('rxjs', require('rxjs'))
-Tabby.registerModule('rxjs/operators', require('rxjs'))
-Tabby.registerModule('string_decoder', require('string_decoder'))
-Tabby.registerModule('js-yaml', require('js-yaml'))
-Tabby.registerModule('zone.js/dist/zone.js', require('zone.js/dist/zone.js'))
-Tabby.registerModule('any-promise', require('any-promise'))
+Tlink.registerModule('@angular/core', require('@angular/core'))
+Tlink.registerModule('@angular/cdk', require('@angular/cdk'))
+Tlink.registerModule('@angular/cdk/clipboard', require('@angular/cdk/clipboard'))
+Tlink.registerModule('@angular/cdk/drag-drop', require('@angular/cdk/drag-drop'))
+Tlink.registerModule('@angular/compiler', require('@angular/compiler'))
+Tlink.registerModule('@angular/common', require('@angular/common'))
+Tlink.registerModule('@angular/forms', require('@angular/forms'))
+Tlink.registerModule('@angular/platform-browser', require('@angular/platform-browser'))
+Tlink.registerModule('@angular/platform-browser/animations', require('@angular/platform-browser/animations'))
+Tlink.registerModule('@angular/platform-browser-dynamic', require('@angular/platform-browser-dynamic'))
+Tlink.registerModule('@angular/animations', require('@angular/animations'))
+Tlink.registerModule('@angular/localize', require('@angular/localize'))
+Tlink.registerModule('@angular/localize/init', require('@angular/localize/init'))
+Tlink.registerModule('@ng-bootstrap/ng-bootstrap', require('@ng-bootstrap/ng-bootstrap'))
+Tlink.registerModule('ngx-toastr', require('ngx-toastr'))
+Tlink.registerModule('deepmerge', require('deepmerge'))
+Tlink.registerModule('rxjs', require('rxjs'))
+Tlink.registerModule('rxjs/operators', require('rxjs'))
+Tlink.registerModule('string_decoder', require('string_decoder'))
+Tlink.registerModule('js-yaml', require('js-yaml'))
+Tlink.registerModule('zone.js/dist/zone.js', require('zone.js/dist/zone.js'))
+Tlink.registerModule('any-promise', require('any-promise'))
 
 Object.assign(window, {
     __dirname: '__dirname',

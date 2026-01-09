@@ -6,7 +6,7 @@ export function parseArgs (argv: string[], cwd: string): any {
     }
 
     return require('yargs/yargs')(argv.slice(1))
-        .usage('tabby [command] [arguments]')
+        .usage('tlink [command] [arguments]')
         .command('open [directory]', 'open a shell in a directory', {
             directory: { type: 'string', 'default': cwd },
         })

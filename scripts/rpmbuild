@@ -1,0 +1,26 @@
+#!/bin/bash
+set -euo pipefail
+
+real="${RPMBUILD_REAL:-}"
+if [[ -z "$real" ]]; then
+  real="$(command -v rpmbuild)"
+fi
+
+args=()
+while [[ $# -gt 0 ]]; do
+  if [[ "$1" == "--define" && $# -gt 1 ]]; then
+    define="$2"
+    shift 2
+    if [[ "$define" == buildroot\ * ]]; then
+      buildroot="${define#buildroot }"
+      args+=("--buildroot" "$buildroot")
+    else
+      args+=("--define" "$define")
+    fi
+  else
+    args+=("$1")
+    shift
+  fi
+done
+
+exec "$real" "${args[@]}"

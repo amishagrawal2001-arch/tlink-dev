@@ -1,0 +1,58 @@
+.color-templates-panel
+    .panel-header
+        .title
+            i.fas.fa-palette.me-2
+            span Color templates
+        button.btn.btn-sm.btn-link(
+            type='button',
+            (click)='closePanel()',
+            [ngbTooltip]='"Close panel"|translate',
+            [attr.aria-label]='"Close panel"|translate'
+        )
+            i.fas.fa-times
+
+    .panel-body(#scrollRegion)
+        p.text-muted.small Quickly browse and apply terminal color schemes without opening profile settings.
+
+        .form-row
+            label.form-label Search templates
+            .input-group
+                span.input-group-text
+                    i.fas.fa-search
+                input.form-control(
+                    type='text',
+                    placeholder='Filter by name',
+                    [ngModel]='filterText',
+                    (ngModelChange)='onFilterChange($event)'
+                )
+                button.btn.btn-outline-secondary(
+                    type='button',
+                    *ngIf='filterText',
+                    (click)='onFilterChange("")',
+                    [ngbTooltip]='"Clear filter"|translate'
+                )
+                    i.fas.fa-times
+
+        .loading-state(*ngIf='loading')
+            i.fas.fa-spinner.fa-spin.me-2
+            span(translate) Loading templates…
+
+        .empty-state(*ngIf='!loading && filteredSchemes.length === 0')
+            span No templates found.
+
+        .scheme-list(*ngIf='!loading && filteredSchemes.length > 0')
+            .scheme-card(
+                *ngFor='let scheme of filteredSchemes; trackBy: scheme?.name'
+            )
+                .scheme-header
+                    .name {{scheme.name}}
+                    button.btn.btn-sm.btn-primary(
+                        type='button',
+                        [disabled]='!currentProfile || savingProfileId === currentProfile?.id',
+                        (click)='applyScheme(scheme)'
+                    )
+                        span(*ngIf='savingProfileId !== currentProfile?.id') Apply
+                        span(*ngIf='savingProfileId === currentProfile?.id')
+                            i.fas.fa-spinner.fa-spin.me-1
+                            span Applying…
+                color-scheme-preview([scheme]='scheme')

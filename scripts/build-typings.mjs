@@ -5,5 +5,7 @@ import log from 'npmlog'
 
 vars.builtinPlugins.forEach(plugin => {
     log.info('typings', plugin)
+    // Clean previous declaration output to avoid TS5055 "would overwrite input file"
+    sh.rm('-rf', `${plugin}/typings`)
     sh.exec(`yarn tsc --project ${plugin}/tsconfig.typings.json`, { fatal: true })
 })

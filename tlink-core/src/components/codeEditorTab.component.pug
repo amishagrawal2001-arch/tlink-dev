@@ -1,0 +1,120 @@
+.code-editor-body
+    .code-editor-toolbar
+        .toolbar-left
+            .menu-container.left-menu
+                button.btn.btn-sm.btn-outline-secondary(type='button', (click)='toggleFileMenu($event)', title='File actions') File
+                .dropdown-menu(*ngIf='fileMenuOpen', (click)='$event.stopPropagation()')
+                    button(type='button', (click)='handleFileAction("new")') New
+                    button(type='button', (click)='handleFileAction("open")') Open
+                    button(type='button', (click)='handleFileAction("save")') Save
+                    button(type='button', (click)='handleFileAction("saveAs")') Save as
+                    button(type='button', (click)='handleFileAction("reopen")') Reopen closed
+            .menu-container.left-menu
+                button.btn.btn-sm.btn-outline-secondary(type='button', (click)='toggleEditMenu($event)', title='Edit actions') ✎ Edit
+                .dropdown-menu(*ngIf='editMenuOpen', (click)='$event.stopPropagation()')
+                    button(type='button', (click)='handleEditAction("find")') Find
+                    button(type='button', (click)='handleEditAction("replace")') Replace
+                    button(type='button', (click)='handleEditAction("goto")') Go to line
+                    button(type='button', (click)='handleEditAction("format")') Format
+                    button(type='button', (click)='handleEditAction("formatJson")') Format JSON
+                    button(type='button', (click)='handleEditAction("copy")') Copy
+                    button(type='button', (click)='handleEditAction("paste")') Paste
+                    button(type='button', (click)='handleEditAction("send")') Send to terminal
+                    button(type='button', (click)='handleEditAction("run")') Run in terminal
+                    button(type='button', (click)='handleEditAction("openClipboard")') Open clipboard
+                    button(type='button', (click)='handleEditAction("wrap")') {{wordWrapEnabled ? 'Wrap off' : 'Wrap on'}}
+                    button(type='button', (click)='handleEditAction("minimap")') {{minimapEnabled ? 'Hide minimap' : 'Show minimap'}}
+                    button(type='button', (click)='handleEditAction("save")') Save
+                    button(type='button', (click)='handleEditAction("saveAs")') Save as
+                    button(type='button', (click)='handleEditAction("new")') New
+                    button(type='button', (click)='handleEditAction("open")') Open
+            select.form-select.form-select-sm((change)='openRecent($event.target.value)')
+                option(value='') Recent files
+                option(*ngFor='let item of recentFiles', [value]='item') {{item}}
+            select.form-select.form-select-sm((change)='selectDiffTarget($event.target.value)')
+                option(value='') Diff with…
+                option(*ngFor='let item of documents', [value]='item.id') {{item.name}}
+            button.btn.btn-sm.btn-outline-secondary(type='button', (click)='diffWithSelected()', [disabled]='!pendingDiffDocId') Diff
+            button.btn.btn-sm.btn-outline-secondary(type='button', (click)='compareWithDisk()', [disabled]='!documents.length') Diff vs disk
+            button.btn.btn-sm.btn-outline-secondary(type='button', (click)='exitDiffMode()', [disabled]='viewMode!=="diff"') Exit diff
+        .toolbar-right
+            button.btn.btn-sm.btn-outline-secondary(type='button', (mousedown)='$event.stopPropagation()', (click)='toggleTheme($event)') Theme
+            button.btn.btn-sm.btn-outline-secondary(type='button', (click)='toggleSplitView()', [class.active]='!!splitEditor', [disabled]='viewMode==="diff"') Split
+            button.btn.btn-sm.btn-outline-secondary.toolbar-toggle(type='button', (click)='toggleAutosave()', [class.active]='autosaveEnabled') Autosave
+            button.btn.btn-sm.btn-outline-secondary.toolbar-toggle(type='button', (click)='toggleIndentationStyle()', [class.active]='getActiveDoc()?.insertSpaces') {{getActiveDoc()?.insertSpaces ? 'Spaces' : 'Tabs'}}
+            label.font-control
+                span.small-label Tab
+                input.form-control.form-control-sm(type='number', [value]='getActiveDoc()?.tabSize || 4', min='1', max='12', (change)='setTabSize($event.target.valueAsNumber)')
+            button.btn.btn-sm.btn-outline-secondary(type='button', (click)='toggleEOL()') {{statusEOL || 'EOL'}}
+            label.font-control
+                span.small-label Font
+                input.form-control.form-control-sm(type='number', [value]='fontSize', min='10', max='28', (change)='setFontSize($event.target.valueAsNumber)')
+            label.font-control
+                span.small-label Line
+                input.form-control.form-control-sm(type='number', [value]='lineHeight', min='14', max='40', (change)='setLineHeight($event.target.valueAsNumber)')
+    .editor-shell
+        .tab-sidebar([style.width.px]='sidebarWidth')
+            .sidebar-header
+                span Explorer
+                .folder-actions
+                    button.btn.btn-link.btn-sm(type='button', ngbTooltip='Add folder', (click)='addFolder()') +
+                    button.btn.btn-link.btn-sm(type='button', ngbTooltip='Open existing folder', (click)='openFolderFromDisk()') ⤓
+            .tree-list
+                .tree-row(*ngFor='let item of treeItems', [style.paddingLeft.px]='item.depth*12', [class.folder]='item.node.isFolder', [class.active-folder]='item.node.isFolder && item.node.path===selectedFolderPath', [class.active-doc]='item.node.docId===activeDocId', (click)='onTreeClick($event, item.node)', (dblclick)='onTreeDblClick($event, item.node)', (contextmenu)='onTreeContextMenu($event, item.node)', [draggable]='!!item.node.path', (dragstart)='item.node.path && onTreeDragStart($event, item.node)', (dragend)='item.node.path && onTreeDragEnd()', (dragover)='item.node.isFolder && onTreeDragOver($event)', (drop)='item.node.isFolder && onTreeDrop($event, item.node.path)')
+                    span.chevron(*ngIf='item.node.isFolder && item.node.path && item.node.path !== ""', (click)='toggleFolder($event, item.node)') {{expandedFolders.has(item.node.path) ? "▾" : "▸"}}
+                    span.bullet(*ngIf='!item.node.isFolder', [class.untitled]='item.node.docId ? !(getDocById(item.node.docId)?.path) : false', [class.titled]='item.node.docId ? !!(getDocById(item.node.docId)?.path) : true') •
+                    span.name(*ngIf='!item.node.docId || editingDocId!==item.node.docId') {{item.node.name}}
+                    input.form-control.form-control-sm.rename-input(*ngIf='item.node.docId && editingDocId===item.node.docId', [id]='"code-editor-rename-"+item.node.docId', type='text', [value]='editingDocName', (click)='$event.stopPropagation()', (input)='editingDocName=$event.target.value', (keydown.enter)='commitInlineRename(item.node.docId!)', (keydown.esc)='cancelInlineRename()', (blur)='commitInlineRename(item.node.docId!)')
+                    span.dirty-indicator(*ngIf='item.node.docId && getDocById(item.node.docId)?.isDirty') •
+                    button.btn.btn-link.btn-sm(*ngIf='item.node.docId', type='button', (click)='closeDocument(item.node.docId!); $event.stopPropagation()', title='Close') ×
+            .dropdown-menu.doc-context-menu(*ngIf='folderContextMenuOpen', [style.left.px]='folderContextMenuX', [style.top.px]='folderContextMenuY', (click)='$event.stopPropagation()')
+                button(type='button', (click)='handleFolderContextAction("newFile")') New file…
+                button(type='button', (click)='handleFolderContextAction("newFolder")') New folder…
+                button(type='button', (click)='handleFolderContextAction("rename")') Rename…
+                button(type='button', (click)='handleFolderContextAction("open")') Show in Finder/Explorer
+                button(type='button', (click)='handleFolderContextAction("remove")') Remove from list
+                button(type='button', (click)='handleFolderContextAction("delete")') Delete (disk)
+            .dropdown-menu.doc-context-menu(*ngIf='fileContextMenuOpen', [style.left.px]='fileContextMenuX', [style.top.px]='fileContextMenuY', (click)='$event.stopPropagation()')
+                button(type='button', (click)='handleFileContextAction("open")') Open
+                button(type='button', (click)='handleFileContextAction("rename")') Rename…
+                button(type='button', (click)='handleFileContextAction("show")') Show in Finder/Explorer
+                button(type='button', (click)='handleFileContextAction("delete")') Delete (disk)
+            .dropdown-menu.doc-context-menu(*ngIf='docContextMenuOpen', [style.left.px]='docContextMenuX', [style.top.px]='docContextMenuY', (click)='$event.stopPropagation()')
+                button(type='button', (click)='renameDocumentFromContextMenu()') Rename…
+                button(type='button', (click)='moveDocumentFromContextMenu(null)') Move to All documents
+                button(*ngFor='let folder of folders', type='button', (click)='moveDocumentFromContextMenu(folder.path)') Move to {{folder.name}}
+                button(type='button', (click)='closeDocumentFromContextMenu()') Close
+        .sidebar-resizer((mousedown)='beginSidebarResize($event)')
+        .editor-main
+            .breadcrumbs-row
+                .breadcrumbs-left
+                    span.breadcrumb(*ngFor='let part of breadcrumbs; let last = last', [class.last]='last')
+                        | {{part}}
+                        span.separator(*ngIf='!last') /
+                .breadcrumbs-actions
+                    input.form-control.form-control-sm.run-args(type='text', placeholder='Args', [value]='runArgs', (input)='runArgs=$event.target.value')
+                    button.btn.btn-sm.btn-outline-secondary.btn-icon(type='button', ngbTooltip='Run in terminal', (click)='runActiveFile()')
+                        i.fa.fa-play
+                    button.btn.btn-sm.btn-outline-secondary.btn-icon(type='button', *ngIf='hasRunTerminal', ngbTooltip='Close run terminal', (click)='closeRunTerminal()')
+                        i.fas.fa-times
+            .split-controls(*ngIf='splitEditor && viewMode==="editor"')
+                span Split view document:
+                select((change)='selectSplitDoc($event.target.value)')
+                    option(value='') Primary
+                    option(*ngFor='let doc of documents', [value]='doc.id', [selected]='doc.id===splitDocId') {{doc.name}}
+                button.btn.btn-sm.btn-outline-secondary.btn-icon(type='button', ngbTooltip='Close split', (click)='toggleSplitView()') ×
+            .code-editor-host-container([class.diff-mode]='viewMode==="diff"', [class.split-mode]='!!splitEditor && viewMode==="editor"')
+                .editor-pane.primary([class.hidden]='viewMode!=="editor"')
+                    div.editor-host(#primaryHost)
+                .editor-pane.split([class.hidden]='!splitEditor || viewMode!=="editor"')
+                    div.editor-host(#splitHost)
+                .editor-pane.diff([class.hidden]='viewMode!=="diff"')
+                    div.editor-host(#diffHost)
+    .code-editor-status
+        span.status-message(*ngIf='statusLabel') {{statusLabel}}
+        span {{statusLineCol}}
+        span {{statusLanguage}}
+        span {{statusEOL}}
+        span {{statusIndent}}
+        span {{statusEncoding}}
+        span {{statusWrap}}

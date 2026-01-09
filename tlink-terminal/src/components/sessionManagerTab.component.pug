@@ -1,0 +1,105 @@
+.session-header
+    .title
+        i.fas.fa-sitemap.me-2
+        span Session Manager
+    .spacer
+    button.btn.btn-sm.btn-link((click)='closePanel()')
+        i.fas.fa-times
+
+.session-search
+    .input-group
+        input.form-control(
+            type='text',
+            placeholder='Filter profiles and connections...',
+            [ngModel]='filterText',
+            (ngModelChange)='onFilterTextChange($event)'
+        )
+        button.btn.btn-secondary(*ngIf='filterText', (click)='clearFilter()')
+            i.fas.fa-times
+
+.session-content
+    .section(*ngIf='showConnections')
+        .section-title Active Connections
+        .list-group.list-group-flush(*ngIf='hasConnections')
+            button.list-group-item.list-group-item-action.connection-item(
+                *ngFor='let connection of filteredConnections; trackBy: trackByConnection',
+                type='button',
+                (click)='focusConnection(connection)'
+            )
+                .status-dot([class.is-open]='connection.isOpen')
+                .connection-main
+                    .name {{connection.title}}
+                    .meta
+                        span {{connection.detail || 'Not connected'}}
+                        span.protocol {{connection.protocol | uppercase}}
+        .empty-state(*ngIf='!hasConnections') No active connections.
+
+    .section(*ngIf='showProfiles')
+        .section-header
+            .section-title Profiles
+            .section-actions
+                button.btn.btn-sm.btn-secondary(
+                    type='button',
+                    (click)='createProfile()',
+                    [ngbTooltip]='"New profile"|translate',
+                    [attr.aria-label]='"New profile"|translate'
+                )
+                    i.fas.fa-plus
+                button.btn.btn-sm.btn-secondary(
+                    type='button',
+                    (click)='createGroup()',
+                    [ngbTooltip]='"New group"|translate',
+                    [attr.aria-label]='"New group"|translate'
+                )
+                    i.fas.fa-folder-plus
+                button.btn.btn-sm.btn-secondary(
+                    type='button',
+                    [disabled]='!canEditSelection',
+                    (click)='editSelected()',
+                    [ngbTooltip]='"Edit selected"|translate',
+                    [attr.aria-label]='"Edit selected"|translate'
+                )
+                    i.fas.fa-pen
+                button.btn.btn-sm.btn-secondary(
+                    type='button',
+                    [disabled]='selectionCount === 0',
+                    (click)='deleteSelected()',
+                    [ngbTooltip]='"Delete selected"|translate',
+                    [attr.aria-label]='"Delete selected"|translate'
+                )
+                    i.fas.fa-trash
+                button.btn.btn-sm.btn-secondary(
+                    type='button',
+                    [disabled]='selectionCount === 0',
+                    (click)='clearSelection()',
+                    [ngbTooltip]='"Clear selection"|translate',
+                    [attr.aria-label]='"Clear selection"|translate'
+                )
+                    i.fas.fa-xmark
+        .empty-state(*ngIf='!hasProfiles') No profiles match the current filter.
+        .profile-group(*ngFor='let group of visibleGroups; trackBy: trackByGroup')
+            .group-header(
+                (click)='selectGroup(group, $event)',
+                (contextmenu)='openGroupContextMenu($event, group)',
+                [class.selected]='isGroupSelected(group)'
+            )
+                button.group-toggle(
+                    type='button',
+                    (click)='toggleGroup(group); $event.stopPropagation()'
+                )
+                    i.fas.fa-chevron-right([class.rotate]='!group.collapsed')
+                span.group-name {{group.name}}
+                span.group-count {{group.profiles?.length ?? 0}}
+            .list-group.list-group-flush(*ngIf='!group.collapsed && (group.profiles?.length ?? 0) > 0')
+                button.list-group-item.list-group-item-action.profile-item(
+                    *ngFor='let profile of group.profiles; trackBy: trackByProfile',
+                    type='button',
+                    (click)='selectProfile(profile, $event)',
+                    (dblclick)='openProfile(profile)',
+                    (contextmenu)='openProfileContextMenu($event, profile)',
+                    [class.selected]='isProfileSelected(profile)'
+                )
+                    i.fas.fa-plug.me-2
+                    .profile-main
+                        .name {{profile.name}}
+                        span.protocol {{profile.type | uppercase}}

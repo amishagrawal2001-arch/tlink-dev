@@ -1,7 +1,7 @@
 import * as fs from 'mz/fs'
 import * as path from 'path'
 import * as remote from '@electron/remote'
-import { PluginInfo } from '../../tabby-core/src/api/mainProcess'
+import { PluginInfo } from '../../tlink-core/src/api/mainProcess'
 import { PLUGIN_BLACKLIST } from './pluginBlacklist'
 
 const nodeModule = require('module') // eslint-disable-line @typescript-eslint/no-var-requires
@@ -17,7 +17,37 @@ function normalizePath (p: string): string {
     return p
 }
 
-const builtinPluginsPath = process.env.TABBY_DEV ? path.dirname(remote.app.getAppPath()) : path.join((process as any).resourcesPath, 'builtin-plugins')
+/**
+ * Where built-in plugins are loaded from.
+ *
+ * - In packaged builds: `${resourcesPath}/builtin-plugins`
+ * - In source/dev runs (electron app): prefer `${repoRoot}/builtin-plugins` even if TLINK_DEV is not set
+ *   because Electron's `resourcesPath` points to the Electron runtime, not the repo.
+ */
+function getBuiltinPluginsPath (): string {
+    const packagedPath = path.join((process as any).resourcesPath, 'builtin-plugins')
+    const repoRootPath = path.join(path.dirname(remote.app.getAppPath()), 'builtin-plugins')
+
+    if (process.env.TLINK_DEV) {
+        return path.dirname(remote.app.getAppPath())
+    }
+
+    try {
+        if (require('fs').existsSync(packagedPath)) {
+            return packagedPath
+        }
+    } catch { /* ignore */ }
+
+    try {
+        if (require('fs').existsSync(repoRootPath)) {
+            return repoRootPath
+        }
+    } catch { /* ignore */ }
+
+    return packagedPath
+}
+
+const builtinPluginsPath = getBuiltinPluginsPath()
 
 const cachedBuiltinModules = {
     '@angular/animations': require('@angular/animations'),
@@ -41,10 +71,10 @@ const cachedBuiltinModules = {
 
 const builtinModules = [
     ...Object.keys(cachedBuiltinModules),
-    'tabby-core',
-    'tabby-local',
-    'tabby-settings',
-    'tabby-terminal',
+    'tlink-core',
+    'tlink-local',
+    'tlink-settings',
+    'tlink-terminal',
 ]
 
 const originalRequire = (global as any).require
@@ -72,14 +102,14 @@ export function initModuleLookup (userPluginsPath: string): void {
     paths.unshift(path.join(userPluginsPath, 'node_modules'))
     paths.unshift(path.join(remote.app.getAppPath(), 'node_modules'))
 
-    if (process.env.TABBY_DEV) {
+    if (process.env.TLINK_DEV) {
         paths.unshift(path.dirname(remote.app.getAppPath()))
     }
 
     paths.unshift(builtinPluginsPath)
     // paths.unshift(path.join((process as any).resourcesPath, 'app.asar', 'node_modules'))
-    if (process.env.TABBY_PLUGINS) {
-        process.env.TABBY_PLUGINS.split(':').map(x => paths.push(normalizePath(x)))
+    if (process.env.TLINK_PLUGINS) {
+        process.env.TLINK_PLUGINS.split(':').map(x => paths.push(normalizePath(x)))
     }
 
     process.env.NODE_PATH += path.delimiter + paths.join(path.delimiter)
@@ -92,8 +122,9 @@ export function initModuleLookup (userPluginsPath: string): void {
     })
 }
 
-const PLUGIN_PREFIX = 'tabby-'
-const LEGACY_PLUGIN_PREFIX = 'terminus-'
+const PRIMARY_PLUGIN_PREFIX = 'tlink-'
+const LEGACY_PLUGIN_PREFIXES = ['terminus-', 'tabby-']
+const PLUGIN_PREFIXES = [PRIMARY_PLUGIN_PREFIX, ...LEGACY_PLUGIN_PREFIXES]
 
 async function getCandidateLocationsInPluginDir (pluginDir: any): Promise<{ pluginDir: string, packageName: string }[]> {
     const candidateLocations: { pluginDir: string, packageName: string }[] = []
@@ -110,7 +141,7 @@ async function getCandidateLocationsInPluginDir (pluginDir: any): Promise<{ plug
         const promises = []
 
         for (const packageName of pluginNames) {
-            if ((packageName.startsWith(PLUGIN_PREFIX) || packageName.startsWith(LEGACY_PLUGIN_PREFIX)) && !PLUGIN_BLACKLIST.includes(packageName)) {
+            if (PLUGIN_PREFIXES.some(prefix => packageName.startsWith(prefix)) && !PLUGIN_BLACKLIST.includes(packageName)) {
                 const pluginPath = path.join(pluginDir, packageName)
                 const infoPath = path.join(pluginPath, 'package.json')
                 promises.push(fs.exists(infoPath).then(result => {
@@ -156,12 +187,13 @@ async function parsePluginInfo (pluginDir: string, packageName: string): Promise
     const pluginPath = path.join(pluginDir, packageName)
     const infoPath = path.join(pluginPath, 'package.json')
 
-    const name = packageName.startsWith(PLUGIN_PREFIX) ? packageName.substring(PLUGIN_PREFIX.length) : packageName.substring(LEGACY_PLUGIN_PREFIX.length)
+    const prefix = PLUGIN_PREFIXES.find(prefix => packageName.startsWith(prefix))
+    const name = prefix ? packageName.substring(prefix.length) : packageName
 
     try {
         const info = JSON.parse(await fs.readFile(infoPath, { encoding: 'utf-8' }))
 
-        if (!info.keywords || !(info.keywords.includes('terminus-plugin') || info.keywords.includes('terminus-builtin-plugin') || info.keywords.includes('tabby-plugin') || info.keywords.includes('tabby-builtin-plugin'))) {
+        if (!info.keywords || !(info.keywords.includes('terminus-plugin') || info.keywords.includes('terminus-builtin-plugin') || info.keywords.includes('tabby-plugin') || info.keywords.includes('tabby-builtin-plugin') || info.keywords.includes('tlink-plugin') || info.keywords.includes('tlink-builtin-plugin'))) {
             return null
         }
 
@@ -174,7 +206,7 @@ async function parsePluginInfo (pluginDir: string, packageName: string): Promise
             name: name,
             packageName: packageName,
             isBuiltin: pluginDir === builtinPluginsPath,
-            isLegacy: info.keywords.includes('terminus-plugin') || info.keywords.includes('terminus-builtin-plugin'),
+            isLegacy: info.keywords.includes('terminus-plugin') || info.keywords.includes('terminus-builtin-plugin') || info.keywords.includes('tabby-plugin') || info.keywords.includes('tabby-builtin-plugin'),
             version: info.version,
             description: info.description,
             author,
@@ -241,12 +273,23 @@ export async function loadPlugins (foundPlugins: PluginInfo[], progress: Progres
             console.info(`Loading ${foundPlugin.name}: ${nodeRequire.resolve(foundPlugin.path)}`)
             try {
                 const packageModule = nodeRequire(foundPlugin.path)
-                if (foundPlugin.packageName.startsWith('tabby-')) {
-                    cachedBuiltinModules[foundPlugin.packageName.replace('tabby-', 'terminus-')] = packageModule
+                if (foundPlugin.packageName.startsWith('tlink-')) {
+                    cachedBuiltinModules[foundPlugin.packageName.replace('tlink-', 'terminus-')] = packageModule
                 }
-                const pluginModule = packageModule.default.forRoot ? packageModule.default.forRoot() : packageModule.default
+                const moduleExport = packageModule.default ?? packageModule
+                const pluginModule = moduleExport?.forRoot ? moduleExport.forRoot() : moduleExport
+                if (!pluginModule) {
+                    throw new Error(`Plugin ${foundPlugin.name} did not export a module`)
+                }
+                const hasNgModule = !!(pluginModule.ɵmod || pluginModule.ngModule)
+                if (!hasNgModule) {
+                    console.warn(`Skipping ${foundPlugin.name}: not an Angular module`)
+                    setProgress()
+                    setTimeout(x, 50)
+                    return
+                }
                 pluginModule.pluginName = foundPlugin.name
-                pluginModule.bootstrap = packageModule.bootstrap
+                pluginModule.bootstrap = packageModule.bootstrap ?? moduleExport.bootstrap
                 plugins.push(pluginModule)
             } catch (error) {
                 console.error(`Could not load ${foundPlugin.name}:`, error)

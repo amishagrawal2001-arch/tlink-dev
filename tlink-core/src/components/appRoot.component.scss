@@ -1,0 +1,499 @@
+:host {
+    display: flex;
+    width: 100vw;
+    height: 100vh;
+    flex-direction: column;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-drag: none;
+    will-change: transform;
+    cursor: default;
+    animation: 0.5s ease-out fadeIn;
+    transition: 0.25s background;
+
+    --tabs-height: calc(38px * var(--spaciness));
+    --side-tab-width: calc(200px * var(--spaciness));
+    --left-dock-width: 32px;
+    --right-dock-width: 24px;
+}
+
+$tab-border-radius: 4px;
+
+.wrap {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  flex-direction: row;
+}
+
+.content {
+    width: 100vw;
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column-reverse;
+    position: relative;
+    box-sizing: border-box;
+
+    &.has-left-dock {
+        padding-left: var(--left-dock-width);
+    }
+
+    &.has-right-dock {
+        padding-right: var(--right-dock-width);
+    }
+
+    &.tabs-on-top {
+        flex-direction: column;
+    }
+
+    &.tabs-on-right {
+        flex-direction: row-reverse;
+    }
+
+    &.tabs-on-left {
+        flex-direction: row;
+    }
+}
+
+.left-dock {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: var(--left-dock-width);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 0;
+    gap: 12px;
+    background: var(--theme-bg-more-2);
+    border-right: 1px solid var(--theme-bg-less);
+    z-index: 6;
+}
+
+.left-dock-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.left-dock-bottom {
+    margin-top: auto;
+    padding-bottom: 8px;
+}
+
+.left-dock-button {
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--theme-fg-more);
+    background: transparent;
+    border: 1px solid transparent;
+    padding: 0;
+    cursor: pointer;
+    transition: 0.15s ease-out;
+
+    &:hover {
+        background: var(--theme-bg-more);
+        border-color: var(--theme-bg-less);
+        color: var(--theme-fg-more-2);
+    }
+
+    &:disabled {
+        opacity: 0.5;
+        cursor: default;
+    }
+
+    svg {
+        width: 14px;
+        height: 14px;
+        display: block;
+        fill: currentColor;
+    }
+}
+
+.right-dock {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: var(--right-dock-width);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 0;
+    gap: 12px;
+    background: var(--theme-bg-more-2);
+    border-left: 1px solid var(--theme-bg-less);
+    z-index: 6;
+}
+
+.content.tabs-on-left > .tab-bar, .content.tabs-on-right > .tab-bar {
+    height: 100%;
+    width: var(--side-tab-width);
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex-direction: column;
+    background: var(--theme-bg-more-2);
+
+    .tabs {
+        width: var(--side-tab-width);
+        flex: none;
+        flex-direction: column;
+
+        tab-header {
+            flex: 0 0 var(--tabs-height);
+        }
+    }
+
+    .btn-space {
+        flex: auto;
+    }
+
+    &>.inset {
+        opacity: 0;
+        width: 100%;
+    }
+
+    ::ng-deep tab-header {
+        width: 100% !important;
+    }
+}
+
+.content.tabs-on-left > .tab-bar.tab-bar-no-controls-overlay, .content.tabs-titlebar-enabled {
+    .tabs {
+        padding-top: 0 !important;
+    }
+}
+
+.content.tabs-on-right > .tab-bar {
+    .tabs {
+        // Account for WCO on Windows.
+        padding-top: 36px;
+    }
+}
+
+.tab-bar {
+    flex: none;
+    height: var(--tabs-height);
+    display: flex;
+    width: 100%;
+
+    .btn-tab-bar {
+        line-height: calc(var(--tabs-height) + 2px);
+        height: var(--tabs-height);
+        cursor: pointer;
+
+        display: flex;
+        align-items: center;
+        padding: 0 12px;
+        flex: 0 0 auto;
+        border-bottom: 2px solid transparent;
+        transition: 0.125s all ease-out;
+        font-size: 12px;
+
+        text-transform: uppercase;
+        font-weight: bold;
+        color: #aaa;
+        border: none;
+        border-radius: 0;
+
+        align-items: center;
+
+        &.dropdown-toggle::after {
+            display: none;
+        }
+    }
+
+    .btn-tab-bar.btn-transfer-active {
+        color: #33d17a !important;
+    }
+
+    .btn-tab-bar.btn-transfer-active svg {
+        fill: #33d17a !important;
+        stroke: #33d17a !important;
+    }
+
+    &>.tabs {
+        flex: 0 1 auto;
+        display: flex;
+        min-width: 0;
+    }
+
+    &>.btn-space {
+        min-width: 1px;
+        flex: 1 0 1%;
+
+        .tabs-on-top & {
+            margin-top: 2px; // for window resizing
+        }
+
+        &.drag {
+            -webkit-app-region: drag;
+        }
+
+        &.persistent {
+        //   min-width: 72px; // 2 x 36 px height, ie 2 squares
+        // Given WCO on Windows, the min-width of the window buttons is about 138px.
+            min-width: 138px;
+        }
+    }
+
+    &>.window-controls-spacer {
+        min-width: 138px;
+        height: 100%;
+    }
+
+    & > .inset {
+        width: calc(70px + 15px * var(--spaciness));
+        height: var(--tabs-height);
+        flex: none;
+        -webkit-app-region: drag;
+    }
+
+    window-controls {
+        padding-left: 10px;
+    }
+
+    .cdk-drag-animating {
+        transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
+    }
+
+    .cdk-drop-list-dragging tab-header:not(.cdk-drag-placeholder) {
+        transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
+    }
+}
+
+.content-body {
+    flex: 1 1 0;
+    position: relative;
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.workspace-stack {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    position: relative;
+}
+
+.workspace {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+}
+
+.workspace-main {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+
+    > .content-tab {
+        position: absolute;
+        top: 0;
+        width: 100%;
+        height: 100%;
+
+        left: -1000%;
+
+        &.content-tab-active {
+            left: 0;
+        }
+    }
+}
+
+.bottom-panel {
+    flex: 0 0 auto;
+    min-height: 0;
+    display: flex;
+    background: var(--theme-bg);
+    border-top: 1px solid var(--theme-bg-less);
+    box-shadow: 0 -1px 0 rgba(0, 0, 0, 0.08), 0 -8px 18px rgba(0, 0, 0, 0.12);
+    overflow: hidden;
+    padding-top: 8px;
+    box-sizing: border-box;
+    position: relative;
+    z-index: 1;
+
+    > * {
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+
+    .bottom-panel-resizer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 8px;
+        cursor: ns-resize;
+        z-index: 2;
+        touch-action: none;
+    }
+}
+
+.shortcut-bar {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 6px;
+    border-top: 1px solid var(--theme-bg-less);
+    background: var(--theme-bg-more-2);
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 32px;
+
+    .shortcut-label {
+        font-size: 12px;
+        color: var(--theme-fg-more);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .shortcut-actions {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+    }
+
+    .btn-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 20px;
+        min-width: 20px;
+        padding-left: 4px;
+        padding-right: 4px;
+        line-height: 1;
+
+        svg {
+            display: block;
+            pointer-events: none;
+            width: 14px;
+            height: 14px;
+            fill: currentColor;
+        }
+
+        &.shortcut-icon-button {
+            border: none;
+            background: transparent;
+            color: var(--theme-fg);
+            padding: 2px;
+
+            &:hover:not(:disabled) {
+                background: var(--theme-bg-more);
+            }
+
+            &.active {
+                background: var(--theme-bg-more-2);
+                color: var(--theme-fg-more-2);
+            }
+
+            &:disabled {
+                opacity: 0.6;
+            }
+        }
+    }
+}
+
+.side-panel {
+    flex: 0 0 auto;
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    background: var(--theme-bg);
+    border-left: 1px solid var(--theme-bg-more-2);
+}
+
+.side-panel-tabs {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: center;
+}
+
+.side-panel-toggle {
+    pointer-events: auto;
+    --side-panel-accent-rgb: var(--bs-primary-rgb);
+    background: rgba(var(--side-panel-accent-rgb), 0.08);
+    color: var(--side-panel-text-color, var(--theme-fg-more-2));
+    border: 1px solid rgba(var(--side-panel-accent-rgb), 0.25);
+    border-right: none;
+    border-radius: 0;
+    padding: 2px 2px;
+    cursor: pointer;
+    user-select: none;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transition: 0.125s all ease-out;
+}
+
+.side-panel-toggle:hover {
+    background: rgba(var(--side-panel-accent-rgb), 0.14);
+    border-color: rgba(var(--side-panel-accent-rgb), 0.35);
+    color: var(--side-panel-text-color-active, var(--theme-fg));
+}
+
+.side-panel-toggle.is-open {
+    background: rgba(var(--side-panel-accent-rgb), 0.4);
+    border-color: rgba(var(--side-panel-accent-rgb), 0.75);
+    color: var(--side-panel-text-color-active, var(--theme-fg));
+    box-shadow: inset 2px 0 0 rgba(var(--side-panel-accent-rgb), 0.9);
+}
+
+.side-panel-toggle span {
+    font-size: var(--side-panel-font-size, 9px);
+    font-weight: bold;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+hotkey-hint {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    max-width: 300px;
+}
+
+::ng-deep .btn-tab-bar svg,
+::ng-deep .btn-tab-bar + .dropdown-menu svg {
+    width: calc(22px * var(--spaciness));
+    height: calc(16px * var(--spaciness));
+    fill: white;
+    fill-opacity: 0.75;
+    stroke: currentColor;
+    stroke-opacity: 1;
+}
+
+::ng-deep .btn-update svg {
+    fill: cyan;
+}
+
+::ng-deep .broadcast-status-warning {
+    background: red;
+    position: absolute;
+    top: 0;
+    left: 50%;
+    padding: 5px 10px;
+    color: black;
+    border-radius: 0 0 5px 5px;
+
+    width: 300px;
+    margin-left: -150px;
+    text-align: center;
+    font-weight: bold;
+}

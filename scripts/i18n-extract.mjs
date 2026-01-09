@@ -30,7 +30,7 @@ const tempHtml = 'locale/tmp-html'
         JsExtractors.callExpression('_', {
             arguments: { text: 0 },
         }),
-    ]).parseFilesGlob('./tabby-*/src/**/*.ts')
+    ]).parseFilesGlob('./tlink-*/src/**/*.ts')
 
     log.info('extract-pug')
     const options = {

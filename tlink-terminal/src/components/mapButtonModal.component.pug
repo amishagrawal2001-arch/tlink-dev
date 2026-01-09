@@ -1,0 +1,88 @@
+.modal-header
+    h5.modal-title(translate) Map Button
+    button.btn-close(type='button', aria-label='Close', (click)='cancel()')
+
+.modal-body
+    h6.mb-3(translate) Action
+
+    .row.g-3
+        .col-md-4
+            label.form-label(translate) Function
+            select.form-control(
+                [(ngModel)]='model.action',
+                (ngModelChange)='onActionChange($event)'
+            )
+                option(*ngFor='let option of actionOptions', [ngValue]='option.value') {{option.label}}
+            .form-check.mt-3
+                input.form-check-input(
+                    type='checkbox',
+                    [(ngModel)]='model.disableTooltip'
+                )
+                label.form-check-label(translate) Disable tooltip
+            .form-check.mt-2
+                input.form-check-input(
+                    type='checkbox',
+                    [(ngModel)]='model.appendEnter'
+                )
+                label.form-check-label(translate) Append Enter
+            .mt-3
+                button.btn.btn-secondary.btn-sm(type='button', (click)='browseFile()', translate) Attach script file
+                input.form-control.d-none(
+                    #fileInput,
+                    type='file',
+                    accept='.txt,.sh,.py,.cfg,.conf,.cli,.script',
+                    (change)='onFileSelected($event)'
+                )
+                .text-muted.mt-1(*ngIf='model.sourceFileName') {{model.sourceFileName}}
+        .col-md-8
+            div(*ngIf='isSendString')
+                label.form-label(translate) Send String
+                textarea.form-control(
+                    rows='10',
+                    [(ngModel)]='model.command',
+                    (keydown)='onScriptKeydown($event)'
+                )
+            div(*ngIf='isRunScript')
+                label.form-label(translate) Push Script (Device)
+                textarea.form-control(
+                    rows='10',
+                    [(ngModel)]='model.command',
+                    (keydown)='onScriptKeydown($event)'
+                )
+            div(*ngIf='isRunLocal')
+                label.form-label(translate) Run Script (Local)
+                textarea.form-control(
+                    rows='10',
+                    [(ngModel)]='model.command',
+                    (keydown)='onScriptKeydown($event)'
+                )
+            .mt-3(*ngIf='isRunScript || isRunLocal')
+                label.form-label(translate) Script arguments
+                input.form-control(
+                    type='text',
+                    placeholder='e.g. -o temp_grouped_by_port.txt',
+                    [(ngModel)]='model.scriptArgs'
+                )
+
+    .text-muted.mt-2
+        span(translate) Escapes: \\r Enter, \\n newline, \\t tab, \\e escape, \\b backspace, \\p 1s pause, \\\\ backslash, \\v paste clipboard
+
+    hr.my-4
+
+    h6.mb-3(translate) Appearance
+    .row.g-3.align-items-center
+        .col-md-8
+            label.form-label(translate) Label
+            input.form-control(type='text', [(ngModel)]='model.label')
+        .col-md-4
+            label.form-label(translate) Icon color
+            select.form-control([(ngModel)]='model.color')
+                option(*ngFor='let option of colorOptions', [ngValue]='option.value') {{option.label}}
+
+    .mt-3
+        label.form-label(translate) Description
+        input.form-control(type='text', [(ngModel)]='model.description')
+
+.modal-footer
+    button.btn.btn-secondary((click)='cancel()', translate) Cancel
+    button.btn.btn-primary((click)='ok()', translate) OK
