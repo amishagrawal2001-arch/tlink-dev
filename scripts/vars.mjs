@@ -33,6 +33,7 @@ export const builtinPlugins = [
     'tlink-linkifier',
     'tlink-auto-sudo-password',
     'tlink-chatgpt',
+    'tlink-ai-assistant',
 ]
 
 export const packagesWithDocs = [

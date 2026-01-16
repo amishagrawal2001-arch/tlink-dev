@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import sh from 'shelljs'
 import fs from 'node:fs/promises'
+import * as path from 'path'
 import * as vars from './vars.mjs'
 import log from 'npmlog'
 import { GettextExtractor, JsExtractors, HtmlExtractors } from 'gettext-extractor'
@@ -16,7 +17,19 @@ const tempHtml = 'locale/tmp-html'
     for (const plugin of vars.builtinPlugins) {
         log.info('compile-pug', plugin)
 
-        sh.exec(`yarn pug --doctype html -s --pretty -O '{require: function(){}}' -o ${tempHtml}/${plugin} ${plugin}`, { fatal: true })
+        // Compile Pug files to HTML (may fail if no Pug files, which is OK)
+        sh.exec(`yarn pug --doctype html -s --pretty -O '{require: function(){}}' -o ${tempHtml}/${plugin} ${plugin}`, { silent: true })
+
+        // Copy HTML files directly for plugins that use HTML templates
+        const htmlFiles = sh.find(`${plugin}/src`).filter(file => file.match(/\.html$/))
+        if (htmlFiles.length > 0) {
+            sh.mkdir('-p', `${tempHtml}/${plugin}/src`)
+            htmlFiles.forEach(file => {
+                const relativePath = file.replace(`${plugin}/`, '')
+                sh.mkdir('-p', `${tempHtml}/${plugin}/${path.dirname(relativePath)}`)
+                sh.cp(file, `${tempHtml}/${plugin}/${relativePath}`)
+            })
+        }
     }
 
     log.info('extract-ts')
@@ -32,7 +45,7 @@ const tempHtml = 'locale/tmp-html'
         }),
     ]).parseFilesGlob('./tlink-*/src/**/*.ts')
 
-    log.info('extract-pug')
+    log.info('extract-html')
     const options = {
         attributes: {
             context: 'translatecontext',

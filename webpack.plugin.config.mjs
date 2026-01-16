@@ -177,8 +177,10 @@ export default options => {
             new devtoolPlugin(sourceMapOptions),
             new AngularWebpackPlugin({
                 tsconfig: path.resolve(options.dirname, 'tsconfig.json'),
-                directTemplateLoading: false,
+                directTemplateLoading: true,
                 jitMode: true,
+                emitClassMetadata: false,
+                emitNgModuleScope: false,
             })
         ],
     }
