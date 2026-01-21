@@ -1,0 +1,185 @@
+ul.nav-tabs(ngbNav, #nav='ngbNav')
+    li(ngbNavItem)
+        a(ngbNavLink, translate) General
+        ng-template(ngbNavContent)
+            .mb-3
+                label(translate) Host
+                input.form-control(
+                    type='text',
+                    [(ngModel)]='profile.options.host',
+                )
+
+            .mb-3
+                label(translate) Port
+                input.form-control(
+                    type='number',
+                    placeholder='3389',
+                    [(ngModel)]='profile.options.port',
+                )
+
+            .mb-3
+                label(translate) Username
+                input.form-control(
+                    type='text',
+                    [(ngModel)]='profile.options.user',
+                )
+
+            .mb-3
+                label(translate) Domain
+                input.form-control(
+                    type='text',
+                    [(ngModel)]='profile.options.domain',
+                    placeholder='(optional)',
+                )
+
+            .mb-3
+                label(translate) Password
+                input.form-control(
+                    type='password',
+                    [(ngModel)]='profile.options.password',
+                    placeholder='(leave empty to prompt on connect)',
+                )
+
+    li(ngbNavItem)
+        a(ngbNavLink, translate) Display
+        ng-template(ngbNavContent)
+            .mb-3
+                label(translate) Width
+                input.form-control(
+                    type='number',
+                    [(ngModel)]='profile.options.width',
+                )
+
+            .mb-3
+                label(translate) Height
+                input.form-control(
+                    type='number',
+                    [(ngModel)]='profile.options.height',
+                )
+
+            .mb-3
+                label(translate) Color Depth
+                select.form-control([(ngModel)]='profile.options.colorDepth')
+                    option([value]='8') 8-bit (256 colors)
+                    option([value]='16') 16-bit (High Color)
+                    option([value]='24') 24-bit (True Color)
+                    option([value]='32') 32-bit (True Color + Alpha)
+
+    li(ngbNavItem)
+        a(ngbNavLink, translate) Features
+        ng-template(ngbNavContent)
+            .mb-3
+                .form-check
+                    input.form-check-input(
+                        type='checkbox',
+                        [(ngModel)]='profile.options.enableAudio',
+                        id='enableAudio'
+                    )
+                    label.form-check-label(for='enableAudio', translate) Enable Audio Redirection
+
+                .form-check
+                    input.form-check-input(
+                        type='checkbox',
+                        [(ngModel)]='profile.options.enableClipboard',
+                        id='enableClipboard'
+                    )
+                    label.form-check-label(for='enableClipboard', translate) Enable Clipboard Sharing
+
+                .form-check
+                    input.form-check-input(
+                        type='checkbox',
+                        [(ngModel)]='profile.options.enablePrinting',
+                        id='enablePrinting'
+                    )
+                    label.form-check-label(for='enablePrinting', translate) Enable Printer Redirection
+
+                .form-check
+                    input.form-check-input(
+                        type='checkbox',
+                        [(ngModel)]='profile.options.enableDrives',
+                        id='enableDrives'
+                    )
+                    label.form-check-label(for='enableDrives', translate) Enable Drive Mapping
+
+                .form-check
+                    input.form-check-input(
+                        type='checkbox',
+                        [(ngModel)]='profile.options.enableWallpaper',
+                        id='enableWallpaper'
+                    )
+                    label.form-check-label(for='enableWallpaper', translate) Enable Wallpaper
+
+                .form-check
+                    input.form-check-input(
+                        type='checkbox',
+                        [(ngModel)]='profile.options.enableThemes',
+                        id='enableThemes'
+                    )
+                    label.form-check-label(for='enableThemes', translate) Enable Themes
+
+                .form-check
+                    input.form-check-input(
+                        type='checkbox',
+                        [(ngModel)]='profile.options.enableFontSmoothing',
+                        id='enableFontSmoothing'
+                    )
+                    label.form-check-label(for='enableFontSmoothing', translate) Enable Font Smoothing
+
+                .form-check
+                    input.form-check-input(
+                        type='checkbox',
+                        [(ngModel)]='profile.options.enableDesktopComposition',
+                        id='enableDesktopComposition'
+                    )
+                    label.form-check-label(for='enableDesktopComposition', translate) Enable Desktop Composition
+
+    li(ngbNavItem)
+        a(ngbNavLink, translate) Security
+        ng-template(ngbNavContent)
+            .mb-3
+                .form-check
+                    input.form-check-input(
+                        type='checkbox',
+                        [(ngModel)]='profile.options.enableNLA',
+                        id='enableNLA'
+                    )
+                    label.form-check-label(for='enableNLA', translate) Enable Network Level Authentication (NLA)
+
+                .form-check
+                    input.form-check-input(
+                        type='checkbox',
+                        [(ngModel)]='profile.options.enableTLS',
+                        id='enableTLS'
+                    )
+                    label.form-check-label(for='enableTLS', translate) Enable TLS Encryption
+
+                .form-check
+                    input.form-check-input(
+                        type='checkbox',
+                        [(ngModel)]='profile.options.ignoreCertificate',
+                        id='ignoreCertificate'
+                    )
+                    label.form-check-label(for='ignoreCertificate', translate) Ignore Certificate Errors
+
+    li(ngbNavItem)
+        a(ngbNavLink, translate) Performance
+        ng-template(ngbNavContent)
+            .mb-3
+                .form-check
+                    input.form-check-input(
+                        type='checkbox',
+                        [(ngModel)]='profile.options.compression',
+                        id='compression'
+                    )
+                    label.form-check-label(for='compression', translate) Enable Compression
+
+                .form-check
+                    input.form-check-input(
+                        type='checkbox',
+                        [(ngModel)]='profile.options.bitmapCaching',
+                        id='bitmapCaching'
+                    )
+                    label.form-check-label(for='bitmapCaching', translate) Enable Bitmap Caching
+
+div([ngbNavOutlet]='nav')
+

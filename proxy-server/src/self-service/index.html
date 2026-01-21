@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Tlink Agentic Self-Service</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0f1115; color: #e9ecf2; padding: 20px; }
+    h1 { margin-top: 0; }
+    .card { background: #181b22; border: 1px solid #2a2f3a; border-radius: 8px; padding: 16px; max-width: 640px; }
+    label { display: block; margin-bottom: 6px; }
+    input { width: 100%; padding: 8px; border: 1px solid #2a2f3a; border-radius: 4px; background: #10131a; color: #e9ecf2; }
+    button { margin-top: 10px; background: #2f80ed; color: white; border: none; padding: 10px 14px; border-radius: 4px; cursor: pointer; }
+    pre { background: #10131a; padding: 10px; border-radius: 6px; overflow: auto; }
+    .hint { color: #9aa4b5; font-size: 13px; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Request a short-lived token</h1>
+    <p>Enter your email to receive a verification link that issues a short-lived token. If email is not configured, the link will be shown here.</p>
+    <label for="email">Email</label>
+    <input id="email" type="email" placeholder="you@example.com">
+    <button id="requestBtn">Send link</button>
+    <p id="status" class="hint"></p>
+    <div id="linkBlock" style="display:none;">
+      <p>Verification link (copy to browser):</p>
+      <pre id="linkText"></pre>
+    </div>
+  </div>
+
+  <script>
+    const emailEl = document.getElementById('email');
+    const statusEl = document.getElementById('status');
+    const linkBlock = document.getElementById('linkBlock');
+    const linkText = document.getElementById('linkText');
+    document.getElementById('requestBtn').addEventListener('click', async () => {
+      statusEl.textContent = 'Sending...';
+      linkBlock.style.display = 'none';
+      try {
+        const res = await fetch('/v1/self-service/request-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: emailEl.value })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error?.message || 'Request failed');
+        statusEl.textContent = data.message || 'Link sent';
+        if (data.verificationUrl || data.emailResult?.link) {
+          linkBlock.style.display = 'block';
+          linkText.textContent = data.verificationUrl || data.emailResult.link;
+        }
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = err.message || 'Error sending link';
+      }
+    });
+  </script>
+</body>
+</html>

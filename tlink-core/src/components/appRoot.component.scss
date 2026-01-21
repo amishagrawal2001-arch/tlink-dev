@@ -135,7 +135,7 @@ $tab-border-radius: 4px;
 }
 
 .right-dock {
-    position: absolute;
+    position: fixed; // Fixed to viewport, not affected by app-root margin-left changes
     top: 0;
     bottom: 0;
     right: 0;
@@ -148,7 +148,7 @@ $tab-border-radius: 4px;
     gap: 12px;
     background: var(--theme-bg-more-2);
     border-left: 1px solid var(--theme-bg-less);
-    z-index: 6;
+    z-index: 1002; // Higher than AI sidebar (1000) and its resize handle (1001) to ensure visibility
 }
 
 .content.tabs-on-left > .tab-bar, .content.tabs-on-right > .tab-bar {

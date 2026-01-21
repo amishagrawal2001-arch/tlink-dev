@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Tlink Agentic Admin & API Guide</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f1115;
+      --card: #181b22;
+      --border: #2a2f3a;
+      --text: #e9ecf2;
+      --muted: #9aa4b5;
+      --accent: #2f80ed;
+    }
+    body { margin: 0; padding: 20px; font-family: "Inter", system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+    a { color: var(--accent); }
+    h1, h2, h3 { margin: 0 0 8px; }
+    section { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #214c2f; color: #9ee6b0; font-size: 12px; }
+    dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; }
+    dt { color: var(--muted); }
+    dd { margin: 0; }
+    ul { margin: 8px 0 0 20px; }
+    .small { color: var(--muted); font-size: 13px; }
+    .card-title { display: flex; justify-content: space-between; align-items: center; }
+    code { background: rgba(255,255,255,0.04); padding: 2px 4px; border-radius: 4px; }
+    pre { background: #11151c; border: 1px solid var(--border); padding: 10px; border-radius: 8px; overflow-x: auto; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <section>
+    <div class="card-title">
+      <h1>Tlink Agentic Admin & API Guide</h1>
+      <span class="pill">Admin</span>
+    </div>
+    <div class="small">Admin endpoints require <code>Authorization: Bearer &lt;ADMIN_TOKEN&gt;</code>. If configured, add <code>x-admin-otp</code> for OTP/TOTP.</div>
+    <dl style="margin-top:8px;">
+      <dt>Admin UI</dt><dd><code>http://localhost:3052/admin</code></dd>
+      <dt>Admin API</dt><dd><code>http://localhost:3052/admin/api/*</code></dd>
+      <dt>Public API</dt><dd><code>http://localhost:3052/v1/*</code></dd>
+    </dl>
+  </section>
+
+  <section>
+    <h2>Users</h2>
+    <ul>
+      <li><code>GET /admin/api/users?search=&page=&pageSize=</code> — list users.</li>
+      <li><code>GET /admin/api/users/:id?includeTokens=0|1</code> — fetch user (optional tokens).</li>
+      <li><code>POST /admin/api/users</code> — create; body supports email, name, allowed/denied providers/models (global & per provider), preferred/locked provider, rate limits (global & per provider), billing limits. Returns user + token + optional <code>verificationUrl</code>.</li>
+      <li><code>PATCH /admin/api/users/:id</code> — update fields above; includes <code>active</code> toggle.</li>
+      <li><code>POST /admin/api/users/:id/resend</code> — resend verification (returns link if email not configured).</li>
+      <li><code>POST /admin/api/users/:id/tokens</code> — issue token; optional <code>expiresInDays</code>.</li>
+      <li><code>DELETE /admin/api/users/:id/tokens/:token</code> — revoke token.</li>
+      <li><code>POST /admin/api/users/:id/reset-usage</code> — reset usage counters.</li>
+      <li><code>POST /admin/api/users/:id/test</code> — provider/model routing test; returns provider, model, status, latency.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Tokens (admin issuance)</h2>
+    <ul>
+      <li><code>POST /v1/tokens</code> — create a user + token in one call (admin token required).</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Audit</h2>
+    <ul>
+      <li><code>GET /admin/api/audit?search=&provider=&status=&reason=&from=&to=&page=&pageSize=</code> — list audit events.</li>
+      <li><code>GET /admin/api/audit/export?format=csv</code> — full CSV export.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Routing</h2>
+    <ul>
+      <li><code>GET /admin/api/routing</code> — current routing mode/rules (empty rules = built-in heuristics only).</li>
+      <li><code>POST /admin/api/routing</code> — set routing: <code>{ "mode": "auto|off", "rules": [...] }</code>.</li>
+      <li><code>GET /admin/api/routing/builtins</code> — built-in heuristic defaults (intent → provider/model).</li>
+    </ul>
+    <div class="small mono">
+<pre><code># get current
+curl -s http://localhost:3052/admin/api/routing \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# disable auto routing
+curl -s -X POST http://localhost:3052/admin/api/routing \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"off"}'
+
+# set rules
+curl -s -X POST http://localhost:3052/admin/api/routing \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "mode":"auto",
+        "rules":[
+          {"intent":"code","provider":"openai","model":"gpt-4o"},
+          {"intent":"translate","provider":"openai","model":"gpt-4o-mini"},
+          {"intent":"default","provider":"groq","model":"llama-3.1-8b-instant"}
+        ]
+      }'
+
+# view built-ins
+curl -s http://localhost:3052/admin/api/routing/builtins \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+</code></pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>Usage</h2>
+    <ul>
+      <li><code>GET /admin/api/usage</code> — aggregated usage per user (requests, prompt/completion tokens, last provider/model).</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Provider Health</h2>
+    <ul>
+      <li><code>GET /admin/api/providers/health</code> — provider health snapshot.</li>
+      <li><code>POST /admin/api/providers/health/:provider/suppress</code> — body <code>{ suppressed: true|false, reason? }</code>.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Models (public)</h2>
+    <ul>
+      <li><code>GET /v1/models</code> — proxy-exposed models across providers.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Self-service (no admin token)</h2>
+    <ul>
+      <li><code>POST /v1/self-service/request-token</code> — email a short-lived token link; always returns <code>verificationUrl</code> for manual share.</li>
+      <li><code>GET /v1/self-service/claim?token=&format=json</code> — claim short-lived token.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>User tokens & intent examples (public API)</h2>
+    <p>Issue a token, then call chat with or without intents.</p>
+    <h3>Issue token (existing user, admin)</h3>
+    <pre><code>curl -s -X POST http://localhost:3052/admin/api/users/&lt;userId&gt;/tokens \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"ttlDays":90}'</code></pre>
+
+    <h3>Revoke token (admin)</h3>
+    <pre><code>curl -X DELETE http://localhost:3052/admin/api/users/&lt;userId&gt;/tokens/&lt;tokenId&gt; \
+  -H "Authorization: Bearer $ADMIN_TOKEN"</code></pre>
+
+    <h3>Create user + token (admin)</h3>
+    <pre><code>curl -s -X POST http://localhost:3052/v1/tokens \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"id":"alice-2","name":"Alice 2","allowedProviders":["openai","groq"],"preferredProvider":null}'</code></pre>
+
+    <h3>Use the returned token</h3>
+    <pre><code>export USER_TOKEN=PASTE_TOKEN_HERE</code></pre>
+
+    <h3>Chat (auto/default)</h3>
+    <pre><code>curl -s http://localhost:3052/v1/chat/completions \
+  -H "Authorization: Bearer $USER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"ping"}],"stream":false}'</code></pre>
+
+    <h3>Chat with intents</h3>
+    <pre><code># code/long
+curl -s http://localhost:3052/v1/chat/completions \
+  -H "Authorization: Bearer $USER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"write a short python function to add two numbers"}],"intent":"code/long","stream":false}'
+
+# translate/summarize
+curl -s http://localhost:3052/v1/chat/completions \
+  -H "Authorization: Bearer $USER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"summarize this request in one line"}],"intent":"translate/summarize","stream":false}'
+
+# vision
+curl -s http://localhost:3052/v1/chat/completions \
+  -H "Authorization: Bearer $USER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":[{"type":"text","text":"describe the image"},{"type":"image_url","image_url":{"url":"https://upload.wikimedia.org/wikipedia/commons/3/3f/Fronalpstock_big.jpg"}}]}],"intent":"vision","stream":false}'
+
+# audio/transcribe (whisper)
+curl -s http://localhost:3052/v1/audio/transcriptions \
+  -H "Authorization: Bearer $USER_TOKEN" \
+  -F "file=@/path/to/sample.wav" \
+  -F "intent=audio" -F "model=auto"</code></pre>
+  </section>
+
+  <section>
+    <h2>Email Verification</h2>
+    <div class="small">
+      Links hit <code>/v1/verify-email?token=...</code>. Configure <code>SMTP_*</code> and <code>PUBLIC_BASE_URL</code> for real email; otherwise links are logged/returned.
+    </div>
+  </section>
+
+  <section>
+    <h2>Headers Recap</h2>
+    <ul>
+      <li><code>Authorization: Bearer &lt;ADMIN_TOKEN&gt;</code></li>
+      <li>Optional: <code>x-admin-otp: &lt;otp-or-totp-code&gt;</code> if <code>ADMIN_OTP_SECRET</code> or <code>ADMIN_TOTP_SECRET</code> is set.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>cURL examples</h2>
+    <div class="small">Set your token first: <code>export ADMIN_TOKEN=YOUR_TOKEN</code></div>
+    <h3>List users</h3>
+    <pre><code>curl -s "http://localhost:3052/admin/api/users?search=&page=1&pageSize=50" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"</code></pre>
+
+    <h3>Create user</h3>
+    <pre><code>curl -s -X POST http://localhost:3052/admin/api/users \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"alice@example.com","name":"Alice","allowedProviders":["openai","groq"],"preferredProvider":"groq"}'</code></pre>
+
+    <h3>Audit search</h3>
+    <pre><code>curl -s "http://localhost:3052/admin/api/audit?search=alice&provider=groq&page=1&pageSize=50" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"</code></pre>
+
+    <h3>Provider health</h3>
+    <pre><code>curl -s http://localhost:3052/admin/api/providers/health \
+  -H "Authorization: Bearer $ADMIN_TOKEN"</code></pre>
+
+    <h3>Self-service link (no admin token)</h3>
+    <pre><code>curl -s -X POST http://localhost:3052/v1/self-service/request-token \
+  -H "Content-Type: application/json" \
+  -d '{"email":"alice@example.com"}'</code></pre>
+  </section>
+</body>
+</html>

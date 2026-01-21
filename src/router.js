@@ -1,0 +1,144 @@
+import { getAllProviders, getProviderConfig } from './providers/config.js';
+import { selectProvider } from './providers/selector.js';
+
+const AUTO_TOKENS = ['auto', 'tlink-proxy-auto', 'tlink-agentic-auto'];
+const OPENAI_STRONG = process.env.ROUTER_OPENAI_STRONG_MODEL || process.env.OPENAI_DEFAULT_MODEL || 'gpt-4o';
+const OPENAI_FAST = process.env.ROUTER_OPENAI_FAST_MODEL || process.env.OPENAI_DEFAULT_MODEL || 'gpt-4o-mini';
+const GROQ_STRONG = process.env.ROUTER_GROQ_STRONG_MODEL || process.env.GROQ_DEFAULT_MODEL || 'llama-3.1-70b-versatile';
+const GROQ_FAST = process.env.ROUTER_GROQ_FAST_MODEL || process.env.GROQ_DEFAULT_MODEL || 'llama-3.1-8b-instant';
+
+function providerByBase(providers, baseName) {
+    if (!baseName) return null;
+    return providers.find(p => p.name === baseName || p.name.startsWith(`${baseName}-`)) || null;
+}
+
+function extractText(messages = []) {
+    let text = '';
+    let hasImage = false;
+    let hasAudio = false;
+    if (Array.isArray(messages)) {
+        for (const m of messages) {
+            if (m?.role !== 'user') continue;
+            const content = m.content;
+            if (typeof content === 'string') {
+                text += `\n${content}`;
+            } else if (Array.isArray(content)) {
+                for (const part of content) {
+                    if (typeof part === 'string') text += `\n${part}`;
+                    else if (part?.text) text += `\n${part.text}`;
+                    if (part?.image_url) hasImage = true;
+                    if (part?.audio) hasAudio = true;
+                }
+            } else if (content?.text) {
+                text += `\n${content.text}`;
+            }
+            if (m?.images?.length) hasImage = true;
+            if (m?.audio) hasAudio = true;
+        }
+    }
+    return { text: text.trim(), hasImage, hasAudio };
+}
+
+function detectIntent(meta) {
+    const text = (meta.text || '').toLowerCase();
+    if (meta.hasImage) return 'vision';
+    if (meta.hasAudio) return 'audio';
+    if (/translate|translation|अनुवाद|in hindi|in english/.test(text)) return 'translate';
+    if (/summarize|summary|tl;dr/.test(text)) return 'summarize';
+    if (/```|exception|stack trace|traceback|error|npm |docker|k8s|kubectl|sql|bash|python|java|c#|c\+\+|typescript|javascript/.test(text)) return 'code';
+    if (text.length > 1800) return 'long';
+    return 'default';
+}
+
+/**
+ * Decide provider/model when model is "auto".
+ * Returns an ordered candidate list with optional routing reason.
+ */
+export function pickProviderModel({ user, requestedModel, messages }) {
+    const providers = getAllProviders(user?.allowedProviders);
+    if (!providers.length) return { candidates: [], reason: 'no_providers' };
+
+    const { text, hasImage, hasAudio } = extractText(messages);
+    const intent = detectIntent({ text, hasImage, hasAudio });
+    const candidates = [];
+
+    const lockedProvider = user?.lockedProvider || null;
+    const isAuto = !requestedModel || AUTO_TOKENS.includes(String(requestedModel).toLowerCase());
+
+    const pushCandidate = (base, model, reason) => {
+        const provider = lockedProvider
+            ? providerByBase(providers, lockedProvider)
+            : providerByBase(providers, base);
+        if (!provider) return;
+        const cfg = getProviderConfig(provider.name, user?.allowedProviders);
+        const effectiveModel = model || cfg?.defaultModel || requestedModel || 'auto';
+        candidates.push({ provider, model: effectiveModel, reason });
+    };
+
+    if (!isAuto) {
+        const provider = selectProvider({ model: requestedModel, user });
+        if (provider) {
+            return { candidates: [{ provider, model: requestedModel, reason: 'explicit-model' }], reason: 'explicit-model' };
+        }
+        return { candidates: [], reason: 'no_provider_for_explicit' };
+    }
+
+    switch (intent) {
+        case 'code':
+        case 'long':
+            pushCandidate('openai', OPENAI_STRONG, `rule:${intent}->openai`);
+            pushCandidate('groq', GROQ_STRONG, `rule:${intent}->groq`);
+            break;
+        case 'translate':
+        case 'summarize':
+            pushCandidate('openai', OPENAI_FAST, `rule:${intent}->openai`);
+            pushCandidate('groq', GROQ_FAST, `rule:${intent}->groq`);
+            break;
+        case 'vision':
+            pushCandidate('openai', OPENAI_STRONG, 'rule:vision->openai');
+            break;
+        case 'audio':
+            pushCandidate('openai', 'whisper-1', 'rule:audio->openai');
+            pushCandidate('groq', 'whisper-large-v3', 'rule:audio->groq');
+            break;
+        default:
+            pushCandidate('groq', GROQ_FAST, 'rule:default->groq');
+            pushCandidate('openai', OPENAI_FAST, 'rule:default->openai');
+            break;
+    }
+
+    // Fallback to strategy if no match or locked provider missing
+    if (!candidates.length) {
+        const provider = selectProvider({ model: requestedModel, user });
+        if (provider) {
+            const cfg = getProviderConfig(provider.name, user?.allowedProviders);
+            candidates.push({
+                provider,
+                model: cfg?.defaultModel || requestedModel || 'auto',
+                reason: 'fallback-strategy'
+            });
+        }
+    }
+
+    // Deduplicate providers while keeping order
+    const seen = new Set();
+    const deduped = [];
+    for (const c of candidates) {
+        if (c.provider && !seen.has(c.provider.name)) {
+            seen.add(c.provider.name);
+            deduped.push(c);
+        }
+    }
+
+    return { candidates: deduped, reason: deduped[0]?.reason || 'fallback', intent };
+}
+
+export function isAutoModel(model) {
+    if (!model) return true;
+    const m = String(model).toLowerCase();
+    return AUTO_TOKENS.includes(m);
+}
+
+export function extractPromptMeta(messages) {
+    return extractText(messages);
+}

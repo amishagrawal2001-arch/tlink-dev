@@ -49,7 +49,7 @@ export class CoreCommandProvider extends CommandProvider {
             },
             {
                 id: 'core:new-code-editor',
-                locations: [CommandLocation.StartPage, CommandLocation.RightToolbar],
+                locations: [CommandLocation.StartPage], // Removed RightToolbar - button only in left dock now
                 label: this.translate.instant('Code editor'),
                 icon: require('./icons/code.svg'),
                 run: async () => {

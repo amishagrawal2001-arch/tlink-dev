@@ -1,7 +1,7 @@
-# Tabby (formerly Terminus) - AI Coding Assistant Instructions
+# Tlink (formerly Tabby/Terminus) - AI Coding Assistant Instructions
 
 ## Project Overview
-Tabby is an Electron-based terminal emulator and SSH/serial client built with Angular and TypeScript. It features a plugin-based architecture where functionality is provided through modular plugins that extend the core application.
+Tlink is an Electron-based terminal emulator and SSH/serial client built with Angular and TypeScript. It features a plugin-based architecture where functionality is provided through modular plugins that extend the core application.
 
 ## Architecture
 - **Main App**: `app/` - Electron main/renderer processes

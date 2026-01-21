@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Tlink Agentic Admin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: "Inter", system-ui, -apple-system, sans-serif; background: #0f1115; color: #e9ecf2; margin: 0; padding: 16px; }
+    h1 { margin-top: 0; }
+    .card { background: #181b22; border: 1px solid #2a2f3a; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; width: 100%; }
+    label { display: block; margin: 0 0 4px; font-size: 13px; color: #9aa4b5; }
+    input, select { background: #10131a; color: #e9ecf2; border: 1px solid #2a2f3a; border-radius: 6px; padding: 8px 10px; min-width: 200px; }
+    button { background: #2f80ed; color: white; border: none; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 13px; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+    th, td { border-bottom: 1px solid #2a2f3a; padding: 8px 6px; text-align: left; }
+    .row-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .row-actions button, .row-actions select { padding: 6px 9px; font-size: 12px; border-radius: 6px; border: 1px solid #2a2f3a; background: #10131a; color: #e9ecf2; min-width: 120px; }
+    .pill { padding: 2px 6px; border-radius: 999px; font-size: 12px; }
+    .pill.ok { background: #214c2f; color: #9ee6b0; }
+    .pill.warn { background: #4c3921; color: #f1c48b; }
+    .pill.bad { background: #4c2121; color: #f1a3a3; }
+    .flex { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+    .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field.sm input { min-width: 120px; max-width: 160px; }
+    .field.actions { flex: 1 1 auto; gap: 6px; flex-direction: row; align-items: center; }
+    .stack { display: flex; flex-direction: column; gap: 10px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+    .advanced { border: 1px solid #2a2f3a; border-radius: 6px; padding: 8px 10px; background: #12151c; }
+    .advanced summary { cursor: pointer; color: #c7d2e0; }
+    .hint { font-size: 12px; color: #9aa4b5; display: block; margin-top: 2px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace; }
+    .chip-row { display: flex; gap: 6px; align-items: center; }
+    .table-wrap { overflow-x: auto; }
+    .badge-inline { display: inline-flex; align-items: center; gap: 4px; background: #1f2430; border: 1px solid #2f3744; padding: 2px 6px; border-radius: 10px; font-size: 11px; margin-right: 4px; }
+    .badge-inline .dot { width: 6px; height: 6px; border-radius: 50%; background: #3ecf8e; }
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .modal-backdrop.hidden { display: none; }
+    .modal { background: #11151c; border: 1px solid #2a2f3a; border-radius: 10px; padding: 16px; width: min(900px, 90vw); box-shadow: 0 16px 40px rgba(0,0,0,0.45); }
+    .modal h3 { margin-top: 0; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 12px; }
+    .muted { color: #9aa4b5; }
+    .small { font-size: 12px; }
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .modal-backdrop.hidden { display: none; }
+    .modal { background: #11151c; border: 1px solid #2a2f3a; border-radius: 10px; padding: 16px; width: min(900px, 90vw); box-shadow: 0 16px 40px rgba(0,0,0,0.45); }
+    .modal h3 { margin-top: 0; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 12px; }
+    .muted { color: #9aa4b5; }
+    .small { font-size: 12px; }
+    .nowrap { white-space: nowrap; }
+    .inline-edit { display: inline-flex; align-items: center; gap: 6px; }
+    .inline-edit input { min-width: 160px; padding: 4px 6px; font-size: 12px; }
+    .inline-edit button { padding: 4px 6px; font-size: 12px; }
+    .icon-btn { background: #10131a; border: 1px solid #2a2f3a; color: #e9ecf2; padding: 4px; border-radius: 6px; min-width: 28px; }
+    .icon-btn:hover { border-color: #2f80ed; color: #2f80ed; }
+  </style>
+</head>
+<body>
+  <div class="flex" style="justify-content: space-between; align-items: center; margin-bottom: 8px;">
+    <h1 style="margin: 0;">Tlink Agentic Admin</h1>
+    <a href="/API-ADMIN.html" target="_blank" style="color:#2f80ed; text-decoration:none;">API Docs</a>
+  </div>
+  <div class="card stack">
+    <div class="row" id="quickStats">
+      <div class="field sm">
+        <label>Users</label>
+        <div id="statUsers" class="pill ok">-</div>
+      </div>
+      <div class="field sm">
+        <label>Verified</label>
+        <div id="statVerified" class="pill ok">-</div>
+      </div>
+      <div class="field sm">
+        <label>Active</label>
+        <div id="statActive" class="pill ok">-</div>
+      </div>
+      <div class="field sm">
+        <label>Req (sum)</label>
+        <div id="statRequests" class="pill warn">-</div>
+      </div>
+      <div class="field sm">
+        <label>Prompt tokens</label>
+        <div id="statPrompt" class="pill warn">-</div>
+      </div>
+      <div class="field sm">
+        <label>Completion tokens</label>
+        <div id="statCompletion" class="pill warn">-</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card stack">
+    <div class="row">
+      <div class="field">
+        <label for="adminToken">Admin token</label>
+        <input id="adminToken" type="password" placeholder="ADMIN_TOKEN">
+      </div>
+      <div class="field sm">
+        <label for="adminOtp">OTP</label>
+        <input id="adminOtp" type="text" placeholder="TOTP/OTP">
+      </div>
+      <div class="field">
+        <label for="baseUrl">Base URL</label>
+        <input id="baseUrl" type="text" value="">
+      </div>
+      <div class="field actions">
+        <button id="loadBtn">Load users</button>
+        <button id="copyAuthBtn" title="Copy Authorization header">Copy auth header</button>
+        <span id="status"></span>
+      </div>
+      <div class="field" style="flex:1 1 100%; margin-top:4px;">
+        <span class="hint">Routing is controlled by the server env <code>ROUTING_MODE</code> (default: <code>auto</code>; set to <code>off</code> to disable auto model selection).</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card stack">
+    <h3 class="mb-0">Routing</h3>
+    <div class="row">
+      <div class="field sm">
+        <label for="routingMode">Mode</label>
+        <select id="routingMode">
+          <option value="auto">auto</option>
+          <option value="off">off</option>
+        </select>
+      </div>
+      <div class="field" style="flex:1 1 auto;">
+        <label for="routingRules">Rules (JSON array, optional)</label>
+        <textarea id="routingRules" rows="3" placeholder='[{"intent":"code","provider":"openai","model":"gpt-4o"}]'></textarea>
+        <span class="hint">Rules are optional; current heuristics will still run. Mode overrides <code>ROUTING_MODE</code>.</span>
+      </div>
+      <div class="field actions">
+        <button id="routingLoadBtn">Load</button>
+        <button id="routingSaveBtn">Save</button>
+        <span id="routingStatus"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card stack">
+    <div class="row">
+      <div class="field">
+        <label>Search users</label>
+        <input id="search" type="text" placeholder="Email/ID/Name">
+      </div>
+      <div class="field sm">
+        <label>Page</label>
+        <input id="userPage" type="number" min="1" value="1">
+      </div>
+      <div class="field sm">
+        <label>Page size</label>
+        <input id="userPageSize" type="number" min="5" max="500" value="50">
+      </div>
+      <div class="field">
+        <label>Filters</label>
+        <div class="chip-row">
+          <label class="nowrap"><input type="checkbox" id="filterVerified"> Verified</label>
+          <label class="nowrap"><input type="checkbox" id="filterActive"> Active</label>
+          <label class="nowrap"><input type="checkbox" id="filterHasLimits"> Has limits</label>
+        </div>
+      </div>
+      <div class="field actions">
+        <button id="searchBtn">Search</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card stack">
+    <h3 class="mb-0">Bulk limits / quotas</h3>
+    <div class="row">
+      <div class="field sm">
+        <label>Rate max</label>
+        <input id="bulkRateMax" type="number" placeholder="100">
+      </div>
+      <div class="field sm">
+        <label>Rate window (ms)</label>
+        <input id="bulkRateWindow" type="number" placeholder="900000">
+      </div>
+      <div class="field">
+        <label>Rate by provider (JSON)</label>
+        <input id="bulkRateByProvider" type="text" placeholder='{"openai":{"max":60,"windowMs":60000}}'>
+      </div>
+      <div class="field">
+        <label>Quota (req/ptok/ctok)</label>
+        <input id="bulkQuota" type="text" placeholder='{"maxRequests":10000,"maxPromptTokens":500000,"maxCompletionTokens":500000}'>
+      </div>
+      <div class="field actions">
+        <button id="bulkApplyBtn">Apply to filtered users</button>
+        <span class="hint" id="bulkStatus"></span>
+      </div>
+    </div>
+    <div class="row">
+      <div class="field" style="min-width: 300px;">
+        <label>Provider policy defaults (JSON)</label>
+        <input id="bulkProviderPolicies" type="text" placeholder='{"openai":{"allowed":["gpt-4o"],"denied":["o1"]},"groq":{"allowed":["llama-3.1-8b-instant"]}}'>
+      </div>
+      <div class="field actions">
+        <button id="bulkPolicyBtn">Apply policies to filtered users</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card stack">
+    <h3 class="mb-0">Create user</h3>
+    <div class="row grid">
+      <div class="field">
+        <label>Email</label>
+        <input id="newEmail" type="text" placeholder="Email">
+      </div>
+      <div class="field">
+        <label>Name</label>
+        <input id="newName" type="text" placeholder="Name">
+      </div>
+      <div class="field">
+        <label>Allowed providers</label>
+        <input id="newProviders" type="text" placeholder="comma-separated">
+      </div>
+      <div class="field">
+        <label>Allowed models</label>
+        <input id="newModels" type="text" placeholder="comma-separated">
+      </div>
+      <div class="field">
+        <label>Denied models</label>
+        <input id="newDeniedModels" type="text" placeholder="comma-separated">
+      </div>
+      <div class="field">
+        <label>Preferred provider</label>
+        <input id="newPreferred" type="text" placeholder="e.g. groq">
+      </div>
+      <div class="field">
+        <label>Lock provider</label>
+        <input id="newLockedProvider" type="text" placeholder="optional">
+      </div>
+      <div class="field">
+        <label>Rate max</label>
+        <input id="newRateMax" type="number" min="0" placeholder="e.g. 100">
+      </div>
+      <div class="field">
+        <label>Rate window (ms)</label>
+        <input id="newRateWindow" type="number" min="1000" placeholder="e.g. 60000">
+      </div>
+    </div>
+    <details class="advanced">
+      <summary>Advanced JSON</summary>
+      <div class="row grid">
+        <div class="field full">
+          <label>Allow by provider (JSON)</label>
+          <input id="newModelsByProvider" type="text" class="mono" placeholder='{"groq":["llama-3.1-8b-instant"]}'>
+        </div>
+        <div class="field full">
+          <label>Deny by provider (JSON)</label>
+          <input id="newDeniedByProvider" type="text" class="mono" placeholder='{"openai":["gpt-5"]}'>
+        </div>
+        <div class="field full">
+          <label>Rate by provider (JSON)</label>
+          <input id="newRateByProvider" type="text" class="mono" placeholder='{"groq":{"max":10,"windowMs":60000}}'>
+        </div>
+      </div>
+    </details>
+    <div class="row">
+      <button id="createBtn">Create</button>
+      <span id="createStatus"></span>
+    </div>
+  </div>
+
+  <div class="card stack">
+    <div class="row">
+      <div class="field">
+        <label for="search">Search users</label>
+        <input id="search" type="text" placeholder="Email/ID/Name">
+      </div>
+      <div class="field sm">
+        <label><input type="checkbox" id="filterVerified"> Verified only</label>
+      </div>
+      <div class="field sm">
+        <label><input type="checkbox" id="filterActive"> Active only</label>
+      </div>
+      <div class="field sm">
+        <label><input type="checkbox" id="filterHasLimits"> Has limits</label>
+      </div>
+      <div class="field actions">
+        <button id="searchBtn">Search</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table id="usersTable">
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Name</th>
+            <th>Locked provider</th>
+            <th>Verified</th>
+            <th>Providers</th>
+            <th>Preferred</th>
+            <th>Last used</th>
+            <th>Last provider</th>
+            <th>Last model</th>
+            <th>Created</th>
+            <th>Tokens</th>
+            <th>Status</th>
+            <th>Limits</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="flex">
+      <strong>Tokens for:</strong> <span id="tokensUser">None</span>
+      <label for="tokenTtl">TTL (days)</label>
+      <input id="tokenTtl" type="number" min="1" style="width: 80px;" placeholder="90">
+      <button class="pill-btn" data-ttl="30">30d</button>
+      <button class="pill-btn" data-ttl="90">90d</button>
+      <button class="pill-btn" data-ttl="180">180d</button>
+      <button id="addTokenBtn">Add token</button>
+      <span id="tokenStatus"></span>
+    </div>
+    <div class="table-wrap">
+      <table id="tokensTable">
+        <thead>
+          <tr>
+            <th>Token</th>
+            <th>Created</th>
+            <th>Expires</th>
+            <th>Last used</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Policies modal -->
+  <div id="policiesModal" class="modal-backdrop hidden">
+    <div class="modal">
+      <h3>Edit policies</h3>
+      <p id="policiesUserLabel" class="muted"></p>
+      <div class="grid cols-2 gap">
+        <label>Allowed models (comma)
+          <input id="polAllowedModels" placeholder="gpt-4o,gpt-4o-mini">
+        </label>
+        <label>Denied models (comma)
+          <input id="polDeniedModels" placeholder="o1,o3-mini">
+        </label>
+      </div>
+      <div class="grid cols-2 gap">
+        <label>Allowed models by provider (JSON)
+          <textarea id="polAllowedByProvider" rows="4" placeholder='{"openai":["gpt-4o"],"groq":["llama-3.1-8b-instant"]}'></textarea>
+        </label>
+        <label>Denied models by provider (JSON)
+          <textarea id="polDeniedByProvider" rows="4" placeholder='{"openai":["o1"],"groq":["whisper-large-v3"]}'></textarea>
+        </label>
+      </div>
+      <div class="grid cols-2 gap">
+        <label>Global rate limit (JSON)
+          <textarea id="polRateLimit" rows="3" placeholder='{"max":100,"windowMs":900000}'></textarea>
+        </label>
+        <label>Rate limit by provider (JSON)
+          <textarea id="polRateByProvider" rows="3" placeholder='{"openai":{"max":60,"windowMs":60000}}'></textarea>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button id="polSaveBtn" class="primary">Save</button>
+        <button id="polCancelBtn" type="button">Cancel</button>
+      </div>
+      <div id="polStatus" class="muted small"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="flex">
+      <label for="auditSearch">Audit search</label>
+      <input id="auditSearch" type="text" placeholder="user/provider/model/status/error">
+      <label for="auditProvider">Provider</label>
+      <input id="auditProvider" type="text" placeholder="e.g. groq">
+      <label for="auditStatusFilter">Status</label>
+      <input id="auditStatusFilter" type="text" placeholder="e.g. 200 or error">
+      <label for="auditReasonFilter">Reason</label>
+      <input id="auditReasonFilter" type="text" placeholder="rate_limit/model_not_allowed/quota">
+      <label for="auditFrom">From</label>
+      <input id="auditFrom" type="date">
+      <label for="auditTo">To</label>
+      <input id="auditTo" type="date">
+      <button id="auditLoadBtn">Load audit</button>
+      <button id="auditCsvBtn">Export CSV</button>
+      <button id="auditFullBtn">Full export</button>
+      <span id="auditStatusMsg"></span>
+    </div>
+    <div class="flex mt-8">
+      <button class="pill-btn" id="auditPresetToday">Today</button>
+      <button class="pill-btn" id="auditPreset7d">Last 7d</button>
+      <button class="pill-btn" id="auditPresetAll">All time</button>
+    </div>
+    <div class="flex mt-8">
+      <label for="auditPage">Page</label>
+      <input id="auditPage" type="number" min="1" value="1" style="width: 70px;">
+      <label for="auditPageSize">Page size</label>
+      <input id="auditPageSize" type="number" min="10" max="500" value="200" style="width: 80px;">
+      <button id="healthLoadBtn">Load provider health</button>
+      <span id="healthStatus"></span>
+    </div>
+    <div class="table-wrap">
+      <table id="auditTable">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>User</th>
+            <th>Provider</th>
+            <th>Model</th>
+            <th>Routed</th>
+            <th>Routing reason</th>
+            <th>Status</th>
+            <th>Reason</th>
+            <th>Attempts</th>
+            <th>Latency</th>
+            <th>Error</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="flex">
+      <strong>Usage / Billing</strong>
+      <button id="usageLoadBtn">Load usage</button>
+      <button id="usageCsvBtn">Export CSV</button>
+      <span id="usageStatus"></span>
+    </div>
+    <div class="flex mt-8">
+      <label for="usageFrom">From</label>
+      <input id="usageFrom" type="date">
+      <label for="usageTo">To</label>
+      <input id="usageTo" type="date">
+      <button class="pill-btn" id="usagePresetToday">Today</button>
+      <button class="pill-btn" id="usagePreset7d">Last 7d</button>
+      <button class="pill-btn" id="usagePresetAll">All time</button>
+      <label class="nowrap" for="usagePage">Page</label>
+      <input id="usagePage" type="number" min="1" value="1" style="width:70px">
+      <label class="nowrap" for="usagePageSize">Page size</label>
+      <input id="usagePageSize" type="number" min="5" max="500" value="50" style="width:80px">
+    </div>
+    <div class="table-wrap">
+      <table id="usageTable">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Email</th>
+            <th>Requests</th>
+            <th>Prompt tokens</th>
+            <th>Completion tokens</th>
+            <th>Last provider</th>
+            <th>Last model</th>
+            <th>Updated</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="mb-0">Provider health</h3>
+    <div class="flex">
+      <label for="healthFailThreshold">Fail count ≥</label>
+      <input id="healthFailThreshold" type="number" min="1" value="1" style="width:70px">
+      <label for="healthErrorMinutes">Last error within (min)</label>
+      <input id="healthErrorMinutes" type="number" min="1" value="60" style="width:70px">
+      <button id="healthSuppressFailing">Suppress failing</button>
+      <button id="healthUnsuppressAll">Unsuppress all</button>
+      <span class="hint" id="healthActionsStatus"></span>
+    </div>
+    <div class="flex mt-8">
+      <label class="nowrap" for="healthPage">Page</label>
+      <input id="healthPage" type="number" min="1" value="1" style="width:70px">
+      <label class="nowrap" for="healthPageSize">Page size</label>
+      <input id="healthPageSize" type="number" min="5" max="500" value="50" style="width:80px">
+    </div>
+    <div class="table-wrap">
+      <table id="healthTable">
+        <thead>
+          <tr>
+            <th>Provider</th>
+            <th>Last success</th>
+            <th>Last error</th>
+            <th>Rolling latency</th>
+            <th>Successes</th>
+            <th>Failures</th>
+            <th>Suppressed</th>
+            <th>Until</th>
+            <th>Reason</th>
+            <th>Last error msg</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card stack">
+    <h3 class="mb-0">Self-service token</h3>
+    <div class="row">
+      <div class="field">
+        <label>Email</label>
+        <input id="selfEmail" type="email" placeholder="user@example.com">
+      </div>
+      <div class="field actions">
+        <button id="selfSendBtn">Send self-service link</button>
+        <span id="selfStatus" class="hint"></span>
+      </div>
+    </div>
+    <div class="hint">Uses /v1/self-service/request-token with email verification. If email is not configured, link will be returned for manual share.</div>
+  </div>
+
+  <div class="card stack">
+    <script src="app.js"></script>
+  </body>
+  </html>

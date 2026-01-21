@@ -1,0 +1,33 @@
+.rdp-tab-container
+    .rdp-toolbar.d-flex.align-items-center.p-2.bg-dark
+        i.fas.fa-xs.fa-circle.text-success.me-2(*ngIf='connected')
+        i.fas.fa-xs.fa-circle.text-danger.me-2(*ngIf='!connected')
+        strong.me-auto {{profile.options.user}}@{{profile.options.host}}:{{profile.options.port}}
+        
+        button.btn.btn-sm.btn-link.me-2((click)='connect()', *ngIf='!connected')
+            i.fas.fa-plug
+            span(translate) Connect
+        
+        button.btn.btn-sm.btn-link.me-2((click)='disconnect()', *ngIf='connected')
+            i.fas.fa-unlink
+            span(translate) Disconnect
+
+    .rdp-content
+        div(*ngIf='connectionError')
+            .alert.alert-danger.m-3
+                strong Connection failed
+                div {{connectionError}}
+                button.btn.btn-primary.mt-2((click)='connect()') Retry
+
+        div(*ngIf='connecting && !connectionError')
+            .d-flex.justify-content-center.align-items-center.h-100
+                .text-center
+                    i.fas.fa-spinner.fa-spin.fa-2x.mb-3
+                    div Connecting to {{profile.options.user}}@{{profile.options.host}}...
+
+        canvas(
+            #canvas='',
+            *ngIf='!connectionError',
+            [style.display]='connected ? "block" : "none"'
+        )
+

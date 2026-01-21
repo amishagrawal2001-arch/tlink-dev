@@ -548,12 +548,14 @@ export class AppRootComponent implements OnInit {
         const buttons = all
             .filter(x => x.locations?.includes(aboveZero ? CommandLocation.RightToolbar : CommandLocation.LeftToolbar))
             .filter(x => !x.label?.toLowerCase().includes('toggle ssh connections sidebar'))
+            .filter(x => !x.label?.toLowerCase().includes('ai assistant')) // Filter AI Assistant from toolbar (only in dock)
 
         if (!aboveZero) {
             return buttons
         }
         const settingsLabel = this.translate.instant('Settings')
-        return buttons.filter(button => button.id !== 'core:cycle-color-scheme' && button.label !== settingsLabel)
+        // Note: core:cycle-color-scheme is now shown in right toolbar (moved from left dock)
+        return buttons.filter(button => button.label !== settingsLabel)
     }
 
     private buildCommandContext (): CommandContext {
@@ -645,6 +647,21 @@ export class AppRootComponent implements OnInit {
             context.tab = tab
         }
         await this.commands.run('tlink-chatgpt:open', context)
+    }
+
+    openAIAssistant (): void {
+        // Find AI Assistant command from toolbar button provider and execute it
+        this.commands.getCommands(this.buildCommandContext()).then(commands => {
+            const aiAssistantCmd = commands.find(cmd => 
+                cmd.label?.toLowerCase() === 'ai assistant' ||
+                cmd.label?.toLowerCase().includes('ai assistant')
+            )
+            if (aiAssistantCmd) {
+                aiAssistantCmd.run()
+            }
+        }).catch((err) => {
+            this.logger.warn('Failed to find AI Assistant command:', err)
+        })
     }
 
     websocketServerRunning = false
