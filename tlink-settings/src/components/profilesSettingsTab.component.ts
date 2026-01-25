@@ -279,7 +279,7 @@ export class ProfilesSettingsTabComponent extends BaseComponent {
     }
 
     async refreshProfileGroups (): Promise<void> {
-        const profileGroupCollapsed = JSON.parse(window.localStorage.profileGroupCollapsed ?? '{}')
+        const profileGroupCollapsed = this.getProfileGroupCollapsedState()
         const groups = await this.profilesService.getProfileGroups({ includeNonUserGroup: true, includeProfiles: true })
         groups.sort((a, b) => a.name.localeCompare(b.name))
         groups.sort((a, b) => (a.id === 'built-in' || !a.editable ? 1 : 0) - (b.id === 'built-in' || !b.editable ? 1 : 0))
@@ -387,9 +387,17 @@ export class ProfilesSettingsTabComponent extends BaseComponent {
     * Save ProfileGroup collapse state in localStorage
     */
     private saveProfileGroupCollapse (group: PartialProfileGroup<CollapsableProfileGroup>): void {
-        const profileGroupCollapsed = JSON.parse(window.localStorage.profileGroupCollapsed ?? '{}')
-        profileGroupCollapsed[group.id] = group.collapsed
+        const profileGroupCollapsed = this.getProfileGroupCollapsedState()
+        profileGroupCollapsed[group.id] = group.collapsed ?? false
         window.localStorage.profileGroupCollapsed = JSON.stringify(profileGroupCollapsed)
+    }
+
+    private getProfileGroupCollapsedState (): Record<string, boolean> {
+        try {
+            return JSON.parse(window.localStorage.profileGroupCollapsed ?? '{}')
+        } catch {
+            return {}
+        }
     }
 
     private static collapsableIntoPartialProfileGroup (group: PartialProfileGroup<CollapsableProfileGroup>): PartialProfileGroup<ProfileGroup> {

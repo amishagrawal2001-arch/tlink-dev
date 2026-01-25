@@ -1,5 +1,5 @@
 import { Component, HostBinding, Inject, Injector } from '@angular/core'
-import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop'
+import { CdkDragDrop } from '@angular/cdk/drag-drop'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import deepClone from 'clone-deep'
 import { AppService, BaseTabComponent as CoreBaseTabComponent, MenuItemOptions, NotificationsService, PartialProfile, PartialProfileGroup, PlatformService, Profile, ProfileGroup, ProfileProvider, ProfilesService, PromptModalComponent, SidePanelService, SplitTabComponent, TranslateService } from 'tlink-core'
@@ -754,36 +754,71 @@ export class SessionManagerTabComponent extends BaseTabComponentRuntime {
         if (!profile || profile.isBuiltin || !profile.id) {
             return
         }
-        if (!targetGroup.editable || !targetGroup.id) {
+        if (!targetGroup.id) {
             return
         }
 
         const sourceGroup = this.profileGroups.find(group => group.id === dragData.groupId)
+        const targetGroupFull = this.profileGroups.find(group => group.id === targetGroup.id)
         if (!sourceGroup?.profiles) {
             return
         }
-        targetGroup.profiles ??= []
+        if (!targetGroupFull?.editable) {
+            return
+        }
+        targetGroupFull.profiles ??= []
 
-        if (sourceGroup.id === targetGroup.id) {
-            const targetIndex = target === 'header' ? 0 : event.currentIndex
-            moveItemInArray(targetGroup.profiles, event.previousIndex, targetIndex)
-            await this.updateProfileOrder(targetGroup)
+        const targetIndex = this.resolveDropIndex(
+            targetGroupFull.profiles,
+            targetGroup.profiles ?? [],
+            event.currentIndex,
+            target,
+        )
+
+        if (sourceGroup.id === targetGroupFull.id) {
+            const sourceIndex = sourceGroup.profiles.findIndex(item => item.id === profile.id)
+            if (sourceIndex < 0) {
+                return
+            }
+            const [moved] = sourceGroup.profiles.splice(sourceIndex, 1)
+            const adjustedIndex = targetIndex > sourceIndex ? targetIndex - 1 : targetIndex
+            sourceGroup.profiles.splice(adjustedIndex, 0, moved)
+            await this.updateProfileOrder(targetGroupFull)
         } else {
             const sourceIndex = sourceGroup.profiles.findIndex(item => item.id === profile.id)
             if (sourceIndex < 0) {
                 return
             }
             sourceGroup.profiles.splice(sourceIndex, 1)
-            const targetIndex = target === 'header' ? targetGroup.profiles.length : event.currentIndex
-            targetGroup.profiles.splice(targetIndex, 0, profile)
-            profile.group = targetGroup.id
+            targetGroupFull.profiles.splice(targetIndex, 0, profile)
+            profile.group = targetGroupFull.id
             await this.profiles.writeProfile(profile)
             await this.updateProfileOrder(sourceGroup)
-            await this.updateProfileOrder(targetGroup)
+            await this.updateProfileOrder(targetGroupFull)
         }
 
         await this.config.save()
         await this.refreshProfiles()
+    }
+
+    private resolveDropIndex (
+        fullList: PartialProfile<Profile>[],
+        visibleList: PartialProfile<Profile>[],
+        visibleIndex: number,
+        target: 'header' | 'list',
+    ): number {
+        if (target === 'header') {
+            return 0
+        }
+        if (visibleIndex >= visibleList.length) {
+            return fullList.length
+        }
+        const targetId = visibleList[visibleIndex]?.id
+        if (!targetId) {
+            return fullList.length
+        }
+        const fullIndex = fullList.findIndex(item => item.id === targetId)
+        return fullIndex >= 0 ? fullIndex : fullList.length
     }
 
     private async updateProfileOrder (group: SessionProfileGroup): Promise<void> {
