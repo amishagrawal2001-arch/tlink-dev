@@ -114,7 +114,9 @@
     color: var(--theme-fg);
     border: 1px solid var(--theme-bg-more-2);
     border-radius: 8px;
-    margin-bottom: 6px;
+    margin-bottom: 2px;
+    padding: 4px 6px;
+    line-height: 1.1;
 }
 
 .list-group-item:hover {
@@ -125,7 +127,7 @@
 .profile-item {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 6px;
 }
 
 .profile-item {
@@ -150,7 +152,13 @@
 .profile-item .profile-main {
     flex-direction: row;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
+}
+
+.profile-item profile-icon {
+    width: 12px;
+    height: 12px;
+    flex: 0 0 12px;
 }
 
 .profile-item .name {
@@ -203,7 +211,7 @@
 
 .protocol {
     border: 1px solid var(--theme-bg-more-2);
-    padding: 1px 6px;
+    padding: 0 4px;
     border-radius: 999px;
     font-size: 10px;
     text-transform: uppercase;
@@ -226,7 +234,7 @@
 }
 
 .profile-group {
-    margin-bottom: 8px;
+    margin-bottom: 4px;
 }
 
 .group-header {
@@ -236,8 +244,8 @@
     font-size: 12px;
     font-weight: 600;
     color: var(--theme-fg);
-    margin-bottom: 6px;
-    padding: 4px 6px;
+    margin-bottom: 2px;
+    padding: 2px 6px;
     border-radius: 8px;
 }
 

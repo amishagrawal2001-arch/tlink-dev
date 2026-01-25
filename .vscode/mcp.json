@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "tabby": {
+      "url": "http://localhost:3001/sse",
+      "type": "http"
+    }
+  }
+}
