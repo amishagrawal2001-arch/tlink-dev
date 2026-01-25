@@ -77,8 +77,11 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
 
                                     .me-auto
 
-                                    button.btn.btn-link.hover-reveal.ms-1(*ngIf='!profile.isTemplate', (click)='$event.stopPropagation(); launchProfile(profile)')
+                                    button.btn.btn-link.hover-reveal.ms-1(*ngIf='!profile.isTemplate', (click)='$event.stopPropagation(); launchProfile(profile)', [ngbTooltip]='"Open terminal"|translate')
                                         i.fas.fa-play
+
+                                    button.btn.btn-link.hover-reveal.ms-1(*ngIf='!profile.isTemplate', (click)='$event.stopPropagation(); launchProfileSFTP(profile)', [ngbTooltip]='"Open SFTP"|translate')
+                                        i.far.fa-folder-open
 
                                     .ms-1.hover-reveal(ngbDropdown, placement='bottom-right top-right auto')
                                         button.btn.btn-link.ms-1(

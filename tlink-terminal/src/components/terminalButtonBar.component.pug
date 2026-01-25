@@ -1,4 +1,14 @@
 div.terminal-button-bar(*ngIf='isEnabled', (contextmenu)='openContextMenu($event)')
+    button.btn.btn-sm.btn-outline-secondary.button-bar-btn(
+        *ngIf='tabHasSFTP',
+        type='button',
+        (click)='openTabSFTP()',
+        [disabled]='!tab?.session?.open',
+        [title]='"Open SFTP"|translate'
+    )
+        i.far.fa-folder-open.me-1
+        span.button-label(translate) SFTP
+
     button.btn.btn-sm.button-bar-btn(
         *ngFor='let button of buttons; trackBy: trackByIndex',
         type='button',

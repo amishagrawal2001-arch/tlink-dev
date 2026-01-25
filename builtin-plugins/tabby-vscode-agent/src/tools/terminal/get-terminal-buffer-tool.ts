@@ -1,9 +1,15 @@
-import * as z from 'zod';
-import stripAnsi from 'strip-ansi';
+import { z } from 'zod/v3';
 import { createErrorResponse, createJsonResponse } from '../../type/types';
 import { BaseTool } from './base-tool';
 import { ExecToolCategory } from '../terminal';
 import { McpLoggerService } from '../../services/mcpLogger.service';
+
+const stripAnsi = (value: string): string =>
+  value.replace(
+    // Strip ANSI escape sequences (colors, cursor moves, etc.)
+    /[\u001B\u009B][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g,
+    ''
+  );
 
 /**
  * Tool for retrieving the current content (text buffer) of a terminal session

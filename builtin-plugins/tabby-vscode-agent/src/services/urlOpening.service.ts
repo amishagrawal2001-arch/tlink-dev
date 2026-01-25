@@ -1,5 +1,4 @@
 import { Injectable } from '@angular/core';
-import { exec } from 'child_process';
 import { McpLoggerService } from './mcpLogger.service';
 
 @Injectable({ providedIn: 'root' })
@@ -8,11 +7,24 @@ export class UrlOpeningService {
 
   openUrl(url: string): void {
     this.logger.info(`Opening URL: ${url}`);
-    exec(`start ${url}`, (error) => {
-      if (error) {
-        this.logger.error(`Failed to open URL: ${url}. Falling back to window.open.`, error);
-        window.open(url, '_blank');
+    try {
+      const win: any = window as any;
+      const shell = win?.electron?.shell || win?.require?.('electron')?.shell;
+      if (shell?.openExternal) {
+        shell.openExternal(url);
+        return;
       }
-    });
+      if (typeof win?.open === 'function') {
+        win.open(url, '_blank', 'noopener');
+        return;
+      }
+    } catch (error) {
+      this.logger.error(`Failed to open URL: ${url}`, error);
+      try {
+        window.open(url, '_blank', 'noopener');
+      } catch (fallbackError) {
+        this.logger.error(`Failed to open URL via window.open: ${url}`, fallbackError);
+      }
+    }
   }
 }

@@ -1,4 +1,9 @@
-import stripAnsi from 'strip-ansi';
+const stripAnsi = (value: string): string =>
+  value.replace(
+    // Strip ANSI escape sequences (colors, cursor moves, etc.)
+    /[\u001B\u009B][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g,
+    ''
+  );
 
 /**
  * Interface for shell strategy

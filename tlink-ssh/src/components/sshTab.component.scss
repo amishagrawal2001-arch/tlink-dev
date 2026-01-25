@@ -9,3 +9,21 @@ sftp-panel {
     border-top: 1px solid rgba(255, 255, 255, 0.12);
     box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.35);
 }
+
+:host(.sftp-only) {
+    terminal-toolbar,
+    terminal-button-bar,
+    .terminal-toolbar-spacer,
+    .content {
+        display: none;
+    }
+
+    sftp-panel {
+        flex: 1 1 auto;
+        height: auto;
+        min-height: 0;
+        max-height: none;
+        border-top: none;
+        box-shadow: none;
+    }
+}

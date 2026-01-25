@@ -46,6 +46,31 @@ export class ButtonProvider extends ToolbarButtonProvider {
                             },
                         }
                     })
+
+                    // Add quick connect options for each protocol provider
+                    this.profiles.getProviders().forEach(provider => {
+                        const quickConnectProvider = provider as any
+                        if (typeof quickConnectProvider.quickConnect === 'function') {
+                            options.push({
+                                name: this.translate.instant('Quick connect'),
+                                freeInputPattern: `${this.translate.instant('Connect to "%s"...')} (${provider.name.toUpperCase()})`,
+                                icon: 'fas fa-arrow-right',
+                                description: `(${provider.name.toUpperCase()})`,
+                                result: undefined,
+                                weight: 100,
+                                callback: async (query?: string) => {
+                                    if (!query) {
+                                        return
+                                    }
+                                    const profile = quickConnectProvider.quickConnect(query)
+                                    if (profile) {
+                                        await this.profiles.openNewTabForProfile(profile)
+                                    }
+                                },
+                            })
+                        }
+                    })
+
                     await this.selector.show<void>(this.translate.instant('New connection'), options).catch(() => null)
                 },
             },

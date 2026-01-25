@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, ViewChild, ElementRef, ChangeDetectionStrategy } from '@angular/core'
+import { Component, Input, Output, EventEmitter, ViewChild, ElementRef, AfterViewInit } from '@angular/core'
 import { KeyboardInteractivePrompt } from '../session/ssh'
 import { SSHProfile } from '../api'
 import { PasswordStorageService } from '../services/passwordStorage.service'
@@ -7,17 +7,30 @@ import { PasswordStorageService } from '../services/passwordStorage.service'
     selector: 'keyboard-interactive-auth-panel',
     templateUrl: './keyboardInteractiveAuthPanel.component.pug',
     styleUrls: ['./keyboardInteractiveAuthPanel.component.scss'],
-    changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class KeyboardInteractiveAuthComponent {
+export class KeyboardInteractiveAuthComponent implements AfterViewInit {
     @Input() profile: SSHProfile
     @Input() prompt: KeyboardInteractivePrompt
+    @Input() username?: string
     @Input() step = 0
     @Output() done = new EventEmitter()
     @ViewChild('input') input: ElementRef
     remember = false
 
     constructor (private passwordStorage: PasswordStorageService) {}
+
+    ngAfterViewInit (): void {
+        setTimeout(() => {
+            this.input?.nativeElement?.focus()
+        }, 100)
+    }
+
+    onInputClick (): void {
+        // Ensure input receives focus when clicked
+        if (this.input?.nativeElement) {
+            this.input.nativeElement.focus()
+        }
+    }
 
     isPassword (): boolean {
         return this.prompt.isAPasswordPrompt(this.step)
@@ -30,9 +43,10 @@ export class KeyboardInteractiveAuthComponent {
         this.input.nativeElement.focus()
     }
 
-    next (): void {
+    async next (): Promise<void> {
         if (this.isPassword() && this.remember) {
-            this.passwordStorage.savePassword(this.profile, this.prompt.responses[this.step])
+            const username = this.username?.trim() || undefined
+            await this.passwordStorage.savePassword(this.profile, this.prompt.responses[this.step], username)
         }
 
         if (this.step === this.prompt.prompts.length - 1) {

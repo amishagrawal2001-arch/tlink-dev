@@ -37,6 +37,18 @@ export class TerminalButtonBarComponent {
         return this.config.store.terminal.buttonBar.enabled
     }
 
+    get tabHasSFTP (): boolean {
+        return !!(this.tab as any)?.openSFTP
+    }
+
+    openTabSFTP (): void {
+        if (this.tabHasSFTP && this.tab.session?.open) {
+            (this.tab as any).openSFTP()
+        } else {
+            this.notifications.error('SFTP is not available for this tab')
+        }
+    }
+
     getButtonLabel (button: TerminalButtonBarButton): string {
         const label = (button.label ?? '').trim()
         if (label.length) {

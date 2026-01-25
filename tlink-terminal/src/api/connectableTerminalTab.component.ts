@@ -17,6 +17,8 @@ export abstract class ConnectableTerminalTabComponent<P extends ConnectableTermi
 
     protected reconnectOffered = false
     protected isDisconnectedByHand = false
+    protected reconnecting = false
+    protected reconnectTimestamps: number[] = []
 
     constructor (protected injector: Injector) {
         super(injector)
@@ -59,6 +61,7 @@ export abstract class ConnectableTerminalTabComponent<P extends ConnectableTermi
     async initializeSession (): Promise<void> {
         this.reconnectOffered = false
         this.isDisconnectedByHand = false
+        this.reconnectTimestamps = []
     }
 
     /**
@@ -67,8 +70,27 @@ export abstract class ConnectableTerminalTabComponent<P extends ConnectableTermi
     protected onSessionDestroyed (): void {
         super.onSessionDestroyed()
 
+        if (this.reconnecting) {
+            return
+        }
+
         if (this.frontend) {
             if (this.profile.behaviorOnSessionEnd === 'reconnect' && !this.isDisconnectedByHand) {
+                const now = Date.now()
+                const windowMs = 10000
+                this.reconnectTimestamps = this.reconnectTimestamps.filter(ts => now - ts < windowMs)
+                this.reconnectTimestamps.push(now)
+                if (this.reconnectTimestamps.length > 5) {
+                    this.isDisconnectedByHand = true
+                    this.reconnectOffered = true
+                    this.write(this.translate.instant(_('Auto-reconnect paused after repeated failures. Press any key to retry.')) + '\r\n')
+                    this.input$.pipe(first()).subscribe(() => {
+                        this.isDisconnectedByHand = false
+                        this.reconnectOffered = false
+                        this.reconnect()
+                    })
+                    return
+                }
                 this.reconnect()
             } else if (this.profile.behaviorOnSessionEnd === 'keep' || !this.shouldTabBeDestroyedOnSessionClose()) {
                 this.offerReconnection()
@@ -116,10 +138,22 @@ export abstract class ConnectableTerminalTabComponent<P extends ConnectableTermi
     }
 
     async reconnect (): Promise<void> {
-        this.session?.destroy()
-        await this.initializeSession()
-        this.clearServiceMessagesOnConnect()
-        this.session?.releaseInitialDataBuffer()
+        if (this.reconnecting) {
+            return
+        }
+        this.reconnecting = true
+        this.reconnectOffered = false
+        const previousDisconnectState = this.isDisconnectedByHand
+        this.isDisconnectedByHand = true
+        try {
+            await this.session?.destroy()
+            await this.initializeSession()
+            this.clearServiceMessagesOnConnect()
+            this.session?.releaseInitialDataBuffer()
+        } finally {
+            this.isDisconnectedByHand = previousDisconnectState
+            this.reconnecting = false
+        }
     }
 
     private clearServiceMessagesOnConnect (): void {

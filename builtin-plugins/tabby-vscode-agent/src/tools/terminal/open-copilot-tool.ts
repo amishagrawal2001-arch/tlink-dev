@@ -41,7 +41,7 @@ export class OpenCopilotTool extends BaseTool {
         this.logger.info(`VS Code Copilot command executed: ${stdout}`);
       }
     });
-    this.app.emit('mcp-show-notification', {
+    (this.app as any).emit?.('mcp-show-notification', {
       message: 'Recommend using tabby-copilot-opener extension in vscode for a seamless integration.',
     });
   }

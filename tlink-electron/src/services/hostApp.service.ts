@@ -29,6 +29,11 @@ export class ElectronHostAppService extends HostAppService {
         electron.ipcRenderer.on('host:command-window-bottom', () => this.zone.run(() => this.commandWindowBottomRequest.next()))
         electron.ipcRenderer.on('host:button-bar', () => this.zone.run(() => this.buttonBarToggleRequest.next()))
         electron.ipcRenderer.on('host:session-manager', () => this.zone.run(() => this.sessionManagerRequest.next()))
+        electron.ipcRenderer.on('host:open-ai-assistant', (_$event, fullWindowMode?: boolean) => this.zone.run(() => {
+            // Store the full window mode flag
+            ;(this as any)._aiAssistantFullWindowMode = fullWindowMode
+            this.aiAssistantRequest.next()
+        }))
 
         electron.ipcRenderer.on('cli', (_$event, argv: any, cwd: string, secondInstance: boolean) => this.zone.run(async () => {
             const event = { argv, cwd, secondInstance }

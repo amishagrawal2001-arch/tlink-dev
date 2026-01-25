@@ -1,9 +1,106 @@
 :host {
-    display: flex;
-    flex-direction: column;
-    padding: 15px 20px;
+    display: block;
+    padding: 16px;
+    position: relative;
+    z-index: 100;
 }
 
-.prompt-text {
-    white-space: pre-wrap;
+.auth-header {
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(127, 127, 127, 0.2);
+}
+
+.auth-title {
+    strong {
+        display: block;
+        font-size: 15px;
+        margin-bottom: 4px;
+    }
+
+    .small {
+        font-size: 13px;
+    }
+}
+
+.auth-body {
+    margin-bottom: 16px;
+
+    label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 500;
+    }
+
+    .form-control {
+        border: 1px solid #ccc;
+        background: #fff;
+        color: #000;
+        pointer-events: auto;
+        user-select: text;
+        cursor: text;
+        position: relative;
+        z-index: 1;
+
+        &:focus {
+            border-color: var(--bs-primary);
+            box-shadow: 0 0 0 0.2rem rgba(var(--bs-primary-rgb), 0.25);
+            z-index: 2;
+        }
+
+        &:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    }
+
+    :host-context(.theme-dark) .form-control {
+        border: 1px solid #555;
+        background: #2a2a2a;
+        color: #fff;
+    }
+
+    .toggle-wrapper {
+        span {
+            font-size: 14px;
+            user-select: none;
+        }
+
+        toggle {
+            padding: 2px;
+
+            ::ng-deep .form-check-input {
+                background-color: #d0d0d0;
+                border: 1px solid #b0b0b0;
+
+                &:checked {
+                    background-color: var(--bs-primary);
+                    border-color: var(--bs-primary);
+                }
+
+                &:focus {
+                    box-shadow: 0 0 0 0.2rem rgba(var(--bs-primary-rgb), 0.25);
+                }
+            }
+        }
+    }
+
+    :host-context(.theme-dark) .toggle-wrapper toggle ::ng-deep .form-check-input {
+        background-color: #4a4a4a;
+        border: 1px solid #666;
+
+        &:checked {
+            background-color: var(--bs-primary);
+            border-color: var(--bs-primary);
+        }
+    }
+}
+
+.auth-footer {
+    padding-top: 12px;
+    border-top: 1px solid rgba(127, 127, 127, 0.2);
+
+    .btn {
+        min-width: 80px;
+    }
 }

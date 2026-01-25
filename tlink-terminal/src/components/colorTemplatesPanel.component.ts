@@ -65,7 +65,8 @@ export class ColorTemplatesPanelComponent implements OnInit, OnDestroy {
 
     async loadProfiles (): Promise<void> {
         // Allow applying to built-in shell profiles too
-        this.profiles = await this.profilesService.getProfiles({ includeBuiltin: true, clone: true })
+        this.profiles = (await this.profilesService.getProfiles({ includeBuiltin: true, clone: true }))
+            .filter(profile => !!profile.id && !profile.isTemplate)
         this.setActiveProfileFromFocusedTab()
         if (!this.selectedProfileId && this.profiles.length) {
             this.selectedProfileId = this.profiles[0].id ?? ''
@@ -99,6 +100,22 @@ export class ColorTemplatesPanelComponent implements OnInit, OnDestroy {
 
     selectProfile (id: string): void {
         this.selectedProfileId = id
+    }
+
+    profileLabel (profile: PartialProfile<any>): string {
+        const group = this.groupLabel(profile)
+        const name = profile.name ?? profile.id ?? this.translate.instant('Profile')
+        return group ? `${group} / ${name}` : name
+    }
+
+    private groupLabel (profile: PartialProfile<any>): string {
+        if (profile.group) {
+            return this.profilesService.resolveProfileGroupName(profile.group)
+        }
+        if (profile.isBuiltin) {
+            return this.translate.instant('Built-in')
+        }
+        return this.translate.instant('Ungrouped')
     }
 
     async applyScheme (scheme: TerminalColorScheme): Promise<void> {

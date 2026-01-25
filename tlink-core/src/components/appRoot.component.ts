@@ -20,7 +20,7 @@ import { SafeModeModalComponent } from './safeModeModal.component'
 import { ColorPickerModalComponent } from './colorPickerModal.component'
 import { TabBodyComponent } from './tabBody.component'
 import { SplitTabComponent } from './splitTab.component'
-import { AppService, BottomPanelRegistration, BottomPanelService, Command, CommandContext, CommandLocation, FileTransfer, HostWindowService, PlatformService, SidePanelRegistration, SidePanelService } from '../api'
+import { AppService, BottomPanelRegistration, BottomPanelService, Command, CommandContext, CommandLocation, FileTransfer, HostWindowService, PlatformService, SidePanelRegistration, SidePanelService, ProfilesService, SelectorService, SelectorOption, PartialProfile, Profile } from '../api'
 import { TabsService } from '../services/tabs.service'
 import { CodeEditorTabComponent } from './codeEditorTab.component'
 
@@ -117,6 +117,8 @@ export class AppRootComponent implements OnInit {
         private sidePanel: SidePanelService,
         private bottomPanel: BottomPanelService,
         private platform: PlatformService,
+        private profiles: ProfilesService,
+        private selector: SelectorService,
         log: LogService,
         private ngbModal: NgbModal,
         _themes: ThemesService,
@@ -259,6 +261,24 @@ export class AppRootComponent implements OnInit {
 
     openSettingsFromDock (): void {
         this.hostApp.openSettingsUI()
+    }
+
+    openProfilesAndConnections (): void {
+        try {
+            const { SettingsTabComponent } = window['nodeRequire']('tlink-settings')
+            const existing = this.app.tabs.find(tab => tab instanceof SettingsTabComponent)
+            if (existing) {
+                this.app.selectTab(existing)
+                ;(existing as any).activeTab = 'profiles'
+                return
+            }
+            this.app.openNewTabRaw({
+                type: SettingsTabComponent as any,
+                inputs: { activeTab: 'profiles' },
+            })
+        } catch {
+            this.hostApp.openSettingsUI()
+        }
     }
 
     cycleColorSchemeFromDock (): void {
@@ -593,49 +613,57 @@ export class AppRootComponent implements OnInit {
         this.sidePanel.show(panel)
     }
 
-    openProfileSelector (): void {
-        // Check if Settings tab is already open
-        try {
-            const { SettingsTabComponent } = window['nodeRequire']('tlink-settings')
-            
-            // Find existing Settings tab (could be top-level or in a split)
-            let existingSettingsTab: any = null
-            let parentSplit: SplitTabComponent | null = null
-            
-            for (const tab of this.app.tabs) {
-                if (tab instanceof SettingsTabComponent) {
-                    existingSettingsTab = tab
-                    break
-                } else if (tab instanceof SplitTabComponent) {
-                    const settingsTab = tab.getAllTabs().find(t => t instanceof SettingsTabComponent)
-                    if (settingsTab) {
-                        existingSettingsTab = settingsTab
-                        parentSplit = tab
-                        break
-                    }
-                }
+    async openProfileSelector (): Promise<void> {
+        if (this.selector.active) {
+            return
+        }
+        const profile = await this.profiles.showProfileSelector().catch(() => null)
+        if (profile) {
+            await this.profiles.openNewTabForProfile(profile)
+        }
+    }
+
+    async openSftpProfileSelector (): Promise<void> {
+        if (this.selector.active) {
+            return
+        }
+        const allProfiles = await this.profiles.getProfiles({ includeBuiltin: true })
+        const sshProfiles = allProfiles.filter(p => p.type === 'ssh')
+        
+        const options: SelectorOption<void>[] = sshProfiles.map(p => {
+            const { result, ...opt } = this.profiles.selectorOptionForProfile(p)
+            return {
+                ...opt,
+                result: undefined,
+                callback: async () => {
+                    await this.profiles.openNewTabForProfile(p, 'r', { startInSFTP: true })
+                },
             }
-            
-            if (existingSettingsTab) {
-                // Settings tab already exists, focus it and navigate to profiles section
-                if (parentSplit) {
-                    this.app.selectTab(parentSplit)
-                    parentSplit.focus(existingSettingsTab)
-                } else {
-                    this.app.selectTab(existingSettingsTab)
-                }
-                // Set activeTab to profiles
-                existingSettingsTab.activeTab = 'profiles'
-            } else {
-                // No Settings tab exists, open a new one
-                this.app.openNewTabRaw({
-                    type: SettingsTabComponent,
-                    inputs: { activeTab: 'profiles' },
+        })
+
+        // Add quick connect option for SSH with SFTP
+        this.profiles.getProviders().forEach(provider => {
+            const quickConnectProvider = provider as any
+            if (provider.id === 'ssh' && typeof quickConnectProvider.quickConnect === 'function') {
+                options.push({
+                    name: `${this.translate.instant('Quick connect')} (${provider.name.toUpperCase()})`,
+                    freeInputPattern: `${this.translate.instant('Connect to "%s"...')} (${provider.name.toUpperCase()})`,
+                    icon: 'fas fa-arrow-right',
+                    weight: 0,
+                    callback: async (query?: string) => {
+                        if (!query) {
+                            return
+                        }
+                        const profile = quickConnectProvider.quickConnect(query)
+                        if (profile) {
+                            await this.profiles.openNewTabForProfile(profile as PartialProfile<Profile>, 'r', { startInSFTP: true })
+                        }
+                    },
                 })
             }
-        } catch (err) {
-            this.logger.error('Failed to open settings:', err)
-        }
+        })
+
+        await this.selector.show<void>('Open SFTP', options).catch(() => null)
     }
 
     async openAIChat (): Promise<void> {

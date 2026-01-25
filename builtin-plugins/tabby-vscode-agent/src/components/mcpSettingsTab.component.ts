@@ -1,8 +1,9 @@
-import { Component, HostBinding, OnInit } from '@angular/core';
+import { Component, HostBinding, OnInit, Inject } from '@angular/core';
 import { ConfigService } from 'tabby-core';
 import { McpService } from '../services/mcpService';
 import { McpLoggerService } from '../services/mcpLogger.service';
 import { UrlOpeningService } from '../services/urlOpening.service';
+import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
@@ -45,9 +46,9 @@ export class McpSettingsTabComponent implements OnInit {
     "servers": {
         "tabby": {
             "type": "stdio",
-            "command": "npx",
+            "command": "node",
             "args": [
-                "tabby-mcp-stdio"
+                "<PASTE THE COPIED PATH HERE>"
             ]
         }
     },
@@ -77,7 +78,8 @@ export class McpSettingsTabComponent implements OnInit {
         public config: ConfigService,
         private mcpService: McpService,
         private logger: McpLoggerService,
-        private urlOpeningService: UrlOpeningService
+        private urlOpeningService: UrlOpeningService,
+        @Inject('BOOTSTRAP_DATA') private bootstrapData: any
     ) {
         console.log('McpSettingsTabComponent constructor');
     }
@@ -441,8 +443,77 @@ export class McpSettingsTabComponent implements OnInit {
     }
 
     private setStdioServerPath(): void {
-        const pluginDir = path.join(os.homedir(), 'AppData', 'Roaming', 'tabby', 'plugins', 'node_modules', 'tabby-vscode-agent');
-        this.stdioServerPath = path.join(pluginDir, 'node_modules', 'tabby-mcp-stdio', 'mcp-server-standalone.js');
+        const candidates: string[] = [];
+        const pluginInfo = this.bootstrapData?.installedPlugins?.find((plugin: any) => plugin?.packageName === 'tabby-vscode-agent');
+        const pluginDir = pluginInfo?.path;
+
+        if (pluginDir) {
+            candidates.push(path.join(pluginDir, 'node_modules', 'tabby-mcp-stdio', 'dist', 'index.js'));
+        }
+
+        if (this.bootstrapData?.userPluginsPath) {
+            candidates.push(
+                path.join(
+                    this.bootstrapData.userPluginsPath,
+                    'node_modules',
+                    'tabby-vscode-agent',
+                    'node_modules',
+                    'tabby-mcp-stdio',
+                    'dist',
+                    'index.js'
+                )
+            );
+        }
+
+        if ((process as any).resourcesPath) {
+            candidates.push(
+                path.join(
+                    (process as any).resourcesPath,
+                    'builtin-plugins',
+                    'tabby-vscode-agent',
+                    'node_modules',
+                    'tabby-mcp-stdio',
+                    'dist',
+                    'index.js'
+                )
+            );
+        }
+
+        const existingPath = candidates.find(candidate => this.pathExists(candidate));
+        this.stdioServerPath = existingPath || candidates[0] || '';
+        this.updateStdioConfigSnippet();
+    }
+
+    private updateStdioConfigSnippet(): void {
+        const stdioPath = this.stdioServerPath
+            ? this.escapeJsonString(this.stdioServerPath)
+            : '<PASTE THE COPIED PATH HERE>';
+
+        this.stdioSettingsJson = `
+{
+    "servers": {
+        "tabby": {
+            "type": "stdio",
+            "command": "node",
+            "args": [
+                "${stdioPath}"
+            ]
+        }
+    },
+    "inputs": []
+}`;
+    }
+
+    private escapeJsonString(value: string): string {
+        return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    }
+
+    private pathExists(candidate: string): boolean {
+        try {
+            return !!candidate && fs.existsSync(candidate);
+        } catch {
+            return false;
+        }
     }
 
     copyStdioPath(): void {

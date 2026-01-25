@@ -239,8 +239,12 @@ export class SSHSession {
 
         const storedPassword = await this.passwordStorage.loadPassword(this.profile, this.authUsername)
         if (!storedPassword) {
+            // Debug: Log why password wasn't found
+            this.logger.debug(`No saved password found for ${this.authUsername}@${this.profile.options.host}:${this.profile.options.port ?? 22}`)
             return
         }
+        
+        this.logger.debug(`Found saved password for ${this.authUsername}@${this.profile.options.host}:${this.profile.options.port ?? 22}`)
 
         if (!this.profile.options.auth || this.profile.options.auth === 'password') {
             const hasSavedPassword = this.allAuthMethods.some(method => method.type === 'saved-password' && method.password === storedPassword)
@@ -864,6 +868,7 @@ export class SSHSession {
                             state.prompts(),
                         )
 
+                        let shouldPromptUser = true
                         if (method.savedPassword) {
                             // eslint-disable-next-line max-depth
                             for (let i = 0; i < prompt.prompts.length; i++) {
@@ -872,16 +877,27 @@ export class SSHSession {
                                     prompt.responses[i] = method.savedPassword
                                 }
                             }
+                            // If all prompts are password prompts, auto-respond using the saved password
+                            const hasNonPasswordPrompt = prompt.prompts.some((_, i) => !prompt.isAPasswordPrompt(i))
+                            if (!hasNonPasswordPrompt) {
+                                shouldPromptUser = false
+                            }
                         }
 
-                        this.emitKeyboardInteractivePrompt(prompt)
+                        if (shouldPromptUser) {
+                            this.emitKeyboardInteractivePrompt(prompt)
+                        } else {
+                            responses = prompt.responses
+                        }
 
                         try {
-                            // eslint-disable-next-line @typescript-eslint/await-thenable
-                            responses = await prompt.promise
-                            // Check authAborted after prompt resolves
-                            if (this.authAborted) {
-                                return null
+                            if (shouldPromptUser) {
+                                // eslint-disable-next-line @typescript-eslint/await-thenable
+                                responses = await prompt.promise
+                                // Check authAborted after prompt resolves
+                                if (this.authAborted) {
+                                    return null
+                                }
                             }
                         } catch {
                             break // this loop

@@ -1,26 +1,36 @@
 .resize-handle((mousedown)='startResize($event)')
 .header
-    .path-section.flex-grow-1.d-flex.align-items-center
-        input.form-control.path-input(
-            *ngIf='editingPath !== null',
-            type='text',
-            autofocus,
-            (keydown.enter)='confirmPath()',
-            (keydown.esc)='editingPath = null',
-            (blur)='editingPath = null',
-            [(ngModel)]='editingPath'
-        )
-        .breadcrumb(*ngIf='editingPath === null', (dblclick)='editPath()')
-            a.breadcrumb-item.text-decoration-none((click)='navigate("/")') SFTP
-            a.breadcrumb-item.text-decoration-none(
-                *ngFor='let segment of pathSegments',
-                (click)='navigate(segment.path)'
-            ) {{segment.name}}
-
-    button.btn.btn-link.btn-sm.path-button(*ngIf='editingPath === null', (click)='editPath()', [title]='path')
-        i.fas.fa-edit.me-1
-        span.path-label Path:
-        span.path-value {{path || '/'}}
+    .path-section.d-flex.align-items-center
+        .path-info.flex-grow-1.d-flex.flex-column.gap-1
+            .path-display.d-flex.align-items-center.gap-2(*ngIf='editingPath === null')
+                button.btn.btn-link.btn-sm.path-button(
+                    type='button',
+                    (click)='editPath()',
+                    [title]='path || "/"'
+                )
+                    i.fas.fa-edit.me-1
+                    span Path
+                span.path-value.flex-grow-1 {{path || '/'}}
+            .input-group.flex-grow-1(*ngIf='editingPath !== null')
+                input.form-control.path-input(
+                    type='text',
+                    autofocus,
+                    (keydown.enter)='confirmPath()',
+                    (keydown.esc)='cancelEditPath()',
+                    [(ngModel)]='editingPath'
+                )
+                button.btn.btn-outline-secondary.path-edit-close(
+                    type='button',
+                    (click)='confirmPath()',
+                    [disabled]='!editingPath || editingPath.trim() === ""'
+                )
+                    i.fas.fa-check
+                button.btn.btn-outline-secondary.path-edit-close(
+                    type='button',
+                    (click)='cancelEditPath()'
+                )
+                    i.fas.fa-times
+        //- Breadcrumb removed to avoid duplicating the path display.
 
     button.btn.btn-link.btn-sm.flex-shrink-0.d-flex(*ngIf='!showFilter', (click)='showFilter = true')
         i.fas.fa-filter.me-1

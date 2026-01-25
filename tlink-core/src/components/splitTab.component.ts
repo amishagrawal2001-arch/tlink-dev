@@ -1,5 +1,5 @@
 import { Observable, Subject, takeWhile } from 'rxjs'
-import { Component, Injectable, ViewChild, ViewContainerRef, EmbeddedViewRef, AfterViewInit, OnDestroy, Injector } from '@angular/core'
+import { Component, Injectable, ViewChild, ViewContainerRef, EmbeddedViewRef, AfterViewInit, OnDestroy, Injector, ElementRef } from '@angular/core'
 import { BaseTabComponent, BaseTabProcess, GetRecoveryTokenOptions } from './baseTab.component'
 import { TabRecoveryProvider, RecoveryToken } from '../api/tabRecovery'
 import { TabsService, NewTabParameters } from '../services/tabs.service'
@@ -269,6 +269,7 @@ export class SplitTabComponent extends BaseTabComponent implements AfterViewInit
         private tabsService: TabsService,
         private tabRecovery: TabRecoveryService,
         injector: Injector,
+        private elementRef: ElementRef<HTMLElement>,
     ) {
         super(injector)
         this.root = new SplitContainer()
@@ -393,6 +394,33 @@ export class SplitTabComponent extends BaseTabComponent implements AfterViewInit
             // Propagate visibility to new children
             this.emitVisibility(this.visibility.value)
         }
+        const pointerHandler = (event: PointerEvent) => {
+            if (!this.isPointerInsideSplit(event)) {
+                return
+            }
+            if (this.shouldIgnorePointerEvent(event)) {
+                return
+            }
+            // Try to find the tab from the event target first (more accurate)
+            let target = this.findTabForEventTarget(event.target)
+            // If that fails, fall back to point-based detection
+            if (!target) {
+                target = this.findTabForPoint(event.clientX, event.clientY)
+            }
+            if (target && target !== this.focusedTab) {
+                // Defer to avoid fighting with other focus handlers (e.g., AI sidebar)
+                // Use a small delay to ensure other handlers have processed
+                setTimeout(() => {
+                    // Double-check the target is still valid and not already focused
+                    if (target && target !== this.focusedTab && this.viewRefs.has(target)) {
+                        this.focus(target)
+                    }
+                }, 0)
+            }
+        }
+        const doc = this.elementRef.nativeElement.ownerDocument as unknown as HTMLElement
+        this.addEventListenerUntilDestroyed(doc, 'pointerdown', pointerHandler, true)
+        this.addEventListenerUntilDestroyed(doc, 'pointerup', pointerHandler, true)
         this.initialized.next()
         this.initialized.complete()
     }
@@ -743,6 +771,58 @@ export class SplitTabComponent extends BaseTabComponent implements AfterViewInit
         return null
     }
 
+    private findTabForPoint (clientX: number, clientY: number): BaseTabComponent|null {
+        // Get all tabs with their rects, filtering out tabs without valid viewRefs
+        const allTabs = this.getAllTabs()
+        const tabsWithRects: Array<{ tab: BaseTabComponent, rect: DOMRect, area: number }> = []
+        
+        for (const tab of allTabs) {
+            // Only include tabs that have a viewRef (are actually rendered)
+            if (!this.viewRefs.has(tab)) {
+                continue
+            }
+            try {
+                const rect = this.getPaneRect(tab)
+                // Check if point is within this tab's rect
+                if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+                    tabsWithRects.push({
+                        tab,
+                        rect,
+                        area: rect.width * rect.height
+                    })
+                }
+            } catch (e) {
+                // If getPaneRect fails, skip this tab
+                continue
+            }
+        }
+
+        // If no tabs match, return null
+        if (tabsWithRects.length === 0) {
+            return null
+        }
+
+        // If multiple tabs match (overlapping), prefer the one with smallest area (most specific)
+        // Sort by area (smallest first), then by position
+        tabsWithRects.sort((a, b) => {
+            // First, prefer smaller area (more specific match)
+            if (Math.abs(a.area - b.area) > 1) {
+                return a.area - b.area
+            }
+            // If areas are similar, sort by position (top to bottom, left to right)
+            if (Math.abs(a.rect.top - b.rect.top) > 1) {
+                return a.rect.top - b.rect.top
+            }
+            if (Math.abs(a.rect.left - b.rect.left) > 1) {
+                return a.rect.left - b.rect.left
+            }
+            return 0
+        })
+
+        // Return the most specific match (first in sorted array)
+        return tabsWithRects[0].tab
+    }
+
     /** @hidden */
     async canClose (): Promise<boolean> {
         return !(await Promise.all(this.getAllTabs().map(x => x.canClose()))).some(x => !x)
@@ -845,7 +925,20 @@ export class SplitTabComponent extends BaseTabComponent implements AfterViewInit
     private attachTabView (tab: BaseTabComponent) {
         const ref = tab.insertIntoContainer(this.viewContainer)
         this.viewRefs.set(tab, ref)
-        tab.addEventListenerUntilDestroyed(ref.rootNodes[0], 'click', () => this.focus(tab))
+        // Some host views start with a comment node, so attach listeners to all element roots
+        const rootElements = ref.rootNodes.filter(node => node instanceof HTMLElement) as HTMLElement[]
+        const targets = rootElements.length ? rootElements : [this.viewContainer.element.nativeElement]
+        const focusHandler = (event?: Event) => {
+            this.focus(tab)
+        }
+        for (const el of targets) {
+            el.setAttribute('tabindex', '-1')
+            tab.addEventListenerUntilDestroyed(el, 'pointerdown', focusHandler, true)
+            tab.addEventListenerUntilDestroyed(el, 'mousedown', focusHandler, true)
+            tab.addEventListenerUntilDestroyed(el, 'click', focusHandler)
+        }
+        // Capture clicks anywhere inside the pane before inner handlers steal focus
+        tab.addEventListenerUntilDestroyed(this.viewContainer.element.nativeElement, 'pointerdown', focusHandler, true)
 
         tab.subscribeUntilDestroyed(
             this.observeUntilChildDetached(tab, tab.focused$),
@@ -875,6 +968,43 @@ export class SplitTabComponent extends BaseTabComponent implements AfterViewInit
         tab.destroyed$.subscribe(() => {
             this.removeTab(tab)
         })
+    }
+
+    private shouldIgnorePointerEvent (event: Event): boolean {
+        if (!(event.target instanceof HTMLElement)) {
+            return false
+        }
+        const ignored = event.target.closest('split-tab-spanner, split-tab-drop-zone, split-tab-pane-label, .ai-sidebar-wrapper, .ai-sidebar-container, .ai-assistant')
+        return !!ignored
+    }
+
+    private isPointerInsideSplit (event: PointerEvent): boolean {
+        const path = event.composedPath ? event.composedPath() : []
+        if (path.includes(this.elementRef.nativeElement)) {
+            return true
+        }
+        const rect = this.elementRef.nativeElement.getBoundingClientRect()
+        return event.clientX >= rect.left && event.clientX <= rect.right &&
+            event.clientY >= rect.top && event.clientY <= rect.bottom
+    }
+
+    private findTabForEventTarget (target: EventTarget|null): BaseTabComponent|null {
+        if (!(target instanceof Node)) {
+            return null
+        }
+        for (const [tab, ref] of this.viewRefs.entries()) {
+            const nodes = ref.rootNodes.filter((n): n is HTMLElement => n instanceof HTMLElement)
+            if (nodes.some(node => node.contains(target))) {
+                return tab
+            }
+            if (tab.viewContainerEmbeddedRef) {
+                const embeddedNodes = tab.viewContainerEmbeddedRef.rootNodes.filter((n): n is HTMLElement => n instanceof HTMLElement)
+                if (embeddedNodes.some(node => node.contains(target))) {
+                    return tab
+                }
+            }
+        }
+        return null
     }
 
     private observeUntilChildDetached<T> (tab: BaseTabComponent, event: Observable<T>): Observable<T> {

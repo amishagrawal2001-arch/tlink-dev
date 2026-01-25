@@ -94,6 +94,10 @@ ipcMain.on('app:new-window', () => {
     application.newWindow()
 })
 
+ipcMain.on('app:open-ai-assistant-window', () => {
+    application.openAIAssistantWindow()
+})
+
 process.on('uncaughtException' as any, err => {
     console.log(err)
     application.broadcast('uncaughtException', err)

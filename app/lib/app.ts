@@ -24,6 +24,7 @@ export class Application {
     private ptyManager = new PTYManager()
     private sessionSharingServer = getSessionSharingServer()
     private windows: Window[] = []
+    private aiAssistantWindow: Window | null = null
     private globalHotkey$ = new Subject<void>()
     private quitRequested = false
     userPluginsPath: string
@@ -573,6 +574,9 @@ export class Application {
         })
         window.closed$.subscribe(() => {
             this.windows = this.windows.filter(x => x !== window)
+            if (this.aiAssistantWindow === window) {
+                this.aiAssistantWindow = null
+            }
             if (!this.windows.some(x => x.isMainWindow)) {
                 this.windows[0]?.makeMain()
                 this.windows[0]?.present()
@@ -583,6 +587,40 @@ export class Application {
         }
         await window.ready
         return window
+    }
+
+    async openAIAssistantWindow (): Promise<void> {
+        // Check if AI assistant window already exists and is not destroyed
+        if (this.aiAssistantWindow && !this.aiAssistantWindow.isDestroyed()) {
+            // Focus existing window
+            this.aiAssistantWindow.present()
+            this.aiAssistantWindow.focus()
+            // Send message to open AI assistant in full-window mode
+            this.aiAssistantWindow.send('host:open-ai-assistant', true)
+            return
+        }
+
+        // Create new window for AI assistant with specific size (800x700)
+        const window = await this.newWindow({ 
+            width: 800, 
+            height: 700 
+        })
+        this.aiAssistantWindow = window
+        
+        // Set window title
+        window.webContents.once('did-finish-load', () => {
+            window.webContents.executeJavaScript(`
+                if (document.title) {
+                    document.title = 'AI Assistant - Tlink';
+                }
+            `)
+        })
+        
+        // Wait for window to be ready, then send message to open AI assistant in full-window mode
+        window.ready.then(() => {
+            // Send flag indicating this is an AI Assistant window (full-window mode)
+            window.send('host:open-ai-assistant', true)
+        })
     }
 
     onGlobalHotkey (): void {

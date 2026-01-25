@@ -12,11 +12,13 @@ import { supportedAlgorithms } from '../algorithms'
 /** @hidden */
 @Component({
     templateUrl: './sshProfileSettings.component.pug',
+    styleUrls: ['./sshProfileSettings.component.scss'],
 })
 export class SSHProfileSettingsComponent {
     Platform = Platform
     profile: SSHProfile
     hasSavedPassword: boolean
+    private originalUsername: string|null = null
 
     connectionMode: 'direct'|'proxyCommand'|'jumpHost'|'socksProxy'|'httpProxy' = 'direct'
 
@@ -64,6 +66,8 @@ export class SSHProfileSettingsComponent {
                 console.error('Could not check for saved password', e)
             }
         }
+
+        this.originalUsername = this.profile.options.user ?? null
     }
 
     getJumpHostLabel (p: PartialProfile<SSHProfile>) {
@@ -103,6 +107,7 @@ export class SSHProfileSettingsComponent {
     }
 
     save () {
+        void this.migrateSavedPasswordOnUsernameChange()
         for (const k of Object.values(SSHAlgorithmType)) {
             this.profile.options.algorithms![k] = Object.entries(this.algorithms[k])
                 .filter(([_, v]) => !!v)
@@ -126,6 +131,30 @@ export class SSHProfileSettingsComponent {
         }
 
         this.loginScriptsSettings?.save()
+    }
+
+    private async migrateSavedPasswordOnUsernameChange (): Promise<void> {
+        const previous = this.originalUsername?.trim() || null
+        const current = this.profile.options.user?.trim() || null
+        if (!previous || !current || previous === current || !this.hasSavedPassword) {
+            this.originalUsername = current
+            return
+        }
+
+        try {
+            const existing = await this.passwordStorage.loadPassword(this.profile, previous)
+            if (existing) {
+                await this.passwordStorage.savePassword(this.profile, existing, current)
+                await this.passwordStorage.deletePassword(this.profile, previous)
+                this.hasSavedPassword = true
+            } else {
+                this.hasSavedPassword = false
+            }
+        } catch (e) {
+            console.error('Could not migrate saved password to new username', e)
+        } finally {
+            this.originalUsername = current
+        }
     }
 
     onForwardAdded (fw: ForwardedPortConfig) {

@@ -1,4 +1,3 @@
-import * as z from 'zod';
 import { createJsonResponse } from '../../type/types';
 import { BaseTool } from './base-tool';
 import { ExecToolCategory } from '../terminal';

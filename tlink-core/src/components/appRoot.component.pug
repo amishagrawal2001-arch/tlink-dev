@@ -17,9 +17,15 @@ title-bar(
         .left-dock-section
             button.left-dock-button(
                 type='button',
-                (click)='openProfileSelector()',
-                ngbTooltip='Profiles'
+                (click)='openProfilesAndConnections()',
+                ngbTooltip='Profiles & connections'
             ) !{require('../icons/profiles.svg')}
+            button.left-dock-button(
+                type='button',
+                (click)='openSftpProfileSelector()',
+                ngbTooltip='Open SFTP'
+            )
+                i.far.fa-folder-open
             button.left-dock-button(
                 type='button',
                 (click)='openSidePanelById("session-manager")',

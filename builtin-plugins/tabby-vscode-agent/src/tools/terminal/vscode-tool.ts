@@ -7,7 +7,7 @@ export class VSCodeTool {
     constructor(private app: AppService) { }
 
     handler = async () => {
-        this.app.emit('mcp-run-command', {
+        (this.app as any).emit?.('mcp-run-command', {
             command: 'workbench.action.chat.openInNewWindow',
         });
         return createSuccessResponse('Command sent to open VSCode chat window');

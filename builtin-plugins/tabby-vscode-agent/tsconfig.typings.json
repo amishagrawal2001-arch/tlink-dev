@@ -1,10 +1,22 @@
 {
-  "extends": "../tsconfig.json",
-  "exclude": ["node_modules", "dist", "typings"],
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", "dist", "typings", "build", "plugins"],
   "compilerOptions": {
     "baseUrl": "src",
+    "module": "ESNext",
+    "moduleResolution": "node",
     "emitDeclarationOnly": true,
     "declaration": true,
     "declarationDir": "./typings",
+    "skipLibCheck": true,
+    "paths": {
+      "tabby-core": ["../../tlink-core/typings"],
+      "tabby-settings": ["../../tlink-settings/typings"],
+      "tabby-terminal": ["../../tlink-terminal/typings"],
+      "zod": ["shims/zod-v3"],
+      "zod/v3": ["shims/zod-v3"],
+      "zod/v4": ["shims/zod-v3"],
+      "zod/v4/*": ["shims/zod-v3"]
+    }
   }
 }

@@ -19,6 +19,8 @@ if (process.platform === 'win32') {
 
 export interface WindowOptions {
     hidden?: boolean
+    width?: number
+    height?: number
 }
 
 abstract class GlasstronWindow extends BrowserWindow {
@@ -40,6 +42,7 @@ export class Window {
     private windowConfig: ElectronConfig
     private windowBounds?: Rectangle
     private closing = false
+    private hasCustomSize = false // Track if window was created with custom size (e.g., AI Assistant)
     private lastVibrancy: { enabled: boolean, type?: string } | null = null
     private disableVibrancyWhileDragging = false
     private touchBarControl: any
@@ -55,11 +58,14 @@ export class Window {
 
         this.windowConfig = new ElectronConfig({ name: 'window' })
         this.windowBounds = this.windowConfig.get('windowBoundaries')
+        
+        // Track if this window has a custom size (should not save bounds)
+        this.hasCustomSize = !!(options.width && options.height)
 
         const maximized = this.windowConfig.get('maximized')
         const bwOptions: BrowserWindowConstructorOptions = {
-            width: 800,
-            height: 600,
+            width: options.width ?? 1500,
+            height: options.height ?? 900,
             title: app.getName(),
             minWidth: 400,
             minHeight: 300,
@@ -76,7 +82,8 @@ export class Window {
             acceptFirstMouse: true,
         }
 
-        if (this.windowBounds) {
+        // Don't use saved bounds if custom size is specified (e.g., for AI Assistant window)
+        if (this.windowBounds && !options.width && !options.height) {
             Object.assign(bwOptions, this.windowBounds)
             const closestDisplay = screen.getDisplayNearestPoint( { x: this.windowBounds.x, y: this.windowBounds.y } )
 
@@ -87,6 +94,12 @@ export class Window {
                 bwOptions.x = closestDisplay.bounds.width / 2 - bwOptions.width / 2
                 bwOptions.y = closestDisplay.bounds.height / 2 - bwOptions.height / 2
             }
+        } else if (options.width && options.height) {
+            // Center window on screen if custom size is specified
+            const primaryDisplay = screen.getPrimaryDisplay()
+            const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize
+            bwOptions.x = Math.floor((screenWidth - bwOptions.width) / 2)
+            bwOptions.y = Math.floor((screenHeight - bwOptions.height) / 2)
         }
 
         if (this.configStore.appearance?.frame === 'native') {
@@ -325,15 +338,53 @@ export class Window {
             this.send('host:window-moved')
         })
 
+        // Debounced subscription to save window bounds when resized or moved
+        const boundsChangeSubscription = new Observable<void>(observer => {
+            const resizeHandler = () => {
+                if (this.window && !this.window.isDestroyed() && !this.window.isMaximized()) {
+                    this.windowBounds = this.window.getBounds()
+                    observer.next()
+                }
+            }
+            const moveHandler = () => {
+                if (this.window && !this.window.isDestroyed() && !this.window.isMaximized()) {
+                    this.windowBounds = this.window.getBounds()
+                    observer.next()
+                }
+            }
+            this.window.on('resize', resizeHandler)
+            this.window.on('move', moveHandler)
+            
+            // Return cleanup function
+            return () => {
+                this.window.off('resize', resizeHandler)
+                this.window.off('move', moveHandler)
+            }
+        }).pipe(debounceTime(500)).subscribe(() => {
+            // Save window bounds to config periodically (debounced to avoid excessive writes)
+            // Don't save bounds for windows with custom size (e.g., AI Assistant window)
+            if (this.windowBounds && this.window && !this.window.isDestroyed() && !this.window.isMaximized() && !this.hasCustomSize) {
+                this.windowConfig.set('windowBoundaries', this.windowBounds)
+            }
+        })
+
         this.window.on('closed', () => {
             moveSubscription.unsubscribe()
+            boundsChangeSubscription.unsubscribe()
         })
 
         this.window.on('enter-full-screen', () => this.send('host:window-enter-full-screen'))
         this.window.on('leave-full-screen', () => this.send('host:window-leave-full-screen'))
 
         this.window.on('maximize', () => this.send('host:window-maximized'))
-        this.window.on('unmaximize', () => this.send('host:window-unmaximized'))
+        this.window.on('unmaximize', () => {
+            this.send('host:window-unmaximized')
+            // Save bounds when unmaximized to ensure correct size is restored
+            if (!this.hasCustomSize && this.window && !this.window.isDestroyed()) {
+                this.windowBounds = this.window.getBounds()
+                this.windowConfig.set('windowBoundaries', this.windowBounds)
+            }
+        })
 
         this.window.on('close', event => {
             if (!this.closing) {
@@ -341,25 +392,19 @@ export class Window {
                 this.send('host:window-close-request')
                 return
             }
-            this.windowConfig.set('windowBoundaries', this.windowBounds)
-            this.windowConfig.set('maximized', this.window.isMaximized())
+            // Only save bounds if window doesn't have custom size
+            if (!this.hasCustomSize) {
+                this.windowConfig.set('windowBoundaries', this.windowBounds)
+                this.windowConfig.set('maximized', this.window.isMaximized())
+            }
         })
 
         this.window.on('closed', () => {
             this.destroy()
         })
 
-        this.window.on('resize', () => {
-            if (!this.window.isMaximized()) {
-                this.windowBounds = this.window.getBounds()
-            }
-        })
-
-        this.window.on('move', () => {
-            if (!this.window.isMaximized()) {
-                this.windowBounds = this.window.getBounds()
-            }
-        })
+        // Window bounds are updated in onResize/onMove handlers above and saved
+        // periodically via the debounced boundsChangeSubscription
 
         this.window.on('focus', () => {
             this.send('host:window-focused')
@@ -435,8 +480,11 @@ export class Window {
             return { action: 'deny' }
         })
 
-        ipcMain.on('window-set-disable-vibrancy-while-dragging', (_event, value) => {
-            this.disableVibrancyWhileDragging = value && this.configStore.hacks?.disableVibrancyWhileDragging
+        ipcMain.on('window-set-disable-vibrancy-while-dragging', (event, value) => {
+            // Only handle if this message is for this window
+            if (this.window && event.sender === this.window.webContents) {
+                this.disableVibrancyWhileDragging = value && this.configStore.hacks?.disableVibrancyWhileDragging
+            }
         })
 
         let moveEndedTimeout: any = null
@@ -455,12 +503,18 @@ export class Window {
         this.window.on('move', onBoundsChange)
         this.window.on('resize', onBoundsChange)
 
-        ipcMain.on('window-set-traffic-light-position', (_event, x, y) => {
-            this.window.setWindowButtonPosition({ x, y })
+        ipcMain.on('window-set-traffic-light-position', (event, x, y) => {
+            // Only handle if this message is for this window
+            if (this.window && event.sender === this.window.webContents) {
+                this.window.setWindowButtonPosition({ x, y })
+            }
         })
 
-        ipcMain.on('window-set-opacity', (_event, opacity) => {
-            this.window.setOpacity(opacity)
+        ipcMain.on('window-set-opacity', (event, opacity) => {
+            // Only handle if this message is for this window
+            if (this.window && event.sender === this.window.webContents) {
+                this.window.setOpacity(opacity)
+            }
         })
 
         this.on('window-set-progress-bar', (_, value) => {

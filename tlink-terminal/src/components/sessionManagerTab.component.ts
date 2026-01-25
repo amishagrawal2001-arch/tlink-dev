@@ -4,7 +4,6 @@ import deepClone from 'clone-deep'
 import { AppService, BaseTabComponent as CoreBaseTabComponent, MenuItemOptions, NotificationsService, PartialProfile, PartialProfileGroup, PlatformService, Profile, ProfileGroup, ProfileProvider, ProfilesService, PromptModalComponent, SidePanelService, SplitTabComponent, TranslateService } from 'tlink-core'
 import { EditProfileGroupModalComponent, EditProfileGroupModalComponentResult, EditProfileModalComponent } from 'tlink-settings'
 import { BaseTerminalTabComponent } from '../api/baseTerminalTab.component'
-import { ProfileCreateModalComponent } from './profileCreateModal.component'
 
 // Fallback base class to avoid runtime crashes if the core export is undefined
 const BaseTabComponentRuntime: typeof CoreBaseTabComponent = (CoreBaseTabComponent ?? class extends (Object as any) {}) as typeof CoreBaseTabComponent
@@ -263,6 +262,54 @@ export class SessionManagerTabComponent extends BaseTabComponentRuntime {
         } else {
             this.selectedProfileIds.add(profile.id)
         }
+        if (!multi) {
+            // Try to find and focus the existing tab, but don't open a new one
+            const existing = this.findTabForProfile(profile)
+            if (existing) {
+                this.focusTab(existing)
+                return
+            }
+            
+            // If not found by profile matching, try the connections list as fallback
+            this.refreshConnections()
+            
+            const matchingConnection = this.connections.find(conn => {
+                const connProfile = (conn.tab.profile ?? null) as PartialProfile<Profile> | null
+                if (!connProfile) {
+                    return false
+                }
+                // Try exact ID match first
+                if (connProfile.id === profile.id) {
+                    return true
+                }
+                // Fallback to name and type match
+                if (profile.name && profile.type && 
+                    connProfile.name === profile.name && 
+                    connProfile.type === profile.type) {
+                    return true
+                }
+                // Also try matching by host/user for SSH profiles
+                if (profile.type === 'ssh' && connProfile.type === 'ssh') {
+                    const profileHost = profile.options?.host
+                    const profileUser = profile.options?.user
+                    const connHost = connProfile.options?.host
+                    const connUser = connProfile.options?.user
+                    if (profileHost && connHost && profileHost === connHost) {
+                        if (!profileUser || !connUser || profileUser === connUser) {
+                            return true
+                        }
+                    }
+                }
+                // Try matching by connection title containing profile name
+                if (profile.name && conn.title?.toLowerCase().includes(profile.name.toLowerCase())) {
+                    return true
+                }
+                return false
+            })
+            if (matchingConnection) {
+                this.focusTab(matchingConnection.tab)
+            }
+        }
     }
 
     isGroupSelected (group: SessionProfileGroup): boolean {
@@ -451,14 +498,154 @@ export class SessionManagerTabComponent extends BaseTabComponentRuntime {
     }
 
     async createProfile (group?: SessionProfileGroup): Promise<void> {
-        const modal = this.ngbModal.open(ProfileCreateModalComponent)
-        if (group?.editable) {
-            modal.componentInstance.groupId = group.id ?? ''
+        // Show profile selector with quick connect instead of just the create modal
+        const profile = await this.profiles.showProfileSelector().catch(() => null)
+        if (!profile) {
+            return
         }
 
-        const result = await modal.result.catch(() => null)
-        if (result) {
+        // Determine target group: use passed group, or selected group, or null
+        let targetGroup: SessionProfileGroup | null = group || null
+        if (!targetGroup && this.selectedGroups.length === 1) {
+            targetGroup = this.selectedGroups[0]
+        }
+
+        // If it's a quick connect profile (no ID), mark it for auto-save after connection
+        const isQuickConnect = !profile.id
+        const shouldAutoSave = isQuickConnect && targetGroup?.editable && targetGroup.id
+
+        if (shouldAutoSave && targetGroup) {
+            // Store the target group ID in the profile temporarily so we can save it after connection
+            ;(profile as any).__autoSaveGroupId = targetGroup.id
+            
+            // Ensure profile has a name (quick connect usually sets name to query, but be safe)
+            if (!profile.name || profile.name.trim() === '') {
+                // Try to extract name from connection options
+                const host = (profile as any).options?.host || 
+                            (profile as any).options?.hostname ||
+                            (profile as any).options?.address ||
+                            'Quick Connect'
+                profile.name = host
+            }
+        }
+
+        // Open the profile connection - we'll save it after successful connection
+        const tab = await this.profiles.openNewTabForProfile(profile)
+        
+        // If this is a quick connect profile that should be auto-saved, set up a listener
+        if (shouldAutoSave && tab && targetGroup?.id) {
+            // Wait for connection to be established, then save the profile
+            this.autoSaveQuickConnectProfile(tab, profile, targetGroup.id)
+        }
+    }
+
+    private async autoSaveQuickConnectProfile (tab: BaseTabComponent, profile: PartialProfile<Profile>, groupId: string): Promise<void> {
+        // For SSH profiles, wait for the session to be ready and password to be saved
+        if (profile.type === 'ssh') {
+            try {
+                // Get the SSH tab component
+                const sshTab = tab as any
+                if (sshTab.sshSession) {
+                    // Wait for the session to be open/connected
+                    // Check every 500ms for up to 10 seconds
+                    let attempts = 0
+                    const checkInterval = setInterval(async () => {
+                        attempts++
+                        if (sshTab.sshSession?.open || attempts > 20) {
+                            clearInterval(checkInterval)
+                            if (sshTab.sshSession?.open) {
+                                // Connection established, wait a bit more to ensure password is saved
+                                // Password is saved after session.open is set, so add a small delay
+                                await new Promise(resolve => setTimeout(resolve, 1500))
+                                
+                                // Use the profile from the session
+                                const sessionProfile = deepClone(sshTab.sshSession.profile)
+                                
+                                // CRITICAL: Ensure the profile has the authUsername that was used during authentication
+                                // The password is saved with authUsername, so we need to match it
+                                // This is essential for password retrieval on reconnect
+                                if (sshTab.sshSession.authUsername) {
+                                    // Always set the username to match what was used for password storage
+                                    if (!sessionProfile.options) {
+                                        sessionProfile.options = {}
+                                    }
+                                    sessionProfile.options.user = sshTab.sshSession.authUsername
+                                }
+                                
+                                // CRITICAL: Ensure port is set (defaults to 22 if not specified)
+                                // Password storage uses host:port as key, so port must match exactly
+                                if (!sessionProfile.options.port) {
+                                    sessionProfile.options.port = 22
+                                }
+                                
+                                // Save the profile with correct username
+                                this.saveQuickConnectProfile(sessionProfile, groupId)
+                            }
+                        }
+                    }, 500)
+                } else {
+                    // Session not created yet, wait a bit and try again
+                    setTimeout(() => this.autoSaveQuickConnectProfile(tab, profile, groupId), 1000)
+                }
+            } catch (err) {
+                console.error('Error auto-saving quick connect profile:', err)
+            }
+        } else {
+            // For other profile types (RDP, Telnet), save immediately
+            this.saveQuickConnectProfile(profile, groupId)
+        }
+    }
+
+    private async saveQuickConnectProfile (profile: PartialProfile<Profile>, groupId: string): Promise<void> {
+        try {
+            // Create a copy to avoid modifying the original
+            const profileToSave = deepClone(profile)
+            
+            // Assign to the group
+            profileToSave.group = groupId
+            
+            // Ensure profile has a name
+            if (!profileToSave.name || profileToSave.name.trim() === '') {
+                const host = (profileToSave as any).options?.host || 
+                            (profileToSave as any).options?.hostname ||
+                            (profileToSave as any).options?.address ||
+                            'Quick Connect'
+                profileToSave.name = host
+            }
+            
+            // CRITICAL: Ensure options object exists and has the user field set
+            // This is essential for password retrieval on reconnect
+            if (!profileToSave.options) {
+                profileToSave.options = {}
+            }
+            
+            // For SSH profiles, ensure user and port are set correctly
+            if (profileToSave.type === 'ssh') {
+                // Ensure user is set (it should already be set from autoSaveQuickConnectProfile)
+                if (!(profileToSave as any).options.user) {
+                    // Fallback: try to get from the original profile
+                    const originalUser = (profile as any).options?.user
+                    if (originalUser) {
+                        (profileToSave as any).options.user = originalUser
+                    }
+                }
+                
+                // Ensure port is set (defaults to 22 if not specified)
+                // Password storage uses host:port as key, so port must match exactly
+                if (!(profileToSave as any).options.port) {
+                    (profileToSave as any).options.port = 22
+                }
+            }
+            
+            // Save the profile with auto-generated ID
+            await this.profiles.newProfile(profileToSave)
+            await this.config.save()
+            
+            // Refresh to show the new profile in the group
             await this.refreshProfiles()
+        } catch (err) {
+            console.error('Error saving quick connect profile:', err)
+            this.notifications.error('Failed to save profile')
         }
     }
 
@@ -605,8 +792,40 @@ export class SessionManagerTabComponent extends BaseTabComponentRuntime {
         if (!profile?.id) {
             return null
         }
+        const profileName = profile.name?.toLowerCase() ?? ''
         for (const tab of this.getAllTerminalTabs()) {
-            if ((tab.profile as PartialProfile<Profile> | undefined)?.id === profile.id) {
+            const tabProfile = tab.profile as PartialProfile<Profile> | undefined
+            if (!tabProfile) {
+                // Try matching by tab title as last resort
+                if (profileName && tab.title?.toLowerCase().includes(profileName)) {
+                    return tab
+                }
+                continue
+            }
+            // First try exact ID match
+            if (tabProfile.id === profile.id) {
+                return tab
+            }
+            // Fallback: match by name and type if both are available
+            if (profile.name && profile.type && 
+                tabProfile.name === profile.name && 
+                tabProfile.type === profile.type) {
+                return tab
+            }
+            // For SSH profiles, also try matching by host and user
+            if (profile.type === 'ssh' && tabProfile.type === 'ssh') {
+                const profileHost = profile.options?.host
+                const profileUser = profile.options?.user
+                const tabHost = tabProfile.options?.host
+                const tabUser = tabProfile.options?.user
+                if (profileHost && tabHost && profileHost === tabHost) {
+                    if (!profileUser || !tabUser || profileUser === tabUser) {
+                        return tab
+                    }
+                }
+            }
+            // Also try matching by tab title containing profile name
+            if (profileName && tab.title?.toLowerCase().includes(profileName)) {
                 return tab
             }
         }
@@ -614,12 +833,31 @@ export class SessionManagerTabComponent extends BaseTabComponentRuntime {
     }
 
     private focusTab (tab: BaseTabComponent): void {
+        // Find the parent split tab if this tab is in a split pane
         const parent = this.app.getParentTab(tab)
         if (parent) {
-            parent.focus(tab)
+            // Check if this tab is already focused in the split
+            if (parent.getFocusedTab() === tab && this.app.activeTab === parent) {
+                // Already focused, no need to do anything
+                return
+            }
+            // If parent is already active, focus immediately
+            if (this.app.activeTab === parent) {
+                parent.focus(tab)
+                return
+            }
+            // Otherwise, select the parent first, then focus after selection completes
             this.app.selectTab(parent)
+            // Use setImmediate to ensure selectTab's setImmediate completes first
+            setImmediate(() => {
+                // Double-check the parent is still active and tab is still valid
+                if (this.app.activeTab === parent && parent.getAllTabs().includes(tab)) {
+                    parent.focus(tab)
+                }
+            })
             return
         }
+        // For non-split tabs, just select them directly
         this.app.selectTab(tab)
     }
 

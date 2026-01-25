@@ -212,7 +212,7 @@ export class ExecToolCategory extends BaseToolCategory {
           .map(childTab => ({
             id: id++,
             tabParent: tab,
-            tab: childTab as BaseTerminalTabComponent<any>
+            tab: childTab as unknown as BaseTerminalTabComponent<any>
           })));
       }
     });

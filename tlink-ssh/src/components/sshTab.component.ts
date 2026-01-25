@@ -3,7 +3,7 @@ import { promises as fs } from 'fs'
 import * as path from 'path'
 import { marker as _ } from '@biesbjerg/ngx-translate-extract-marker'
 import colors from 'ansi-colors'
-import { Component, Injector } from '@angular/core'
+import { Component, HostBinding, Injector } from '@angular/core'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import { Platform, ProfilesService } from 'tlink-core'
 import { BaseTerminalTabComponent, ConnectableTerminalTabComponent } from 'tlink-terminal'
@@ -31,11 +31,14 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
     sftpPanelVisible = false
     sftpPath = '/'
     enableToolbar = true
+    startInSFTP = false
+    @HostBinding('class.sftp-only') sftpOnly = false
     activeKIPrompt: KeyboardInteractivePrompt|null = null
     openingLogDir = false
     openingLogFile = false
-    private reconnectTimestamps: number[] = []
     private suppressAutoReconnect = false
+    private sftpAutostarted = false
+    private initializationPromise: Promise<void>|null = null
 
     constructor (
         injector: Injector,
@@ -47,6 +50,10 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
         super(injector)
         this.sessionChanged$.subscribe(() => {
             this.activeKIPrompt = null
+            if (this.startInSFTP && this.session?.open && !this.sftpAutostarted) {
+                this.sftpAutostarted = true
+                void this.openSFTP()
+            }
         })
     }
 
@@ -73,6 +80,7 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
             }
         })
 
+        this.sftpOnly = this.startInSFTP
         super.ngOnInit()
 
         if (!this.session?.open) {
@@ -246,6 +254,11 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
     }
 
     protected onSessionDestroyed (): void {
+        if (this.reconnecting) {
+            this.setSession(null)
+            return
+        }
+
         const shouldAutoReconnect = !this.isDisconnectedByHand &&
             !this.isSessionExplicitlyTerminated() &&
             (this.profile.behaviorOnSessionEnd === 'auto' || this.profile.behaviorOnSessionEnd === 'reconnect')
@@ -301,24 +314,49 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
         }
     }
 
+    private async initializeSftpOnlySession (multiplex = true): Promise<void> {
+        this.sshSession = await this.setupOneSession(this.injector, this.profile, multiplex)
+        this.sftpAutostarted = true
+        await this.openSFTP()
+    }
+
     async initializeSession (): Promise<void> {
-        if (this.session?.open) {
-            return
+        if (this.initializationPromise) {
+            return this.initializationPromise
         }
-        await super.initializeSession()
-        try {
-            await this.initializeSessionMaybeMultiplex(true)
-        } catch {
-            try {
-                await this.initializeSessionMaybeMultiplex(false)
-            } catch (e) {
-                console.error('SSH session initialization failed', e)
-                if (this.frontendIsReady) {
-                    this.write(colors.black.bgRed(' X ') + ' ' + colors.red(e.message) + '\r\n')
+        this.initializationPromise = (async () => {
+            if (this.session?.open || this.sshSession?.open) {
+                return
+            }
+            await super.initializeSession()
+            if (this.startInSFTP) {
+                try {
+                    await this.initializeSftpOnlySession(true)
+                } catch {
+                    try {
+                        await this.initializeSftpOnlySession(false)
+                    } catch (e) {
+                        console.error('SFTP-only session initialization failed', e)
+                    }
                 }
                 return
             }
-        }
+            try {
+                await this.initializeSessionMaybeMultiplex(true)
+            } catch {
+                try {
+                    await this.initializeSessionMaybeMultiplex(false)
+                } catch (e) {
+                    console.error('SSH session initialization failed', e)
+                    if (this.frontendIsReady) {
+                        this.write(colors.black.bgRed(' X ') + ' ' + colors.red(e.message) + '\r\n')
+                    }
+                }
+            }
+        })().finally(() => {
+            this.initializationPromise = null
+        })
+        return this.initializationPromise
     }
 
     showPortForwarding (): void {

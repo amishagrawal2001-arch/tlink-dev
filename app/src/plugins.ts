@@ -152,7 +152,12 @@ export function initModuleLookup (userPluginsPath: string): void {
     paths.unshift(path.join(remote.app.getAppPath(), 'node_modules'))
 
     if (process.env.TLINK_DEV) {
-        paths.unshift(path.dirname(remote.app.getAppPath()))
+        const repoRoot = path.dirname(remote.app.getAppPath())
+        paths.unshift(repoRoot)
+        const devBuiltinPluginsPath = path.join(repoRoot, 'builtin-plugins')
+        if (require('fs').existsSync(devBuiltinPluginsPath)) {
+            paths.unshift(devBuiltinPluginsPath)
+        }
     }
 
     paths.unshift(builtinPluginsPath)

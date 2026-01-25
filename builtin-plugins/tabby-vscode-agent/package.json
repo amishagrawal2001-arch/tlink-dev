@@ -30,7 +30,7 @@
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "tabby-mcp-stdio": "^1.0.4",
-    "zod": "^3.22.4"
+    "zod": "3.22.4"
   },
   "peerDependencies": {
     "@angular/animations": "*",

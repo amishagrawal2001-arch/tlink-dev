@@ -1,5 +1,5 @@
 import { firstBy } from 'thenby'
-import { Component, Input, HostListener, ViewChildren, QueryList, ElementRef } from '@angular/core' // eslint-disable-line @typescript-eslint/no-unused-vars
+import { Component, Input, HostListener, ViewChildren, ViewChild, QueryList, ElementRef } from '@angular/core' // eslint-disable-line @typescript-eslint/no-unused-vars
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap'
 import FuzzySearch from 'fuzzy-search'
 import { SelectorOption } from '../api/selector'
@@ -18,6 +18,7 @@ export class SelectorModalComponent<T> {
     @Input() selectedIndex = 0
     hasGroups = false
     @ViewChildren('item') itemChildren: QueryList<ElementRef>
+    @ViewChild('filterInput') filterInput?: ElementRef<HTMLInputElement>
     private preventEdit: boolean
 
     constructor (public modalInstance: NgbActiveModal) {
@@ -80,7 +81,6 @@ export class SelectorModalComponent<T> {
                     .thenBy<SelectorOption<T>, string>(x => x.group ?? '')
                     .thenBy<SelectorOption<T>, string>(x => x.name),
             )
-                .filter(x => !x.freeInputPattern)
         } else {
             // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
             this.filteredOptions = new FuzzySearch(
@@ -112,6 +112,10 @@ export class SelectorModalComponent<T> {
     }
 
     selectOption (option: SelectorOption<T>): void {
+        if (option.freeInputPattern && !this.filter.trim()) {
+            this.filterInput?.nativeElement.focus()
+            return
+        }
         this.modalInstance.close(option.result)
         setTimeout(() => option.callback?.(this.filter))
     }

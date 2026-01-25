@@ -40,6 +40,8 @@ export class SFTPPanelComponent implements OnDestroy {
     private resizeStartHeight = 0
     private resizeMoveHandler: ((event: MouseEvent) => void)|null = null
     private resizeUpHandler: (() => void)|null = null
+    private navigationToken = 0
+    private hardTimeoutId: NodeJS.Timeout|null = null
 
     constructor (
         private ngbModal: NgbModal,
@@ -53,7 +55,19 @@ export class SFTPPanelComponent implements OnDestroy {
 
     async ngOnInit (): Promise<void> {
         try {
-            this.sftp = await this.session.openSFTP()
+            // Guard against SFTP handshake hanging forever
+            let timeoutId: NodeJS.Timeout|undefined
+            try {
+                const openSftpPromise = this.session.openSFTP()
+                const timeoutPromise = new Promise<never>((_, reject) => {
+                    timeoutId = setTimeout(() => reject(new Error('SFTP handshake timed out. Please retry.')), 10000)
+                })
+                this.sftp = await Promise.race([openSftpPromise, timeoutPromise])
+            } finally {
+                if (timeoutId) {
+                    clearTimeout(timeoutId)
+                }
+            }
             
             // Subscribe to SFTP session closure to prevent hanging operations
             this.sftpClosedSubscription = this.sftp.closed$.subscribe(() => {
@@ -69,6 +83,13 @@ export class SFTPPanelComponent implements OnDestroy {
         } catch (error) {
             const message = error?.message ?? 'Failed to open SFTP session.'
             console.warn('Failed to open SFTP session:', error)
+            // Ensure UI doesn't stay in a loading state
+            this.isNavigating = false
+            this.navigationWarning = false
+            this.navigationAbortController = null
+            this.fileList = []
+            this.filteredFileList = []
+            this.pathSegments = []
             this.notifications.error(message)
             this.closed.emit()
             return
@@ -91,12 +112,17 @@ export class SFTPPanelComponent implements OnDestroy {
             this.navigationAbortController = null
         }
         // Clear all timeouts
+        if (this.hardTimeoutId) {
+            clearTimeout(this.hardTimeoutId)
+            this.hardTimeoutId = null
+        }
         if (this.warningTimeoutId) {
             clearTimeout(this.warningTimeoutId)
             this.warningTimeoutId = null
         }
         this.isNavigating = false
         this.navigationWarning = false
+        this.navigationToken = 0
         // Unsubscribe from SFTP closed events
         if (this.sftpClosedSubscription) {
             this.sftpClosedSubscription.unsubscribe()
@@ -105,6 +131,7 @@ export class SFTPPanelComponent implements OnDestroy {
     }
 
     async navigate (newPath: string, fallbackOnError = true): Promise<void> {
+        const token = ++this.navigationToken
         // Cancel any ongoing navigation
         if (this.navigationAbortController) {
             this.navigationAbortController.abort()
@@ -130,6 +157,36 @@ export class SFTPPanelComponent implements OnDestroy {
 
         this.isNavigating = true
         const previousPath = this.path
+        // Hard fail-safe: force-stop after 8s to avoid stuck UI
+        // This ensures the UI remains responsive even if the operation hangs
+        if (this.hardTimeoutId) {
+            clearTimeout(this.hardTimeoutId)
+        }
+        this.hardTimeoutId = setTimeout(() => {
+            // Check if this navigation is still active
+            if (token !== this.navigationToken || !this.isNavigating) {
+                return
+            }
+            // Force stop navigation to prevent UI freeze
+            this.navigationToken++
+            this.navigationWarning = false
+            this.isNavigating = false
+            if (this.navigationAbortController) {
+                this.navigationAbortController.abort()
+                this.navigationAbortController = null
+            }
+            // Clear all timeouts
+            if (this.warningTimeoutId) {
+                clearTimeout(this.warningTimeoutId)
+                this.warningTimeoutId = null
+            }
+            // Revert to previous path so UI is consistent
+            this.path = previousPath
+            this.pathChange.next(this.path)
+            this.fileList = []
+            this.filteredFileList = []
+            this.notifications.error('SFTP operation timed out after 8 seconds. The UI was unresponsive. Please try again or check the path.')
+        }, 8000)
         
         // Normalize path
         const normalizedPath = newPath.trim()
@@ -165,7 +222,7 @@ export class SFTPPanelComponent implements OnDestroy {
             }
             
             // Check if navigation was aborted before starting
-            if (abortSignal.aborted) {
+            if (abortSignal.aborted || token !== this.navigationToken) {
                 this.isNavigating = false
                 this.navigationAbortController = null
                 return
@@ -174,7 +231,7 @@ export class SFTPPanelComponent implements OnDestroy {
             // Show warning after 2 seconds if operation is still pending
             this.navigationWarning = false
             this.warningTimeoutId = setTimeout(() => {
-                if (this.isNavigating && !abortSignal.aborted) {
+                if (this.isNavigating && !abortSignal.aborted && token === this.navigationToken) {
                     this.navigationWarning = true
                 }
             }, 2000) // Show warning after 2 seconds
@@ -183,12 +240,12 @@ export class SFTPPanelComponent implements OnDestroy {
             // Start the readdir operation
             readdirPromise = this.sftp.readdir(this.path)
             
-            // Create timeout promise that will reject after 5 seconds
+            // Create timeout promise that will reject after 4 seconds (reduced for faster feedback)
             const timeoutPromise = new Promise<never>((_, reject) => {
                 timeoutId = setTimeout(() => {
                     // Force rejection even if readdir is still pending
-                    reject(new Error(`SFTP operation timed out after 5 seconds. The path "${this.path}" may be invalid or the server is unresponsive. Please check the path and try again.`))
-                }, 5000) // 5 second timeout
+                    reject(new Error(`SFTP operation timed out after 4 seconds. The path "${this.path}" may be invalid or the server is unresponsive.`))
+                }, 4000) // 4 second timeout
             })
 
             // Use Promise.race to ensure timeout works - this will reject if timeout occurs
@@ -235,10 +292,13 @@ export class SFTPPanelComponent implements OnDestroy {
             
             const result = await Promise.race([wrappedReaddir, wrappedTimeout])
             
-            // Check if navigation was aborted (double-check after await)
-            if (abortSignal.aborted || !this.sftp) {
-                this.isNavigating = false
-                this.navigationAbortController = null
+            // Check if navigation was aborted or invalidated (double-check after await)
+            if (abortSignal.aborted || !this.sftp || token !== this.navigationToken) {
+                if (token === this.navigationToken) {
+                    this.isNavigating = false
+                    this.navigationAbortController = null
+                    this.navigationWarning = false
+                }
                 return
             }
             
@@ -247,7 +307,10 @@ export class SFTPPanelComponent implements OnDestroy {
                 throw new Error('Invalid response from SFTP server')
             }
             
-            this.fileList = result
+            // Final check before updating UI
+            if (token === this.navigationToken) {
+                this.fileList = result
+            }
         } catch (error) {
             // Clear all timeouts in case of error
             if (timeoutId) {
@@ -262,8 +325,11 @@ export class SFTPPanelComponent implements OnDestroy {
             
             // Don't show error if navigation was cancelled
             if (abortSignal.aborted) {
-                this.isNavigating = false
-                this.navigationAbortController = null
+                if (token === this.navigationToken) {
+                    this.isNavigating = false
+                    this.navigationAbortController = null
+                    this.navigationWarning = false
+                }
                 return
             }
             
@@ -272,12 +338,16 @@ export class SFTPPanelComponent implements OnDestroy {
             
             const errorMessage = error?.message ?? 'Failed to read directory'
             this.notifications.error(errorMessage)
+            // Ensure UI exits loading state on failure
+            this.fileList = []
+            this.filteredFileList = []
             
             // Reset to previous path if available
             if (previousPath && fallbackOnError && previousPath !== this.path) {
                 // Reset navigating flag before recursive call
                 this.isNavigating = false
                 this.navigationAbortController = null
+                this.navigationWarning = false
                 // Use setTimeout to allow UI to update before navigating back
                 setTimeout(() => {
                     this.navigate(previousPath, false).catch(() => {
@@ -286,8 +356,11 @@ export class SFTPPanelComponent implements OnDestroy {
                 }, 100)
                 return
             }
-            this.isNavigating = false
-            this.navigationAbortController = null
+            if (token === this.navigationToken) {
+                this.isNavigating = false
+                this.navigationAbortController = null
+                this.navigationWarning = false
+            }
             return
         } finally {
             // Ensure all timeouts are cleared
@@ -299,6 +372,10 @@ export class SFTPPanelComponent implements OnDestroy {
                 clearTimeout(this.warningTimeoutId)
                 this.warningTimeoutId = null
             }
+            if (this.hardTimeoutId) {
+                clearTimeout(this.hardTimeoutId)
+                this.hardTimeoutId = null
+            }
         }
 
         // Check again if navigation was aborted after readdir
@@ -308,6 +385,12 @@ export class SFTPPanelComponent implements OnDestroy {
             return
         }
 
+        // Final validation before updating UI
+        if (token !== this.navigationToken || !this.fileList) {
+            // Navigation was invalidated or fileList is null, don't update UI
+            return
+        }
+        
         const dirKey = a => a.isDirectory ? 1 : 0
         this.fileList.sort((a, b) =>
             dirKey(b) - dirKey(a) ||
@@ -317,6 +400,12 @@ export class SFTPPanelComponent implements OnDestroy {
         this.isNavigating = false
         this.navigationWarning = false
         this.navigationAbortController = null
+        
+        // Clear hard timeout since navigation completed successfully
+        if (this.hardTimeoutId) {
+            clearTimeout(this.hardTimeoutId)
+            this.hardTimeoutId = null
+        }
     }
 
     getFileType (fileExtension: string): string {
@@ -418,6 +507,23 @@ export class SFTPPanelComponent implements OnDestroy {
 
     goUp (): void {
         this.navigate(path.dirname(this.path))
+    }
+
+    editPath (): void {
+        this.editingPath = this.path || '/'
+        // Focus is handled by the template's autofocus; keep editing mode until blur/submit
+    }
+
+    cancelEditPath (): void {
+        this.editingPath = null
+    }
+
+    async confirmPath (): Promise<void> {
+        const target = this.editingPath?.trim()
+        this.editingPath = null
+        if (target && target !== this.path) {
+            await this.navigate(target)
+        }
     }
 
     async open (item: SFTPFile): Promise<void> {
@@ -592,23 +698,6 @@ export class SFTPPanelComponent implements OnDestroy {
 
     dismissCWDTip (): void {
         window.localStorage.sshCWDTipDismissed = 'true'
-    }
-
-    editPath (): void {
-        this.editingPath = this.path
-    }
-
-    async confirmPath (): Promise<void> {
-        if (this.editingPath === null) {
-            return
-        }
-        const pathToNavigate = this.editingPath
-        this.editingPath = null // Clear editing state immediately for better UX
-        try {
-            await this.navigate(pathToNavigate)
-        } catch (error) {
-            // Error already handled in navigate()
-        }
     }
 
     close (): void {

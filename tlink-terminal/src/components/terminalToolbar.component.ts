@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/explicit-module-boundary-types */
 import { Component, HostListener, Input } from '@angular/core'
-import { AppService, SplitTabComponent, ProfilesService, SelectorService, TabsService } from 'tlink-core'
+import { AppService, SplitTabComponent, ProfilesService, SelectorService, TabsService, SelectorOption, PartialProfile, Profile } from 'tlink-core'
 import { BaseTerminalTabComponent } from '../api/baseTerminalTab.component'
 
 /** @hidden */
@@ -49,27 +49,49 @@ export class TerminalToolbarComponent {
         }
         const allProfiles = await this.profiles.getProfiles({ includeBuiltin: true })
         const filtered = allProfiles.filter(p => !p.isBuiltin || p.type === 'chatgpt')
-        if (!filtered.length) {
-            return
+
+        const openProfile = async (profile: PartialProfile<Profile>): Promise<void> => {
+            const params = await this.profiles.newTabParametersForProfile(profile)
+            if (!params) {
+                return
+            }
+            const newTab = this.tabs.create(params)
+            if (this.tab.topmostParent instanceof SplitTabComponent) {
+                await this.tab.topmostParent.addTab(newTab, this.tab, 'r')
+            } else {
+                await this.app.openNewTab(params)
+            }
         }
 
-        const options = filtered.map(p => {
+        const options: SelectorOption<void>[] = filtered.map(p => {
             const { result, ...opt } = this.profiles.selectorOptionForProfile(p)
             return {
                 ...opt,
                 result: undefined,
-                callback: async () => {
-                    const params = await this.profiles.newTabParametersForProfile(p)
-                    if (!params) {
-                        return
-                    }
-                    const newTab = this.tabs.create(params)
-                    if (this.tab.topmostParent instanceof SplitTabComponent) {
-                        await this.tab.topmostParent.addTab(newTab, this.tab, 'r')
-                    } else {
-                        await this.app.openNewTab(params)
-                    }
-                },
+                callback: async () => openProfile(p),
+            }
+        })
+
+        // Add quick connect options for each protocol provider
+        this.profiles.getProviders().forEach(provider => {
+            const quickConnectProvider = provider as any
+            if (typeof quickConnectProvider.quickConnect === 'function') {
+                options.push({
+                    name: 'Quick connect',
+                    freeInputPattern: `Connect to "%s"... (${provider.name.toUpperCase()})`,
+                    icon: 'fas fa-arrow-right',
+                    description: `(${provider.name.toUpperCase()})`,
+                    weight: 100,
+                    callback: async (query?: string) => {
+                        if (!query) {
+                            return
+                        }
+                        const profile = quickConnectProvider.quickConnect(query)
+                        if (profile) {
+                            await openProfile(profile)
+                        }
+                    },
+                })
             }
         })
 

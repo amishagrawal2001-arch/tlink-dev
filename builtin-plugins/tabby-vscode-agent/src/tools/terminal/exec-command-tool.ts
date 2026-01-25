@@ -1,5 +1,4 @@
-import * as z from 'zod';
-import stripAnsi from 'strip-ansi';
+import { z } from 'zod/v3';
 import { createErrorResponse, createJsonResponse, createSuccessResponse } from '../../type/types';
 import { BaseTool } from './base-tool';
 import { BaseTerminalTabComponentWithId, ExecToolCategory } from '../terminal';
@@ -10,6 +9,13 @@ import { escapeShellString } from '../../utils/escapeShellString';
 import { AppService, ConfigService } from 'tabby-core';
 import { DialogService } from '../../services/dialog.service';
 import { RunningCommandsManagerService } from '../../services/runningCommandsManager.service';
+
+const stripAnsi = (value: string): string =>
+  value.replace(
+    // Strip ANSI escape sequences (colors, cursor moves, etc.)
+    /[\u001B\u009B][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g,
+    ''
+  );
 
 /**
  * Tool for executing a command in a terminal session and retrieving the output.

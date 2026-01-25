@@ -21,6 +21,7 @@ export abstract class HostAppService {
     protected commandWindowBottomRequest = new Subject<void>()
     protected buttonBarToggleRequest = new Subject<void>()
     protected sessionManagerRequest = new Subject<void>()
+    protected aiAssistantRequest = new Subject<void>()
     protected configChangeBroadcast = new Subject<void>()
     protected logger: Logger
 
@@ -40,6 +41,10 @@ export abstract class HostAppService {
      * Fired when Command Window (Bottom) is selected from the menu
      */
     get commandWindowBottomRequest$ (): Observable<void> { return this.commandWindowBottomRequest }
+    /**
+     * Fired when AI Assistant window should be opened
+     */
+    get aiAssistantRequest$ (): Observable<void> { return this.aiAssistantRequest }
     /**
      * Fired when Button Bar is selected from the menu
      */

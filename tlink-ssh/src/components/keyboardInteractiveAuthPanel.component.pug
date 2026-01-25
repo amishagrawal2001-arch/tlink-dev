@@ -1,34 +1,35 @@
-.d-flex
-    strong(translate) Keyboard-interactive auth
-    .ms-2 {{prompt.name}}
+.auth-header
+    .auth-title
+        strong Keyboard-interactive auth
+        .text-muted.small {{prompt.name}}
 
-.prompt-text {{prompt.prompts[step].prompt}}
+.auth-body
+    .mb-3
+        label {{prompt.prompts[step].prompt}}
+        input.form-control(
+            #input,
+            autofocus,
+            [type]='isPassword() ? "password": "text"',
+            [placeholder]='isPassword() ? ("Enter password"|translate) : ("Enter response"|translate)',
+            (keyup.enter)='next()',
+            (click)='onInputClick()',
+            [(ngModel)]='prompt.responses[step]'
+        )
 
-input.form-control.mt-2(
-    #input,
-    autofocus,
-    [type]='isPassword() ? "password": "text"',
-    placeholder='Response',
-    (keyup.enter)='next()',
-    [(ngModel)]='prompt.responses[step]'
-)
+    .mb-3(*ngIf='isPassword()')
+        .toggle-wrapper.d-flex.align-items-center
+            toggle([(ngModel)]='remember')
+            span.ms-2(translate) Remember password
 
-.d-flex.mt-3
-    checkbox(
-        *ngIf='isPassword()',
-        [(ngModel)]='remember',
-        [text]='"Save password"|translate'
-    )
-
-    .ms-auto
-
-    button.btn.btn-secondary.me-3(
+.auth-footer.d-flex.gap-2.justify-content-end
+    button.btn.btn-secondary(
         *ngIf='step > 0',
-        (click)='previous()'
-    )
+        (click)='previous()',
+        translate
+    ) Back
 
     button.btn.btn-primary(
         (click)='next()'
     )
-        span(*ngIf='step < prompt.prompts.length - 1') Next
-        span(*ngIf='step == prompt.prompts.length - 1') Finish
+        span(*ngIf='step < prompt.prompts.length - 1', translate) Next
+        span(*ngIf='step == prompt.prompts.length - 1', translate) Finish

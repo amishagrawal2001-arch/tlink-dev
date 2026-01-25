@@ -33,6 +33,17 @@
                 )
                     i.fas.fa-times
 
+        .form-row
+            label.form-label Profile
+            select.form-select(
+                [ngModel]='selectedProfileId',
+                (ngModelChange)='selectProfile($event)',
+                [disabled]='profiles.length === 0'
+            )
+                option(value='' disabled selected *ngIf='!selectedProfileId') Select a profile
+                option(*ngFor='let profile of profiles; trackBy: profile?.id', [value]='profile.id')
+                    | {{profileLabel(profile)}}
+
         .loading-state(*ngIf='loading')
             i.fas.fa-spinner.fa-spin.me-2
             span(translate) Loading templates…

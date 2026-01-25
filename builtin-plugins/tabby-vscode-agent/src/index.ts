@@ -97,6 +97,8 @@ export default class McpModule {
     ) {
     console.log('[McpModule] Module initialized');
 
+        this.registerMcpBridge();
+
         // Initialize the server properly after app and config are ready
         this.app.ready$.subscribe(() => {
             this.config.ready$.toPromise().then(() => {
@@ -130,6 +132,21 @@ export default class McpModule {
         } catch (error) {
             this.logger.error('Error starting MCP server on boot:', error);
         }
+    }
+
+    private registerMcpBridge(): void {
+        if (typeof window === 'undefined') {
+            return;
+        }
+        const win = window as any;
+        if (win.__tlinkMcp) {
+            return;
+        }
+        win.__tlinkMcp = {
+            start: async (port: number) => this.mcpService.startServer(port),
+            stop: async () => this.mcpService.stopServer(),
+            status: () => ({ running: this.mcpService.isServerRunning() }),
+        };
     }
 }
 

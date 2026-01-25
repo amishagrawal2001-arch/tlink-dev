@@ -165,9 +165,12 @@ export class ProfilesService {
         this.config.store.profiles = this.config.store.profiles.filter(x => !filter(x))
     }
 
-    async openNewTabForProfile <P extends Profile> (profile: PartialProfile<P>, direction: SplitDirection = 'r'): Promise<BaseTabComponent|null> {
+    async openNewTabForProfile <P extends Profile> (profile: PartialProfile<P>, direction: SplitDirection = 'r', inputs?: Record<string, any>): Promise<BaseTabComponent|null> {
         const params = await this.newTabParametersForProfile(profile)
         if (params) {
+            if (inputs) {
+                params.inputs = { ...params.inputs, ...inputs }
+            }
             return this.app.openNewTab(params, direction)
         }
         return null
@@ -295,15 +298,15 @@ export class ProfilesService {
                 } catch { }
 
                 this.getProviders().forEach(provider => {
-                    if (provider instanceof QuickConnectProfileProvider) {
+                    const quickConnectProvider = provider as any
+                    if (typeof quickConnectProvider.quickConnect === 'function') {
                         options.push({
-                            name: this.translate.instant('Quick connect'),
-                            freeInputPattern: this.translate.instant('Connect to "%s"...'),
-                            description: `(${provider.name.toUpperCase()})`,
+                            name: `${this.translate.instant('Quick connect')} (${provider.name.toUpperCase()})`,
+                            freeInputPattern: `${this.translate.instant('Connect to "%s"...')} (${provider.name.toUpperCase()})`,
                             icon: 'fas fa-arrow-right',
-                            weight: provider.id !== this.config.store.defaultQuickConnectProvider ? 1 : 0,
+                            weight: provider.id !== this.config.store.defaultQuickConnectProvider ? -2 : -3,
                             callback: query => {
-                                const profile = provider.quickConnect(query)
+                                const profile = quickConnectProvider.quickConnect(query)
                                 resolve(profile)
                             },
                         })
