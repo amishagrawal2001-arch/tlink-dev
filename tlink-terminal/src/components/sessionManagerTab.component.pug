@@ -81,7 +81,12 @@
             .group-header(
                 (click)='selectGroup(group, $event)',
                 (contextmenu)='openGroupContextMenu($event, group)',
-                [class.selected]='isGroupSelected(group)'
+                [class.selected]='isGroupSelected(group)',
+                cdkDropList,
+                cdkAutoDropGroup='session-manager-profiles',
+                [cdkDropListData]='group.profiles || []',
+                [cdkDropListDisabled]='!group.editable',
+                (cdkDropListDropped)='onProfileDrop($event, group, "header")'
             )
                 button.group-toggle(
                     type='button',
@@ -90,14 +95,24 @@
                     i.fas.fa-chevron-right([class.rotate]='!group.collapsed')
                 span.group-name {{group.name}}
                 span.group-count {{group.profiles?.length ?? 0}}
-            .list-group.list-group-flush(*ngIf='!group.collapsed && (group.profiles?.length ?? 0) > 0')
+            .list-group.list-group-flush(
+                *ngIf='!group.collapsed && (group.profiles?.length ?? 0) > 0',
+                cdkDropList,
+                cdkAutoDropGroup='session-manager-profiles',
+                [cdkDropListData]='group.profiles || []',
+                [cdkDropListDisabled]='!group.editable',
+                (cdkDropListDropped)='onProfileDrop($event, group, "list")'
+            )
                 button.list-group-item.list-group-item-action.profile-item(
                     *ngFor='let profile of group.profiles; trackBy: trackByProfile',
                     type='button',
                     (click)='selectProfile(profile, $event)',
                     (dblclick)='openProfile(profile)',
                     (contextmenu)='openProfileContextMenu($event, profile)',
-                    [class.selected]='isProfileSelected(profile)'
+                    [class.selected]='isProfileSelected(profile)',
+                    cdkDrag,
+                    [cdkDragDisabled]='!group.editable || profile.isBuiltin',
+                    [cdkDragData]='{ profile: profile, groupId: group.id }'
                 )
                     profile-icon.me-2(
                         [icon]='profile.icon',

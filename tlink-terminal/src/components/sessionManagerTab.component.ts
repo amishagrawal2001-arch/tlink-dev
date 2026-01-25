@@ -1,4 +1,5 @@
 import { Component, HostBinding, Inject, Injector } from '@angular/core'
+import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import deepClone from 'clone-deep'
 import { AppService, BaseTabComponent as CoreBaseTabComponent, MenuItemOptions, NotificationsService, PartialProfile, PartialProfileGroup, PlatformService, Profile, ProfileGroup, ProfileProvider, ProfilesService, PromptModalComponent, SidePanelService, SplitTabComponent, TranslateService } from 'tlink-core'
@@ -224,6 +225,11 @@ export class SessionManagerTabComponent extends BaseTabComponentRuntime {
                 label: this.translate.instant('Edit profile'),
                 enabled: canEdit,
                 click: () => this.editProfile(profile),
+            },
+            {
+                label: this.translate.instant('Duplicate profile'),
+                enabled: canEdit,
+                click: () => this.duplicateProfile(profile),
             },
             {
                 label: this.translate.instant('Delete profile'),
@@ -715,8 +721,102 @@ export class SessionManagerTabComponent extends BaseTabComponentRuntime {
                 }))
                 .filter(group => (group.profiles?.length ?? 0) > 0)
         }
+        this.profileGroups.forEach(group => this.sortProfilesForGroup(group))
         this.pruneSelections()
         this.applyFilter()
+    }
+
+    private sortProfilesForGroup (group: SessionProfileGroup): void {
+        if (!group.profiles?.length) {
+            return
+        }
+        const hasWeights = group.profiles.some(profile => typeof profile.weight === 'number')
+        if (!hasWeights) {
+            return
+        }
+        group.profiles.sort((a, b) => {
+            const weightA = typeof a.weight === 'number' ? a.weight : Number.MAX_SAFE_INTEGER
+            const weightB = typeof b.weight === 'number' ? b.weight : Number.MAX_SAFE_INTEGER
+            if (weightA !== weightB) {
+                return weightA - weightB
+            }
+            return (a.name ?? '').localeCompare(b.name ?? '')
+        })
+    }
+
+    async onProfileDrop (
+        event: CdkDragDrop<PartialProfile<Profile>[]>,
+        targetGroup: SessionProfileGroup,
+        target: 'header' | 'list',
+    ): Promise<void> {
+        const dragData = event.item.data as { profile?: PartialProfile<Profile>, groupId?: string }
+        const profile = dragData.profile
+        if (!profile || profile.isBuiltin || !profile.id) {
+            return
+        }
+        if (!targetGroup.editable || !targetGroup.id) {
+            return
+        }
+
+        const sourceGroup = this.profileGroups.find(group => group.id === dragData.groupId)
+        if (!sourceGroup?.profiles) {
+            return
+        }
+        targetGroup.profiles ??= []
+
+        if (sourceGroup.id === targetGroup.id) {
+            const targetIndex = target === 'header' ? 0 : event.currentIndex
+            moveItemInArray(targetGroup.profiles, event.previousIndex, targetIndex)
+            await this.updateProfileOrder(targetGroup)
+        } else {
+            const sourceIndex = sourceGroup.profiles.findIndex(item => item.id === profile.id)
+            if (sourceIndex < 0) {
+                return
+            }
+            sourceGroup.profiles.splice(sourceIndex, 1)
+            const targetIndex = target === 'header' ? targetGroup.profiles.length : event.currentIndex
+            targetGroup.profiles.splice(targetIndex, 0, profile)
+            profile.group = targetGroup.id
+            await this.profiles.writeProfile(profile)
+            await this.updateProfileOrder(sourceGroup)
+            await this.updateProfileOrder(targetGroup)
+        }
+
+        await this.config.save()
+        await this.refreshProfiles()
+    }
+
+    private async updateProfileOrder (group: SessionProfileGroup): Promise<void> {
+        if (!group.editable || !group.profiles?.length) {
+            return
+        }
+        const updates = group.profiles
+            .filter(profile => !!profile.id && !profile.isBuiltin)
+            .map(async (profile, index) => {
+                if (profile.weight !== index) {
+                    profile.weight = index
+                    await this.profiles.writeProfile(profile)
+                }
+            })
+        await Promise.all(updates)
+    }
+
+    private async duplicateProfile (profile: PartialProfile<Profile>): Promise<void> {
+        try {
+            const copy = deepClone(profile)
+            delete copy.id
+            copy.isBuiltin = false
+            copy.isTemplate = false
+            copy.group = profile.group
+            copy.name = this.translate.instant('{name} copy', profile)
+
+            await this.profiles.newProfile(copy)
+            await this.config.save()
+            await this.refreshProfiles()
+        } catch (error) {
+            console.error('Failed to duplicate profile', error)
+            this.notifications.error('Failed to duplicate profile')
+        }
     }
 
     private refreshConnections (): void {
