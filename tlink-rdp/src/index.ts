@@ -12,6 +12,7 @@ import { RDPConfigProvider } from './config'
 import { RecoveryProvider } from './recoveryProvider'
 import { RDPHotkeyProvider } from './hotkeys'
 import { RDPProfilesService } from './profiles'
+import { RDPService } from './services/rdp.service'
 
 /** @hidden */
 @NgModule({
@@ -27,6 +28,7 @@ import { RDPProfilesService } from './profiles'
         { provide: TabRecoveryProvider, useClass: RecoveryProvider, multi: true },
         { provide: HotkeyProvider, useClass: RDPHotkeyProvider, multi: true },
         { provide: ProfileProvider, useExisting: RDPProfilesService, multi: true },
+        RDPService,
     ],
     declarations: [
         RDPProfileSettingsComponent,

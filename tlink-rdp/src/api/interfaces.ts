@@ -10,6 +10,7 @@ export interface RDPProfileOptions {
     user: string
     password?: string
     domain?: string
+    clientType?: 'node-rdpjs' | 'xfreerdp'
     // Display settings
     width?: number
     height?: number
@@ -33,4 +34,3 @@ export interface RDPProfileOptions {
     // Advanced
     customParams?: string
 }
-

@@ -29,6 +29,7 @@ export const builtinPlugins = [
     'tlink-serial',
     'tlink-telnet',
     'tlink-local',
+    'tlink-rdp',
     'tlink-electron',
     'tlink-plugin-manager',
     'tlink-linkifier',

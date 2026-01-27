@@ -147,7 +147,7 @@ Tlink.registerModule('rxjs', require('rxjs'))
 Tlink.registerModule('rxjs/operators', require('rxjs'))
 Tlink.registerModule('string_decoder', require('string_decoder'))
 Tlink.registerModule('js-yaml', require('js-yaml'))
-Tlink.registerModule('zone.js/dist/zone.js', require('zone.js/dist/zone.js'))
+Tlink.registerModule('zone.js/dist/zone.js', require('zone.js'))
 Tlink.registerModule('any-promise', require('any-promise'))
 
 Object.assign(window, {

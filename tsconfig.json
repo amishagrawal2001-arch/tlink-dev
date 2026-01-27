@@ -34,7 +34,12 @@
         "./app/node_modules/*"
       ],
       "tlink-*": ["../../tlink-*/src"],
-    }
+    },
+    "typeRoots": [
+      "./node_modules/@types",
+      "./app/node_modules/@types",
+      "./types"
+    ]
   },
   "typeAcquisition": {
     "include": [

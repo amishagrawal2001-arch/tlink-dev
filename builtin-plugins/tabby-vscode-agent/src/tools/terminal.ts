@@ -22,10 +22,17 @@ import {
 /**
  * Interface for terminal tab component with ID
  */
+export interface TerminalTabLike extends BaseTerminalTabComponent<any> {
+  title?: string;
+  customTitle?: string;
+  hasActivity?: boolean;
+  hasFocus?: boolean;
+}
+
 export interface BaseTerminalTabComponentWithId {
   id: number;
   tabParent: BaseTabComponent;
-  tab: BaseTerminalTabComponent<any>;
+  tab: TerminalTabLike;
 }
 
 /**
@@ -204,7 +211,7 @@ export class ExecToolCategory extends BaseToolCategory {
         sessions.push({
           id: id++,
           tabParent: tab,
-          tab: tab as BaseTerminalTabComponent<any>
+          tab: tab as TerminalTabLike
         });
       } else if (tab instanceof SplitTabComponent) {
         sessions.push(...tab.getAllTabs()
@@ -212,7 +219,7 @@ export class ExecToolCategory extends BaseToolCategory {
           .map(childTab => ({
             id: id++,
             tabParent: tab,
-            tab: childTab as unknown as BaseTerminalTabComponent<any>
+            tab: childTab as unknown as TerminalTabLike
           })));
       }
     });

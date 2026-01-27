@@ -34,11 +34,25 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
 
             .mb-3
                 label(translate) Password
-                input.form-control(
-                    type='password',
-                    [(ngModel)]='profile.options.password',
-                    placeholder='(leave empty to prompt on connect)',
-                )
+                .input-group
+                    input.form-control(
+                        [type]='showPassword ? "text" : "password"',
+                        [(ngModel)]='profile.options.password',
+                        placeholder='(leave empty to prompt on connect)',
+                    )
+                    button.btn.btn-outline-secondary(
+                        type='button',
+                        (click)='showPassword = !showPassword',
+                        [attr.aria-label]='showPassword ? "Hide password" : "Show password"'
+                    )
+                        i.fa([ngClass]='showPassword ? "fa-eye-slash" : "fa-eye"')
+
+            .mb-3
+                label(translate) RDP Client
+                select.form-control([(ngModel)]='profile.options.clientType')
+                    option([value]="'node-rdpjs'") node-rdpjs (Embedded, SSL-only)
+                    option([value]="'xfreerdp'") FreeRDP (External, NLA/TLS support)
+                small.form-text.text-muted(translate) Choose the RDP client. FreeRDP supports modern servers but opens in a separate window.
 
     li(ngbNavItem)
         a(ngbNavLink, translate) Display
@@ -182,4 +196,3 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                     label.form-check-label(for='bitmapCaching', translate) Enable Bitmap Caching
 
 div([ngbNavOutlet]='nav')
-

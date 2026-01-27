@@ -19,6 +19,7 @@ export class RDPProfilesService extends QuickConnectProfileProvider<RDPProfile> 
             user: '',
             password: null,
             domain: '',
+            clientType: 'node-rdpjs', // Default client
             width: 1920,
             height: 1080,
             colorDepth: 24,

@@ -3,11 +3,11 @@
         i.fas.fa-xs.fa-circle.text-success.me-2(*ngIf='connected')
         i.fas.fa-xs.fa-circle.text-danger.me-2(*ngIf='!connected')
         strong.me-auto {{profile.options.user}}@{{profile.options.host}}:{{profile.options.port}}
-        
+
         button.btn.btn-sm.btn-link.me-2((click)='connect()', *ngIf='!connected')
             i.fas.fa-plug
             span(translate) Connect
-        
+
         button.btn.btn-sm.btn-link.me-2((click)='disconnect()', *ngIf='connected')
             i.fas.fa-unlink
             span(translate) Disconnect
@@ -16,18 +16,26 @@
         div(*ngIf='connectionError')
             .alert.alert-danger.m-3
                 strong Connection failed
-                div {{connectionError}}
+                .break-anywhere {{connectionError}}
+                button.btn.btn-link.btn-sm.px-0(type='button', (click)='copyError()') Copy error
                 button.btn.btn-primary.mt-2((click)='connect()') Retry
 
         div(*ngIf='connecting && !connectionError')
             .d-flex.justify-content-center.align-items-center.h-100
                 .text-center
-                    i.fas.fa-spinner.fa-spin.fa-2x.mb-3
-                    div Connecting to {{profile.options.user}}@{{profile.options.host}}...
+                    i.fas.fa-spinner.fa-spin.fa-2x.mb-3(*ngIf='!usingExternalClient')
+                    div(*ngIf='!usingExternalClient') Connecting to {{profile.options.user}}@{{profile.options.host}}...
+                    div(*ngIf='usingExternalClient') Launching FreeRDP in external window...
+
+        div(*ngIf='connected && usingExternalClient')
+            .alert.alert-info.m-3
+                strong FreeRDP launched
+                div The RDP connection is running in an external FreeRDP window.
 
         canvas(
             #canvas='',
             *ngIf='!connectionError',
-            [style.display]='connected ? "block" : "none"'
+            [style.display]='connected ? "block" : "none"',
+            [tabindex]='connected ? 0 : -1',
+            [style.outline]='"none"'
         )
-

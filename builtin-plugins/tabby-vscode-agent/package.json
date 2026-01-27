@@ -9,7 +9,7 @@
     "copilot",
     "mcp"
   ],
-  "main": "plugins/dist/index.js",
+  "main": "build/index.js",
   "typings": "typings/index.d.ts",
   "scripts": {
     "build": "webpack --progress --color",

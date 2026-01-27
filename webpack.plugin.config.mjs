@@ -47,7 +47,7 @@ export default options => {
             filename: 'index.js',
             pathinfo: true,
             libraryTarget: 'umd',
-            publicPath: 'auto',
+            publicPath: '',
         },
         mode: isDev ? 'development' : 'production',
         optimization:{
@@ -157,6 +157,7 @@ export default options => {
             'macos-native-processlist',
             'native-process-working-directory',
             'net',
+            'node-rdpjs',
             'ngx-toastr',
             'os',
             'path',
