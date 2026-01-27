@@ -15,7 +15,13 @@ version = version.substring(1).trim()
 version = version.replace('-', '-c')
 
 if (version.includes('-c')) {
-    version = semver.inc(version, 'prepatch').replace('-0', `-nightly.${process.env.REV ?? 0}`)
+    const bumped = semver.inc(version, 'prepatch')
+    if (bumped) {
+        version = bumped.replace('-0', `-nightly.${process.env.REV ?? 0}`)
+    } else {
+        // Fallback for non-standard git describe output
+        version = `${version}-nightly.${process.env.REV ?? 0}`
+    }
 }
 
 export const builtinPlugins = [

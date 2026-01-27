@@ -10,8 +10,12 @@ log.info('deps', 'app')
 
 sh.cd('app')
 sh.exec(`yarn install --force --network-timeout 1000000 --ignore-scripts`, { fatal: true })
-// Some native packages might fail to build before patch-package gets a chance to run via postinstall
-sh.exec(`yarn postinstall`, { fatal: false })
+if (process.env.TLINK_SKIP_APP_POSTINSTALL === '1') {
+    log.info('deps', 'app postinstall skipped')
+} else {
+    // Some native packages might fail to build before patch-package gets a chance to run via postinstall
+    sh.exec(`yarn postinstall`, { fatal: false })
+}
 sh.cd('..')
 
 sh.cd('web')
