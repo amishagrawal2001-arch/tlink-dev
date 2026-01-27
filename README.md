@@ -24,6 +24,25 @@
 
 Tlink AI is a fork of [Tlink](https://tlink.sh) with enhanced AI capabilities, integrated code editor, and business-focused features. See [BUSINESS_ENHANCEMENTS.md](./BUSINESS_ENHANCEMENTS.md) for detailed enhancement plans.
 
+### Install from Git (tlink-dev)
+
+If you want to run the latest code from the repo:
+
+```bash
+git clone git@github.com:amishagrawal2001-arch/tlink-dev.git
+cd tlink-dev
+npm install
+npm run build
+npm start
+```
+
+Notes:
+- macOS DMG build (optional):
+  ```bash
+  TLINK_BUILD_TARGETS=mac TLINK_BUILD_MAC_DMG_ONLY=1 ./build.sh
+  ```
+- `npm start` runs the Electron app in dev mode.
+
 ### Key Features
 
 * **AI-Powered Terminal Assistant** - Context-aware command suggestions and automated troubleshooting
