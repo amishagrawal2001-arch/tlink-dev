@@ -2,7 +2,7 @@ import * as glasstron from 'glasstron'
 import { autoUpdater } from 'electron-updater'
 import { Subject, Observable, debounceTime } from 'rxjs'
 import { BrowserWindow, app, ipcMain, Rectangle, Menu, screen, BrowserWindowConstructorOptions, TouchBar, nativeImage, WebContents, nativeTheme } from 'electron'
-import ElectronConfig = require('electron-config')
+const ElectronConfig: any = require('electron-config')
 import { enable as enableRemote } from '@electron/remote/main'
 import * as os from 'os'
 import * as path from 'path'
@@ -39,7 +39,7 @@ export class Window {
     private visible = new Subject<boolean>()
     private closed = new Subject<void>()
     private window?: GlasstronWindow
-    private windowConfig: ElectronConfig
+    private windowConfig: any
     private windowBounds?: Rectangle
     private closing = false
     private hasCustomSize = false // Track if window was created with custom size (e.g., AI Assistant)

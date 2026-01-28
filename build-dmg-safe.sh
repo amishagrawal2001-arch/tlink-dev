@@ -54,6 +54,10 @@ info "Logging to ${LOG_FILE}"
 info "Using repo: ${REPO_URL}"
 info "Working dir: ${WORK_DIR}"
 
+if [[ -z "${TLINK_SKIP_APP_POSTINSTALL:-}" ]]; then
+    export TLINK_SKIP_APP_POSTINSTALL=1
+fi
+
 if [[ ${FRESH_CLONE} -eq 1 && -e "${WORK_DIR}" ]]; then
     info "Removing existing clone for a fresh checkout"
     rm -rf "${WORK_DIR}"
@@ -78,6 +82,19 @@ else
     cd "${WORK_DIR}"
 fi
 
+# Bring in local plugin content if it exists (not necessarily in the remote clone)
+local_overlays=(
+    "tlink-ai-assistant"
+    "tlink-community-color-schemes"
+)
+for plugin in "${local_overlays[@]}"; do
+    if [[ -d "${ROOT_DIR}/${plugin}" ]]; then
+        info "Syncing local ${plugin} into build workspace"
+        rm -rf "${WORK_DIR:?}/${plugin}"
+        cp -a "${ROOT_DIR}/${plugin}" "${WORK_DIR}/"
+    fi
+done
+
 if ! git describe --tags >/dev/null 2>&1; then
     info "No git tags found; creating a local tag from package.json version"
     PACKAGE_VERSION="$(node -p "require('./package.json').version")"
@@ -100,7 +117,6 @@ fi
 
 info "Building DMG..."
 chmod +x ./build.sh
-export TLINK_SKIP_APP_POSTINSTALL=1
 TLINK_BUILD_TARGETS=mac TLINK_BUILD_MAC_DMG_ONLY=1 ./build.sh
 
 info "Copying DMG artifacts back to ${ROOT_DIR}/dist-safe" 

@@ -9,10 +9,16 @@ import { RunningCommandsManagerService } from '../services/runningCommandsManage
 /**
  * Interface for terminal tab component with ID
  */
+export interface TerminalTabLike extends BaseTerminalTabComponent<any> {
+    title?: string;
+    customTitle?: string;
+    hasActivity?: boolean;
+    hasFocus?: boolean;
+}
 export interface BaseTerminalTabComponentWithId {
     id: number;
     tabParent: BaseTabComponent;
-    tab: BaseTerminalTabComponent<any>;
+    tab: TerminalTabLike;
 }
 /**
  * Interface for tracking active command

@@ -13,7 +13,10 @@ const configs = [
 ;(async () => {
     for (const c of configs) {
         log.info('build', c)
-        const stats = await promisify(webpack)((await import(c)).default())
+        const imported = await import(c)
+        const configFactory = imported.default ?? imported
+        const config = typeof configFactory === 'function' ? configFactory() : configFactory
+        const stats = await promisify(webpack)(config)
         console.log(stats.toString({ colors: true }))
         if (stats.hasErrors()) {
             process.exit(1)

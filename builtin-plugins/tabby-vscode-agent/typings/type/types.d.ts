@@ -1,4 +1,4 @@
-import { z } from 'zod/v3';
+import { z } from 'zod';
 /**
  * Standard MCP response content types
  * Must match the MCP SDK expected format

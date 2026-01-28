@@ -1,24 +1,16 @@
 diff --git a/node_modules/electron-debug/index.js b/node_modules/electron-debug/index.js
-index 6e2f3be..72c6a4c 100644
+index 5f4608c..44254ff 100644
 --- a/node_modules/electron-debug/index.js
 +++ b/node_modules/electron-debug/index.js
-@@ -56,11 +56,16 @@ const addExtensionIfInstalled = (name, getPath) => {
+@@ -55,6 +55,11 @@ function inspectElements() {
+ 
+ const addExtensionIfInstalled = (name, getPath) => {
  	const isExtensionInstalled = name => {
- 		// For Electron >=9.
--		if (session.defaultSession.getAllExtensions) {
--			return {}.hasOwnProperty.call(session.defaultSession.getAllExtensions(), name);
 +		// Electron >=34: session.getAllExtensions() was moved to session.extensions.getAllExtensions()
 +		if (session.defaultSession.extensions?.getAllExtensions) {
 +			return {}.hasOwnProperty.call(session.defaultSession.extensions.getAllExtensions(), name);
 +		}
 +
-+		// Electron >=9.
-+		if (session.defaultSession.getAllExtensions) {
-+			return {}.hasOwnProperty.call(session.defaultSession.getAllExtensions(), name);
- 		}
- 
- 		// TODO: Remove this when targeting Electron >=9.
- 		return BrowserWindow.getDevToolsExtensions &&
- 			{}.hasOwnProperty.call(BrowserWindow.getDevToolsExtensions(), name);
- 	};
-
+ 		// For Electron >=9.
+ 		if (session.defaultSession.getAllExtensions) {
+ 			return {}.hasOwnProperty.call(session.defaultSession.getAllExtensions(), name);

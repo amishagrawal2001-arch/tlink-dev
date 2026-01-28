@@ -17,7 +17,10 @@ export default function () {
       }
     },
     resolve: {
-      extensions: ['.ts', '.js']
+      extensions: ['.ts', '.js'],
+      alias: {
+        'zod/v3': 'zod',
+      },
     },
     module: {
       rules: [

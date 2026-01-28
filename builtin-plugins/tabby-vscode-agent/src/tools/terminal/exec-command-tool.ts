@@ -1,4 +1,4 @@
-import { z } from 'zod/v3';
+import { z } from 'zod';
 import { createErrorResponse, createJsonResponse, createSuccessResponse } from '../../type/types';
 import { BaseTool } from './base-tool';
 import { BaseTerminalTabComponentWithId, ExecToolCategory } from '../terminal';

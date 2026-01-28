@@ -7,7 +7,7 @@ import { VSCodeToolCategory } from '../tools/vscode-tool-category';
 import express, { Request, Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import { z } from 'zod/v3';
+import { z } from 'zod';
 import { IncomingMessage, ServerResponse } from 'http';
 import { ConfigService } from 'tabby-core';
 import * as http from 'http';

@@ -21,9 +21,16 @@ const bundleOllama = isOllamaBundleEnabled()
 const artifactSuffix = getArtifactSuffix(bundleOllama)
 const extraResources = getExtraResources(bundleOllama)
 
+const requestedMacArtifacts = (process.env.TLINK_MAC_ARTIFACTS || '')
+    .split(',')
+    .map(x => x.trim())
+    .filter(Boolean)
+
+const macTargets = requestedMacArtifacts.length ? requestedMacArtifacts : ['dmg', 'zip']
+
 builder({
     dir: true,
-    mac: ['dmg', 'zip'],
+    mac: macTargets,
     x64: process.env.ARCH === 'x86_64',
     arm64: process.env.ARCH === 'arm64',
     config: {

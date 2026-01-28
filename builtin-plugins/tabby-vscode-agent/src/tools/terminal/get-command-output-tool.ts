@@ -1,4 +1,4 @@
-import { z } from 'zod/v3';
+import { z } from 'zod';
 import { createErrorResponse, createJsonResponse } from '../../type/types';
 import { BaseTool } from './base-tool';
 import { McpLoggerService } from '../../services/mcpLogger.service';

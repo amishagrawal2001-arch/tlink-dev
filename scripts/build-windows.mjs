@@ -16,9 +16,16 @@ const bundleOllama = isOllamaBundleEnabled()
 const artifactSuffix = getArtifactSuffix(bundleOllama)
 const extraResources = getExtraResources(bundleOllama)
 
+const requestedWindowsArtifacts = (process.env.TLINK_WINDOWS_ARTIFACTS || '')
+    .split(',')
+    .map(x => x.trim())
+    .filter(Boolean)
+
+const windowsTargets = requestedWindowsArtifacts.length ? requestedWindowsArtifacts : ['nsis', 'zip']
+
 builder({
     dir: true,
-    win: ['nsis', 'zip'],
+    win: windowsTargets,
     arm64: process.env.ARCH === 'arm64',
     config: {
         extraMetadata: {

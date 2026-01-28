@@ -30,9 +30,16 @@ try {
     }
 } catch {}
 
+const requestedLinuxArtifacts = (process.env.TLINK_LINUX_ARTIFACTS || '')
+    .split(',')
+    .map(x => x.trim())
+    .filter(Boolean)
+
+const linuxTargets = requestedLinuxArtifacts.length ? requestedLinuxArtifacts : ['deb', 'tar.gz', 'rpm', 'pacman', 'appimage']
+
 builder({
     dir: true,
-    linux: ['deb', 'tar.gz', 'rpm', 'pacman', 'appimage'],
+    linux: linuxTargets,
     armv7l: process.env.ARCH === 'armv7l',
     arm64: process.env.ARCH === 'arm64',
     config: {

@@ -3,7 +3,7 @@ import { Component, Input, HostListener, HostBinding, ViewChildren, ViewChild, T
 import { trigger, style, animate, transition, state } from '@angular/animations'
 import { NgbDropdown, NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop'
-import * as Color from 'color'
+import Color from 'color'
 
 import { HostAppService, Platform } from '../api/hostApp'
 import { HotkeysService } from '../services/hotkeys.service'

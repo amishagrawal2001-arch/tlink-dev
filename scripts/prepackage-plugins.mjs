@@ -11,6 +11,7 @@ const __dirname = url.fileURLToPath(new URL('.', import.meta.url))
 
 
 let target = path.resolve(__dirname, '../builtin-plugins')
+const repoRoot = path.resolve(__dirname, '..')
 sh.mkdir('-p', target)
 fs.writeFileSync(path.join(target, 'package.json'), '{}')
 sh.cd(target)
@@ -19,7 +20,7 @@ vars.builtinPlugins.forEach(plugin => {
         return
     }
     log.info('install', plugin)
-    sh.cp('-r', path.join('..', plugin), '.')
+    sh.cp('-r', path.join(repoRoot, plugin), '.')
     sh.rm('-rf', path.join(plugin, 'node_modules'))
     sh.cd(plugin)
     sh.exec(`yarn install --force --production`, { fatal: true })
