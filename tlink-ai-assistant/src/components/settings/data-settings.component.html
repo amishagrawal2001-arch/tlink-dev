@@ -1,0 +1,106 @@
+        <div class="data-settings">
+            <h3>{{ 'settings.dataManagement.title' | translate }}</h3>
+            <p class="description">{{ 'settings.dataManagement.description' | translate }}</p>
+
+            <!-- 数据位置 -->
+            <div class="data-location">
+                <div class="info-row">
+                    <label>{{ 'settings.dataManagement.storageLocation' | translate }}:</label>
+                    <code>{{ dataDirectory }}</code>
+                </div>
+                <button class="btn btn-secondary" (click)="openDataDirectory()">
+                    <span class="icon">📂</span>
+                    {{ 'settings.dataManagement.openDirectory' | translate }}
+                </button>
+            </div>
+
+            <!-- 存储文件列表 -->
+            <div class="data-files">
+                <h4>{{ 'settings.dataManagement.storedFiles' | translate }}</h4>
+                <table class="files-table" *ngIf="dataFiles.length > 0">
+                    <thead>
+                        <tr>
+                            <th>{{ 'settings.dataManagement.fileName' | translate }}</th>
+                            <th>{{ 'settings.dataManagement.size' | translate }}</th>
+                            <th>{{ 'settings.dataManagement.lastModified' | translate }}</th>
+                            <th>{{ 'settings.dataManagement.actions' | translate }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr *ngFor="let file of dataFiles">
+                            <td>
+                                <span class="file-icon">📄</span>
+                                {{ file.name }}
+                            </td>
+                            <td>{{ formatFileSize(file.size) }}</td>
+                            <td>{{ file.modified | date:'medium' }}</td>
+                            <td class="actions">
+                                <button class="btn btn-small" (click)="viewFile(file)">
+                                    {{ 'settings.dataManagement.view' | translate }}
+                                </button>
+                                <button class="btn btn-small btn-danger" (click)="deleteFile(file)">
+                                    {{ 'settings.dataManagement.delete' | translate }}
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p *ngIf="dataFiles.length === 0" class="no-files">
+                    {{ 'settings.dataManagement.noFiles' | translate }}
+                </p>
+            </div>
+
+            <!-- 数据统计 -->
+            <div class="data-statistics">
+                <h4>{{ 'settings.dataManagement.statistics' | translate }}</h4>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <span class="stat-value">{{ statistics.totalSessions }}</span>
+                        <span class="stat-label">{{ 'settings.dataManagement.chatSessions' | translate }}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">{{ statistics.totalMemories }}</span>
+                        <span class="stat-label">{{ 'settings.dataManagement.memoryItems' | translate }}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">{{ statistics.totalCheckpoints }}</span>
+                        <span class="stat-label">{{ 'settings.dataManagement.checkpoints' | translate }}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">{{ statistics.totalConsents }}</span>
+                        <span class="stat-label">{{ 'settings.dataManagement.consents' | translate }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div class="data-actions">
+                <h4>{{ 'settings.dataManagement.actions' | translate }}</h4>
+                <div class="button-group">
+                    <button class="btn btn-primary" (click)="exportAllData()">
+                        <span class="icon">📤</span>
+                        {{ 'settings.dataManagement.exportAll' | translate }}
+                    </button>
+                    <button class="btn btn-secondary" (click)="importData()">
+                        <span class="icon">📥</span>
+                        {{ 'settings.dataManagement.importData' | translate }}
+                    </button>
+                    <button class="btn btn-warning" (click)="migrateFromLocalStorage()">
+                        <span class="icon">🔄</span>
+                        {{ 'settings.dataManagement.migrateData' | translate }}
+                    </button>
+                    <button class="btn btn-danger" (click)="clearAllData()">
+                        <span class="icon">🗑️</span>
+                        {{ 'settings.dataManagement.clearAll' | translate }}
+                    </button>
+                </div>
+            </div>
+
+            <!-- 数据迁移提示 -->
+            <div class="migration-note" *ngIf="needsMigration">
+                <div class="note-content">
+                    <span class="icon">⚠️</span>
+                    <p>{{ 'settings.dataManagement.migrationNote' | translate }}</p>
+                </div>
+            </div>
+        </div>

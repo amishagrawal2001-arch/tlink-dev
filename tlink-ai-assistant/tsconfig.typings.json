@@ -1,0 +1,23 @@
+{
+  "extends": "../tsconfig.json",
+  "exclude": [
+    "node_modules",
+    "dist",
+    "typings",
+    "integration-tests",
+    "src/**/*.spec.ts",
+    "setup-jest.ts"
+  ],
+  "compilerOptions": {
+    "baseUrl": "src",
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationDir": "./typings",
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "paths": {
+      "tlink-*": ["../../tlink-*"],
+      "*": ["../../app/node_modules/*"]
+    }
+  }
+}

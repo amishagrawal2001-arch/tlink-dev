@@ -1,0 +1,526 @@
+<div class="provider-config">
+    <h3>{{ t.providers.title }}</h3>
+
+    <!-- 云端提供商分组 -->
+    <div class="provider-section">
+        <div class="section-header">
+            <i class="fa fa-cloud"></i>
+            <h4>{{ t.providers.cloudProviders }}</h4>
+            <span class="section-desc">{{ t.providers.cloudProvidersDesc }}</span>
+        </div>
+
+        <div class="providers-grid">
+            <div *ngFor="let providerName of Object.keys(cloudProviderTemplates)"
+                 class="provider-card"
+                 [class.configured]="hasConfig(providerName)"
+                 [class.expanded]="expandedProvider === providerName">
+
+                <!-- 卡片头部 -->
+                <div class="card-header" (click)="toggleExpand(providerName)">
+                    <div class="provider-icon" [class.local]="isLocalProvider(providerName)">
+                        <i class="fa" [ngClass]="getProviderIcon(providerName)"></i>
+                    </div>
+                    <div class="provider-info">
+                        <h5>{{ t.providerNames[providerName] || cloudProviderTemplates[providerName].name }}</h5>
+                        <span class="status-badge" [class.active]="configs[providerName]?.enabled">
+                            {{ hasConfig(providerName) ? (configs[providerName]?.enabled ? t.common.enabled : t.common.disabled) : t.common.notConfigured }}
+                        </span>
+                    </div>
+                    <div class="expand-icon">
+                        <i class="fa" [ngClass]="expandedProvider === providerName ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                    </div>
+                </div>
+
+                <!-- 卡片内容（展开时显示） -->
+                <div class="card-body" *ngIf="expandedProvider === providerName">
+                    <div class="config-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>{{ t.providers.displayName }}</label>
+                                <input type="text" class="form-control" [(ngModel)]="configs[providerName].displayName" *ngIf="configs[providerName]">
+                            </div>
+                            <div class="form-group">
+                                <label>{{ t.providers.status }}</label>
+                                <div class="toggle-switch">
+                                    <input type="checkbox" [id]="'enabled-' + providerName"
+                                        [checked]="configs[providerName]?.enabled"
+                                        (change)="toggleProviderEnabled(providerName)">
+                                    <label [for]="'enabled-' + providerName">
+                                        {{ configs[providerName]?.enabled ? t.common.enabled : t.common.disabled }}
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div *ngFor="let field of cloudProviderTemplates[providerName].fields" class="form-group">
+                            <label>
+                                {{ t.providers[field.key] || field.label }}
+                                <span *ngIf="isRequired(field)" class="required">*</span>
+                                <ng-container *ngIf="providerName === 'groq' && field.key === 'baseURL'">
+                                    <a
+                                        class="ml-2"
+                                        href="https://console.groq.com/docs/overview"
+                                        (click)="openExternal('https://console.groq.com/docs/overview', $event)"
+                                        rel="noopener"
+                                        title="Groq API reference">
+                                        <i class="fa fa-link"></i>
+                                    </a>
+                                </ng-container>
+                                <ng-container *ngIf="providerName === 'minimax' && field.key === 'baseURL'">
+                                    <a
+                                        class="ml-2"
+                                        href="https://platform.deepseek.com/api"
+                                        (click)="openExternal('https://platform.deepseek.com/api', $event)"
+                                        rel="noopener"
+                                        title="Deepseek API reference">
+                                        <i class="fa fa-link"></i>
+                                    </a>
+                                </ng-container>
+                                <ng-container *ngIf="providerName === 'openai' && field.key === 'baseURL'">
+                                    <a
+                                        class="ml-2"
+                                        href="https://platform.openai.com/docs/overview"
+                                        (click)="openExternal('https://platform.openai.com/docs/overview', $event)"
+                                        rel="noopener"
+                                        title="OpenAI API reference">
+                                        <i class="fa fa-link"></i>
+                                    </a>
+                                </ng-container>
+                                <ng-container *ngIf="providerName === 'openai' && field.key === 'model'">
+                                    <i
+                                        class="fa ml-2"
+                                        [ngClass]="openAiModelsLoading ? 'fa-spinner fa-spin' : 'fa-refresh'"
+                                        role="button"
+                                        tabindex="0"
+                                        (click)="!openAiModelsLoading && refreshOpenAiModels()"
+                                        title="Refresh models"
+                                        [attr.aria-label]="openAiModelsLoading ? t.common.loading : 'Refresh models'">
+                                    </i>
+                                </ng-container>
+                                <ng-container *ngIf="providerName === 'groq' && field.key === 'model'">
+                                    <i
+                                        class="fa ml-2"
+                                        [ngClass]="groqModelsLoading ? 'fa-spinner fa-spin' : 'fa-refresh'"
+                                        role="button"
+                                        tabindex="0"
+                                        (click)="!groqModelsLoading && refreshGroqModels()"
+                                        title="Refresh models"
+                                        [attr.aria-label]="groqModelsLoading ? t.common.loading : 'Refresh models'">
+                                    </i>
+                                </ng-container>
+                                <ng-container *ngIf="providerName === 'minimax' && field.key === 'model'">
+                                    <i
+                                        class="fa ml-2"
+                                        [ngClass]="deepseekModelsLoading ? 'fa-spinner fa-spin' : 'fa-refresh'"
+                                        role="button"
+                                        tabindex="0"
+                                        (click)="!deepseekModelsLoading && refreshDeepseekModels()"
+                                        title="Refresh models"
+                                        [attr.aria-label]="deepseekModelsLoading ? t.common.loading : 'Refresh models'">
+                                    </i>
+                                </ng-container>
+                                <ng-container *ngIf="isAgentic(providerName) && field.key === 'model'">
+                                    <span class="ml-2 d-inline-flex align-items-center" style="gap: 8px;">
+                                        <i
+                                            class="fa"
+                                            [ngClass]="proxyModelsLoading ? 'fa-spinner fa-spin' : 'fa-refresh'"
+                                            role="button"
+                                            tabindex="0"
+                                            (click)="!proxyModelsLoading && refreshTlinkProxyModels()"
+                                            title="Refresh models"
+                                            [attr.aria-label]="proxyModelsLoading ? t.common.loading : 'Refresh models'">
+                                        </i>
+                                        <label
+                                            class="d-inline-flex align-items-center mb-0"
+                                            style="font-weight: normal; gap: 6px; font-size: 0.9em;">
+                                            <input
+                                                type="checkbox"
+                                                class="form-check-input"
+                                                style="width: 14px; height: 14px;"
+                                                [checked]="isProxyModelAuto()"
+                                                (change)="setProxyAutoMode($event.target.checked)" />
+                                            Auto
+                                        </label>
+                                    </span>
+                                </ng-container>
+                            </label>
+                            <!-- OpenAI model selector with refresh -->
+                            <div class="input-with-toggle"
+                                 *ngIf="providerName === 'openai' && field.key === 'model' && configs[providerName] && openAiModels.length > 0">
+                                <select
+                                    class="form-control"
+                                    [class]="getInputValidationClass(providerName, field.key)"
+                                    [(ngModel)]="configs[providerName][field.key]">
+                                    <option *ngFor="let m of openAiModels" [value]="m">{{ m }}</option>
+                                    <option *ngIf="configs[providerName][field.key] && !openAiModels.includes(configs[providerName][field.key])"
+                                            [value]="configs[providerName][field.key]">
+                                        {{ 'Custom: ' + configs[providerName][field.key] }}
+                                    </option>
+                                </select>
+                            </div>
+
+                            <!-- Groq model selector with refresh -->
+                            <div class="input-with-toggle"
+                                 *ngIf="providerName === 'groq' && field.key === 'model' && configs[providerName] && groqModels.length > 0">
+                                <select
+                                    class="form-control"
+                                    [class]="getInputValidationClass(providerName, field.key)"
+                                    [(ngModel)]="configs[providerName][field.key]">
+                                    <option *ngFor="let m of groqModels" [value]="m.id">{{ m.ownedBy ? (m.ownedBy + ' • ' + m.id) : m.id }}</option>
+                                    <option *ngIf="configs[providerName][field.key] && !isGroqModelKnown(configs[providerName][field.key])"
+                                            [value]="configs[providerName][field.key]">
+                                        {{ 'Custom: ' + configs[providerName][field.key] }}
+                                    </option>
+                                </select>
+                            </div>
+
+                            <!-- Deepseek model selector with refresh -->
+                            <div class="input-with-toggle"
+                                 *ngIf="providerName === 'minimax' && field.key === 'model' && configs[providerName] && deepseekModels.length > 0">
+                                <select
+                                    class="form-control"
+                                    [class]="getInputValidationClass(providerName, field.key)"
+                                    [(ngModel)]="configs[providerName][field.key]">
+                                    <option *ngFor="let m of deepseekModels" [value]="m.id">{{ m.ownedBy ? (m.ownedBy + ' • ' + m.id) : m.id }}</option>
+                                    <option *ngIf="configs[providerName][field.key] && !isDeepseekModelKnown(configs[providerName][field.key])"
+                                            [value]="configs[providerName][field.key]">
+                                        {{ 'Custom: ' + configs[providerName][field.key] }}
+                                    </option>
+                                </select>
+                            </div>
+
+                            <!-- Tlink Agentic model selector with refresh -->
+                            <div class="input-with-toggle"
+                                 *ngIf="isAgentic(providerName) && field.key === 'model' && configs[providerName] && proxyModels.length > 0">
+                                <select
+                                    class="form-control"
+                                    [class]="getInputValidationClass(providerName, field.key)"
+                                    [(ngModel)]="configs[providerName][field.key]"
+                                    [disabled]="isProxyModelAuto()">
+                                    <option *ngIf="isProxyModelAuto()" value="auto">Auto (proxy selects)</option>
+                                    <option *ngFor="let m of proxyModels" [value]="m.id">
+                                        {{ m.ownedBy ? (m.ownedBy + ' • ' + m.id) : (m.provider ? (m.provider + ' • ' + m.id) : m.id) }}
+                                    </option>
+                                    <option *ngIf="configs[providerName][field.key] && !isProxyModelKnown(configs[providerName][field.key])"
+                                            [value]="configs[providerName][field.key]">
+                                        {{ 'Custom: ' + configs[providerName][field.key] }}
+                                    </option>
+                                </select>
+                            </div>
+
+                            <!-- 文本和密码输入框 -->
+                            <div class="input-with-toggle"
+                                *ngIf="configs[providerName]
+                                       && (getFieldType(field) === 'text' || getFieldType(field) === 'password')
+                                       && !(providerName === 'openai' && field.key === 'model' && openAiModels.length > 0)
+                                       && !(providerName === 'groq' && field.key === 'model' && groqModels.length > 0)
+                                       && !(providerName === 'minimax' && field.key === 'model' && deepseekModels.length > 0)
+                                       && !(isAgentic(providerName) && field.key === 'model' && proxyModels.length > 0)">
+                                <input
+                                    [type]="isPasswordField(field) && !isPasswordVisible(providerName, field.key) ? 'password' : 'text'"
+                                    class="form-control"
+                                    [class]="getInputValidationClass(providerName, field.key)"
+                                    [placeholder]="field.placeholder || ''"
+                                    [attr.list]="(providerName === 'openai' && field.key === 'model') ? 'openai-models-list' : (providerName === 'groq' && field.key === 'model') ? 'groq-models-list' : (providerName === 'minimax' && field.key === 'model') ? 'deepseek-models-list' : (isAgentic(providerName) && field.key === 'model') ? 'agentic-models-list' : null"
+                                    [(ngModel)]="configs[providerName][field.key]">
+                                <button *ngIf="isPasswordField(field)"
+                                        type="button"
+                                        class="btn-toggle-visibility"
+                                        (click)="togglePasswordVisibility(providerName, field.key)">
+                                    <i class="fa" [ngClass]="isPasswordVisible(providerName, field.key) ? 'fa-eye-slash' : 'fa-eye'"></i>
+                                </button>
+                            </div>
+                            <datalist *ngIf="providerName === 'openai' && field.key === 'model'" id="openai-models-list">
+                                <option *ngFor="let m of openAiModels" [value]="m"></option>
+                            </datalist>
+                            <datalist *ngIf="providerName === 'groq' && field.key === 'model'" id="groq-models-list">
+                                <option *ngFor="let m of groqModels" [value]="m.id">{{ m.ownedBy ? (m.ownedBy + ' • ' + m.id) : m.id }}</option>
+                            </datalist>
+                            <datalist *ngIf="providerName === 'minimax' && field.key === 'model'" id="deepseek-models-list">
+                                <option *ngFor="let m of deepseekModels" [value]="m.id">{{ m.ownedBy ? (m.ownedBy + ' • ' + m.id) : m.id }}</option>
+                            </datalist>
+                            <datalist *ngIf="isAgentic(providerName) && field.key === 'model'" id="agentic-models-list">
+                                <option value="auto">Auto (proxy selects)</option>
+                                <option *ngFor="let m of proxyModels" [value]="m.id">
+                                    {{ m.ownedBy ? (m.ownedBy + ' • ' + m.id) : (m.provider ? (m.provider + ' • ' + m.id) : m.id) }}
+                                </option>
+                            </datalist>
+                            <!-- 数字输入框 -->
+                            <div *ngIf="configs[providerName] && getFieldType(field) === 'number'">
+                                <input
+                                    type="number"
+                                    class="form-control"
+                                    [placeholder]="field.placeholder || ''"
+                                    [(ngModel)]="configs[providerName][field.key]">
+                            </div>
+                            <!-- 复选框 -->
+                            <div *ngIf="configs[providerName] && getFieldType(field) === 'checkbox'" class="checkbox-group">
+                                <div class="toggle-switch">
+                                    <input type="checkbox"
+                                           [id]="providerName + '-' + field.key"
+                                           [(ngModel)]="configs[providerName][field.key]">
+                                    <label [for]="providerName + '-' + field.key">
+                                        {{ field.placeholder || '' }}
+                                    </label>
+                                </div>
+                            </div>
+                            <!-- API Key 验证提示 -->
+                            <div *ngIf="field.key === 'apiKey' && configs[providerName]?.[field.key]"
+                                 class="validation-feedback"
+                                 [class.valid]="validateApiKeyFormat(providerName, configs[providerName][field.key]).valid"
+                                 [class.invalid]="!validateApiKeyFormat(providerName, configs[providerName][field.key]).valid">
+                                <i class="fa" [ngClass]="validateApiKeyFormat(providerName, configs[providerName][field.key]).valid ? 'fa-check-circle' : 'fa-exclamation-circle'"></i>
+                                {{ validateApiKeyFormat(providerName, configs[providerName][field.key]).message || 'Format correct' }}
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button class="btn btn-primary" (click)="saveConfig(providerName)">
+                                <i class="fa fa-save"></i> {{ t.providers.saveConfig }}
+                            </button>
+                            <button class="btn btn-secondary" (click)="testConnection(providerName)">
+                                <i class="fa fa-plug"></i> {{ t.providers.testConnection }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 本地提供商分组 -->
+    <div class="provider-section local">
+        <div class="section-header">
+            <i class="fa fa-server"></i>
+            <h4>{{ t.providers.localProviders }}</h4>
+            <span class="section-desc">{{ t.providers.localProvidersDesc }}</span>
+        </div>
+
+        <div class="providers-grid">
+            <div *ngFor="let providerName of Object.keys(localProviderTemplates)"
+                 class="provider-card"
+                 [class.configured]="hasConfig(providerName)"
+                 [class.expanded]="expandedProvider === providerName">
+
+                <!-- 卡片头部 -->
+                <div class="card-header" (click)="toggleExpand(providerName)">
+                    <div class="provider-icon local">
+                        <i class="fa" [ngClass]="getProviderIcon(providerName)"></i>
+                    </div>
+                    <div class="provider-info">
+                        <h5>{{ t.providerNames[providerName] || localProviderTemplates[providerName].name }}</h5>
+                        <div class="status-row">
+                            <span class="status-badge" [class.active]="configs[providerName]?.enabled">
+                                {{ hasConfig(providerName) ? (configs[providerName]?.enabled ? t.common.enabled : t.common.disabled) : t.common.notConfigured }}
+                            </span>
+                            <!-- 在线状态指示器 -->
+                            <span class="online-status" [style.color]="getLocalStatus(providerName).color">
+                                <i class="fa" [ngClass]="getLocalStatus(providerName).icon"></i>
+                                {{ getLocalStatus(providerName).text }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="expand-icon">
+                        <i class="fa" [ngClass]="expandedProvider === providerName ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                    </div>
+                </div>
+
+                <!-- 卡片内容（展开时显示） -->
+                <div class="card-body" *ngIf="expandedProvider === providerName">
+                    <div class="config-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>{{ t.providers.displayName }}</label>
+                                <input type="text" class="form-control" [(ngModel)]="configs[providerName].displayName" *ngIf="configs[providerName]">
+                            </div>
+                            <div class="form-group">
+                                <label>{{ t.providers.status }}</label>
+                                <div class="toggle-switch">
+                                    <input type="checkbox" [id]="'enabled-' + providerName"
+                                        [checked]="configs[providerName]?.enabled"
+                                        (change)="toggleProviderEnabled(providerName)">
+                                    <label [for]="'enabled-' + providerName">
+                                        {{ configs[providerName]?.enabled ? t.common.enabled : t.common.disabled }}
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="doc-link" *ngIf="providerName === 'vllm'">
+                            <i class="fa fa-book"></i>
+                            <a href="README-vllm.md" (click)="openExternal('README-vllm.md', $event)" rel="noopener">
+                                vLLM setup guide
+                            </a>
+                        </div>
+
+                        <div *ngFor="let field of localProviderTemplates[providerName].fields" class="form-group">
+                            <label>
+                                {{ t.providers[field.key] || field.label }}
+                                <span *ngIf="isRequired(field)" class="required">*</span>
+                            </label>
+                            <div class="input-with-toggle" *ngIf="configs[providerName] && (getFieldType(field) === 'text' || getFieldType(field) === 'password')">
+                                <input
+                                    [type]="isPasswordField(field) && !isPasswordVisible(providerName, field.key) ? 'password' : 'text'"
+                                    class="form-control"
+                                    [class]="getInputValidationClass(providerName, field.key)"
+                                    [placeholder]="field.placeholder || ''"
+                                    [(ngModel)]="configs[providerName][field.key]">
+                                <button *ngIf="isPasswordField(field)"
+                                        type="button"
+                                        class="btn-toggle-visibility"
+                                        (click)="togglePasswordVisibility(providerName, field.key)">
+                                    <i class="fa" [ngClass]="isPasswordVisible(providerName, field.key) ? 'fa-eye-slash' : 'fa-eye'"></i>
+                                </button>
+                            </div>
+                            <!-- API Key 验证提示 -->
+                            <div *ngIf="field.key === 'apiKey' && configs[providerName]?.[field.key]"
+                                 class="validation-feedback"
+                                 [class.valid]="validateApiKeyFormat(providerName, configs[providerName][field.key]).valid"
+                                 [class.invalid]="!validateApiKeyFormat(providerName, configs[providerName][field.key]).valid">
+                                <i class="fa" [ngClass]="validateApiKeyFormat(providerName, configs[providerName][field.key]).valid ? 'fa-check-circle' : 'fa-exclamation-circle'"></i>
+                                {{ validateApiKeyFormat(providerName, configs[providerName][field.key]).message || 'Format correct' }}
+                            </div>
+                        </div>
+
+                        <!-- Ollama Model Manager (only for Ollama provider) -->
+                        <div *ngIf="providerName === 'ollama' && localStatus['ollama']" class="ollama-model-manager">
+                            <div class="model-manager-header">
+                                <h5>
+                                    <i class="fa fa-database"></i> Model Management
+                                </h5>
+                                <button class="btn btn-sm btn-secondary" (click)="toggleModelManager()">
+                                    <i class="fa" [ngClass]="showModelManager ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                                    {{ showModelManager ? 'Hide' : 'Show' }} Models
+                                </button>
+                            </div>
+
+                            <div *ngIf="showModelManager" class="model-manager-content">
+                                <!-- Installed Models List -->
+                                <div class="installed-models">
+                                    <h6>Installed Models ({{ ollamaModels.length }})</h6>
+                                    <button class="btn btn-sm btn-link" (click)="loadOllamaModels()" [disabled]="ollamaModelLoading">
+                                        <i class="fa fa-refresh" [class.fa-spin]="ollamaModelLoading"></i> Refresh
+                                    </button>
+
+                                    <div *ngIf="ollamaModelLoading && ollamaModels.length === 0" class="loading-models">
+                                        <i class="fa fa-spinner fa-spin"></i> Loading models...
+                                    </div>
+
+                                    <div *ngIf="!ollamaModelLoading && ollamaModels.length === 0" class="no-models">
+                                        <p>No models installed. Pull a model below to get started.</p>
+                                    </div>
+
+                                    <div *ngIf="getActiveOllamaModels().length > 0" class="models-list">
+                                        <div *ngFor="let model of getActiveOllamaModels()" class="model-item" [class.active]="configs['ollama']?.model === model.name">
+                                            <div class="model-info">
+                                                <div class="model-name">
+                                                    <strong>{{ model.name }}</strong>
+                                                    <span *ngIf="configs['ollama']?.model === model.name" class="current-badge">Current</span>
+                                                </div>
+                                                <div class="model-details">
+                                                    <span *ngIf="model.details?.parameter_size" class="model-param">
+                                                        {{ model.details.parameter_size }}
+                                                    </span>
+                                                    <span class="model-size">{{ formatModelSize(model.size) }}</span>
+                                                    <span *ngIf="model.details?.quantization_level" class="model-quant">
+                                                        {{ model.details.quantization_level }}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="model-actions">
+                                                <button class="btn btn-sm btn-primary" 
+                                                        (click)="useOllamaModel(model.name)"
+                                                        [disabled]="configs['ollama']?.model === model.name"
+                                                        title="Use this model">
+                                                    <i class="fa fa-check"></i> Use
+                                                </button>
+                                                <button class="btn btn-sm btn-danger" 
+                                                        (click)="deleteOllamaModel(model.name)"
+                                                        title="Delete this model">
+                                                    <i class="fa fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Pull New Model -->
+                                <div class="pull-model-section">
+                                    <h6>Pull New Model</h6>
+                                    <div class="pull-model-form">
+                                        <input type="text" 
+                                               class="form-control" 
+                                               [(ngModel)]="newModelName"
+                                               placeholder="e.g., qwen2.5:7b, mistral:7b, codellama:13b"
+                                               [disabled]="ollamaModelPulling[newModelName]">
+                                        <button class="btn btn-primary" 
+                                                (click)="pullOllamaModel()"
+                                                [disabled]="!newModelName.trim() || ollamaModelPulling[newModelName]">
+                                            <i class="fa fa-download"></i> Pull Model
+                                        </button>
+                                    </div>
+
+                                    <!-- Pull Progress -->
+                                    <div *ngIf="isAnyModelPulling()" class="pull-progress">
+                                        <div class="progress-info">
+                                            <span>{{ ollamaModelProgress[getPullingModelName() || '']?.message || 'Downloading...' }}</span>
+                                            <span *ngIf="ollamaModelProgress[getPullingModelName() || '']?.progress !== undefined">
+                                                {{ ollamaModelProgress[getPullingModelName() || ''].progress }}%
+                                            </span>
+                                        </div>
+                                        <div class="progress-bar-container">
+                                            <div class="progress-bar" 
+                                                 [style.width.%]="ollamaModelProgress[getPullingModelName() || '']?.progress || 0">
+                                            </div>
+                                        </div>
+                                        <div *ngIf="ollamaModelProgress[getPullingModelName() || '']?.completed && ollamaModelProgress[getPullingModelName() || '']?.total" 
+                                             class="progress-details">
+                                            {{ formatModelSize(ollamaModelProgress[getPullingModelName() || ''].completed) }} / 
+                                            {{ formatModelSize(ollamaModelProgress[getPullingModelName() || ''].total) }}
+                                        </div>
+                                    </div>
+
+                                    <!-- Popular Models Suggestions -->
+                                    <div class="popular-models">
+                                        <p class="suggestions-label">Popular models:</p>
+                                        <div class="model-suggestions">
+                                            <button class="btn btn-sm btn-outline" 
+                                                    (click)="newModelName = 'qwen2.5:7b'"
+                                                    [disabled]="ollamaModelPulling[newModelName]">
+                                                qwen2.5:7b
+                                            </button>
+                                            <button class="btn btn-sm btn-outline" 
+                                                    (click)="newModelName = 'mistral:7b'"
+                                                    [disabled]="ollamaModelPulling[newModelName]">
+                                                mistral:7b
+                                            </button>
+                                            <button class="btn btn-sm btn-outline" 
+                                                    (click)="newModelName = 'codellama:13b'"
+                                                    [disabled]="ollamaModelPulling[newModelName]">
+                                                codellama:13b
+                                            </button>
+                                            <button class="btn btn-sm btn-outline" 
+                                                    (click)="newModelName = 'tinyllama'"
+                                                    [disabled]="ollamaModelPulling[newModelName]">
+                                                tinyllama
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button class="btn btn-primary" (click)="saveConfig(providerName)">
+                                <i class="fa fa-save"></i> {{ t.providers.saveConfig }}
+                            </button>
+                            <button class="btn btn-info" (click)="testConnection(providerName)">
+                                <i class="fa fa-wifi"></i> {{ t.providers.detectService }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
