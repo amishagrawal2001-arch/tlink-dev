@@ -78,7 +78,7 @@
     "hexer": "^1.5.0",
     "html-loader": "4.2.0",
     "json-loader": "^0.5.7",
-    "lru-cache": "^6.0.0",
+    "lru-cache": "^11.2.5",
     "macos-release": "^3.3.0",
     "marked": "^17.0.1",
     "minimatch": "5.1.6",
