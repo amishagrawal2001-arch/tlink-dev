@@ -31,12 +31,20 @@ If you want to run the latest code from the repo:
 ```bash
 git clone git@github.com:amishagrawal2001-arch/tlink-dev.git
 cd tlink-dev
-npm install
-npm run build
-npm start
+./start_tlink.sh
+```
+
+Or run the steps manually:
+
+```bash
+yarn install
+yarn run build
+yarn start
 ```
 
 Notes:
+- This repo expects Yarn Classic (1.x). `yarn install` is required because the postinstall script uses yarn in subpackages.
+- `./start_tlink.sh` works on macOS/Linux and on Windows via Git Bash or WSL. Use `--help` to see optional flags (skip install/build/start).
 - macOS DMG build (optional):
   ```bash
   TLINK_BUILD_TARGETS=mac TLINK_BUILD_MAC_DMG_ONLY=1 ./build.sh
