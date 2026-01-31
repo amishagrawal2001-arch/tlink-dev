@@ -428,9 +428,17 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
                     this.localStatus[name] = false;
                     continue;
                 }
-                const url = base.replace(/\/+$/, '').endsWith('/models')
-                    ? base
-                    : `${base.replace(/\/+$/, '')}/models`;
+                const trimmedBase = base.replace(/\/+$/, '');
+                let url = trimmedBase;
+                if (name === 'ollama') {
+                    if (/\/v1(\/|$)/.test(trimmedBase) || trimmedBase.endsWith('/models')) {
+                        url = trimmedBase.endsWith('/models') ? trimmedBase : `${trimmedBase}/models`;
+                    } else {
+                        url = `${trimmedBase}/api/tags`;
+                    }
+                } else {
+                    url = trimmedBase.endsWith('/models') ? trimmedBase : `${trimmedBase}/models`;
+                }
 
                 const response = await fetch(url, { signal: controller.signal });
                 clearTimeout(timeoutId);
@@ -472,7 +480,13 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
         this.logger.info(testingMessage);
 
         try {
-            const response = await fetch(`${baseURL}/models`, {
+            const trimmedBase = baseURL.replace(/\/+$/, '');
+            const isOllama = providerName === 'ollama';
+            const url = isOllama && !/\/v1(\/|$)/.test(trimmedBase) && !trimmedBase.endsWith('/models')
+                ? `${trimmedBase}/api/tags`
+                : (trimmedBase.endsWith('/models') ? trimmedBase : `${trimmedBase}/models`);
+
+            const response = await fetch(url, {
                 method: 'GET',
                 signal: AbortSignal.timeout(5000)
             });

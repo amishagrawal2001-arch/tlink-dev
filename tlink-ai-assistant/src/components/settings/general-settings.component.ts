@@ -219,9 +219,10 @@ export class GeneralSettingsComponent implements OnInit, OnDestroy {
             if (!base) {
                 return false;
             }
-            const url = base.replace(/\/+$/, '').endsWith('/models')
-                ? base
-                : `${base.replace(/\/+$/, '')}/models`;
+            const trimmedBase = base.replace(/\/+$/, '');
+            const url = providerName === 'ollama' && !/\/v1(\/|$)/.test(trimmedBase) && !trimmedBase.endsWith('/models')
+                ? `${trimmedBase}/api/tags`
+                : (trimmedBase.endsWith('/models') ? trimmedBase : `${trimmedBase}/models`);
 
             const response = await fetch(url, {
                 method: 'GET',
