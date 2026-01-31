@@ -44,6 +44,7 @@ yarn start
 
 Notes:
 - This repo expects Yarn Classic (1.x). `yarn install` is required because the postinstall script uses yarn in subpackages.
+- Node.js >= 22.12.0 is required. `./install_tlink.sh` will try to upgrade if an older version is detected.
 - `./install_tlink.sh` works on macOS/Linux and on Windows via Git Bash or WSL. Use `--help` to see optional flags (skip install/build/start).
 - macOS DMG build (optional):
   ```bash

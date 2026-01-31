@@ -12,6 +12,8 @@ SKIP_BUILD="${TLINK_SKIP_BUILD:-0}"
 SKIP_START="${TLINK_SKIP_START:-0}"
 REBUILD_NATIVE="${TLINK_REBUILD_NATIVE:-0}"
 CLEAN_USER_PLUGINS="${TLINK_CLEAN_USER_PLUGINS:-0}"
+UPGRADE_NODE="${TLINK_UPGRADE_NODE:-1}"
+MIN_NODE_VERSION="${TLINK_NODE_MIN_VERSION:-22.12.0}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -21,6 +23,8 @@ while [[ $# -gt 0 ]]; do
     --skip-start) SKIP_START=1 ;;
     --rebuild-native) REBUILD_NATIVE=1 ;;
     --clean-user-plugins) CLEAN_USER_PLUGINS=1 ;;
+    --upgrade-node) UPGRADE_NODE=1 ;;
+    --no-upgrade-node) UPGRADE_NODE=0 ;;
     --install-only) SKIP_BUILD=1; SKIP_START=1 ;;
     --build-only) SKIP_INSTALL=1; SKIP_START=1 ;;
     --help|-h)
@@ -34,6 +38,8 @@ Options:
   --skip-start        Skip yarn start
   --rebuild-native    Rebuild native modules (keytar, node-pty, etc.)
   --clean-user-plugins  Move user plugin cache out of the way
+  --upgrade-node      Attempt to upgrade Node if below minimum
+  --no-upgrade-node   Do not attempt to upgrade Node
   --install-only      Only install dependencies
   --build-only        Only run build
 EOF
@@ -57,6 +63,62 @@ esac
 
 log "Detected OS: $OS_NAME ($OS)"
 
+version_ge() {
+  # returns 0 if $1 >= $2
+  [[ "$(printf '%s\n' "$1" "$2" | sort -V | head -n1)" == "$2" ]]
+}
+
+try_upgrade_node() {
+  local target="$1"
+
+  if command -v fnm >/dev/null 2>&1; then
+    log "Upgrading Node via fnm..."
+    fnm install "$target"
+    eval "$(fnm env --use-on-cd)"
+    fnm use "$target"
+    return 0
+  fi
+
+  if [[ -z "${NVM_DIR:-}" ]]; then
+    export NVM_DIR="$HOME/.nvm"
+  fi
+  if [[ -s "$NVM_DIR/nvm.sh" ]]; then
+    # shellcheck disable=SC1090
+    . "$NVM_DIR/nvm.sh"
+  fi
+  if command -v nvm >/dev/null 2>&1; then
+    log "Upgrading Node via nvm..."
+    nvm install "$target"
+    nvm use "$target"
+    return 0
+  fi
+
+  if command -v volta >/dev/null 2>&1; then
+    log "Upgrading Node via volta..."
+    volta install "node@$target"
+    return 0
+  fi
+
+  if command -v asdf >/dev/null 2>&1; then
+    log "Upgrading Node via asdf..."
+    if ! asdf plugin list | grep -q nodejs; then
+      log "asdf nodejs plugin missing. Install with: asdf plugin add nodejs"
+      return 1
+    fi
+    asdf install nodejs "$target"
+    asdf global nodejs "$target"
+    return 0
+  fi
+
+  if command -v brew >/dev/null 2>&1; then
+    log "Homebrew detected. Please run:"
+    log "  brew install node@22 && brew link --force --overwrite node@22"
+    return 1
+  fi
+
+  return 1
+}
+
 resolve_user_plugins_dir() {
   case "$OS" in
     macos)
@@ -79,14 +141,37 @@ resolve_user_plugins_dir() {
 }
 
 if ! command -v node >/dev/null 2>&1; then
-  log "Node.js is required (>=15). Please install Node.js and re-run."
-  exit 1
+  if [[ "$UPGRADE_NODE" -eq 1 ]]; then
+    log "Node.js not found. Attempting install (>= $MIN_NODE_VERSION)..."
+    if ! try_upgrade_node "$MIN_NODE_VERSION"; then
+      log "Node.js >= $MIN_NODE_VERSION is required. Please install and re-run."
+      exit 1
+    fi
+  else
+    log "Node.js is required (>= $MIN_NODE_VERSION). Please install and re-run."
+    exit 1
+  fi
 fi
 
-NODE_MAJOR="$(node -v | sed -E 's/^v([0-9]+).*/\1/')"
-if [[ "$NODE_MAJOR" -lt 15 ]]; then
-  log "Node.js >= 15 is required. Current: $(node -v)"
-  exit 1
+NODE_VERSION="$(node -v | sed -E 's/^v//')"
+if ! version_ge "$NODE_VERSION" "$MIN_NODE_VERSION"; then
+  if [[ "$UPGRADE_NODE" -eq 1 ]]; then
+    log "Node.js >= $MIN_NODE_VERSION is required. Current: v$NODE_VERSION"
+    log "Attempting upgrade..."
+    if try_upgrade_node "$MIN_NODE_VERSION"; then
+      NODE_VERSION="$(node -v | sed -E 's/^v//')"
+      if ! version_ge "$NODE_VERSION" "$MIN_NODE_VERSION"; then
+        log "Upgrade completed but Node version is still v$NODE_VERSION"
+        exit 1
+      fi
+    else
+      log "Automatic upgrade failed. Please upgrade Node to >= $MIN_NODE_VERSION."
+      exit 1
+    fi
+  else
+    log "Node.js >= $MIN_NODE_VERSION is required. Current: v$NODE_VERSION"
+    exit 1
+  fi
 fi
 
 if ! command -v yarn >/dev/null 2>&1; then

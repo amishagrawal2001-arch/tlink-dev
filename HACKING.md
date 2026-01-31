@@ -7,7 +7,7 @@ Tlink is an Electron app, with the frontend written in Typescript with the help 
 First of all, clone this repository.
 
 # Install Dependencies
-- [Node.js](https://nodejs.org/en/download/) **version 15 or newer*
+- [Node.js](https://nodejs.org/en/download/) **version 22.12.0 or newer*
 - [Yarn](https://yarnpkg.com/)
 
 First, from within the `tlink` directory install the dependencies via yarn:
