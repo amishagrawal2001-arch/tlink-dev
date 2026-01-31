@@ -10,8 +10,8 @@ import { AppService } from '../services/app.service'
 import { TabsService } from '../services/tabs.service'
 import { ProfilesService } from '../services/profiles.service'
 import { SplitTabComponent } from './splitTab.component'
-import type { TerminalService as TerminalServiceType } from 'tlink-local'
-import type { BaseTerminalTabComponent as BaseTerminalTabComponentType } from 'tlink-terminal'
+type TerminalServiceType = any
+type BaseTerminalTabComponentType = any
 import { PromptModalComponent } from './promptModal.component'
 
 type Monaco = any
@@ -86,7 +86,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     statusMessage = ''
     runArgs = ''
     sidebarWidth = 240
-    private runTerminalTab: BaseTerminalTabComponentType<any>|null = null
+    private runTerminalTab: BaseTerminalTabComponentType | null = null
     pendingDiffDocId: string|null = null
     fileMenuOpen = false
     editMenuOpen = false
@@ -3165,13 +3165,13 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         doc.ansiDecorationIds = doc.model.deltaDecorations(doc.ansiDecorationIds ?? [], decorations)
     }
 
-    private async ensureRunTerminal (cwd: string): Promise<BaseTerminalTabComponentType<any>|null> {
+    private async ensureRunTerminal (cwd: string): Promise<BaseTerminalTabComponentType | null> {
         const terminalService = this.resolveTerminalService()
         if (!terminalService) {
             this.setError('Local terminal service unavailable')
             return null
         }
-        const existing = this.runTerminalTab as (BaseTerminalTabComponentType<any> & BaseTabComponent)|null
+        const existing = this.runTerminalTab as (BaseTerminalTabComponentType & BaseTabComponent) | null
         if (existing?.parent) {
             return existing
         }
@@ -3200,8 +3200,8 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         return term
     }
 
-    private async placeTerminalNextToEditor (term: BaseTerminalTabComponentType<any>): Promise<void> {
-        const terminalTab = term as BaseTerminalTabComponentType<any> & BaseTabComponent
+    private async placeTerminalNextToEditor (term: BaseTerminalTabComponentType): Promise<void> {
+        const terminalTab = term as BaseTerminalTabComponentType & BaseTabComponent
         if (terminalTab.parent === this.parent && terminalTab.parent instanceof SplitTabComponent) {
             terminalTab.parent.focus(terminalTab)
             return
@@ -3221,7 +3221,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         this.app.selectTab(split)
     }
 
-    private sendToTerminal (term: BaseTerminalTabComponentType<any>, text: string): void {
+    private sendToTerminal (term: BaseTerminalTabComponentType, text: string): void {
         try {
             term.session?.write(Buffer.from(text))
         } catch {

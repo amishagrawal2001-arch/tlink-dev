@@ -23,10 +23,10 @@ import {
  * Interface for terminal tab component with ID
  */
 export interface TerminalTabLike extends BaseTerminalTabComponent<any> {
-  title?: string;
-  customTitle?: string;
-  hasActivity?: boolean;
-  hasFocus?: boolean;
+  title: string;
+  customTitle: string;
+  hasActivity: boolean;
+  hasFocus: boolean;
 }
 
 export interface BaseTerminalTabComponentWithId {

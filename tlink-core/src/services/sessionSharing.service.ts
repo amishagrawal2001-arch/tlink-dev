@@ -2,7 +2,6 @@ import { Injectable } from '@angular/core'
 import { v4 as uuidv4 } from 'uuid'
 import { Logger, LogService } from './log.service'
 import { PlatformService } from '../api/platform'
-import { BaseTerminalTabComponent } from 'tlink-terminal'
 
 export interface SharedSession {
     id: string
@@ -61,7 +60,7 @@ export class SessionSharingService {
      * Generate a shareable link for a terminal session
      */
     async shareSession (
-        terminal: BaseTerminalTabComponent<any>,
+        terminal: any,
         options: SessionSharingOptions,
     ): Promise<string | null> {
         // Check if WebSocket server is running
@@ -154,7 +153,7 @@ export class SessionSharingService {
     /**
      * Stop sharing a session
      */
-    async stopSharing (terminal: BaseTerminalTabComponent<any>): Promise<void> {
+    async stopSharing (terminal: any): Promise<void> {
         try {
             const sessionId = this.terminalToSessionId.get(terminal)
             if (!sessionId) {
@@ -192,14 +191,14 @@ export class SessionSharingService {
     /**
      * Check if a session is currently shared
      */
-    isSessionShared (terminal: BaseTerminalTabComponent<any>): boolean {
+    isSessionShared (terminal: any): boolean {
         return this.terminalToSessionId.has(terminal)
     }
 
     /**
      * Get the shared session for a terminal
      */
-    getSharedSession (terminal: BaseTerminalTabComponent<any>): SharedSession | null {
+    getSharedSession (terminal: any): SharedSession | null {
         const sessionId = this.terminalToSessionId.get(terminal)
         if (!sessionId) {
             return null
@@ -210,7 +209,7 @@ export class SessionSharingService {
     /**
      * Copy shareable link to clipboard
      */
-    async copyShareableLink (terminal: BaseTerminalTabComponent<any>): Promise<boolean> {
+    async copyShareableLink (terminal: any): Promise<boolean> {
         const sharedSession = this.getSharedSession(terminal)
         if (!sharedSession) {
             return false
@@ -417,7 +416,7 @@ export class SessionSharingService {
     /**
      * Get shareable URL with network access information
      */
-    async getShareableUrlWithInfo (terminal: BaseTerminalTabComponent<any>): Promise<{ url: string, networkUrl?: string, publicUrl?: string } | null> {
+    async getShareableUrlWithInfo (terminal: any): Promise<{ url: string, networkUrl?: string, publicUrl?: string } | null> {
         const sharedSession = this.getSharedSession(terminal)
         if (!sharedSession) {
             return null
@@ -477,4 +476,3 @@ export class SessionSharingService {
         return null
     }
 }
-
