@@ -244,7 +244,7 @@ resolve_user_plugins_dir() {
   esac
 }
 
-if [[ "$SKIP_NODE_CHECK" -ne 1 && ! command -v node >/dev/null 2>&1 ]]; then
+if [[ "$SKIP_NODE_CHECK" -ne 1 ]] && ! command -v node >/dev/null 2>&1; then
   if [[ "$UPGRADE_NODE" -eq 1 ]]; then
     log "Node.js not found. Attempting install (>= $MIN_NODE_VERSION)..."
     if ! try_upgrade_node "$MIN_NODE_VERSION"; then
@@ -280,7 +280,7 @@ if [[ "$SKIP_NODE_CHECK" -ne 1 ]]; then
   fi
 fi
 
-if [[ "$SKIP_YARN_CHECK" -ne 1 && ! command -v yarn >/dev/null 2>&1 ]]; then
+if [[ "$SKIP_YARN_CHECK" -ne 1 ]] && ! command -v yarn >/dev/null 2>&1; then
   if command -v corepack >/dev/null 2>&1; then
     log "Yarn not found. Enabling Yarn Classic via corepack..."
     corepack prepare yarn@1.22.22 --activate
