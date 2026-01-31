@@ -89,7 +89,7 @@
     "ngx-toastr": "^16.0.2",
     "ngx-translate-messageformat-compiler": "^7.2.0",
     "node-abi": "^4",
-    "npmlog": "6.0.2",
+    "npmlog": "7.0.1",
     "npx": "^10.2.2",
     "pako": "^2.1.0",
     "patch-package": "^6.4.7",
