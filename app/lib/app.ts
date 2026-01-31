@@ -74,7 +74,7 @@ export class Application {
                 if (!directory || !fs.existsSync(directory)) {
                     return null
                 }
-                
+
                 // Check if directory is a git repository by trying to get root
                 try {
                     const rootResult = await exec('git rev-parse --show-toplevel', { cwd: directory })
@@ -126,29 +126,34 @@ export class Application {
                 try {
                     const statusResult = await exec('git status --porcelain', { cwd: directory })
                     const statusLines = statusResult[0].toString().trim().split('\n').filter(line => line.trim())
-                    
+                    const stagedStatuses = new Set(['M', 'A', 'D', 'R'])
+                    const modifiedStatuses = new Set(['M', 'D'])
+
                     for (const line of statusLines) {
-                        if (!line.trim()) continue
-                        
-                        const status = line.substring(0, 2)
-                        const file = line.substring(3).trim()
-                        
+                        if (!line.trim()) {
+                            continue
+                        }
+
+                        const status = line.slice(0, 2)
+                        const file = line.slice(3).trim()
+
                         // Handle untracked files
-                        if (status[0] === '?' && status[1] === '?') {
+                        if (status.startsWith('??')) {
                             results.untracked.push(file)
-                        } else {
-                            // Staged changes (index status)
-                            if (status[0] !== ' ' && status[0] !== '?') {
-                                if (status[0] === 'M' || status[0] === 'A' || status[0] === 'D' || status[0] === 'R') {
-                                    results.staged.push(file)
-                                }
-                            }
-                            // Working tree changes
-                            if (status[1] !== ' ' && status[1] !== '?') {
-                                if (status[1] === 'M' || status[1] === 'D') {
-                                    results.modified.push(file)
-                                }
-                            }
+                            continue
+                        }
+
+                        const indexStatus = status.charAt(0)
+                        const worktreeStatus = status.charAt(1)
+
+                        // Staged changes (index status)
+                        if (indexStatus !== ' ' && indexStatus !== '?' && stagedStatuses.has(indexStatus)) {
+                            results.staged.push(file)
+                        }
+
+                        // Working tree changes
+                        if (worktreeStatus !== ' ' && worktreeStatus !== '?' && modifiedStatuses.has(worktreeStatus)) {
+                            results.modified.push(file)
                         }
                     }
 
@@ -176,8 +181,8 @@ export class Application {
                     return null
                 }
 
-                const entries: Array<{ name: string, type: 'file' | 'directory' | 'symlink', size?: number }> = []
-                
+                const entries: { name: string, type: 'file' | 'directory' | 'symlink', size?: number }[] = []
+
                 const files = fs.readdirSync(directory)
                 for (const file of files) {
                     const filePath = path.join(directory, file)
@@ -256,11 +261,12 @@ export class Application {
      */
     private initSessionSharing (): void {
         // IPC handler: Get WebSocket server URL
-        ipcMain.handle('session-sharing:get-server-url', async (_event, usePublicUrl: boolean = false) => {
+        ipcMain.handle('session-sharing:get-server-url', async (_event, usePublicUrl = false) => {
             return this.sessionSharingServer.getWebSocketUrl(usePublicUrl)
         })
 
         // IPC handler: Register a shared session
+        // eslint-disable-next-line @typescript-eslint/max-params
         ipcMain.handle('session-sharing:register', async (_event, sessionId: string, token: string, mode: string, password?: string, expiresIn?: number) => {
             this.sessionSharingServer.registerSession(sessionId, token, mode as 'read-only' | 'interactive', password, expiresIn)
         })
@@ -307,9 +313,9 @@ export class Application {
         // IPC handler: Start server
         ipcMain.handle('session-sharing:start-server', async (_event, port?: number, host?: string) => {
             try {
-                const sessionSharingConfig = this.configStore.sessionSharing || {}
-                const bindHost = host || sessionSharingConfig.bindHost || '0.0.0.0'
-                const bindPort = port || sessionSharingConfig.port || 0
+                const sessionSharingConfig = this.configStore.sessionSharing ?? {}
+                const bindHost = host ?? sessionSharingConfig.bindHost ?? '0.0.0.0'
+                const bindPort = port ?? sessionSharingConfig.port ?? 0
                 const actualPort = await this.sessionSharingServer.start(bindPort, bindHost)
                 // Broadcast status change
                 this.broadcast('session-sharing:server-status-changed', {
@@ -395,13 +401,13 @@ export class Application {
         // 2. localtunnel - npm package, simple to use
         // 3. Cloudflare Tunnel - free, requires cloudflare account
         // 4. Custom tunnel service
-        
+
         console.log('Tunneling service requested but not yet implemented')
         console.log('For internet access, consider:')
         console.log('  1. Using port forwarding on your router')
         console.log('  2. Using a tunneling service (ngrok, localtunnel, etc.)')
         console.log('  3. Using a VPN to connect to your local network')
-        
+
         // For now, users can manually set up port forwarding or use external tunneling tools
     }
 
@@ -412,7 +418,7 @@ export class Application {
         // IPC handler: Get backup directory path
         ipcMain.handle('backup:get-directory-path', async () => {
             try {
-                const configDir = process.env.TLINK_CONFIG_DIRECTORY || app.getPath('userData')
+                const configDir = process.env.TLINK_CONFIG_DIRECTORY ?? app.getPath('userData')
                 return path.join(configDir, 'backups')
             } catch (error) {
                 console.error('Failed to get backup directory path:', error)
@@ -536,15 +542,15 @@ export class Application {
         // Server will start when:
         // 1. User clicks the dock button to start it
         // 2. User tries to share a session and agrees to start it
-        
+
         // Check if auto-start is enabled in config (for backward compatibility)
-        const sessionSharingConfig = this.configStore.sessionSharing || {}
+        const sessionSharingConfig = this.configStore.sessionSharing ?? {}
         if (sessionSharingConfig.autoStart) {
             try {
-                const bindHost = sessionSharingConfig.bindHost || '0.0.0.0'
-                const port = sessionSharingConfig.port || 0
+                const bindHost = sessionSharingConfig.bindHost ?? '0.0.0.0'
+                const port = sessionSharingConfig.port ?? 0
                 await this.sessionSharingServer.start(port, bindHost)
-                
+
                 // If tunneling is enabled, start tunnel service (for internet access)
                 if (sessionSharingConfig.enableTunneling) {
                     await this.startTunnelingService()
@@ -601,12 +607,12 @@ export class Application {
         }
 
         // Create new window for AI assistant with specific size (800x700)
-        const window = await this.newWindow({ 
-            width: 800, 
-            height: 700 
+        const window = await this.newWindow({
+            width: 800,
+            height: 700,
         })
         this.aiAssistantWindow = window
-        
+
         // Set window title
         window.webContents.once('did-finish-load', () => {
             window.webContents.executeJavaScript(`
@@ -615,7 +621,7 @@ export class Application {
                 }
             `)
         })
-        
+
         // Wait for window to be ready, then send message to open AI assistant in full-window mode
         window.ready.then(() => {
             // Send flag indicating this is an AI Assistant window (full-window mode)
@@ -666,7 +672,8 @@ export class Application {
         if (!this.hasWindows()) {
             await this.newWindow()
         }
-        this.windows.filter(w => !w.isDestroyed())[0].send(event, ...args)
+        const target = this.windows.find(window => !window.isDestroyed()) ?? this.windows[0]
+        target.send(event, ...args)
     }
 
     enableTray (): void {
@@ -797,7 +804,7 @@ export class Application {
                                 await this.newWindow()
                             }
                             const target = this.windows.find(window => window.isFocused()) ?? this.windows[0]
-                            target?.send('host:command-window')
+                            target.send('host:command-window')
                         },
                     },
                     {
@@ -807,7 +814,7 @@ export class Application {
                                 await this.newWindow()
                             }
                             const target = this.windows.find(window => window.isFocused()) ?? this.windows[0]
-                            target?.send('host:command-window-bottom')
+                            target.send('host:command-window-bottom')
                         },
                     },
                     {
@@ -817,7 +824,7 @@ export class Application {
                                 await this.newWindow()
                             }
                             const target = this.windows.find(window => window.isFocused()) ?? this.windows[0]
-                            target?.send('host:button-bar')
+                            target.send('host:button-bar')
                         },
                     },
                     {
@@ -827,7 +834,7 @@ export class Application {
                                 await this.newWindow()
                             }
                             const target = this.windows.find(window => window.isFocused()) ?? this.windows[0]
-                            target?.send('host:session-manager')
+                            target.send('host:session-manager')
                         },
                     },
                     { type: 'separator' },

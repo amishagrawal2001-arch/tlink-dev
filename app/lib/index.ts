@@ -58,7 +58,7 @@ require('./lru')
 // Silence a noisy deprecation warning from electron-debug on newer Electron:
 // "session.getAllExtensions is deprecated" (moved to session.extensions.getAllExtensions)
 process.on('warning', warning => {
-    if (warning?.name === 'DeprecationWarning' && String(warning?.message ?? '').includes('session.getAllExtensions')) {
+    if (warning.name === 'DeprecationWarning' && warning.message.includes('session.getAllExtensions')) {
         return
     }
     // Re-emit other warnings as usual
@@ -71,8 +71,6 @@ const { parseArgs } = require('./cli')
 const { Application } = require('./app')
 const electronDebug = require('electron-debug')
 const { loadConfig } = require('./config')
-
-
 
 const argv = parseArgs(process.argv, process.cwd())
 

@@ -1,5 +1,4 @@
-import { Server } from 'http'
-import { createServer } from 'http'
+import { createServer, type Server } from 'http'
 import { WebSocketServer, WebSocket } from 'ws'
 
 interface SharedSession {
@@ -26,7 +25,7 @@ export class SessionSharingServer {
      * @param port Port number (0 for auto-assign)
      * @param host Host to bind to ('127.0.0.1' for localhost only, '0.0.0.0' for all interfaces)
      */
-    async start (port: number = 0, host: string = '0.0.0.0'): Promise<number> {
+    async start (port = 0, host = '0.0.0.0'): Promise<number> {
         if (this.started && this.wss) {
             return this.port
         }
@@ -36,7 +35,7 @@ export class SessionSharingServer {
         return new Promise((resolve, reject) => {
             try {
                 this.httpServer = createServer()
-                this.wss = new WebSocketServer({ 
+                this.wss = new WebSocketServer({
                     server: this.httpServer,
                     path: '/session',
                 })
@@ -57,7 +56,7 @@ export class SessionSharingServer {
                         this.port = address
                     }
                     this.started = true
-                    
+
                     const bindAddress = this.host === '0.0.0.0' ? 'all interfaces' : this.host
                     console.log(`Session sharing WebSocket server started on ${bindAddress}:${this.port}`)
                     console.log(`Local URL: ws://127.0.0.1:${this.port}/session`)
@@ -65,17 +64,17 @@ export class SessionSharingServer {
                         console.log(`Network URL: ws://<your-ip>:${this.port}/session (accessible on local network)`)
                         console.log(`Note: For internet access, configure port forwarding or use a tunneling service`)
                     }
-                    
+
                     resolve(this.port)
                 })
 
                 this.httpServer.on('error', (error) => {
                     console.error('HTTP server error:', error)
-                    reject(error)
+                    reject(error instanceof Error ? error : new Error(String(error)))
                 })
             } catch (error) {
                 console.error('Failed to start WebSocket server:', error)
-                reject(error)
+                reject(error instanceof Error ? error : new Error(String(error)))
             }
         })
     }
@@ -110,6 +109,7 @@ export class SessionSharingServer {
     /**
      * Register a new shared session
      */
+    // eslint-disable-next-line @typescript-eslint/max-params
     registerSession (sessionId: string, token: string, mode: 'read-only' | 'interactive', password?: string, expiresIn?: number): void {
         // Clean up expired sessions
         this.cleanupExpiredSessions()
@@ -207,11 +207,11 @@ export class SessionSharingServer {
      * Get the WebSocket URL
      * @param usePublicUrl If true, returns public URL (if tunnel is active), otherwise local URL
      */
-    getWebSocketUrl (usePublicUrl: boolean = false): string {
+    getWebSocketUrl (usePublicUrl = false): string {
         if (usePublicUrl && this.publicUrl) {
             return this.publicUrl
         }
-        
+
         // If bound to 0.0.0.0, return localhost URL for sharing (viewers should use their network IP)
         const host = this.host === '0.0.0.0' ? '127.0.0.1' : this.host
         return `ws://${host}:${this.port}/session`
@@ -415,7 +415,7 @@ export class SessionSharingServer {
             if (session.viewers.has(ws)) {
                 session.viewers.delete(ws)
                 console.log(`Viewer disconnected from session ${sessionId} (remaining viewers: ${session.viewers.size})`)
-                
+
                 // Notify session owner via IPC
                 process.emit('session-sharing:viewer-left' as any, sessionId, session.viewers.size)
 
@@ -451,4 +451,3 @@ export function getSessionSharingServer (): SessionSharingServer {
     }
     return serverInstance
 }
-

@@ -48,7 +48,7 @@ async function bootstrap (bootstrapData: BootstrapData, plugins: PluginInfo[], s
     ]).bootstrapModule(module)
     if (process.env.TLINK_DEV) {
         const applicationRef = moduleRef.injector.get(ApplicationRef)
-        const componentRef = applicationRef.components[0]
+        const [componentRef] = applicationRef.components
         enableDebugTools(componentRef)
     }
     return moduleRef

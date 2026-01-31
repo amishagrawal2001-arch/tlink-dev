@@ -155,6 +155,7 @@ export class PTYManager {
             event.returnValue = this.ptys[id]?.getPID()
         })
 
+        // eslint-disable-next-line @typescript-eslint/max-params
         ipcMain.on('pty:resize', (_event, id, columns, rows) => {
             this.ptys[id]?.resize(columns, rows)
         })

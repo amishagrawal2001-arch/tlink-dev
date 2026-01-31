@@ -1,0 +1,2 @@
+# Subproject has its own tooling; exclude from root lint
+/tlink-ai-assistant/

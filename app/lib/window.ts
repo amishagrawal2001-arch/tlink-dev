@@ -14,7 +14,8 @@ import { parseArgs } from './cli'
 
 let DwmEnableBlurBehindWindow: any = null
 if (process.platform === 'win32') {
-    DwmEnableBlurBehindWindow = require('@tabby-gang/windows-blurbehind').DwmEnableBlurBehindWindow
+    const { DwmEnableBlurBehindWindow: blurBehind } = require('@tabby-gang/windows-blurbehind')
+    DwmEnableBlurBehindWindow = blurBehind
 }
 
 export interface WindowOptions {
@@ -58,7 +59,7 @@ export class Window {
 
         this.windowConfig = new ElectronConfig({ name: 'window' })
         this.windowBounds = this.windowConfig.get('windowBoundaries')
-        
+
         // Track if this window has a custom size (should not save bounds)
         this.hasCustomSize = !!(options.width && options.height)
 
@@ -242,7 +243,8 @@ export class Window {
         }
         this.window.webContents.send(event, ...args)
         if (event === 'host:config-change') {
-            this.configStore = args[0]
+            const [config] = args
+            this.configStore = config
             this.enableDockedWindowStyles(this.isDockedOnTop())
         }
     }
@@ -354,7 +356,7 @@ export class Window {
             }
             this.window.on('resize', resizeHandler)
             this.window.on('move', moveHandler)
-            
+
             // Return cleanup function
             return () => {
                 this.window.off('resize', resizeHandler)

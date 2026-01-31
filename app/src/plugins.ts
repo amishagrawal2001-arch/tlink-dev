@@ -255,7 +255,7 @@ async function parsePluginInfo (pluginDir: string, packageName: string): Promise
     const pluginPath = path.join(pluginDir, packageName)
     const infoPath = path.join(pluginPath, 'package.json')
 
-    const prefix = PLUGIN_PREFIXES.find(prefix => packageName.startsWith(prefix))
+    const prefix = PLUGIN_PREFIXES.find(pluginPrefix => packageName.startsWith(pluginPrefix))
     const name = prefix ? packageName.substring(prefix.length) : packageName
 
     try {
@@ -265,8 +265,8 @@ async function parsePluginInfo (pluginDir: string, packageName: string): Promise
             return null
         }
 
-        let author = info.author
-        author = author.name || author
+        const { author: authorInfo } = info
+        const author = typeof authorInfo === 'object' && authorInfo?.name ? authorInfo.name : authorInfo
 
         console.log(`Found ${name} in ${pluginDir}`)
 

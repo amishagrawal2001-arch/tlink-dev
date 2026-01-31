@@ -29,7 +29,7 @@ export function getRootModule (plugins: any[]) {
         ngDoBootstrap (appRef: ApplicationRef) {
             (window as any)['requestAnimationFrame'] = window[window['Zone'].__symbol__('requestAnimationFrame')]
 
-            const componentDef = bootstrap[0]
+            const [componentDef] = bootstrap
             appRef.bootstrap(componentDef)
         }
     }
