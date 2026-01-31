@@ -1,5 +1,17 @@
 name: Package-Build
-on: [push, pull_request]
+on:
+  push:
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+
+concurrency:
+  group: package-build-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   Lint:
     runs-on: ubuntu-24.04
