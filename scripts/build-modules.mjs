@@ -17,7 +17,11 @@ const configs = [
         const configFactory = imported.default ?? imported
         const config = typeof configFactory === 'function' ? configFactory() : configFactory
         const stats = await promisify(webpack)(config)
-        console.log(stats.toString({ colors: true }))
+        const statsOptions = { colors: true }
+        if (process.env.CI) {
+            statsOptions.warnings = false
+        }
+        console.log(stats.toString(statsOptions))
         if (stats.hasErrors()) {
             process.exit(1)
         }

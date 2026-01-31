@@ -24,6 +24,9 @@
         ]
     },
     "compileOnSave": false,
+    "files": [
+        "lib/index.ts"
+    ],
     "exclude": [
         "dist",
         "src",

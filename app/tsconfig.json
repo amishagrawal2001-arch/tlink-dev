@@ -25,6 +25,10 @@
         "types": ["node"]
     },
     "compileOnSave": false,
+    "include": [
+        "src/**/*",
+        "lib/sentry.ts"
+    ],
     "exclude": [
         "dist",
         "node_modules",
