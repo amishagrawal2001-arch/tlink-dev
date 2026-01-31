@@ -2,13 +2,19 @@
 import sh from 'shelljs'
 import * as vars from './vars.mjs'
 import log from 'npmlog'
+import * as path from 'path'
+
+const repoRoot = process.cwd()
+const cdRepo = () => {
+    sh.cd(repoRoot)
+}
 
 log.info('patch')
 sh.exec(`yarn patch-package`, { fatal: true })
 
 log.info('deps', 'app')
 
-sh.cd('app')
+sh.cd(path.join(repoRoot, 'app'))
 sh.exec(`yarn install --force --network-timeout 1000000 --ignore-scripts`, { fatal: true })
 if (process.env.TLINK_SKIP_APP_POSTINSTALL === '1') {
     log.info('deps', 'app postinstall skipped')
@@ -16,24 +22,29 @@ if (process.env.TLINK_SKIP_APP_POSTINSTALL === '1') {
     // Some native packages might fail to build before patch-package gets a chance to run via postinstall
     sh.exec(`yarn postinstall`, { fatal: false })
 }
-sh.cd('..')
+cdRepo()
 
-sh.cd('web')
+sh.cd(path.join(repoRoot, 'web'))
 sh.exec(`yarn install --force --network-timeout 1000000`, { fatal: true })
 sh.exec(`yarn patch-package`, { fatal: true })
-sh.cd('..')
+cdRepo()
 
 vars.allPackages.forEach(plugin => {
     log.info('deps', plugin)
-    sh.cd(plugin)
+    const pluginPath = path.join(repoRoot, plugin)
+    if (!sh.test('-d', pluginPath)) {
+        log.warn('deps', `missing ${plugin}, skipping`)
+        return
+    }
+    sh.cd(pluginPath)
     sh.exec(`yarn install --force --network-timeout 1000000`, { fatal: true })
-    sh.cd('..')
+    cdRepo()
 })
 
 if (['darwin', 'linux'].includes(process.platform)) {
-    sh.cd('node_modules')
+    sh.cd(path.join(repoRoot, 'node_modules'))
     for (let x of vars.builtinPlugins) {
         sh.ln('-fs', '../' + x, x)
     }
-    sh.cd('..')
+    cdRepo()
 }
