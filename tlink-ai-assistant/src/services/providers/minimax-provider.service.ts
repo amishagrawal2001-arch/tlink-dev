@@ -54,11 +54,14 @@ export class MinimaxProviderService extends BaseAiProvider {
 
         try {
             const allowBrowser = typeof window !== 'undefined' && (window as any).process?.versions?.electron;
-            this.client = new Anthropic({
+            const clientOptions: any = {
                 apiKey: this.config.apiKey,
                 baseURL: this.getBaseURL(),
-                dangerouslyAllowBrowser: !!allowBrowser,
-            });
+            };
+            if (allowBrowser) {
+                clientOptions.dangerouslyAllowBrowser = true;
+            }
+            this.client = new Anthropic(clientOptions);
 
             this.logger.info('Minimax client initialized', {
                 baseURL: this.getBaseURL(),

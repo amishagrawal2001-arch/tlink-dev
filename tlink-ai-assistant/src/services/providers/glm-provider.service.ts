@@ -83,11 +83,14 @@ export class GlmProviderService extends BaseAiProvider {
             if (this.useAnthropicSdk) {
                 // 方案1: Anthropic SDK (用于 /api/anthropic 格式)
                 const allowBrowser = typeof window !== 'undefined' && (window as any).process?.versions?.electron;
-                this.anthropicClient = new Anthropic({
+                const clientOptions: any = {
                     apiKey: this.config.apiKey,
                     baseURL: baseURL,
-                    dangerouslyAllowBrowser: !!allowBrowser,
-                });
+                };
+                if (allowBrowser) {
+                    clientOptions.dangerouslyAllowBrowser = true;
+                }
+                this.anthropicClient = new Anthropic(clientOptions);
                 this.logger.info('GLM client initialized (Anthropic SDK)', {
                     baseURL,
                     model: this.config.model || 'glm-4.6'
