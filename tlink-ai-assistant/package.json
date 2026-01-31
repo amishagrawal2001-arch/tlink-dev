@@ -48,10 +48,12 @@
         "marked": "^4.3.0",
         "pako": "^2.1.0",
         "rxjs": "^7.8.1",
+        "zod": "^3.22.4"
+    },
+    "peerDependencies": {
         "tlink-core": "*",
         "tlink-settings": "*",
-        "tlink-terminal": "*",
-        "zod": "^3.22.4"
+        "tlink-terminal": "*"
     },
     "devDependencies": {
         "@types/crypto-js": "^4.2.2",

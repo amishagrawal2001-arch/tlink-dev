@@ -10,6 +10,8 @@ SKIP_SYSTEM_DEPS="${TLINK_SKIP_SYSTEM_DEPS:-0}"
 SKIP_INSTALL="${TLINK_SKIP_INSTALL:-0}"
 SKIP_BUILD="${TLINK_SKIP_BUILD:-0}"
 SKIP_START="${TLINK_SKIP_START:-0}"
+REBUILD_NATIVE="${TLINK_REBUILD_NATIVE:-0}"
+CLEAN_USER_PLUGINS="${TLINK_CLEAN_USER_PLUGINS:-0}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -17,17 +19,21 @@ while [[ $# -gt 0 ]]; do
     --skip-install) SKIP_INSTALL=1 ;;
     --skip-build) SKIP_BUILD=1 ;;
     --skip-start) SKIP_START=1 ;;
+    --rebuild-native) REBUILD_NATIVE=1 ;;
+    --clean-user-plugins) CLEAN_USER_PLUGINS=1 ;;
     --install-only) SKIP_BUILD=1; SKIP_START=1 ;;
     --build-only) SKIP_INSTALL=1; SKIP_START=1 ;;
     --help|-h)
       cat <<'EOF'
-Usage: ./start_tlink.sh [options]
+Usage: ./install_tlink.sh [options]
 
 Options:
   --skip-system-deps  Skip OS-level dependencies
   --skip-install      Skip yarn install
   --skip-build        Skip yarn build
   --skip-start        Skip yarn start
+  --rebuild-native    Rebuild native modules (keytar, node-pty, etc.)
+  --clean-user-plugins  Move user plugin cache out of the way
   --install-only      Only install dependencies
   --build-only        Only run build
 EOF
@@ -50,6 +56,27 @@ case "$OS_NAME" in
 esac
 
 log "Detected OS: $OS_NAME ($OS)"
+
+resolve_user_plugins_dir() {
+  case "$OS" in
+    macos)
+      echo "$HOME/Library/Application Support/Tlink/plugins"
+      ;;
+    linux)
+      echo "${XDG_CONFIG_HOME:-$HOME/.config}/tlink/plugins"
+      ;;
+    windows)
+      if command -v cygpath >/dev/null 2>&1 && [[ -n "${APPDATA:-}" ]]; then
+        echo "$(cygpath -u "$APPDATA")/tlink/plugins"
+      else
+        echo "$HOME/AppData/Roaming/tlink/plugins"
+      fi
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
+}
 
 if ! command -v node >/dev/null 2>&1; then
   log "Node.js is required (>=15). Please install Node.js and re-run."
@@ -89,6 +116,17 @@ if [[ "$OS" == "windows" ]]; then
   log "Windows detected. This script expects Git Bash or WSL."
 fi
 
+if [[ "$CLEAN_USER_PLUGINS" -eq 1 ]]; then
+  USER_PLUGINS_DIR="$(resolve_user_plugins_dir)"
+  if [[ -n "$USER_PLUGINS_DIR" && -d "$USER_PLUGINS_DIR" ]]; then
+    BACKUP_DIR="${USER_PLUGINS_DIR}.bak-$(date +%Y%m%d%H%M%S)"
+    log "Moving user plugins cache to: $BACKUP_DIR"
+    mv "$USER_PLUGINS_DIR" "$BACKUP_DIR"
+  else
+    log "No user plugins cache found to move."
+  fi
+fi
+
 if [[ "$SKIP_INSTALL" -ne 1 ]]; then
   log "Installing dependencies with yarn..."
   yarn install
@@ -97,6 +135,11 @@ fi
 if [[ "$SKIP_BUILD" -ne 1 ]]; then
   log "Building project..."
   yarn run build
+fi
+
+if [[ "$REBUILD_NATIVE" -eq 1 ]]; then
+  log "Rebuilding native modules..."
+  node scripts/build-native.mjs
 fi
 
 if [[ "$SKIP_START" -ne 1 ]]; then
