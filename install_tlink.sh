@@ -14,6 +14,7 @@ REBUILD_NATIVE="${TLINK_REBUILD_NATIVE:-0}"
 CLEAN_USER_PLUGINS="${TLINK_CLEAN_USER_PLUGINS:-0}"
 UPGRADE_NODE="${TLINK_UPGRADE_NODE:-1}"
 MIN_NODE_VERSION="${TLINK_NODE_MIN_VERSION:-22.12.0}"
+INSTALL_OLLAMA="${TLINK_INSTALL_OLLAMA:-0}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -25,6 +26,7 @@ while [[ $# -gt 0 ]]; do
     --clean-user-plugins) CLEAN_USER_PLUGINS=1 ;;
     --upgrade-node) UPGRADE_NODE=1 ;;
     --no-upgrade-node) UPGRADE_NODE=0 ;;
+    --install-ollama) INSTALL_OLLAMA=1 ;;
     --install-only) SKIP_BUILD=1; SKIP_START=1 ;;
     --build-only) SKIP_INSTALL=1; SKIP_START=1 ;;
     --help|-h)
@@ -40,6 +42,7 @@ Options:
   --clean-user-plugins  Move user plugin cache out of the way
   --upgrade-node      Attempt to upgrade Node if below minimum
   --no-upgrade-node   Do not attempt to upgrade Node
+  --install-ollama    Attempt to install Ollama (optional)
   --install-only      Only install dependencies
   --build-only        Only run build
 EOF
@@ -117,6 +120,42 @@ try_upgrade_node() {
   fi
 
   return 1
+}
+
+install_ollama() {
+  if command -v ollama >/dev/null 2>&1; then
+    log "Ollama already installed."
+    return 0
+  fi
+
+  case "$OS" in
+    macos)
+      if command -v brew >/dev/null 2>&1; then
+        log "Installing Ollama via Homebrew..."
+        brew install ollama
+        return $?
+      fi
+      log "Homebrew not found. Install Ollama from https://ollama.com/download or install Homebrew first."
+      return 1
+      ;;
+    linux)
+      if command -v curl >/dev/null 2>&1; then
+        log "Installing Ollama via install script (requires sudo)..."
+        curl -fsSL https://ollama.com/install.sh | sh
+        return $?
+      fi
+      log "curl not found. Please install Ollama from https://ollama.com/download."
+      return 1
+      ;;
+    windows)
+      log "Windows detected. Please install Ollama from https://ollama.com/download."
+      return 1
+      ;;
+    *)
+      log "Unknown OS. Please install Ollama manually from https://ollama.com/download."
+      return 1
+      ;;
+  esac
 }
 
 resolve_user_plugins_dir() {
@@ -199,6 +238,10 @@ fi
 
 if [[ "$OS" == "windows" ]]; then
   log "Windows detected. This script expects Git Bash or WSL."
+fi
+
+if [[ "$INSTALL_OLLAMA" -eq 1 ]]; then
+  install_ollama || true
 fi
 
 if [[ "$CLEAN_USER_PLUGINS" -eq 1 ]]; then
