@@ -46,7 +46,7 @@ Notes:
 - This repo expects Yarn Classic (1.x). `yarn install` is required because the postinstall script uses yarn in subpackages.
 - Node.js >= 22.12.0 is required. `./install_tlink.sh` will try to upgrade if an older version is detected.
 - `./install_tlink.sh` works on macOS/Linux and on Windows via Git Bash or WSL. Use `--help` to see optional flags (skip install/build/start).
-- Ollama is optional and not bundled. Use `./install_tlink.sh --install-ollama` to attempt install (macOS via Homebrew, Linux via curl script). Windows requires manual install.
+- Ollama is optional and not bundled. By default, `install_tlink.sh` will attempt to install Ollama. Use `--no-install-ollama` to skip, or run `./install_tlink.sh --install-ollama` to only install Ollama.
 - macOS DMG build (optional):
   ```bash
   TLINK_BUILD_TARGETS=mac TLINK_BUILD_MAC_DMG_ONLY=1 ./build.sh

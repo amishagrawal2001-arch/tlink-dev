@@ -14,7 +14,21 @@ REBUILD_NATIVE="${TLINK_REBUILD_NATIVE:-0}"
 CLEAN_USER_PLUGINS="${TLINK_CLEAN_USER_PLUGINS:-0}"
 UPGRADE_NODE="${TLINK_UPGRADE_NODE:-1}"
 MIN_NODE_VERSION="${TLINK_NODE_MIN_VERSION:-22.12.0}"
-INSTALL_OLLAMA="${TLINK_INSTALL_OLLAMA:-0}"
+INSTALL_OLLAMA="${TLINK_INSTALL_OLLAMA:-1}"
+ONLY_INSTALL_OLLAMA=0
+SKIP_NODE_CHECK=0
+SKIP_YARN_CHECK=0
+
+if [[ $# -gt 0 ]]; then
+  ONLY_INSTALL_OLLAMA=1
+  for arg in "$@"; do
+    case "$arg" in
+      --install-ollama) ;;
+      --help|-h) ;;
+      *) ONLY_INSTALL_OLLAMA=0 ;;
+    esac
+  done
+fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -27,6 +41,7 @@ while [[ $# -gt 0 ]]; do
     --upgrade-node) UPGRADE_NODE=1 ;;
     --no-upgrade-node) UPGRADE_NODE=0 ;;
     --install-ollama) INSTALL_OLLAMA=1 ;;
+    --no-install-ollama) INSTALL_OLLAMA=0 ;;
     --install-only) SKIP_BUILD=1; SKIP_START=1 ;;
     --build-only) SKIP_INSTALL=1; SKIP_START=1 ;;
     --help|-h)
@@ -42,7 +57,8 @@ Options:
   --clean-user-plugins  Move user plugin cache out of the way
   --upgrade-node      Attempt to upgrade Node if below minimum
   --no-upgrade-node   Do not attempt to upgrade Node
-  --install-ollama    Attempt to install Ollama (optional)
+  --install-ollama    Attempt to install Ollama (optional; if used alone, only installs Ollama)
+  --no-install-ollama Skip Ollama installation
   --install-only      Only install dependencies
   --build-only        Only run build
 EOF
@@ -65,6 +81,16 @@ case "$OS_NAME" in
 esac
 
 log "Detected OS: $OS_NAME ($OS)"
+
+if [[ "$ONLY_INSTALL_OLLAMA" -eq 1 ]]; then
+  SKIP_SYSTEM_DEPS=1
+  SKIP_INSTALL=1
+  SKIP_BUILD=1
+  SKIP_START=1
+  UPGRADE_NODE=0
+  SKIP_NODE_CHECK=1
+  SKIP_YARN_CHECK=1
+fi
 
 version_ge() {
   # returns 0 if $1 >= $2
@@ -135,7 +161,46 @@ install_ollama() {
         brew install ollama
         return $?
       fi
-      log "Homebrew not found. Install Ollama from https://ollama.com/download or install Homebrew first."
+      if ! command -v curl >/dev/null 2>&1; then
+        log "curl not found. Install Ollama manually from https://ollama.com/download."
+        return 1
+      fi
+      if ! command -v hdiutil >/dev/null 2>&1; then
+        log "hdiutil not found. Install Ollama manually from https://ollama.com/download."
+        return 1
+      fi
+      log "Installing Ollama via DMG (no Homebrew)..."
+      local tmp_dir dmg mount_point
+      tmp_dir="$(mktemp -d)"
+      dmg="$tmp_dir/Ollama.dmg"
+      mount_point="$tmp_dir/OllamaMount"
+      mkdir -p "$mount_point"
+
+      cleanup_ollama_dmg() {
+        hdiutil detach "$mount_point" >/dev/null 2>&1 || true
+        rm -rf "$tmp_dir" || true
+      }
+      trap cleanup_ollama_dmg EXIT
+
+      curl -fsSL "https://ollama.com/download/Ollama.dmg" -o "$dmg"
+      hdiutil attach "$dmg" -nobrowse -mountpoint "$mount_point"
+
+      if [[ -d "/Applications/Ollama.app" ]]; then
+        log "Ollama.app already exists in /Applications. Skipping copy."
+        return 0
+      fi
+
+      if cp -R "$mount_point/Ollama.app" /Applications/; then
+        log "Ollama installed to /Applications."
+        return 0
+      fi
+      if command -v sudo >/dev/null 2>&1; then
+        log "Retrying copy with sudo..."
+        sudo cp -R "$mount_point/Ollama.app" /Applications/
+        log "Ollama installed to /Applications."
+        return 0
+      fi
+      log "Failed to copy Ollama.app to /Applications. Please install manually."
       return 1
       ;;
     linux)
@@ -179,7 +244,7 @@ resolve_user_plugins_dir() {
   esac
 }
 
-if ! command -v node >/dev/null 2>&1; then
+if [[ "$SKIP_NODE_CHECK" -ne 1 && ! command -v node >/dev/null 2>&1 ]]; then
   if [[ "$UPGRADE_NODE" -eq 1 ]]; then
     log "Node.js not found. Attempting install (>= $MIN_NODE_VERSION)..."
     if ! try_upgrade_node "$MIN_NODE_VERSION"; then
@@ -192,28 +257,30 @@ if ! command -v node >/dev/null 2>&1; then
   fi
 fi
 
-NODE_VERSION="$(node -v | sed -E 's/^v//')"
-if ! version_ge "$NODE_VERSION" "$MIN_NODE_VERSION"; then
-  if [[ "$UPGRADE_NODE" -eq 1 ]]; then
-    log "Node.js >= $MIN_NODE_VERSION is required. Current: v$NODE_VERSION"
-    log "Attempting upgrade..."
-    if try_upgrade_node "$MIN_NODE_VERSION"; then
-      NODE_VERSION="$(node -v | sed -E 's/^v//')"
-      if ! version_ge "$NODE_VERSION" "$MIN_NODE_VERSION"; then
-        log "Upgrade completed but Node version is still v$NODE_VERSION"
+if [[ "$SKIP_NODE_CHECK" -ne 1 ]]; then
+  NODE_VERSION="$(node -v | sed -E 's/^v//')"
+  if ! version_ge "$NODE_VERSION" "$MIN_NODE_VERSION"; then
+    if [[ "$UPGRADE_NODE" -eq 1 ]]; then
+      log "Node.js >= $MIN_NODE_VERSION is required. Current: v$NODE_VERSION"
+      log "Attempting upgrade..."
+      if try_upgrade_node "$MIN_NODE_VERSION"; then
+        NODE_VERSION="$(node -v | sed -E 's/^v//')"
+        if ! version_ge "$NODE_VERSION" "$MIN_NODE_VERSION"; then
+          log "Upgrade completed but Node version is still v$NODE_VERSION"
+          exit 1
+        fi
+      else
+        log "Automatic upgrade failed. Please upgrade Node to >= $MIN_NODE_VERSION."
         exit 1
       fi
     else
-      log "Automatic upgrade failed. Please upgrade Node to >= $MIN_NODE_VERSION."
+      log "Node.js >= $MIN_NODE_VERSION is required. Current: v$NODE_VERSION"
       exit 1
     fi
-  else
-    log "Node.js >= $MIN_NODE_VERSION is required. Current: v$NODE_VERSION"
-    exit 1
   fi
 fi
 
-if ! command -v yarn >/dev/null 2>&1; then
+if [[ "$SKIP_YARN_CHECK" -ne 1 && ! command -v yarn >/dev/null 2>&1 ]]; then
   if command -v corepack >/dev/null 2>&1; then
     log "Yarn not found. Enabling Yarn Classic via corepack..."
     corepack prepare yarn@1.22.22 --activate
