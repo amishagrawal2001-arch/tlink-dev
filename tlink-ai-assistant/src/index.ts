@@ -28,6 +28,7 @@ import { MinimaxProviderService } from './services/providers/minimax-provider.se
 import { GlmProviderService } from './services/providers/glm-provider.service';
 import { OpenAiCompatibleProviderService } from './services/providers/openai-compatible.service';
 import { OllamaProviderService } from './services/providers/ollama-provider.service';
+import { OllamaCloudProviderService } from './services/providers/ollama-cloud-provider.service';
 import { VllmProviderService } from './services/providers/vllm-provider.service';
 import { GroqProviderService } from './services/providers/groq-provider.service';
 import { TlinkProxyProviderService } from './services/providers/tlink-proxy.provider';
@@ -128,6 +129,7 @@ import { AiHotkeyProvider } from './providers/tlink/ai-hotkey.provider';
         GlmProviderService,
         OpenAiCompatibleProviderService,
         OllamaProviderService,
+        OllamaCloudProviderService,
         VllmProviderService,
         GroqProviderService,
         TlinkProxyProviderService,

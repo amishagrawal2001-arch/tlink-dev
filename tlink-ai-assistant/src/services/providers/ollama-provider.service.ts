@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Observable, Observer } from 'rxjs';
 import { BaseAiProvider } from './base-provider.service';
-import { ProviderCapability, ValidationResult } from '../../types/provider.types';
+import { ProviderCapability, ValidationResult, AuthConfig } from '../../types/provider.types';
 import { ChatRequest, ChatResponse, StreamEvent, MessageRole, CommandRequest, CommandResponse, ExplainRequest, ExplainResponse, AnalysisRequest, AnalysisResponse } from '../../types/ai.types';
 import { LoggerService } from '../core/logger.service';
 
@@ -11,15 +11,15 @@ import { LoggerService } from '../core/logger.service';
  */
 @Injectable()
 export class OllamaProviderService extends BaseAiProvider {
-    readonly name = 'ollama';
-    readonly displayName = 'Ollama (Local)';
+    readonly name: string = 'ollama';
+    readonly displayName: string = 'Ollama (Local)';
     readonly capabilities = [
         ProviderCapability.CHAT,
         ProviderCapability.STREAMING,
         ProviderCapability.COMMAND_GENERATION,
         ProviderCapability.COMMAND_EXPLANATION
     ];
-    readonly authConfig = {
+    readonly authConfig: AuthConfig = {
         type: 'none' as const,
         credentials: {}
     };
@@ -54,6 +54,9 @@ export class OllamaProviderService extends BaseAiProvider {
         return baseURL
             .replace(/\/v1\/chat\/completions.*$/i, '')
             .replace(/\/api\/chat.*$/i, '')
+            .replace(/\/api\/generate.*$/i, '')
+            .replace(/\/api\/tags.*$/i, '')
+            .replace(/\/api\/?$/i, '')
             .replace(/\/v1\/?$/i, '')
             .replace(/\/+$/, '');
     }
@@ -114,7 +117,7 @@ export class OllamaProviderService extends BaseAiProvider {
             
             const response = await fetch(url, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: this.getAuthHeaders(),
                 body: JSON.stringify(requestBody)
             });
 
@@ -198,7 +201,7 @@ export class OllamaProviderService extends BaseAiProvider {
         
         const response = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: this.getAuthHeaders(),
             body: JSON.stringify({
                 model: this.config?.model || 'llama3.1',
                 messages: this.transformMessagesToNative(request.messages),
@@ -359,7 +362,7 @@ export class OllamaProviderService extends BaseAiProvider {
                     
                     let response = await fetch(url, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: this.getAuthHeaders(),
                         body: JSON.stringify(requestBody),
                         signal: abortController.signal
                     });
@@ -404,7 +407,7 @@ export class OllamaProviderService extends BaseAiProvider {
                             // Retry with the same stream handling
                             response = await fetch(url, {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
+                                headers: this.getAuthHeaders(),
                                 body: JSON.stringify(retryRequestBody),
                                 signal: abortController.signal
                             });
@@ -615,7 +618,7 @@ export class OllamaProviderService extends BaseAiProvider {
         
         fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: this.getAuthHeaders(),
             body: JSON.stringify({
                 model: this.config?.model || 'llama3.1',
                 messages: this.transformMessagesToNative(request.messages),
@@ -713,13 +716,8 @@ export class OllamaProviderService extends BaseAiProvider {
         
         const response = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: this.config?.model || 'llama3.1',
-                messages: this.transformMessages(request.messages),
-                max_tokens: request.maxTokens || 1,
-                temperature: request.temperature || 0
-            })
+            headers: this.getAuthHeaders(),
+            body: JSON.stringify(requestBody)
         });
 
         if (!response.ok) {
@@ -727,18 +725,29 @@ export class OllamaProviderService extends BaseAiProvider {
         }
 
         const data = await response.json();
+        if (useOpenAICompat) {
+            return {
+                message: {
+                    id: this.generateId(),
+                    role: MessageRole.ASSISTANT,
+                    content: data.choices?.[0]?.message?.content || '',
+                    timestamp: new Date()
+                },
+                usage: data.usage ? {
+                    promptTokens: data.usage.prompt_tokens,
+                    completionTokens: data.usage.completion_tokens,
+                    totalTokens: data.usage.total_tokens
+                } : undefined
+            };
+        }
         return {
             message: {
                 id: this.generateId(),
                 role: MessageRole.ASSISTANT,
-                content: data.choices[0]?.message?.content || '',
+                content: data.message?.content || '',
                 timestamp: new Date()
             },
-            usage: data.usage ? {
-                promptTokens: data.usage.prompt_tokens,
-                completionTokens: data.usage.completion_tokens,
-                totalTokens: data.usage.total_tokens
-            } : undefined
+            usage: undefined
         };
     }
 

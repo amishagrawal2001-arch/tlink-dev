@@ -410,6 +410,29 @@
         animation: slideDown 0.3s ease;
     }
 
+    .model-manager-content {
+        .no-models {
+            margin-bottom: 16px;
+            background: rgba(255, 193, 7, 0.08);
+            border: 1px solid rgba(255, 193, 7, 0.35);
+            border-radius: 10px;
+            text-align: left;
+
+            p {
+                margin: 0 0 12px 0;
+                line-height: 1.4;
+
+                i {
+                    color: var(--ai-warning, #ff9800);
+                }
+            }
+
+            .btn {
+                box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
+            }
+        }
+    }
+
     .installed-models {
         margin-bottom: 24px;
 

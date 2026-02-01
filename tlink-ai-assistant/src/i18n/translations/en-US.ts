@@ -156,6 +156,7 @@ export const enUS: TranslationKeys = {
         groq: 'Groq',
         'tlink-proxy': 'Tlink Agentic',
         ollama: 'Ollama (Local)',
+        'ollama-cloud': 'Ollama Cloud',
         vllm: 'vLLM (Local)'
     },
 

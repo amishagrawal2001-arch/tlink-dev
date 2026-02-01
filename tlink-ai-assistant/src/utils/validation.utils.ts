@@ -317,7 +317,7 @@ export function validateFilePath(path: string): { valid: boolean; error?: string
 /**
  * AI提供商类型
  */
-export type AIProviderType = 'openai' | 'anthropic' | 'minimax' | 'glm' | 'openai-compatible' | 'ollama' | 'vllm';
+export type AIProviderType = 'openai' | 'anthropic' | 'minimax' | 'glm' | 'openai-compatible' | 'ollama' | 'ollama-cloud' | 'vllm';
 
 /**
  * OpenAI模型列表
@@ -472,6 +472,12 @@ export function validateProviderApiKey(
             // Ollama本地服务通常不需要API密钥
             break;
 
+        case 'ollama-cloud':
+            if (trimmedKey.length < 10) {
+                return { valid: false, error: 'Ollama Cloud API密钥长度不足' };
+            }
+            break;
+
         case 'vllm':
             // vLLM可能有basic auth或无认证
             break;
@@ -531,6 +537,7 @@ function isKnownModelForProvider(provider: AIProviderType, model: string): boole
 
         case 'openai-compatible':
         case 'ollama':
+        case 'ollama-cloud':
         case 'vllm':
             // 这些提供商支持自定义模型名称
             return true;
@@ -544,7 +551,7 @@ function isKnownModelForProvider(provider: AIProviderType, model: string): boole
  * 检查提供商是否需要自定义基础URL
  */
 export function needsCustomBaseURL(provider: AIProviderType): boolean {
-    return ['openai-compatible', 'ollama', 'vllm'].includes(provider);
+    return ['openai-compatible', 'ollama', 'ollama-cloud', 'vllm'].includes(provider);
 }
 
 /**
@@ -569,6 +576,9 @@ export function getProviderDefaultBaseURL(provider: AIProviderType): string {
 
         case 'ollama':
             return 'http://localhost:11434';
+
+        case 'ollama-cloud':
+            return 'https://ollama.com/api';
 
         case 'vllm':
             return 'http://localhost:8000';

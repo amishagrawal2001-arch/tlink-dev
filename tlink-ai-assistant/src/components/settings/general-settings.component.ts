@@ -56,6 +56,7 @@ export class GeneralSettingsComponent implements OnInit, OnDestroy {
         // Legacy alias for backward compatibility
         'tlink-proxy': 'Tlink Agentic',
         'ollama': 'Ollama (Local)',
+        'ollama-cloud': 'Ollama Cloud',
         'vllm': 'vLLM (Local)'
     };
 
@@ -179,6 +180,7 @@ export class GeneralSettingsComponent implements OnInit, OnDestroy {
             'glm': 'Cloud Zhipu ChatGLM models',
             'openai-compatible': 'OpenAI API compatible third-party services',
             'ollama': 'Locally running Ollama service (port 11434)',
+            'ollama-cloud': 'Ollama Cloud hosted models',
             'vllm': 'Locally running vLLM service (port 8000)',
             'tlink-agentic': 'Tlink Agentic gateway (agent tools enabled)',
             'tlink-agent': 'Tlink Agent gateway (alias of Agentic)'

@@ -156,6 +156,7 @@ export const jaJP: TranslationKeys = {
         groq: 'Groq',
         'tlink-proxy': 'Tlink Agentic',
         ollama: 'Ollama (ローカル)',
+        'ollama-cloud': 'Ollama Cloud',
         vllm: 'vLLM (ローカル)'
     },
 

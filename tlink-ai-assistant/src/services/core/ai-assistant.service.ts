@@ -25,6 +25,7 @@ import { MinimaxProviderService } from '../providers/minimax-provider.service';
 import { GlmProviderService } from '../providers/glm-provider.service';
 import { OpenAiCompatibleProviderService } from '../providers/openai-compatible.service';
 import { OllamaProviderService } from '../providers/ollama-provider.service';
+import { OllamaCloudProviderService } from '../providers/ollama-cloud-provider.service';
 import { VllmProviderService } from '../providers/vllm-provider.service';
 import { GroqProviderService } from '../providers/groq-provider.service';
 import { TlinkProxyProviderService } from '../providers/tlink-proxy.provider';
@@ -51,6 +52,7 @@ export class AiAssistantService {
         @Optional() private glmProvider: GlmProviderService,
         @Optional() private openaiCompatibleProvider: OpenAiCompatibleProviderService,
         @Optional() private ollamaProvider: OllamaProviderService,
+        @Optional() private ollamaCloudProvider: OllamaCloudProviderService,
         @Optional() private vllmProvider: VllmProviderService,
         @Optional() private groqProvider: GroqProviderService,
         @Optional() private tlinkProxyProvider?: TlinkProxyProviderService,
@@ -95,6 +97,9 @@ export class AiAssistantService {
         }
         if (this.ollamaProvider) {
             this.providerMapping['ollama'] = this.ollamaProvider;
+        }
+        if (this.ollamaCloudProvider) {
+            this.providerMapping['ollama-cloud'] = this.ollamaCloudProvider;
         }
         if (this.vllmProvider) {
             this.providerMapping['vllm'] = this.vllmProvider;

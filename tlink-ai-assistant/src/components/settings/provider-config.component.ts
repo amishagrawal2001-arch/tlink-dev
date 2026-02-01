@@ -70,6 +70,11 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
         return name === 'tlink-agentic' || name === 'tlink-proxy' || name === 'tlink-agent';
     }
 
+    isOllamaModelKnown(name: string | undefined): boolean {
+        if (!name) return false;
+        return this.ollamaModels.some(model => model.name === name);
+    }
+
     private getAgenticConfig() {
         return this.configs['tlink-agentic'] || this.configs['tlink-proxy'] || this.configs['tlink-agent'];
     }
@@ -148,6 +153,17 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
                 { key: 'baseURL', label: 'Base URL', type: 'text', default: 'https://api.groq.com/openai/v1', required: false, placeholder: 'https://api.groq.com/openai/v1' },
                 { key: 'model', label: 'Model', type: 'text', default: 'llama-3.1-8b-instant', required: true, placeholder: '例如: llama-3.1-8b-instant, llama-3.3-70b-versatile' },
                 { key: 'contextWindow', label: 'Context Window', type: 'number', default: 8192, required: false, placeholder: 'Set according to model' }
+            ]
+        },
+        'ollama-cloud': {
+            name: 'Ollama Cloud',
+            description: 'Ollama Cloud API (hosted models)',
+            icon: 'fa-cloud',
+            fields: [
+                { key: 'apiKey', label: 'API Key', type: 'password', required: true },
+                { key: 'baseURL', label: 'Base URL', type: 'text', default: 'https://ollama.com/api', required: true, placeholder: 'https://ollama.com/api' },
+                { key: 'model', label: 'Model', type: 'text', default: 'gpt-oss:120b', required: true, placeholder: 'e.g., gpt-oss:120b, gpt-oss:20b' },
+                { key: 'contextWindow', label: 'Context Window', type: 'number', default: 128000, required: false, placeholder: 'Set according to model' }
             ]
         },
         'tlink-agentic': {
@@ -271,6 +287,78 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
                 this.logger.warn('Failed to open fallback URL', fallbackError);
             }
         }
+    }
+
+    async startOllama(event?: Event): Promise<void> {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        try {
+            const win: any = window as any;
+            const shell = win?.electron?.shell || win?.require?.('electron')?.shell;
+            const fs = win?.require?.('fs');
+            const platform = win?.process?.platform;
+            const childProcess = win?.require?.('child_process');
+
+            if (!shell) {
+                this.toast.error('Unable to start Ollama from here. Please launch it manually.');
+                return;
+            }
+
+            if (platform === 'darwin') {
+                const appPath = '/Applications/Ollama.app';
+                if (fs?.existsSync && !fs.existsSync(appPath)) {
+                    this.toast.error('Ollama app not found. Please install it from ollama.com/download.');
+                    return;
+                }
+                if (childProcess?.exec) {
+                    childProcess.exec('open -gj -a Ollama', (err: any) => {
+                        if (err) {
+                            this.logger.warn('Failed to start Ollama via open', { error: String(err) });
+                            this.toast.error('Unable to start Ollama. Please launch it manually.');
+                            return;
+                        }
+                        this.toast.success('Starting Ollama...');
+                        this.scheduleOllamaStatusRefresh();
+                    });
+                    return;
+                }
+                if (shell.openPath) {
+                    const result = await shell.openPath(appPath);
+                    if (!result) {
+                        this.toast.success('Starting Ollama...');
+                        this.scheduleOllamaStatusRefresh();
+                        return;
+                    }
+                    this.logger.warn('Failed to open Ollama app', { error: result });
+                }
+                if (shell.openExternal) {
+                    await shell.openExternal('https://ollama.com/download');
+                    this.toast.error('Unable to start Ollama. Please install or launch it manually.');
+                    return;
+                }
+            } else {
+                if (shell.openExternal) {
+                    await shell.openExternal('https://ollama.com/download');
+                }
+                this.toast.error('Unable to start Ollama automatically. Please start it manually.');
+            }
+        } catch (error) {
+            this.logger.error('Failed to start Ollama', error);
+            this.toast.error('Unable to start Ollama. Please launch it manually.');
+        }
+    }
+
+    private scheduleOllamaStatusRefresh(): void {
+        const delays = [1000, 2500, 5000];
+        delays.forEach((delay) => {
+            setTimeout(() => {
+                this.testLocalProvider('ollama');
+                this.loadOllamaModels();
+            }, delay);
+        });
     }
 
 
@@ -682,7 +770,7 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
             const testEndpoint = this.getTestEndpoint(providerName, baseURL);
             const headers = this.getTestHeaders(providerName, apiKey, baseURL);
             const body = this.getTestBody(providerName, baseURL);
-            const method = providerName === 'openai' ? 'GET' : 'POST';
+            const method = (providerName === 'openai' || providerName === 'ollama-cloud') ? 'GET' : 'POST';
 
             // Retry lightly on 429s to smooth out burst limits
             const maxAttempts = 3;
@@ -754,6 +842,10 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
             case 'openai':
                 // Use models endpoint to avoid consuming RPM/TPM on a chat request during tests
                 return `${baseURL}/models`;
+            case 'ollama-cloud': {
+                const cleanBase = (baseURL || '').replace(/\/+$/, '');
+                return cleanBase.endsWith('/api') ? `${cleanBase}/tags` : `${cleanBase}/api/tags`;
+            }
             case 'anthropic':
                 return `${baseURL}/v1/messages`;
             case 'glm':
@@ -804,6 +896,10 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
             : providerName === 'openai'
                 ? 'gpt-4o-mini'
                 : 'gpt-3.5-turbo';
+
+        if (providerName === 'ollama-cloud') {
+            return null;
+        }
 
         return {
             model: this.configs[providerName]?.model || defaultModel,
@@ -1366,11 +1462,28 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
             this.ollamaModelService.setBaseURL(baseURL);
             this.ollamaModels = await this.ollamaModelService.getInstalledModels();
             this.logger.info('Ollama models loaded', { count: this.ollamaModels.length });
+            this.ensureOllamaModelSelected();
         } catch (error) {
             this.logger.error('Failed to load Ollama models', error);
             this.toast.error('Failed to load Ollama models');
         } finally {
             this.ollamaModelLoading = false;
+        }
+    }
+
+    private ensureOllamaModelSelected(): void {
+        const config = this.configs['ollama'];
+        if (!config || this.ollamaModels.length === 0) {
+            return;
+        }
+
+        const current = (config.model || '').trim();
+        const isLegacyDefault = !current || current === 'llama3.1';
+        if (isLegacyDefault && !this.isOllamaModelKnown(current)) {
+            const nextModel = this.ollamaModels[0].name;
+            config.model = nextModel;
+            this.config.setProviderConfig('ollama', config);
+            this.logger.info('Auto-selected Ollama model', { model: nextModel });
         }
     }
 

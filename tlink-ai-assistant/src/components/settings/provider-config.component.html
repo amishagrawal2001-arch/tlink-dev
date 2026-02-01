@@ -97,6 +97,16 @@
                                         [attr.aria-label]="openAiModelsLoading ? t.common.loading : 'Refresh models'">
                                     </i>
                                 </ng-container>
+                                <ng-container *ngIf="providerName === 'ollama-cloud' && field.key === 'apiKey'">
+                                    <a
+                                        class="ml-2"
+                                        href="https://ollama.com/settings/keys"
+                                        (click)="openExternal('https://ollama.com/settings/keys', $event)"
+                                        rel="noopener"
+                                        title="Create Ollama API key">
+                                        <i class="fa fa-key"></i>
+                                    </a>
+                                </ng-container>
                                 <ng-container *ngIf="providerName === 'groq' && field.key === 'model'">
                                     <i
                                         class="fa ml-2"
@@ -352,13 +362,20 @@
                                 vLLM setup guide
                             </a>
                         </div>
+                        <div class="doc-link" *ngIf="providerName === 'ollama'">
+                            <i class="fa fa-download"></i>
+                            <span>Install Ollama for Model Management from </span>
+                            <a href="https://ollama.com/download" (click)="openExternal('https://ollama.com/download', $event)" rel="noopener">
+                                ollama.com/download
+                            </a>
+                        </div>
 
                         <div *ngFor="let field of localProviderTemplates[providerName].fields" class="form-group">
                             <label>
                                 {{ t.providers[field.key] || field.label }}
                                 <span *ngIf="isRequired(field)" class="required">*</span>
                             </label>
-                            <div class="input-with-toggle" *ngIf="configs[providerName] && (getFieldType(field) === 'text' || getFieldType(field) === 'password')">
+                            <div class="input-with-toggle" *ngIf="configs[providerName] && (getFieldType(field) === 'text' || getFieldType(field) === 'password') && !(providerName === 'ollama' && field.key === 'model' && ollamaModels.length > 0)">
                                 <input
                                     [type]="isPasswordField(field) && !isPasswordVisible(providerName, field.key) ? 'password' : 'text'"
                                     class="form-control"
@@ -372,6 +389,19 @@
                                     <i class="fa" [ngClass]="isPasswordVisible(providerName, field.key) ? 'fa-eye-slash' : 'fa-eye'"></i>
                                 </button>
                             </div>
+                            <div *ngIf="providerName === 'ollama' && field.key === 'model' && configs[providerName] && ollamaModels.length > 0">
+                                <select class="form-control"
+                                        [class]="getInputValidationClass(providerName, field.key)"
+                                        [(ngModel)]="configs[providerName][field.key]">
+                                    <option *ngFor="let model of ollamaModels" [value]="model.name">
+                                        {{ model.name }}
+                                    </option>
+                                    <option *ngIf="configs[providerName][field.key] && !isOllamaModelKnown(configs[providerName][field.key])"
+                                            [value]="configs[providerName][field.key]">
+                                        {{ 'Custom: ' + configs[providerName][field.key] }}
+                                    </option>
+                                </select>
+                            </div>
                             <!-- API Key 验证提示 -->
                             <div *ngIf="field.key === 'apiKey' && configs[providerName]?.[field.key]"
                                  class="validation-feedback"
@@ -383,7 +413,7 @@
                         </div>
 
                         <!-- Ollama Model Manager (only for Ollama provider) -->
-                        <div *ngIf="providerName === 'ollama' && localStatus['ollama']" class="ollama-model-manager">
+                        <div *ngIf="providerName === 'ollama'" class="ollama-model-manager">
                             <div class="model-manager-header">
                                 <h5>
                                     <i class="fa fa-database"></i> Model Management
@@ -395,6 +425,18 @@
                             </div>
 
                             <div *ngIf="showModelManager" class="model-manager-content">
+                                <div *ngIf="!localStatus['ollama']" class="no-models">
+                                    <p>
+                                        <i class="fa fa-info-circle"></i>
+                                        Model Management isn’t available. Install Ollama for Model Management from
+                                        <a href="https://ollama.com/download" (click)="openExternal('https://ollama.com/download', $event)" rel="noopener">
+                                            ollama.com/download
+                                        </a>.
+                                    </p>
+                                    <button class="btn btn-sm btn-primary" (click)="startOllama($event)">
+                                        <i class="fa fa-play"></i> Start Ollama
+                                    </button>
+                                </div>
                                 <!-- Installed Models List -->
                                 <div class="installed-models">
                                     <h6>Installed Models ({{ ollamaModels.length }})</h6>

@@ -162,6 +162,7 @@ export interface ProviderNamesTranslations {
     'tlink-agentic'?: string;
     'tlink-proxy': string;
     ollama: string;
+    'ollama-cloud'?: string;
     vllm: string;
 }
 

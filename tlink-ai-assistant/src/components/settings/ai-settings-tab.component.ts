@@ -167,7 +167,8 @@ export class AiSettingsTabComponent implements OnInit, OnDestroy {
             'anthropic': 'fa fa-brain',
             'minimax': 'fa fa-microchip',
             'glm': 'fa fa-language',
-            'openai-compatible': 'fa fa-plug'
+            'openai-compatible': 'fa fa-plug',
+            'ollama-cloud': 'fa fa-cloud'
         };
         return icons[providerName] || 'fa fa-cloud';
     }
@@ -210,6 +211,7 @@ export class AiSettingsTabComponent implements OnInit, OnDestroy {
             'tlink-agent': 'Tlink Agent',
             'tlink-proxy': 'Tlink Agentic',
             'ollama': 'Ollama (Local)',
+            'ollama-cloud': 'Ollama Cloud',
             'vllm': 'vLLM (Local)'
         };
         

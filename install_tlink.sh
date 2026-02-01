@@ -177,9 +177,16 @@ install_ollama() {
       mkdir -p "$mount_point"
 
       cleanup_ollama_dmg() {
-        hdiutil detach "$mount_point" >/dev/null 2>&1 || true
-        rm -rf "$tmp_dir" || true
+        # Use globals to avoid set -u errors after locals go out of scope.
+        if [[ -n "${OLLAMA_MOUNT_POINT:-}" ]]; then
+          hdiutil detach "$OLLAMA_MOUNT_POINT" >/dev/null 2>&1 || true
+        fi
+        if [[ -n "${OLLAMA_TMP_DIR:-}" ]]; then
+          rm -rf "$OLLAMA_TMP_DIR" || true
+        fi
       }
+      OLLAMA_TMP_DIR="$tmp_dir"
+      OLLAMA_MOUNT_POINT="$mount_point"
       trap cleanup_ollama_dmg EXIT
 
       curl -fsSL "https://ollama.com/download/Ollama.dmg" -o "$dmg"
@@ -187,11 +194,35 @@ install_ollama() {
 
       if [[ -d "/Applications/Ollama.app" ]]; then
         log "Ollama.app already exists in /Applications. Skipping copy."
+        if [[ ! -x "/usr/local/bin/ollama" ]]; then
+          log "Creating /usr/local/bin/ollama symlink (may require sudo)..."
+          if command -v sudo >/dev/null 2>&1; then
+            sudo ln -sf /Applications/Ollama.app/Contents/MacOS/Ollama /usr/local/bin/ollama
+          else
+            ln -sf /Applications/Ollama.app/Contents/MacOS/Ollama /usr/local/bin/ollama
+          fi
+        fi
+        if command -v open >/dev/null 2>&1; then
+          log "Starting Ollama..."
+          open -a Ollama >/dev/null 2>&1 || true
+        fi
         return 0
       fi
 
       if cp -R "$mount_point/Ollama.app" /Applications/; then
         log "Ollama installed to /Applications."
+        if [[ ! -x "/usr/local/bin/ollama" ]]; then
+          log "Creating /usr/local/bin/ollama symlink (may require sudo)..."
+          if command -v sudo >/dev/null 2>&1; then
+            sudo ln -sf /Applications/Ollama.app/Contents/MacOS/Ollama /usr/local/bin/ollama
+          else
+            ln -sf /Applications/Ollama.app/Contents/MacOS/Ollama /usr/local/bin/ollama
+          fi
+        fi
+        if command -v open >/dev/null 2>&1; then
+          log "Starting Ollama..."
+          open -a Ollama >/dev/null 2>&1 || true
+        fi
         return 0
       fi
       if command -v sudo >/dev/null 2>&1; then

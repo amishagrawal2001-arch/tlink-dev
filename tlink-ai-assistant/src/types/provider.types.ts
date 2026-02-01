@@ -103,6 +103,17 @@ export const PROVIDER_DEFAULTS: Record<string, ProviderDefaults> = {
         contextWindow: 8192,
         authConfig: { type: 'none', credentials: {} }
     },
+    'ollama-cloud': {
+        baseURL: 'https://ollama.com/api',
+        model: 'gpt-oss:120b',
+        maxTokens: 1000,
+        temperature: 0.7,
+        timeout: 30000,
+        retries: 3,
+        contextWindow: 128000,
+        authConfig: { type: 'bearer', credentials: {} },
+        displayName: 'Ollama Cloud'
+    },
     vllm: {
         baseURL: 'http://localhost:8000/v1',
         model: 'mistralai/Mistral-7B-Instruct-v0.3',

@@ -156,6 +156,7 @@ export const zhCN: TranslationKeys = {
         groq: 'Groq',
         'tlink-proxy': 'Tlink Agentic',
         ollama: 'Ollama (本地)',
+        'ollama-cloud': 'Ollama Cloud',
         vllm: 'vLLM (本地)'
     },
 
