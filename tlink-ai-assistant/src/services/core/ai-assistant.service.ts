@@ -278,9 +278,18 @@ export class AiAssistantService {
     }
 
     /**
+     * Public refresh hook for settings UI to apply config changes immediately.
+     */
+    refreshProvider(providerName: string): void {
+        this.refreshProviderConfig(providerName);
+    }
+
+    /**
      * 聊天功能
      */
     async chat(request: ChatRequest): Promise<ChatResponse> {
+        // Pull latest settings (important when settings are saved from another window/process)
+        this.config.reloadConfigFromStorage();
         const activeProvider = this.providerManager.getActiveProvider();
         if (!activeProvider) {
             this.logger.error('No active AI provider available', {
@@ -292,6 +301,12 @@ export class AiAssistantService {
 
         // Ensure provider config is up-to-date before making request
         this.refreshProviderConfig(activeProvider.name);
+        const validation = activeProvider.validateConfig();
+        if (!validation.valid) {
+            const errorText = validation.errors?.join('; ') || 'Provider configuration is invalid';
+            this.logger.warn('Provider validation failed', { provider: activeProvider.name, errors: validation.errors });
+            throw new Error(errorText);
+        }
 
         this.logger.info('Processing chat request', { 
             provider: activeProvider.name,
@@ -816,9 +831,13 @@ export class AiAssistantService {
             this.logger.info('Provider cleared');
             return true;
         }
+
+        // Ensure we have the latest config before switching
+        this.config.reloadConfigFromStorage();
         
         // Check if provider is enabled before switching
         const providerConfig = this.config.getProviderConfig(providerName);
+        const providerInstance = this.providerMapping[providerName];
         if (providerConfig?.enabled === false) {
             this.logger.warn(`Cannot switch to disabled provider: ${providerName}`);
             
@@ -840,10 +859,11 @@ export class AiAssistantService {
         }
         
         // Guard: Groq requires an API key before we allow switching
-        if (providerName === 'groq') {
-            const apiKey = (providerConfig as any)?.apiKey;
+        if (providerName === 'groq' || providerName === 'ollama-cloud') {
+            const apiKey = (providerConfig as any)?.apiKey
+                || providerInstance?.getConfig?.()?.apiKey;
             if (!apiKey || String(apiKey).trim() === '') {
-                this.logger.error('Cannot switch to Groq: API key is missing');
+                this.logger.error(`Cannot switch to ${providerName}: API key is missing`);
                 return false;
             }
         }

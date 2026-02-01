@@ -5,6 +5,7 @@ import { ConfigProviderService } from '../../services/core/config-provider.servi
 import { LoggerService } from '../../services/core/logger.service';
 import { ToastService } from '../../services/core/toast.service';
 import { TranslateService } from '../../i18n';
+import { AiAssistantService } from '../../services/core/ai-assistant.service';
 import { OllamaModelService, OllamaModel, ModelPullProgress } from '../../services/ollama/ollama-model.service';
 
 @Component({
@@ -222,7 +223,8 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
         private logger: LoggerService,
         private toast: ToastService,
         private translate: TranslateService,
-        private ollamaModelService: OllamaModelService
+        private ollamaModelService: OllamaModelService,
+        private aiService: AiAssistantService
     ) {
         this.t = this.translate.t;
     }
@@ -654,6 +656,7 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
                 }
             }
             this.config.setProviderConfig(providerName, providerConfig);
+            this.aiService.refreshProvider(providerName);
             this.logger.info('Provider config saved', { provider: providerName });
             this.toast.success(`${this.getProviderTemplate(providerName)?.name || providerName} ${this.t.providers.configSaved || '配置已保存'}`);
         }

@@ -95,6 +95,26 @@ export class ConfigProviderService {
      * 加载配置
      */
     private loadConfig(): void {
+        this.config = this.readConfigFromStorage();
+        if (this.config.language !== 'en-US') {
+            this.config.language = 'en-US';
+            this.saveConfig();
+        }
+    }
+
+    /**
+     * Reload config from storage and notify listeners.
+     */
+    reloadConfigFromStorage(): void {
+        this.config = this.readConfigFromStorage();
+        this.configChange$.next({ key: '*', value: this.config });
+        this.logger.info('Configuration reloaded from file storage');
+    }
+
+    /**
+     * Read config from storage with defaults.
+     */
+    private readConfigFromStorage(): AiAssistantConfig {
         try {
             const data = this.fileStorage.load<Partial<AiAssistantConfig>>(
                 this.STORAGE_FILENAME,
@@ -102,18 +122,14 @@ export class ConfigProviderService {
             );
 
             if (Object.keys(data).length > 0) {
-                this.config = { ...DEFAULT_CONFIG, ...data };
                 this.logger.info('Configuration loaded from file storage');
-            } else {
-                this.logger.info('No stored configuration found, using defaults');
+                return { ...DEFAULT_CONFIG, ...data };
             }
-            if (this.config.language !== 'en-US') {
-                this.config.language = 'en-US';
-                this.saveConfig();
-            }
+            this.logger.info('No stored configuration found, using defaults');
+            return { ...DEFAULT_CONFIG };
         } catch (error) {
             this.logger.error('Failed to load configuration', error);
-            this.config = { ...DEFAULT_CONFIG };
+            return { ...DEFAULT_CONFIG };
         }
     }
 

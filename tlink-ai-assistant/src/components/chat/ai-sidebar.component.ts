@@ -288,11 +288,11 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
                 continue;
             }
 
-            // Skip Groq when no API key is configured to avoid unusable entries
-            if (name === 'groq') {
+            // Skip providers that require API keys when missing to avoid unusable entries
+            if (name === 'groq' || name === 'ollama-cloud') {
                 const apiKey = (cfg as any)?.apiKey;
                 if (!apiKey || String(apiKey).trim() === '') {
-                    this.logger.warn('Skipping Groq in model list because API key is missing');
+                    this.logger.warn('Skipping provider in model list because API key is missing', { provider: name });
                     continue;
                 }
             }
