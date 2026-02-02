@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { TerminalManagerService, TerminalInfo } from './terminal-manager.service';
 import { LoggerService } from '../core/logger.service';
+import { ConfigProviderService } from '../core/config-provider.service';
 
 /**
  * Terminal tool definitions
@@ -222,6 +223,52 @@ Note: If there are still incomplete tasks, please complete them first before cal
                 },
                 required: ['terminal_index']
             }
+        },
+        {
+            name: 'read_file',
+            description: 'Read a text file from disk. Use this to inspect code before making changes.',
+            input_schema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'File path (absolute or relative to workspace root)'
+                    }
+                },
+                required: ['path']
+            }
+        },
+        {
+            name: 'list_files',
+            description: 'List files in a directory (non-recursive by default).',
+            input_schema: {
+                type: 'object',
+                properties: {
+                    path: {
+                        type: 'string',
+                        description: 'Directory path (absolute or relative to workspace root)'
+                    },
+                    max_entries: {
+                        type: 'number',
+                        description: 'Maximum entries to return (default 200)'
+                    }
+                },
+                required: ['path']
+            }
+        },
+        {
+            name: 'apply_patch',
+            description: 'Apply a unified diff patch to files. Use this for all code edits.',
+            input_schema: {
+                type: 'object',
+                properties: {
+                    patch: {
+                        type: 'string',
+                        description: 'Unified diff patch'
+                    }
+                },
+                required: ['patch']
+            }
         }
     ];
 
@@ -231,7 +278,8 @@ Note: If there are still incomplete tasks, please complete them first before cal
 
     constructor(
         private terminalManager: TerminalManagerService,
-        private logger: LoggerService
+        private logger: LoggerService,
+        private config: ConfigProviderService
     ) {
         // No longer need static subscription to output, read directly from xterm buffer dynamically
     }
@@ -313,6 +361,15 @@ Note: If there are still incomplete tasks, please complete them first before cal
                 case 'focus_terminal':
                     result = this.focusTerminal(toolCall.input.terminal_index);
                     break;
+                case 'read_file':
+                    result = this.readFile(toolCall.input.path);
+                    break;
+                case 'list_files':
+                    result = this.listFiles(toolCall.input.path, toolCall.input.max_entries);
+                    break;
+                case 'apply_patch':
+                    result = this.applyPatch(this.normalizePatchInput(toolCall.input));
+                    break;
                 default:
                     throw new Error(`Unknown tool: ${toolCall.name}`);
             }
@@ -334,6 +391,292 @@ Note: If there are still incomplete tasks, please complete them first before cal
                 is_error: true
             };
         }
+    }
+
+    private getFs(): any {
+        const win: any = window as any;
+        return win?.require?.('fs');
+    }
+
+    private getPath(): any {
+        const win: any = window as any;
+        return win?.require?.('path');
+    }
+
+    private resolvePath(inputPath: string): string {
+        const path = this.getPath();
+        const win: any = window as any;
+        const configuredRoot = (this.config.get<string>('agentWorkingDir', '') || '').trim();
+        const cwd = configuredRoot || win?.process?.cwd?.() || '';
+        if (!path) return inputPath;
+        return path.isAbsolute(inputPath) ? inputPath : path.resolve(cwd, inputPath);
+    }
+
+    private readFile(pathInput: string): string {
+        const fs = this.getFs();
+        if (!fs) {
+            throw new Error('File system not available');
+        }
+        if (!pathInput) {
+            throw new Error('Missing path');
+        }
+        const resolved = this.resolvePath(pathInput);
+        const content = fs.readFileSync(resolved, 'utf-8');
+        return `=== ${pathInput} ===\n${content}`;
+    }
+
+    private listFiles(pathInput: string, maxEntries: number = 200): string {
+        const fs = this.getFs();
+        const path = this.getPath();
+        if (!fs || !path) {
+            throw new Error('File system not available');
+        }
+        if (!pathInput) {
+            throw new Error('Missing path');
+        }
+        const resolved = this.resolvePath(pathInput);
+        const entries = fs.readdirSync(resolved, { withFileTypes: true })
+            .slice(0, Math.max(1, maxEntries))
+            .map((entry: any) => entry.isDirectory() ? `${entry.name}/` : entry.name);
+        return `=== ${pathInput} ===\n${entries.join('\n')}`;
+    }
+
+    private applyPatch(patch: string): string {
+        if (!patch || typeof patch !== 'string') {
+            throw new Error('Patch is empty');
+        }
+        const fs = this.getFs();
+        const path = this.getPath();
+        if (!fs || !path) {
+            throw new Error('File system not available');
+        }
+        const configuredRoot = (this.config.get<string>('agentWorkingDir', '') || '').trim();
+        const root = configuredRoot ? this.resolvePath(configuredRoot) : '';
+        const files = this.parseUnifiedDiff(patch);
+        const results: string[] = [];
+        for (const file of files) {
+            const resolved = this.resolvePath(file.path);
+            if (root) {
+                const normalizedRoot = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+                if (!(resolved === root || resolved.startsWith(normalizedRoot))) {
+                    throw new Error(`Patch target خارج working dir: ${file.path}`);
+                }
+            }
+            const original = fs.existsSync(resolved) ? fs.readFileSync(resolved, 'utf-8') : '';
+            const updated = this.applyHunksToContent(original, file.hunks, file.path);
+            fs.writeFileSync(resolved, updated, 'utf-8');
+            results.push(`Patched ${file.path}`);
+        }
+        return results.join('\n');
+    }
+
+    private normalizePatchInput(input: any): string {
+        let patch: string | undefined;
+
+        if (typeof input === 'string') {
+            patch = input;
+        } else if (input && typeof input.patch === 'string') {
+            patch = input.patch;
+        } else if (input && Array.isArray(input.cmd)) {
+            const cmd = input.cmd;
+            const applyIndex = cmd.findIndex((item: any) => item === 'apply_patch');
+            const patchIndex = cmd.findIndex((item: any) => item === 'patch');
+            if (applyIndex !== -1) {
+                if (patchIndex !== -1 && typeof cmd[patchIndex + 1] === 'string') {
+                    patch = cmd[patchIndex + 1];
+                } else {
+                    const lastString = [...cmd].reverse().find((item: any) => typeof item === 'string');
+                    if (lastString) {
+                        patch = lastString;
+                    }
+                }
+            }
+        }
+
+        if (!patch) {
+            throw new Error('Missing patch input. Provide { "patch": "unified diff" }.');
+        }
+
+        const trimmed = patch.trim();
+        if (trimmed.startsWith('*** Begin Patch')) {
+            const converted = this.convertBeginPatchToUnified(trimmed);
+            if (!converted) {
+                throw new Error('Unsupported patch format. Use unified diff with ---/+++ headers.');
+            }
+            patch = converted;
+        }
+
+        if (patch.includes('--- /dev/null')) {
+            const normalized = this.normalizeNewFilePatch(patch);
+            if (normalized) {
+                patch = normalized;
+            }
+        }
+
+        return patch;
+    }
+
+    private convertBeginPatchToUnified(patch: string): string | null {
+        const lines = patch.split('\n');
+        let currentFile: string | null = null;
+        let isAddFile = false;
+        const additions: string[] = [];
+
+        for (const line of lines) {
+            if (line.startsWith('*** Add File:')) {
+                currentFile = line.replace('*** Add File:', '').trim();
+                isAddFile = true;
+                continue;
+            }
+            if (line.startsWith('*** End Patch')) {
+                break;
+            }
+            if (isAddFile && currentFile) {
+                if (line.startsWith('+')) {
+                    additions.push(line.slice(1));
+                } else if (line.startsWith(' ')) {
+                    additions.push(line.slice(1));
+                }
+            }
+        }
+
+        if (!currentFile || additions.length === 0) {
+            return null;
+        }
+
+        return [
+            '--- /dev/null',
+            `+++ ${currentFile}`,
+            `@@ -0,0 +1,${additions.length} @@`,
+            ...additions.map(line => `+${line}`),
+            ''
+        ].join('\n');
+    }
+
+    private normalizeNewFilePatch(patch: string): string | null {
+        const lines = patch.split('\n');
+        const toLine = lines.find(l => l.startsWith('+++ '));
+        if (!toLine) return null;
+        const rawPath = toLine.slice(4).trim();
+        const path = rawPath.replace(/^b\//, '').replace(/^a\//, '');
+        if (!path || path === '/dev/null') return null;
+
+        const additions: string[] = [];
+        let inHunk = false;
+        for (const line of lines) {
+            if (line.startsWith('@@')) {
+                inHunk = true;
+                continue;
+            }
+            if (!inHunk) continue;
+            if (line.startsWith('+') && !line.startsWith('+++')) {
+                additions.push(line.slice(1));
+            }
+        }
+
+        if (additions.length === 0) return null;
+
+        return [
+            '--- /dev/null',
+            `+++ ${path}`,
+            `@@ -0,0 +1,${additions.length} @@`,
+            ...additions.map(line => `+${line}`),
+            ''
+        ].join('\n');
+    }
+
+    private parseUnifiedDiff(patch: string): { path: string; hunks: string[] }[] {
+        const lines = patch.split('\n');
+        const files: { path: string; hunks: string[] }[] = [];
+        let i = 0;
+        while (i < lines.length) {
+            const line = lines[i];
+            if (line.startsWith('--- ')) {
+                const next = lines[i + 1] || '';
+                if (!next.startsWith('+++ ')) {
+                    throw new Error('Invalid patch format: missing +++ header');
+                }
+                const fromLine = line.slice(4).trim();
+                const toLine = next.slice(4).trim();
+                const fromPath = fromLine.replace(/^b\//, '').replace(/^a\//, '');
+                const toPath = toLine.replace(/^b\//, '').replace(/^a\//, '');
+                const path = (toPath === '/dev/null') ? fromPath : toPath;
+                if (!path) {
+                    throw new Error('Invalid patch: empty file path');
+                }
+                if (path === '/dev/null') {
+                    i += 2;
+                    continue;
+                }
+                i += 2;
+                const hunks: string[] = [];
+                while (i < lines.length && !lines[i].startsWith('--- ')) {
+                    if (lines[i].startsWith('@@')) {
+                        const hunkLines: string[] = [lines[i]];
+                        i++;
+                        while (i < lines.length && !lines[i].startsWith('@@') && !lines[i].startsWith('--- ')) {
+                            hunkLines.push(lines[i]);
+                            i++;
+                        }
+                        hunks.push(hunkLines.join('\n'));
+                        continue;
+                    }
+                    i++;
+                }
+                if (hunks.length === 0) {
+                    throw new Error(`No hunks found for ${path}`);
+                }
+                files.push({ path, hunks });
+                continue;
+            }
+            i++;
+        }
+        if (files.length === 0) {
+            throw new Error('No file changes found in patch');
+        }
+        return files;
+    }
+
+    private applyHunksToContent(original: string, hunks: string[], filePath: string): string {
+        let lines = original.split('\n');
+        let lineOffset = 0;
+        for (const hunk of hunks) {
+            const hunkLines = hunk.split('\n');
+            const header = hunkLines.shift();
+            if (!header) continue;
+            const match = /@@ -(\d+),?(\d+)? \+(\d+),?(\d+)? @@/.exec(header);
+            if (!match) {
+                throw new Error(`Invalid hunk header in ${filePath}: ${header}`);
+            }
+            // Clamp to 0 so new-file hunks "-0,0" don't become -1
+            const oldStartRaw = parseInt(match[1], 10) - 1 + lineOffset;
+            const oldStart = Math.max(0, oldStartRaw);
+            let idx = oldStart;
+            for (const line of hunkLines) {
+                if (line.startsWith(' ')) {
+                    const expected = line.slice(1);
+                    if (lines[idx] !== expected) {
+                        throw new Error(`Hunk context mismatch in ${filePath} at line ${idx + 1}`);
+                    }
+                    idx++;
+                } else if (line.startsWith('-')) {
+                    const expected = line.slice(1);
+                    if (lines[idx] !== expected) {
+                        throw new Error(`Hunk removal mismatch in ${filePath} at line ${idx + 1}`);
+                    }
+                    lines.splice(idx, 1);
+                    lineOffset -= 1;
+                } else if (line.startsWith('+')) {
+                    const addition = line.slice(1);
+                    lines.splice(idx, 0, addition);
+                    idx++;
+                    lineOffset += 1;
+                } else if (line.startsWith('\\')) {
+                    // Ignore "\ No newline" markers
+                }
+            }
+        }
+        return lines.join('\n');
     }
 
     /**

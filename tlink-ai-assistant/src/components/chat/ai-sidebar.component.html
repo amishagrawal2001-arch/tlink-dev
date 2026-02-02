@@ -162,6 +162,21 @@
 
             <!-- Input -->
             <div class="ai-sidebar-input">
+                <div class="agent-approval" *ngIf="pendingApproval">
+                    <div class="agent-approval-header">
+                        <span class="agent-approval-title">{{ pendingApproval.title }}</span>
+                        <span class="agent-approval-type">{{ pendingApproval.type | uppercase }}</span>
+                    </div>
+                    <div class="agent-approval-detail" *ngIf="pendingApproval.detail">
+                        {{ pendingApproval.detail }}
+                    </div>
+                    <pre class="agent-approval-content" *ngIf="pendingApproval.type === 'patch'">{{ pendingApproval.patch }}</pre>
+                    <pre class="agent-approval-content" *ngIf="pendingApproval.type === 'command'">{{ pendingApproval.command }}</pre>
+                    <div class="agent-approval-actions">
+                        <button class="btn btn-sm btn-primary" (click)="approvePending(true)">Approve</button>
+                        <button class="btn btn-sm btn-secondary" (click)="approvePending(false)">Reject</button>
+                    </div>
+                </div>
                 <div class="input-container">
                     <textarea
                         #textInput
@@ -176,6 +191,14 @@
                         rows="1">
                     </textarea>
                     <button
+                        class="agent-toggle"
+                        [class.active]="forceAgentMode"
+                        [disabled]="isLoading"
+                        (click)="toggleAgentMode()"
+                        title="Toggle Agent Mode">
+                        Agent
+                    </button>
+                    <button
                         class="send-btn"
                         [disabled]="!inputValue.trim() || isLoading"
                         (click)="submit()"
@@ -184,8 +207,39 @@
                             <path d="M15.964.686a.5.5 0 0 0-.65-.65L.767 5.855H.766l-.452.18a.5.5 0 0 0-.082.887l.41.26.001.002 4.995 3.178 3.178 4.995.002.002.26.41a.5.5 0 0 0 .886-.083l6-15Zm-1.833 1.89L6.637 10.07l-.215-.338a.5.5 0 0 0-.154-.154l-.338-.215 7.494-7.494 1.178-.471-.47 1.178Z"/>
                         </svg>
                     </button>
+                    <button
+                        class="cancel-btn"
+                        *ngIf="isLoading"
+                        (click)="cancelAgentRun()"
+                        title="Cancel Agent">
+                        <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M5.5 5.5h5v5h-5z"/>
+                        </svg>
+                    </button>
                 </div>
                 <div class="input-footer">
+                    <div class="agent-workdir">
+                        <label for="agentWorkdir">Work Dir</label>
+                        <input
+                            id="agentWorkdir"
+                            type="text"
+                            [value]="workingDir"
+                            (input)="updateWorkingDir($event.target.value)"
+                            placeholder="/path/to/project" />
+                        <button class="btn btn-icon" type="button" (click)="openWorkdirPicker()" title="Browse">
+                            <i class="fa fa-folder-open"></i>
+                        </button>
+                        <input
+                            #agentDirInput
+                            type="file"
+                            webkitdirectory
+                            directory
+                            (change)="onWorkdirPicked($event)"
+                            style="display: none;" />
+                        <span class="agent-workdir-warning" *ngIf="!workingDir">
+                            Set a Work Dir to enable file saves.
+                        </span>
+                    </div>
                     <div class="model-switcher" *ngIf="modelOptions.length > 0">
                         <label for="modelSelect">Model</label>
                         <select

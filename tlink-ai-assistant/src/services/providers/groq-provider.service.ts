@@ -150,7 +150,7 @@ export class GroqProviderService extends BaseAiProvider {
                     // In browsers (including Electron renderer), XMLHttpRequest does not support responseType="stream".
                     // Fallback to a non-streaming call and emit the full content once.
                     if (isBrowser) {
-                        const payload: any = {
+                        let payload: any = {
                             model,
                             messages: this.transformMessages(request.messages),
                             temperature: request.temperature || 0.7,
@@ -160,13 +160,57 @@ export class GroqProviderService extends BaseAiProvider {
                         if (Number.isFinite(request.maxTokens) && (request.maxTokens as number) > 0) {
                             payload.max_tokens = request.maxTokens;
                         }
-                        const result = await this.client!.post('/chat/completions', payload);
+
+                        let result: any;
+                        try {
+                            result = await this.client!.post('/chat/completions', payload);
+                        } catch (error: any) {
+                            const status = error?.response?.status;
+                            if (status === 400 && payload.tools) {
+                                this.logger.warn('Groq rejected tools payload, retrying without tools', { model });
+                                const { tools, ...rest } = payload;
+                                result = await this.client!.post('/chat/completions', { ...rest });
+                            } else {
+                                throw error;
+                            }
+                        }
 
                         const choice = result.data?.choices?.[0];
                         const content = choice?.message?.content || '';
+                        const toolCalls = choice?.message?.tool_calls || [];
 
                         if (content) {
                             subscriber.next({ type: 'text_delta', textDelta: content });
+                        }
+
+                        if (toolCalls.length > 0) {
+                            for (const toolCall of toolCalls) {
+                                const toolId = toolCall.id || `tool_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+                                const toolName = toolCall.function?.name || '';
+                                const toolArgs = toolCall.function?.arguments || '';
+                                let parsedInput = {};
+                                try {
+                                    parsedInput = JSON.parse(toolArgs);
+                                } catch {
+                                    // ignore parse errors
+                                }
+                                subscriber.next({
+                                    type: 'tool_use_start',
+                                    toolCall: {
+                                        id: toolId,
+                                        name: toolName,
+                                        input: {}
+                                    }
+                                });
+                                subscriber.next({
+                                    type: 'tool_use_end',
+                                    toolCall: {
+                                        id: toolId,
+                                        name: toolName,
+                                        input: parsedInput
+                                    }
+                                });
+                            }
                         }
 
                         subscriber.next({
@@ -184,16 +228,32 @@ export class GroqProviderService extends BaseAiProvider {
                         return;
                     }
 
-                    const response = await this.client!.post('/chat/completions', {
+                    let streamRequest: any = {
                         model,
                         messages: this.transformMessages(request.messages),
                         max_tokens: request.maxTokens || 1000,
                         temperature: request.temperature || 0.7,
                         stream: true,
                         ...(request.tools && request.tools.length > 0 ? { tools: request.tools } : {})
-                    }, {
-                        responseType: 'stream'
-                    });
+                    };
+
+                    let response: any;
+                    try {
+                        response = await this.client!.post('/chat/completions', streamRequest, {
+                            responseType: 'stream'
+                        });
+                    } catch (error: any) {
+                        const status = error?.response?.status;
+                        if (status === 400 && streamRequest.tools) {
+                            this.logger.warn('Groq rejected tools payload, retrying stream without tools', { model });
+                            const { tools, ...rest } = streamRequest;
+                            response = await this.client!.post('/chat/completions', { ...rest }, {
+                                responseType: 'stream'
+                            });
+                        } else {
+                            throw error;
+                        }
+                    }
 
                     const stream = response.data;
                     let currentToolCallId = '';

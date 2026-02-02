@@ -11,6 +11,7 @@ import { AiSidebarService } from '../../services/chat/ai-sidebar.service';
 import { ThemeService, ThemeType } from '../../services/core/theme.service';
 import { ContextManager } from '../../services/context/manager';
 import { ToolStreamProcessorService } from '../../services/tools/tool-stream-processor.service';
+import { AgentApprovalService, AgentApprovalRequest } from '../../services/core/agent-approval.service';
 import { AnyUIStreamEvent } from '../../services/tools/types/ui-stream-event.types';
 import { PlatformDetectionService, OSType } from '../../services/platform/platform-detection.service';
 import { SelectorService, SelectorOption } from 'tlink-core';
@@ -36,6 +37,7 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
 
     @ViewChild('chatContainer') chatContainerRef!: ElementRef;
     @ViewChild('textInput') textInput!: ElementRef<HTMLTextAreaElement>;
+    @ViewChild('agentDirInput') agentDirInput!: ElementRef<HTMLInputElement>;
 
     // Service reference (injected by AiSidebarService)
     public sidebarService!: AiSidebarService;
@@ -53,6 +55,8 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
     showScrollBottom = false;
     inputValue = '';
     isComposing = false;
+    forceAgentMode = false;
+    pendingApproval: AgentApprovalRequest | null = null;
     charLimit = 4000;
     modelOptions: { name: string; label: string }[] = [];
     selectedModelProvider: string = '';
@@ -67,6 +71,7 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
         { value: 'default', label: 'General' }
     ];
     selectedIntent: string = 'auto';
+    workingDir: string = '';
 
     // Agent mode configuration
     /** Maximum number of historical messages to keep in Agent mode (excluding system messages) */
@@ -89,6 +94,7 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
         private themeService: ThemeService,
         private contextManager: ContextManager,
         private toolStreamProcessor: ToolStreamProcessorService,
+        private agentApproval: AgentApprovalService,
         private platformDetection: PlatformDetectionService,
         private selector: SelectorService,
         private cdr: ChangeDetectorRef
@@ -110,6 +116,7 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
 
         // Load current provider information
         this.loadCurrentProvider();
+        this.workingDir = this.config.get<string>('agentWorkingDir', '') || '';
 
         // Listen to provider changes (reload on any config change)
         // Note: We check periodically or reload when switching providers
@@ -124,6 +131,14 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
                     this.loadCurrentProvider();
                     this.buildModelOptions();
                 }
+                this.workingDir = this.config.get<string>('agentWorkingDir', '') || '';
+            });
+
+        this.agentApproval.pending$
+            .pipe(takeUntil(this.destroy$))
+            .subscribe((pending) => {
+                this.pendingApproval = pending;
+                this.markUiDirty();
             });
 
         // Load chat history
@@ -1305,8 +1320,10 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
     submit(): void {
         const message = this.inputValue.trim();
         if (message && !this.isLoading) {
-            // 检测是否是简单问题，如果是则使用直接聊天（不进入agent循环）
-            if (this.isSimpleQuestion(message)) {
+            // Force agent mode if enabled
+            if (this.forceAgentMode) {
+                this.onSendMessageWithAgent(message);
+            } else if (this.isSimpleQuestion(message)) {
                 this.logger.debug('Detected simple question, using direct chat', { message: message.substring(0, 50) });
                 this.onSendMessage(message);
             } else {
@@ -1317,6 +1334,89 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
             setTimeout(() => this.autoResize(), 0);
             this.textInput?.nativeElement.focus();
         }
+    }
+
+    cancelAgentRun(): void {
+        try {
+            this.toolStreamProcessor.cancel();
+        } catch {
+            // Ignore cancellation errors
+        }
+        this.isLoading = false;
+        this.markUiDirty();
+        const systemMessage: ChatMessage = {
+            id: this.generateId(),
+            role: MessageRole.SYSTEM,
+            content: 'Agent run cancelled.',
+            timestamp: new Date()
+        };
+        this.messages.push(systemMessage);
+        setTimeout(() => this.scrollToBottom(), 0);
+    }
+
+    toggleAgentMode(): void {
+        this.forceAgentMode = !this.forceAgentMode;
+        this.logger.info('Agent mode toggled', { enabled: this.forceAgentMode });
+    }
+
+    approvePending(approved: boolean): void {
+        this.agentApproval.resolveCurrent(approved);
+    }
+
+    updateWorkingDir(value: string): void {
+        this.workingDir = value;
+        this.config.set('agentWorkingDir', value.trim());
+    }
+
+    openWorkdirPicker(): void {
+        try {
+            const electron = (window as any).require?.('electron');
+            const dialog = electron?.remote?.dialog;
+            if (dialog?.showOpenDialog) {
+                dialog.showOpenDialog({ properties: ['openDirectory'] })
+                    .then((result: any) => {
+                        if (result?.canceled || !result.filePaths?.length) return;
+                        this.updateWorkingDir(result.filePaths[0]);
+                    });
+                return;
+            }
+        } catch {
+            // Fall back to web-based directory picker
+        }
+
+        if (this.agentDirInput?.nativeElement) {
+            this.agentDirInput.nativeElement.click();
+        }
+    }
+
+    onWorkdirPicked(event: Event): void {
+        const input = event.target as HTMLInputElement;
+        const files = input.files;
+        if (!files || files.length === 0) {
+            return;
+        }
+
+        const file: any = files[0];
+        const fullPath = file.path as string | undefined;
+        const relPath = file.webkitRelativePath as string | undefined;
+        const pathModule = (window as any)?.require?.('path');
+
+        let selected = '';
+        if (fullPath && relPath) {
+            const rootBase = fullPath.slice(0, Math.max(0, fullPath.length - relPath.length));
+            const topDir = relPath.split('/')[0];
+            selected = pathModule ? pathModule.join(rootBase, topDir) : `${rootBase}${topDir}`;
+        } else if (fullPath) {
+            selected = pathModule ? pathModule.dirname(fullPath) : fullPath;
+        } else if (relPath) {
+            selected = relPath.split('/')[0];
+        }
+
+        if (selected) {
+            this.updateWorkingDir(selected);
+        }
+
+        input.value = '';
     }
 
     /**

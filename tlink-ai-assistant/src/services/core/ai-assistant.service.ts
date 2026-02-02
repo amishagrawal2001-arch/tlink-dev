@@ -13,10 +13,12 @@ import { TerminalContextService } from '../terminal/terminal-context.service';
 import { TerminalToolsService } from '../terminal/terminal-tools.service';
 import { TerminalManagerService } from '../terminal/terminal-manager.service';
 import { SecurityValidatorService } from '../security/security-validator.service';
+import { AgentApprovalService } from './agent-approval.service';
 // Use lazy injection to get AiSidebarService to break circular dependency
 import type { AiSidebarService } from '../chat/ai-sidebar.service';
 import { LoggerService } from './logger.service';
-import { BaseAiProvider } from '../../types/provider.types';
+import { BaseAiProvider, ProviderConfigUtils } from '../../types/provider.types';
+import { StateGraph, START, END } from '@langchain/langgraph';
 
 // Import all provider services
 import { OpenAiProviderService } from '../providers/openai-provider.service';
@@ -43,6 +45,7 @@ export class AiAssistantService {
         private terminalTools: TerminalToolsService,
         private terminalManager: TerminalManagerService,
         private securityValidator: SecurityValidatorService,
+        private agentApproval: AgentApprovalService,
         private injector: Injector,
         private logger: LoggerService,
         // Inject all provider services
@@ -180,14 +183,20 @@ export class AiAssistantService {
                 const providerName = change.key.replace('providers.', '');
                 const provider = this.providerMapping[providerName];
                 if (provider && change.value) {
+                    let filledConfig = change.value;
+                    try {
+                        filledConfig = ProviderConfigUtils.fillDefaults({ ...change.value, name: providerName }, providerName);
+                    } catch {
+                        // Fallback to raw config if provider is unknown
+                    }
                     // Update provider config
                     provider.configure({
-                        ...change.value,
-                        enabled: change.value.enabled !== false
+                        ...filledConfig,
+                        enabled: filledConfig.enabled !== false
                     });
                     this.logger.debug('Provider config updated', { 
                         provider: providerName,
-                        model: change.value.model 
+                        model: filledConfig.model 
                     });
                 }
             }
@@ -210,9 +219,15 @@ export class AiAssistantService {
                 try {
                     // Configure provider (this initializes the client)
                     if (providerConfig) {
+                        let filledConfig = providerConfig;
+                        try {
+                            filledConfig = ProviderConfigUtils.fillDefaults({ ...providerConfig, name }, name);
+                        } catch {
+                            // Fallback to raw config
+                        }
                         provider.configure({
-                            ...providerConfig,
-                            enabled: providerConfig.enabled !== false
+                            ...filledConfig,
+                            enabled: filledConfig.enabled !== false
                         });
                         this.logger.info(`Provider ${name} configured`, {
                             hasApiKey: !!providerConfig.apiKey,
@@ -1277,8 +1292,22 @@ export class AiAssistantService {
         request: ChatRequest,
         config: AgentLoopConfig = {}
     ): Observable<AgentStreamEvent> {
+        const engine = (this.config.get<string>('agentEngine', 'langgraph') || 'langgraph').toLowerCase();
+        if (engine === 'legacy') {
+            return this.chatStreamWithLegacyAgentLoop(request, config);
+        }
+        return this.chatStreamWithLangGraphLoop(request, config);
+    }
+
+    /**
+     * Legacy Agent loop (pre-LangGraph)
+     */
+    private chatStreamWithLegacyAgentLoop(
+        request: ChatRequest,
+        config: AgentLoopConfig = {}
+    ): Observable<AgentStreamEvent> {
         // 🔥 入口日志 - 确认方法被调用
-        this.logger.info('🔥 chatStreamWithAgentLoop CALLED', {
+        this.logger.info('🔥 chatStreamWithLegacyAgentLoop CALLED', {
             messagesCount: request.messages?.length,
             maxRounds: config.maxRounds,
             timeoutMs: config.timeoutMs
@@ -1483,7 +1512,8 @@ export class AiAssistantService {
                                     return;
                                 }
 
-                                if (termination.shouldTerminate) {
+                                const clarificationRequested = this.isClarificationResponse(roundTextContent || '');
+                                if ((pendingToolCalls.length === 0 && clarificationRequested) || termination.shouldTerminate) {
                                     this.logger.info('Agent terminated by smart detector', { reason: termination.reason });
                                     subscriber.next({
                                         type: 'agent_complete',
@@ -1580,6 +1610,92 @@ export class AiAssistantService {
                                         subscriber.error(recursionError);
                                     }
                                 } else {
+                                    const extractedToolCalls = this.extractToolCallsFromText(roundTextContent || '');
+                                    if (extractedToolCalls.length > 0) {
+                                        this.logger.info('Extracted tool calls from text response', { count: extractedToolCalls.length });
+                                        const toolResults = await this.executeToolsSequentially(
+                                            extractedToolCalls,
+                                            subscriber,
+                                            agentState
+                                        );
+                                        const toolResultMessage = this.buildToolResultMessage(toolResults);
+                                        conversationMessages.push(toolResultMessage);
+                                        try {
+                                            await runSingleRound();
+                                        } catch (recursionError) {
+                                            this.logger.error('Recursive round error', recursionError);
+                                            subscriber.next({
+                                                type: 'error',
+                                                error: `执行循环中断: ${recursionError instanceof Error ? recursionError.message : 'Unknown error'}`
+                                            });
+                                            subscriber.error(recursionError);
+                                        }
+                                        return;
+                                    }
+                                    // Auto-apply patch if model returned code without tool calls for file creation
+                                    const lastUserMessage = conversationMessages
+                                        .filter(m => m.role === MessageRole.USER)
+                                        .pop()?.content || '';
+                                    const autoPatch = this.buildAutoPatchFromResponse(roundTextContent, lastUserMessage);
+                                    if (autoPatch) {
+                                        this.logger.info('Auto-building patch from model response', { fileName: autoPatch.fileName });
+                                        const toolCalls = [{
+                                            id: this.generateId(),
+                                            name: 'apply_patch',
+                                            input: { patch: autoPatch.patch }
+                                        }] as ToolCall[];
+                                        const toolResults = await this.executeToolsSequentially(toolCalls, subscriber, agentState);
+                                        const toolResultMessage = this.buildToolResultMessage(toolResults);
+                                        conversationMessages.push(toolResultMessage);
+                                        try {
+                                            await runSingleRound();
+                                        } catch (recursionError) {
+                                            this.logger.error('Recursive round error', recursionError);
+                                            subscriber.next({
+                                                type: 'error',
+                                                error: `执行循环中断: ${recursionError instanceof Error ? recursionError.message : 'Unknown error'}`
+                                            });
+                                            subscriber.error(recursionError);
+                                        }
+                                        return;
+                                    }
+                                    const mentionsPatch = /apply_patch|patch/i.test(roundTextContent || '');
+                                    const hasCode = !!this.extractFirstCodeBlock(roundTextContent || '');
+                                    if (mentionsPatch && !hasCode) {
+                                        const warning = 'Model referenced apply_patch but did not provide file contents. Try again or switch providers for reliable tool calls.';
+                                        subscriber.next({
+                                            type: 'text_delta',
+                                            textDelta: `\n\n⚠️ ${warning}\n`
+                                        });
+                                        subscriber.next({
+                                            type: 'agent_complete',
+                                            reason: 'no_tools',
+                                            totalRounds: agentState.currentRound,
+                                            terminationMessage: warning
+                                        });
+                                        callbacks.onAgentComplete?.('no_tools', agentState.currentRound);
+                                        subscriber.complete();
+                                        resolve();
+                                        return;
+                                    }
+                                    const hasCodeBlock = !!this.extractFirstCodeBlock(roundTextContent);
+                                    if (!hasCodeBlock && this.hasIncompleteHint(roundTextContent || '')) {
+                                        const warning = 'No tool calls were returned. This provider may not support tool calling. Switch providers or enable tool support to create files.';
+                                        subscriber.next({
+                                            type: 'text_delta',
+                                            textDelta: `\n\n⚠️ ${warning}\n`
+                                        });
+                                        subscriber.next({
+                                            type: 'agent_complete',
+                                            reason: 'no_tools',
+                                            totalRounds: agentState.currentRound,
+                                            terminationMessage: warning
+                                        });
+                                        callbacks.onAgentComplete?.('no_tools', agentState.currentRound);
+                                        subscriber.complete();
+                                        resolve();
+                                        return;
+                                    }
                                     // 没有工具调用
                                     // 如果 checkTermination 返回 shouldTerminate: false（检测到未完成暗示），继续下一轮
                                     if (!termination.shouldTerminate) {
@@ -1633,6 +1749,770 @@ export class AiAssistantService {
     }
 
     /**
+     * LangGraph-based Agent loop
+     */
+    private chatStreamWithLangGraphLoop(
+        request: ChatRequest,
+        config: AgentLoopConfig = {}
+    ): Observable<AgentStreamEvent> {
+        this.logger.info('🔥 chatStreamWithLangGraphLoop CALLED', {
+            messagesCount: request.messages?.length,
+            maxRounds: config.maxRounds,
+            timeoutMs: config.timeoutMs
+        });
+
+        const maxRounds = config.maxRounds || 6;
+        const timeoutMs = config.timeoutMs || 120000;
+        const repeatThreshold = config.repeatThreshold || 5;
+        const failureThreshold = config.failureThreshold || 3;
+        const plannerEnabled = (this.config.get<boolean>('agentPlannerEnabled', true) ?? true);
+        const reviewerEnabled = (this.config.get<boolean>('agentReviewerEnabled', true) ?? true);
+
+        const callbacks = {
+            onRoundStart: config.onRoundStart,
+            onRoundEnd: config.onRoundEnd,
+            onAgentComplete: config.onAgentComplete
+        };
+
+        const agentState: AgentState = {
+            currentRound: 0,
+            startTime: Date.now(),
+            toolCallHistory: [],
+            lastAiResponse: '',
+            isActive: true
+        };
+
+            type LangGraphState = {
+                messages: ChatMessage[];
+                pendingToolCalls: ToolCall[];
+                toolResults: ToolResult[];
+                lastText: string;
+                shouldTerminate: boolean;
+                termination: TerminationResult | null;
+                forceRetry: boolean;
+                round: number;
+                hasPlan: boolean;
+                reviewRequired: boolean;
+                reviewerNotes: string;
+                contentRetryCount: number;
+                hasToolResult: boolean;
+                hasPatchApplied: boolean;
+            };
+            const graphStateArgs = {
+                channels: {
+                    messages: { reducer: (_left: ChatMessage[] | undefined, right: ChatMessage[] | undefined) => right ?? _left ?? [], default: () => [] },
+                    pendingToolCalls: { reducer: (_left: ToolCall[] | undefined, right: ToolCall[] | undefined) => right ?? _left ?? [], default: () => [] },
+                    toolResults: { reducer: (_left: ToolResult[] | undefined, right: ToolResult[] | undefined) => right ?? _left ?? [], default: () => [] },
+                    lastText: { reducer: (_left: string | undefined, right: string | undefined) => right ?? _left ?? '', default: () => '' },
+                    shouldTerminate: { reducer: (_left: boolean | undefined, right: boolean | undefined) => right ?? _left ?? false, default: () => false },
+                    termination: { reducer: (_left: TerminationResult | null | undefined, right: TerminationResult | null | undefined) => right ?? _left ?? null, default: () => null },
+                    forceRetry: { reducer: (_left: boolean | undefined, right: boolean | undefined) => right ?? _left ?? false, default: () => false },
+                    round: { reducer: (_left: number | undefined, right: number | undefined) => right ?? _left ?? 0, default: () => 0 },
+                    hasPlan: { reducer: (_left: boolean | undefined, right: boolean | undefined) => right ?? _left ?? false, default: () => false },
+                    reviewRequired: { reducer: (_left: boolean | undefined, right: boolean | undefined) => right ?? _left ?? false, default: () => false },
+                    reviewerNotes: { reducer: (_left: string | undefined, right: string | undefined) => right ?? _left ?? '', default: () => '' },
+                    contentRetryCount: { reducer: (_left: number | undefined, right: number | undefined) => right ?? _left ?? 0, default: () => 0 },
+                    hasToolResult: { reducer: (_left: boolean | undefined, right: boolean | undefined) => right ?? _left ?? false, default: () => false },
+                    hasPatchApplied: { reducer: (_left: boolean | undefined, right: boolean | undefined) => right ?? _left ?? false, default: () => false }
+                }
+            };
+
+        return new Observable<AgentStreamEvent>((subscriber) => {
+            const conversationMessages: ChatMessage[] = [...(request.messages || [])];
+            const taskContextMessage: ChatMessage = {
+                id: this.generateId(),
+                role: MessageRole.SYSTEM,
+                content: this.buildAgentSystemPrompt(),
+                timestamp: new Date()
+            };
+            conversationMessages.unshift(taskContextMessage);
+
+            const plannerNode = async (state: LangGraphState): Promise<Partial<LangGraphState>> => {
+                if (!plannerEnabled || state.hasPlan) {
+                    return { hasPlan: state.hasPlan };
+                }
+                if (!agentState.isActive) {
+                    return {
+                        shouldTerminate: true,
+                        termination: { shouldTerminate: true, reason: 'user_cancel', message: 'User cancelled' } as TerminationResult
+                    };
+                }
+                const activeProvider = this.providerManager.getActiveProvider() as any;
+                if (!activeProvider) {
+                    return { hasPlan: true };
+                }
+                const planRequest: ChatRequest = {
+                    ...request,
+                    messages: [
+                        ...state.messages,
+                        {
+                            id: this.generateId(),
+                            role: MessageRole.SYSTEM,
+                            content: 'You are a planner. Provide a short bullet plan. Do not call tools. Do not mention tool names, commands, or file paths.',
+                            timestamp: new Date()
+                        }
+                    ],
+                    enableTools: false,
+                    tools: []
+                };
+                try {
+                    const planResponse = await activeProvider.chat(planRequest);
+                    const planText = planResponse?.message?.content?.trim() || '';
+                    if (planText) {
+                        const planHasTools = /apply_patch|read_file|list_files|write_to_terminal|task_complete|command:|tool/i.test(planText);
+                        if (planHasTools) {
+                            return { hasPlan: true };
+                        }
+                        subscriber.next({ type: 'text_delta', textDelta: `\n\nPlan:\n${planText}\n` });
+                        const updatedMessages = [...state.messages, {
+                            id: this.generateId(),
+                            role: MessageRole.ASSISTANT,
+                            content: `Plan:\n${planText}`,
+                            timestamp: new Date()
+                        }];
+                        return { messages: updatedMessages, hasPlan: true };
+                    }
+                } catch (error) {
+                    this.logger.warn('Planner node failed', { error: error instanceof Error ? error.message : String(error) });
+                }
+                return { hasPlan: true };
+            };
+
+            const assistantNode = async (state: LangGraphState): Promise<Partial<LangGraphState>> => {
+                if (!agentState.isActive) {
+                    return {
+                        shouldTerminate: true,
+                        termination: { shouldTerminate: true, reason: 'user_cancel', message: 'User cancelled' } as TerminationResult,
+                        forceRetry: false
+                    };
+                }
+
+                const currentRound = (state.round || 0) + 1;
+                agentState.currentRound = currentRound;
+                subscriber.next({ type: 'round_start', round: currentRound });
+                callbacks.onRoundStart?.(currentRound);
+                this.logger.info(`Agent round ${currentRound} started`);
+
+                const pendingToolCalls: ToolCall[] = [];
+                let roundTextContent = '';
+
+                const roundRequest: ChatRequest = {
+                    ...request,
+                    messages: state.messages || [],
+                    enableTools: true,
+                    tools: this.terminalTools.getToolDefinitions()
+                };
+
+                const activeProvider = this.providerManager.getActiveProvider() as any;
+                if (!activeProvider) {
+                    const error = new Error('No active AI provider available');
+                    subscriber.next({ type: 'error', error: error.message });
+                    return {
+                        shouldTerminate: true,
+                        termination: { shouldTerminate: true, reason: 'no_tools', message: error.message } as TerminationResult,
+                        forceRetry: false
+                    };
+                }
+
+                await new Promise<void>((resolve, reject) => {
+                    const streamSub = activeProvider.chatStream(roundRequest).subscribe({
+                        next: (event: any) => {
+                            if (!agentState.isActive) return;
+                            switch (event.type) {
+                                case 'text_delta':
+                                    if (event.textDelta) {
+                                        roundTextContent += event.textDelta;
+                                        subscriber.next({ type: 'text_delta', textDelta: event.textDelta });
+                                    }
+                                    break;
+                                case 'tool_use_start':
+                                    subscriber.next({ type: 'tool_use_start', toolCall: event.toolCall });
+                                    break;
+                                case 'tool_use_end':
+                                    if (event.toolCall) {
+                                        pendingToolCalls.push(event.toolCall as ToolCall);
+                                        subscriber.next({ type: 'tool_use_end', toolCall: event.toolCall });
+                                    }
+                                    break;
+                                case 'error':
+                                    subscriber.next({ type: 'error', error: event.error });
+                                    break;
+                            }
+                        },
+                        error: (error: any) => {
+                            subscriber.next({
+                                type: 'error',
+                                error: error instanceof Error ? error.message : String(error)
+                            });
+                            streamSub.unsubscribe();
+                            reject(error);
+                        },
+                        complete: () => {
+                            streamSub.unsubscribe();
+                            resolve();
+                        }
+                    });
+                });
+
+                subscriber.next({ type: 'round_end', round: currentRound });
+                callbacks.onRoundEnd?.(currentRound);
+
+                const updatedMessages: ChatMessage[] = [...(state.messages || [])];
+                if (roundTextContent || pendingToolCalls.length > 0) {
+                    updatedMessages.push({
+                        id: this.generateId(),
+                        role: MessageRole.ASSISTANT,
+                        content: roundTextContent || '',
+                        timestamp: new Date(),
+                        toolCalls: pendingToolCalls.map(tc => ({
+                            id: tc.id,
+                            name: tc.name,
+                            input: tc.input
+                        }))
+                    });
+                    agentState.lastAiResponse = roundTextContent || '';
+                }
+
+                const lastUserMessage = updatedMessages
+                    .filter(m => m.role === MessageRole.USER)
+                    .pop()?.content || '';
+
+                const termination = this.checkTermination(
+                    agentState,
+                    pendingToolCalls,
+                    [],
+                    { maxRounds, timeoutMs, repeatThreshold, failureThreshold },
+                    'after_ai_response',
+                    lastUserMessage
+                );
+
+                const validToolNames = this.terminalTools.getToolDefinitions().map(t => t.name);
+                const validToolCalls = pendingToolCalls.filter(tc => validToolNames.includes(tc.name));
+                if (validToolCalls.length !== pendingToolCalls.length) {
+                    this.logger.warn('Dropping invalid tool calls', {
+                        invalid: pendingToolCalls.filter(tc => !validToolNames.includes(tc.name)).map(tc => tc.name)
+                    });
+                }
+
+                const hasInvokeText = roundTextContent && (
+                    roundTextContent.includes('<invoke') ||
+                    roundTextContent.includes('<parameter') ||
+                    roundTextContent.includes('</invoke>')
+                );
+                const noActualToolCalls = validToolCalls.length === 0;
+
+                if (hasInvokeText && noActualToolCalls && agentState.currentRound < maxRounds) {
+                    updatedMessages.push({
+                        id: this.generateId(),
+                        role: MessageRole.USER,
+                        content: `【系统提示】你输出了 <invoke> 格式的文本，但这不是正确的工具调用方式。请直接调用工具，不要用文本描述工具调用。系统会自动处理你的工具调用请求。`,
+                        timestamp: new Date()
+                    });
+                    subscriber.next({
+                        type: 'text_delta',
+                        textDelta: '\n\n[系统：检测到格式错误，正在重试...]\n'
+                    });
+                    return {
+                        messages: updatedMessages,
+                        pendingToolCalls: [],
+                        lastText: roundTextContent,
+                        shouldTerminate: false,
+                        termination: null,
+                        forceRetry: true,
+                        round: currentRound
+                    };
+                }
+
+                const clarificationRequested = this.isClarificationResponse(roundTextContent || '');
+                if ((noActualToolCalls && clarificationRequested) || termination.shouldTerminate) {
+                    this.logger.info('Agent terminated by smart detector', { reason: termination.reason });
+                    subscriber.next({
+                        type: 'agent_complete',
+                        reason: termination.reason,
+                        totalRounds: agentState.currentRound,
+                        terminationMessage: termination.message
+                    });
+                    callbacks.onAgentComplete?.(termination.reason, agentState.currentRound);
+                    return {
+                        messages: updatedMessages,
+                        pendingToolCalls: [],
+                        lastText: roundTextContent,
+                        shouldTerminate: true,
+                        termination,
+                        forceRetry: false,
+                        round: currentRound
+                    };
+                }
+
+                if (validToolCalls.length > 0) {
+                    return {
+                        messages: updatedMessages,
+                        pendingToolCalls: validToolCalls,
+                        lastText: roundTextContent,
+                        shouldTerminate: false,
+                        termination: null,
+                        forceRetry: false,
+                        round: currentRound,
+                        reviewRequired: false
+                    };
+                }
+
+                const extractedToolCalls = this.extractToolCallsFromText(roundTextContent || '');
+                if (extractedToolCalls.length > 0) {
+                    this.logger.info('Extracted tool calls from text response', { count: extractedToolCalls.length });
+                    return {
+                        messages: updatedMessages,
+                        pendingToolCalls: extractedToolCalls,
+                        lastText: roundTextContent,
+                        shouldTerminate: false,
+                        termination: null,
+                        forceRetry: false,
+                        round: currentRound,
+                        reviewRequired: false
+                    };
+                }
+
+                const autoPatch = this.buildAutoPatchFromResponse(roundTextContent, lastUserMessage);
+                if (autoPatch) {
+                    this.logger.info('Auto-building patch from model response', { fileName: autoPatch.fileName });
+                    const toolCalls = [{
+                        id: this.generateId(),
+                        name: 'apply_patch',
+                        input: { patch: autoPatch.patch }
+                    }] as ToolCall[];
+                    return {
+                        messages: updatedMessages,
+                        pendingToolCalls: toolCalls,
+                        lastText: roundTextContent,
+                        shouldTerminate: false,
+                        termination: null,
+                        forceRetry: false,
+                        round: currentRound,
+                        reviewRequired: false
+                    };
+                }
+
+                const looseCodePatch = this.buildPatchFromLooseCode(roundTextContent || '', lastUserMessage);
+                if (looseCodePatch) {
+                    this.logger.info('Built patch from loose code text', { fileName: looseCodePatch.fileName });
+                    return {
+                        messages: updatedMessages,
+                        pendingToolCalls: [{
+                            id: this.generateId(),
+                            name: 'apply_patch',
+                            input: { patch: looseCodePatch.patch }
+                        }],
+                        lastText: roundTextContent,
+                        shouldTerminate: false,
+                        termination: null,
+                        forceRetry: false,
+                        round: currentRound,
+                        reviewRequired: false
+                    };
+                }
+
+                const createdClaim = /(created|created in|saved|written|added|generated)/i.test(roundTextContent || '');
+                const filenameOnly = /^\s*[A-Za-z0-9._-]+\.[A-Za-z0-9]+\s*$/.test(roundTextContent || '');
+                if (createdClaim || filenameOnly) {
+                    const inferred = this.inferFileName(roundTextContent || '', '', lastUserMessage) || (roundTextContent || '').trim();
+                    const rawName = inferred || 'generated_file.txt';
+                    // Keep absolute path if it lives under working dir; otherwise reject
+                    const pathModule = (window as any)?.require?.('path');
+                    const configuredRoot = (this.config.get<string>('agentWorkingDir', '') || '').trim();
+                    let safeName = rawName;
+                    if (pathModule) {
+                        const isAbs = pathModule.isAbsolute(rawName);
+                        if (isAbs) {
+                            const root = configuredRoot || pathModule.resolve('.');
+                            const normalizedRoot = root.endsWith(pathModule.sep) ? root : `${root}${pathModule.sep}`;
+                            const normalizedTarget = pathModule.resolve(rawName);
+                            if (normalizedTarget.startsWith(normalizedRoot)) {
+                                safeName = normalizedTarget;
+                            } else {
+                                this.logger.warn('Rejected absolute path outside workdir', { rawName, root: normalizedRoot });
+                                safeName = rawName.replace(/^(\.\.\/|\/)+/, '');
+                            }
+                        } else {
+                            safeName = rawName.replace(/^(\.\.\/|\/)+/, '');
+                        }
+                    } else {
+                        safeName = rawName.replace(/^(\.\.\/|\/)+/, '');
+                    }
+                    if (safeName) {
+                        const patch = [
+                            '--- /dev/null',
+                            `+++ ${safeName}`,
+                            '@@ -0,0 +1,1 @@',
+                            '+',
+                            ''
+                        ].join('\n');
+                        this.logger.info('Auto-creating minimal file from success claim', { fileName: safeName });
+                        return {
+                            messages: updatedMessages,
+                            pendingToolCalls: [{
+                                id: this.generateId(),
+                                name: 'apply_patch',
+                                input: { patch }
+                            }],
+                            lastText: roundTextContent,
+                            shouldTerminate: false,
+                            termination: null,
+                            forceRetry: false,
+                            round: currentRound,
+                            reviewRequired: false
+                        };
+                    }
+                }
+
+                // Strong fallback: if user intent is to create a file but no patch/tool calls were produced, generate a minimal patch
+                if (this.isFileCreateIntent(lastUserMessage) && !state.hasPatchApplied) {
+                    const inferred = this.inferFileName(roundTextContent || '', '', lastUserMessage) || 'generated_file.txt';
+                    const safeName = inferred.replace(/^(\.\.\/|\/)+/, '');
+                    const placeholderLines = [
+                        '#!/usr/bin/env python3',
+                        '\"\"\"Auto-generated placeholder; please add content.\"\"\"',
+                        '',
+                        'def main():',
+                        '    print("placeholder")',
+                        '',
+                        'if __name__ == "__main__":',
+                        '    main()'
+                    ];
+                    const patch = [
+                        '--- /dev/null',
+                        `+++ ${safeName}`,
+                        `@@ -0,0 +1,${placeholderLines.length} @@`,
+                        ...placeholderLines.map(l => `+${l}`),
+                        ''
+                    ].join('\n');
+                    return {
+                        messages: updatedMessages,
+                        pendingToolCalls: [{
+                            id: this.generateId(),
+                            name: 'apply_patch',
+                            input: { patch }
+                        }],
+                        lastText: roundTextContent,
+                        shouldTerminate: false,
+                        termination: null,
+                        forceRetry: false,
+                        round: currentRound,
+                        reviewRequired: false,
+                        hasToolResult: state.hasToolResult,
+                        hasPatchApplied: state.hasPatchApplied
+                    };
+                }
+
+                const mentionsPatch = /apply_patch|patch/i.test(roundTextContent || '');
+                const hasCode = !!this.extractFirstCodeBlock(roundTextContent || '');
+                if (mentionsPatch && !hasCode) {
+                    if ((state.contentRetryCount || 0) < 1) {
+                        const retryHint: ChatMessage = {
+                            id: this.generateId(),
+                            role: MessageRole.SYSTEM,
+                            content: 'Provide the full file contents in a code block. Do not output tool commands or file paths.',
+                            timestamp: new Date()
+                        };
+                        const retryMessages = [...updatedMessages, retryHint];
+                        return {
+                            messages: retryMessages,
+                            pendingToolCalls: [],
+                            lastText: roundTextContent,
+                            shouldTerminate: false,
+                            termination: null,
+                            forceRetry: true,
+                            round: currentRound,
+                            contentRetryCount: (state.contentRetryCount || 0) + 1
+                        };
+                    }
+                    const warning = 'Model referenced apply_patch but did not provide file contents. Try again or switch providers for reliable tool calls.';
+                    subscriber.next({
+                        type: 'text_delta',
+                        textDelta: `\n\n⚠️ ${warning}\n`
+                    });
+                    subscriber.next({
+                        type: 'agent_complete',
+                        reason: 'no_tools',
+                        totalRounds: agentState.currentRound,
+                        terminationMessage: warning
+                    });
+                    callbacks.onAgentComplete?.('no_tools', agentState.currentRound);
+                    return {
+                        messages: updatedMessages,
+                        pendingToolCalls: [],
+                        lastText: roundTextContent,
+                        shouldTerminate: true,
+                        termination: { shouldTerminate: true, reason: 'no_tools', message: warning } as TerminationResult,
+                        forceRetry: false,
+                        round: currentRound
+                    };
+                }
+
+                if (!termination.shouldTerminate) {
+                    this.logger.info(`No tools but incomplete hint detected (${termination.reason}), continuing to next round`);
+                    return {
+                        messages: updatedMessages,
+                        pendingToolCalls: [],
+                        lastText: roundTextContent,
+                        shouldTerminate: false,
+                        termination: null,
+                        forceRetry: true,
+                        round: currentRound,
+                        reviewRequired: false
+                    };
+                }
+
+                this.logger.info(`Agent completed: ${agentState.currentRound} rounds, reason: ${termination.reason}`);
+                subscriber.next({
+                    type: 'agent_complete',
+                    reason: termination.reason,
+                    totalRounds: agentState.currentRound,
+                    terminationMessage: termination.message
+                });
+                callbacks.onAgentComplete?.(termination.reason, agentState.currentRound);
+
+                // If no tools ever ran, force retry once to obtain executable steps
+                const hasEverRunTools = state.hasToolResult;
+                const hasPatch = state.hasPatchApplied;
+                const fileIntent = this.isFileCreateIntent(lastUserMessage);
+
+                if (!hasEverRunTools || (fileIntent && !hasPatch)) {
+                    const retryHint: ChatMessage = {
+                        id: this.generateId(),
+                        role: MessageRole.SYSTEM,
+                        content: 'You must apply a patch with full file contents (code block). Do not just say the file is created.',
+                        timestamp: new Date()
+                    };
+                    return {
+                        messages: [...updatedMessages, retryHint],
+                        pendingToolCalls: [],
+                        lastText: roundTextContent,
+                        shouldTerminate: false,
+                        termination: null,
+                        forceRetry: true,
+                        round: currentRound,
+                        reviewRequired: false,
+                        hasToolResult: hasEverRunTools,
+                        hasPatchApplied: hasPatch
+                    };
+                }
+
+                return {
+                    messages: updatedMessages,
+                    pendingToolCalls: [],
+                    lastText: roundTextContent,
+                    shouldTerminate: true,
+                    termination: termination as TerminationResult,
+                    forceRetry: false,
+                    round: currentRound,
+                    reviewRequired: false,
+                    hasToolResult: hasEverRunTools,
+                    hasPatchApplied: hasPatch
+                };
+                };
+
+            const toolsNode = async (state: LangGraphState): Promise<Partial<LangGraphState>> => {
+                if (!agentState.isActive) {
+                    return {
+                        shouldTerminate: true,
+                        termination: { shouldTerminate: true, reason: 'user_cancel', message: 'User cancelled' } as TerminationResult,
+                        forceRetry: false,
+                        pendingToolCalls: []
+                    };
+                }
+
+                const toolCalls = state.pendingToolCalls || [];
+                if (toolCalls.length === 0) {
+                    return {
+                        messages: state.messages,
+                        pendingToolCalls: [],
+                        shouldTerminate: false,
+                        termination: null,
+                        forceRetry: false,
+                        round: state.round,
+                        reviewRequired: false
+                    };
+                }
+
+                this.logger.info(`Round ${agentState.currentRound}: ${toolCalls.length} tools to execute`);
+                const toolResults = await this.executeToolsSequentially(toolCalls, subscriber, agentState);
+                const updatedMessages: ChatMessage[] = [...(state.messages || [])];
+                const toolResultMessage = this.buildToolResultMessage(toolResults);
+                updatedMessages.push(toolResultMessage);
+
+                const postToolTermination = this.checkTermination(
+                    agentState,
+                    [],
+                    toolResults,
+                    { maxRounds, timeoutMs, repeatThreshold, failureThreshold },
+                    'after_tool_execution'
+                );
+
+                if (postToolTermination.shouldTerminate) {
+                    this.logger.info('Agent terminated after tool execution', { reason: postToolTermination.reason });
+                    subscriber.next({
+                        type: 'agent_complete',
+                        reason: postToolTermination.reason,
+                        totalRounds: agentState.currentRound,
+                        terminationMessage: postToolTermination.message
+                    });
+                    callbacks.onAgentComplete?.(postToolTermination.reason, agentState.currentRound);
+                }
+
+                return {
+                    messages: updatedMessages,
+                    pendingToolCalls: [],
+                    toolResults,
+                    shouldTerminate: postToolTermination.shouldTerminate,
+                    termination: postToolTermination.shouldTerminate ? (postToolTermination as TerminationResult) : null,
+                    forceRetry: false,
+                    round: state.round,
+                    reviewRequired: reviewerEnabled && !postToolTermination.shouldTerminate,
+                    hasToolResult: true,
+                    hasPatchApplied: state.hasPatchApplied || toolCalls.some(tc => tc.name === 'apply_patch')
+                };
+            };
+
+            const reviewerNode = async (state: LangGraphState): Promise<Partial<LangGraphState>> => {
+                if (!reviewerEnabled || !state.reviewRequired) {
+                    return { reviewRequired: false, reviewerNotes: '' };
+                }
+                if (!agentState.isActive) {
+                    return {
+                        shouldTerminate: true,
+                        termination: { shouldTerminate: true, reason: 'user_cancel', message: 'User cancelled' } as TerminationResult
+                    };
+                }
+                if (agentState.currentRound >= maxRounds) {
+                    return { reviewRequired: false, reviewerNotes: '' };
+                }
+                const activeProvider = this.providerManager.getActiveProvider() as any;
+                if (!activeProvider) {
+                    return { reviewRequired: false, reviewerNotes: '' };
+                }
+                const reviewRequest: ChatRequest = {
+                    ...request,
+                    messages: [
+                        ...state.messages,
+                        {
+                            id: this.generateId(),
+                            role: MessageRole.SYSTEM,
+                            content: 'You are a reviewer. If the task is complete, respond with "APPROVED". If not, respond with "REVISE: <short fix instructions>". Do not call tools.',
+                            timestamp: new Date()
+                        }
+                    ],
+                    enableTools: false,
+                    tools: []
+                };
+                try {
+                    const reviewResponse = await activeProvider.chat(reviewRequest);
+                    const reviewText = (reviewResponse?.message?.content || '').trim();
+                    if (reviewText) {
+                        subscriber.next({ type: 'text_delta', textDelta: `\n\nReviewer:\n${reviewText}\n` });
+                    }
+                    if (/^approved\b/i.test(reviewText)) {
+                        const termination: TerminationResult = {
+                            shouldTerminate: true,
+                            reason: 'summarizing',
+                            message: 'Reviewer approved'
+                        };
+                        subscriber.next({
+                            type: 'agent_complete',
+                            reason: termination.reason,
+                            totalRounds: agentState.currentRound,
+                            terminationMessage: termination.message
+                        });
+                        callbacks.onAgentComplete?.(termination.reason, agentState.currentRound);
+                        return {
+                            shouldTerminate: true,
+                            termination,
+                            reviewRequired: false,
+                            reviewerNotes: reviewText
+                        };
+                    }
+                    if (/^revise\b/i.test(reviewText)) {
+                        const updatedMessages = [...state.messages, {
+                            id: this.generateId(),
+                            role: MessageRole.USER,
+                            content: `Reviewer feedback: ${reviewText.replace(/^revise:\s*/i, '')}`,
+                            timestamp: new Date()
+                        }];
+                        return {
+                            messages: updatedMessages,
+                            reviewRequired: false,
+                            reviewerNotes: reviewText
+                        };
+                    }
+                    return { reviewRequired: false, reviewerNotes: reviewText };
+                } catch (error) {
+                    this.logger.warn('Reviewer node failed', { error: error instanceof Error ? error.message : String(error) });
+                    return { reviewRequired: false, reviewerNotes: '' };
+                }
+            };
+
+            const graph = new StateGraph<LangGraphState>(graphStateArgs)
+                .addNode('planner', plannerNode)
+                .addNode('assistant', assistantNode)
+                .addNode('tools', toolsNode)
+                .addNode('reviewer', reviewerNode)
+                .addEdge(START, 'planner')
+                .addEdge('planner', 'assistant')
+                .addConditionalEdges(
+                    'assistant',
+                    (state: LangGraphState) => {
+                        if (state.shouldTerminate) return 'end';
+                        if (state.forceRetry) return 'assistant';
+                        if (state.pendingToolCalls && state.pendingToolCalls.length > 0) return 'tools';
+                        return 'end';
+                    },
+                    { assistant: 'assistant', tools: 'tools', end: END }
+                )
+                .addConditionalEdges(
+                    'tools',
+                    (state: LangGraphState) => (state.shouldTerminate ? 'end' : (state.reviewRequired ? 'reviewer' : 'assistant')),
+                    { assistant: 'assistant', reviewer: 'reviewer', end: END }
+                )
+                .addConditionalEdges(
+                    'reviewer',
+                    (state: LangGraphState) => (state.shouldTerminate ? 'end' : 'assistant'),
+                    { assistant: 'assistant', end: END }
+                )
+                .compile();
+
+            const initialState = {
+                messages: conversationMessages,
+                pendingToolCalls: [],
+                toolResults: [],
+                lastText: '',
+                shouldTerminate: false,
+                termination: null,
+                forceRetry: false,
+                round: 0,
+                contentRetryCount: 0,
+                hasToolResult: false,
+                hasPatchApplied: false
+            };
+
+            graph.invoke(initialState)
+                .then(() => {
+                    if (!subscriber.closed) {
+                        subscriber.complete();
+                    }
+                })
+                .catch((error: any) => {
+                    const message = error instanceof Error ? error.message : String(error);
+                    subscriber.next({ type: 'error', error: message });
+                    subscriber.error(error);
+                });
+
+            return () => {
+                agentState.isActive = false;
+                this.logger.info('Agent loop cancelled by subscriber');
+            };
+        });
+    }
+
+    /**
      * 顺序执行工具并发送事件
      * @param toolCalls 工具调用列表
      * @param subscriber 事件订阅者
@@ -1659,16 +2539,18 @@ export class AiAssistantService {
             const startTime = Date.now();
 
             try {
-                // 对 write_to_terminal 工具进行安全验证
+                // Always require approval for commands and patches
                 if (toolCall.name === 'write_to_terminal' && toolCall.input?.command) {
                     const command = toolCall.input.command;
-                    const validation = await this.securityValidator.validateAndConfirm(
+                    const approved = await this.agentApproval.requestApproval({
+                        id: toolCall.id,
+                        type: 'command',
+                        title: 'Approve Command Execution',
                         command,
-                        'AI 请求执行此命令'
-                    );
+                        detail: 'The agent wants to run this command.'
+                    });
 
-                    if (!validation.approved) {
-                        // 用户拒绝执行
+                    if (!approved) {
                         const duration = Date.now() - startTime;
                         subscriber.next({
                             type: 'tool_executed',
@@ -1679,7 +2561,7 @@ export class AiAssistantService {
                             },
                             toolResult: {
                                 tool_use_id: toolCall.id,
-                                content: `⚠️ 命令被拒绝: ${validation.reason || '用户取消'}`,
+                                content: '⚠️ Command denied by user',
                                 is_error: true,
                                 duration
                             }
@@ -1688,11 +2570,10 @@ export class AiAssistantService {
                         results.push({
                             tool_use_id: toolCall.id,
                             name: toolCall.name,
-                            content: `命令被用户拒绝: ${validation.reason || '用户取消'}`,
+                            content: 'Command denied by user',
                             is_error: true
                         });
 
-                        // 记录到 Agent 状态历史
                         if (agentState) {
                             agentState.toolCallHistory.push({
                                 name: toolCall.name,
@@ -1703,10 +2584,56 @@ export class AiAssistantService {
                             });
                         }
 
-                        continue; // 跳过此工具的执行
+                        continue;
                     }
+                }
 
-                    this.logger.info('Command approved by user', { command, riskLevel: validation.riskLevel });
+                if (toolCall.name === 'apply_patch' && toolCall.input?.patch) {
+                    const patch = toolCall.input.patch;
+                    const approved = await this.agentApproval.requestApproval({
+                        id: toolCall.id,
+                        type: 'patch',
+                        title: 'Approve Patch Apply',
+                        patch,
+                        detail: 'The agent wants to apply this patch.'
+                    });
+
+                    if (!approved) {
+                        const duration = Date.now() - startTime;
+                        subscriber.next({
+                            type: 'tool_executed',
+                            toolCall: {
+                                id: toolCall.id,
+                                name: toolCall.name,
+                                input: toolCall.input
+                            },
+                            toolResult: {
+                                tool_use_id: toolCall.id,
+                                content: '⚠️ Patch denied by user',
+                                is_error: true,
+                                duration
+                            }
+                        });
+
+                        results.push({
+                            tool_use_id: toolCall.id,
+                            name: toolCall.name,
+                            content: 'Patch denied by user',
+                            is_error: true
+                        });
+
+                        if (agentState) {
+                            agentState.toolCallHistory.push({
+                                name: toolCall.name,
+                                input: toolCall.input,
+                                inputHash: this.hashInput(toolCall.input),
+                                success: false,
+                                timestamp: Date.now()
+                            });
+                        }
+
+                        continue;
+                    }
                 }
 
                 const result = await this.terminalTools.executeToolCall(toolCall);
@@ -1754,6 +2681,7 @@ export class AiAssistantService {
             } catch (error) {
                 const duration = Date.now() - startTime;
                 const errorMessage = error instanceof Error ? error.message : String(error);
+                const isWorkdirViolation = typeof errorMessage === 'string' && /outside working dir/i.test(errorMessage);
 
                 // 发送 tool_error 事件
                 subscriber.next({
@@ -1770,6 +2698,13 @@ export class AiAssistantService {
                         duration
                     }
                 });
+
+                if (isWorkdirViolation) {
+                    subscriber.next({
+                        type: 'text_delta',
+                        textDelta: '\n\n⚠️ Patch blocked: target file is outside the configured Work Dir. Update Work Dir or use relative paths.\n'
+                    });
+                }
 
                 // 添加错误结果以便 AI 知道
                 results.push({
@@ -2433,6 +3368,10 @@ export class AiAssistantService {
             /read_terminal_output/i,
             /focus_terminal/i,
             /get_terminal_list/i,
+            /apply_patch/i,
+            /read_file/i,
+            /list_files/i,
+            /task_complete/i
         ];
 
         const allPatterns = [...mcpPatterns, ...builtinToolPatterns];
@@ -2445,18 +3384,29 @@ export class AiAssistantService {
      * 精简版本：减少详细描述，防止 AI 模仿 XML 格式
      */
     private buildAgentSystemPrompt(): string {
+        const workingDir = (this.config.get<string>('agentWorkingDir', '') || '').trim();
+        const workingDirLine = workingDir
+            ? `\n### Working Directory\nUse ${workingDir} as the root for relative paths. Do not use absolute paths in patches.`
+            : '\n### Working Directory\nUse relative paths only (no absolute paths) in patches.';
         return `## Agent Mode
-You are a task execution Agent with terminal operation, browser operation, and other capabilities.
+You are a task execution Agent with terminal operation and code editing capabilities. You must act, not ask follow-up questions, unless required input is missing.
 
 ### Tool Usage Rules
 1. When you need to perform operations, directly call the tools
 2. After calling a tool, wait for the system to return the actual result
 3. After completing all tasks, call the task_complete tool
+4. Use read_file/list_files to inspect code
+5. Use apply_patch with unified diffs for all file edits (never edit files via terminal)
+6. For create/add file requests, use apply_patch with --- /dev/null
+${workingDirLine}
 
 ### Prohibited Behaviors
 ❌ Describing tool calls in text (e.g., <invoke>, <parameter> tags)
+❌ Outputting JSON tool call payloads instead of real tool calls
 ❌ Pretending that tool execution was successful
 ❌ Replying to the user before receiving actual results
+❌ Editing files via shell commands
+❌ Asking clarifying questions when the request is actionable
 
 ### Tips
 - Your tool calls are automatically processed by the system, no need to manually describe the format
@@ -2479,5 +3429,230 @@ You are a task execution Agent with terminal operation, browser operation, and o
         } catch {
             return Math.random().toString(36);
         }
+    }
+
+    private buildAutoPatchFromResponse(responseText: string, lastUserMessage: string): { fileName: string; patch: string } | null {
+        if (!this.isFileCreateIntent(lastUserMessage)) {
+            return null;
+        }
+        const codeBlock = this.extractFirstCodeBlock(responseText);
+        if (!codeBlock) {
+            return null;
+        }
+        const inferred = this.inferFileName(responseText, codeBlock, lastUserMessage);
+        const safeName = (inferred || 'generated_script.py').replace(/^(\.\.\/|\/)+/, '');
+        if (!safeName) {
+            return null;
+        }
+        const codeLines = codeBlock.split('\n');
+        const patch = [
+            `--- /dev/null`,
+            `+++ ${safeName}`,
+            `@@ -0,0 +1,${codeLines.length} @@`,
+            ...codeLines.map(line => `+${line}`),
+            ''
+        ].join('\n');
+        return { fileName: safeName, patch };
+    }
+
+    private isFileCreateIntent(message: string): boolean {
+        const text = (message || '').toLowerCase();
+        return /(create|add|save|write).*(file|script)|create\s+.*\.py|save\s+.*\.py/.test(text);
+    }
+
+    private extractFirstCodeBlock(text: string): string | null {
+        const match = /```[a-zA-Z0-9_-]*\n([\s\S]*?)```/m.exec(text || '');
+        if (!match) return null;
+        return match[1].replace(/\s+$/g, '');
+    }
+
+    private inferFileName(responseText: string, code: string, userText: string): string | null {
+        const explicit = /file\s+(?:added:|name(?:d)?|called)?\s*([A-Za-z0-9._-]+\.[A-Za-z0-9]+)/i.exec(responseText);
+        if (explicit?.[1]) return explicit[1];
+        const fromUser = /([A-Za-z0-9._-]+\.[A-Za-z0-9]+)/.exec(userText);
+        if (fromUser?.[1]) return fromUser[1];
+        const scriptMatch = /([A-Za-z0-9._-]+\.py)/i.exec(responseText);
+        if (scriptMatch?.[1]) return scriptMatch[1];
+        const isPython = /^#!.*python|^\s*import\s+|^\s*def\s+/m.test(code);
+        return isPython ? 'generated_script.py' : 'generated_file.txt';
+    }
+
+    private extractToolCallsFromText(text: string): ToolCall[] {
+        const candidates: string[] = [];
+        if (text) {
+            candidates.push(text.trim());
+        }
+        const codeBlock = this.extractFirstCodeBlock(text);
+        if (codeBlock) {
+            candidates.push(codeBlock.trim());
+        }
+
+        // Detect apply_patch heredoc blocks (<<EOF ... EOF)
+        const heredocPatch = this.extractHeredocPatch(text);
+        if (heredocPatch) {
+            return [{
+                id: this.generateId(),
+                name: 'apply_patch',
+                input: { patch: heredocPatch }
+            }];
+        }
+
+        // Detect raw unified diff in plain text
+        for (const candidate of candidates) {
+            const patch = this.extractUnifiedDiffFromText(candidate);
+            if (patch) {
+                return [{
+                    id: this.generateId(),
+                    name: 'apply_patch',
+                    input: { patch }
+                }];
+            }
+        }
+
+        for (const candidate of candidates) {
+            if (!candidate || !candidate.startsWith('{') || !candidate.endsWith('}')) {
+                continue;
+            }
+            try {
+                const payload = JSON.parse(candidate);
+                const patchFromPayload = this.extractPatchFromPayload(payload);
+                if (patchFromPayload) {
+                    return [{
+                        id: this.generateId(),
+                        name: 'apply_patch',
+                        input: { patch: patchFromPayload }
+                    }];
+                }
+            } catch {
+                // Ignore parse failures
+            }
+        }
+
+        return [];
+    }
+
+    private extractHeredocPatch(text: string): string | null {
+        const lines = text.split('\n');
+        let startIdx = -1;
+        for (let i = 0; i < lines.length; i++) {
+            if (/apply_patch.*<<EOF/i.test(lines[i])) {
+                startIdx = i + 1;
+                break;
+            }
+        }
+        if (startIdx === -1) return null;
+        let endIdx = -1;
+        for (let i = startIdx; i < lines.length; i++) {
+            if (/^EOF\s*$/i.test(lines[i])) {
+                endIdx = i;
+                break;
+            }
+        }
+        if (endIdx === -1 || endIdx <= startIdx) return null;
+        const codeLines = lines.slice(startIdx, endIdx);
+        if (codeLines.length === 0) return null;
+        const inferredName = this.inferFileName(text, codeLines.join('\n'), '') || 'generated_file.txt';
+        const safeName = inferredName.replace(/^(\.\.\/|\/)+/, '');
+        const patch = [
+            '--- /dev/null',
+            `+++ ${safeName}`,
+            `@@ -0,0 +1,${codeLines.length} @@`,
+            ...codeLines.map(l => `+${l}`),
+            ''
+        ].join('\n');
+        return patch;
+    }
+
+    private extractUnifiedDiffFromText(text: string): string | null {
+        const idx = text.indexOf('--- ');
+        if (idx === -1) return null;
+        // Try to stop at the next blank line after a diff hunk or end of string
+        const remainder = text.slice(idx);
+        const endIdx = remainder.search(/\n\s*\n/);
+        const slice = endIdx === -1 ? remainder.trim() : remainder.slice(0, endIdx).trim();
+        if (!slice.includes('\n+++ ')) return null;
+        return slice + '\n';
+    }
+
+    private buildPatchFromLooseCode(responseText: string, lastUserMessage: string): { fileName: string; patch: string } | null {
+        const text = (responseText || '').trim();
+        if (!text) return null;
+
+        const looksLikeCode = /(def\s+\w+\s*\(|import\s+\w+)/.test(text) || /param\s*=\s*['"]?-/.test(text);
+        if (!looksLikeCode) return null;
+
+        const inferred = this.inferFileName(responseText, '', lastUserMessage) || 'generated_script.py';
+        const safeName = inferred.replace(/^(\.\.\/|\/)+/, '');
+        const lines = text.split('\n')
+            .map(l => l.replace(/^Plan:\s*/i, ''))
+            .map(l => l.trimEnd());
+
+        // simple indentation fix: indent lines after a def if they are not indented
+        const fixed: string[] = [];
+        let inFunc = false;
+        for (const line of lines) {
+            if (/^\s*def\s+\w+\s*\(/.test(line)) {
+                inFunc = true;
+                fixed.push(line.trim());
+                continue;
+            }
+            if (inFunc) {
+                if (line.trim() === '') {
+                    inFunc = false;
+                    fixed.push('');
+                    continue;
+                }
+                const alreadyIndented = /^\s+/.test(line);
+                fixed.push(alreadyIndented ? line : `    ${line.trim()}`);
+            } else {
+                fixed.push(line);
+            }
+        }
+
+        const patch = [
+            '--- /dev/null',
+            `+++ ${safeName}`,
+            `@@ -0,0 +1,${fixed.length} @@`,
+            ...fixed.map(l => `+${l}`),
+            ''
+        ].join('\n');
+
+        return { fileName: safeName, patch };
+    }
+
+    private extractPatchFromPayload(payload: any): string | null {
+        if (!payload) return null;
+        if (typeof payload.patch === 'string') {
+            return payload.patch;
+        }
+        if (Array.isArray(payload.cmd)) {
+            const cmd = payload.cmd;
+            const applyIndex = cmd.findIndex((item: any) => item === 'apply_patch');
+            if (applyIndex === -1) return null;
+            const patchIndex = cmd.findIndex((item: any) => item === 'patch');
+            if (patchIndex !== -1 && typeof cmd[patchIndex + 1] === 'string') {
+                return cmd[patchIndex + 1];
+            }
+            const lastString = [...cmd].reverse().find((item: any) => typeof item === 'string');
+            return typeof lastString === 'string' ? lastString : null;
+        }
+        return null;
+    }
+
+    private isClarificationResponse(text: string): boolean {
+        const trimmed = text.trim().toLowerCase();
+        if (!trimmed) return false;
+        return (
+            trimmed.includes('could you') ||
+            trimmed.includes('can you') ||
+            trimmed.includes('please provide') ||
+            trimmed.includes('please share') ||
+            trimmed.includes('what would you like') ||
+            trimmed.includes('let me know') ||
+            trimmed.includes('what code') ||
+            trimmed.includes('what content') ||
+            trimmed.includes('what should') ||
+            trimmed.includes('need more details')
+        );
     }
 }

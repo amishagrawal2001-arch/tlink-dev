@@ -164,6 +164,7 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
                 { key: 'apiKey', label: 'API Key', type: 'password', required: true },
                 { key: 'baseURL', label: 'Base URL', type: 'text', default: 'https://ollama.com/api', required: true, placeholder: 'https://ollama.com/api' },
                 { key: 'model', label: 'Model', type: 'text', default: 'gpt-oss:120b', required: true, placeholder: 'e.g., gpt-oss:120b, gpt-oss:20b' },
+                { key: 'disableStreaming', label: 'Disable Streaming', type: 'checkbox', default: true, required: false, placeholder: 'Recommended for Ollama Cloud' },
                 { key: 'contextWindow', label: 'Context Window', type: 'number', default: 128000, required: false, placeholder: 'Set according to model' }
             ]
         },

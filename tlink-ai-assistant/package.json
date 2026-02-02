@@ -6,9 +6,10 @@
     "typings": "typings/index.d.ts",
     "readme": "README.md",
     "scripts": {
-        "build": "webpack --progress --color && ./BUILD_FIX_SCRIPT.sh",
-        "watch": "webpack --progress --color --watch",
-        "clean": "rimraf dist build",
+    "build": "webpack --progress --color && ./BUILD_FIX_SCRIPT.sh",
+    "watch": "webpack --progress --color --watch",
+    "agent:dev": "WATCHPACK_POLLING=true WATCHPACK_POLLING_INTERVAL=1000 WATCHPACK_IGNORE=node_modules ../node_modules/.bin/webpack --watch --color --config webpack.config.mjs --watch-options-poll=1000",
+    "clean": "rimraf dist build",
         "test": "jest"
     },
     "files": [
@@ -42,6 +43,8 @@
         "@angular/platform-browser": "~15.2.10",
         "@angular/platform-browser-dynamic": "~15.2.10",
         "@anthropic-ai/sdk": "^0.20.0",
+        "@langchain/core": "^0.3.20",
+        "@langchain/langgraph": "^0.0.24",
         "@ng-bootstrap/ng-bootstrap": "~14.2.0",
         "axios": "^1.6.0",
         "crypto-js": "^4.2.0",

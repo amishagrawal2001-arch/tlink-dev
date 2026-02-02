@@ -222,6 +222,18 @@ export class ToolStreamProcessorService {
             this.logger.warn('Filtered XML tool call from text delta');
             return;
         }
+        // 过滤掉伪工具命令（模型输出的 shell 风格工具指令）
+        const normalized = text.trim().toLowerCase();
+        if (
+            normalized.startsWith('apply_patch') ||
+            normalized.startsWith('command: apply_patch') ||
+            normalized.startsWith('tool: apply_patch') ||
+            normalized.startsWith('read_file') ||
+            normalized.startsWith('list_files')
+        ) {
+            this.logger.warn('Filtered pseudo tool command from text delta');
+            return;
+        }
 
         const uiEvent: UITextEvent = {
             type: 'text',

@@ -158,12 +158,30 @@ export class OllamaProviderService extends BaseAiProvider {
 
             if (useOpenAICompat) {
                 // OpenAI-compatible response format
+                const rawToolCalls = data.choices[0]?.message?.tool_calls || [];
+                const toolCalls = rawToolCalls.map((toolCall: any, index: number) => {
+                    let parsedInput: Record<string, any> = {};
+                    const args = toolCall?.function?.arguments;
+                    if (args) {
+                        try {
+                            parsedInput = JSON.parse(args);
+                        } catch {
+                            parsedInput = {};
+                        }
+                    }
+                    return {
+                        id: toolCall.id || `tool_${Date.now()}_${index}`,
+                        name: toolCall?.function?.name || '',
+                        input: parsedInput
+                    };
+                }).filter((tc: any) => tc.name);
                 return {
                     message: {
                         id: this.generateId(),
                         role: MessageRole.ASSISTANT,
                         content: data.choices[0]?.message?.content || '',
-                        timestamp: new Date()
+                        timestamp: new Date(),
+                        ...(toolCalls.length > 0 ? { toolCalls } : {})
                     },
                     usage: data.usage ? {
                         promptTokens: data.usage.prompt_tokens,
@@ -302,6 +320,40 @@ export class OllamaProviderService extends BaseAiProvider {
 
             const runStream = async () => {
                 try {
+                    if (this.config?.disableStreaming) {
+                        const response = await this.chat(request);
+                        const toolCalls = response.message?.toolCalls || [];
+                        subscriber.next({
+                            type: 'text_delta',
+                            textDelta: response.message?.content || ''
+                        });
+                        if (toolCalls.length > 0) {
+                            for (const toolCall of toolCalls) {
+                                subscriber.next({
+                                    type: 'tool_use_start',
+                                    toolCall: {
+                                        id: toolCall.id,
+                                        name: toolCall.name,
+                                        input: {}
+                                    }
+                                });
+                                subscriber.next({
+                                    type: 'tool_use_end',
+                                    toolCall: {
+                                        id: toolCall.id,
+                                        name: toolCall.name,
+                                        input: toolCall.input || {}
+                                    }
+                                });
+                            }
+                        }
+                        subscriber.next({
+                            type: 'message_end',
+                            message: response.message
+                        });
+                        subscriber.complete();
+                        return;
+                    }
                     // Try OpenAI-compatible API first, fallback to native API
                     const originalBaseURL = this.getBaseURL();
                     const cleanBaseURL = this.normalizeBaseURL(originalBaseURL);

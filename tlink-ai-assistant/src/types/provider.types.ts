@@ -48,6 +48,7 @@ export interface ProviderDefaults {
     retries: number;
     contextWindow: number;
     authConfig: AuthConfig;
+    disableStreaming?: boolean;
     displayName?: string;
 }
 
@@ -112,6 +113,7 @@ export const PROVIDER_DEFAULTS: Record<string, ProviderDefaults> = {
         retries: 3,
         contextWindow: 128000,
         authConfig: { type: 'bearer', credentials: {} },
+        disableStreaming: true,
         displayName: 'Ollama Cloud'
     },
     vllm: {
@@ -216,6 +218,7 @@ export namespace ProviderConfigUtils {
             timeout: config.timeout ?? defaults.timeout,
             retries: config.retries ?? defaults.retries,
             authConfig: config.authConfig || defaults.authConfig,
+            disableStreaming: config.disableStreaming ?? defaults.disableStreaming,
             enabled: config.enabled ?? true,
             contextWindow: config.contextWindow ?? defaults.contextWindow
         };

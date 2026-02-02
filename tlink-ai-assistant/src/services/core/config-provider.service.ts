@@ -30,8 +30,16 @@ export interface AiAssistantConfig {
         compactMode: boolean;
         fontSize: number;
     };
+    /** Agent execution engine */
+    agentEngine: 'langgraph' | 'legacy';
+    /** Enable planner node in agent flow */
+    agentPlannerEnabled: boolean;
+    /** Enable reviewer node in agent flow */
+    agentReviewerEnabled: boolean;
     /** Agent 最大执行轮数 */
     agentMaxRounds: number;
+    /** Agent working directory (optional) */
+    agentWorkingDir?: string;
 }
 
 const DEFAULT_CONFIG: AiAssistantConfig = {
@@ -73,7 +81,11 @@ const DEFAULT_CONFIG: AiAssistantConfig = {
         compactMode: false,
         fontSize: 14
     },
-    agentMaxRounds: 50
+    agentEngine: 'langgraph',
+    agentPlannerEnabled: true,
+    agentReviewerEnabled: true,
+    agentMaxRounds: 50,
+    agentWorkingDir: ''
 };
 
 @Injectable({ providedIn: 'root' })
@@ -159,23 +171,6 @@ export class ConfigProviderService {
     }
 
     /**
-     * 获取指定配置项
-     */
-    get<T>(key: string, defaultValue?: T): T | undefined {
-        const keys = key.split('.');
-        let value: any = this.config;
-
-        for (const k of keys) {
-            if (value === null || value === undefined) {
-                return defaultValue;
-            }
-            value = value[k];
-        }
-
-        return value !== undefined ? value : defaultValue;
-    }
-
-    /**
      * 设置指定配置项
      */
     set<T>(key: string, value: T): void {
@@ -200,10 +195,33 @@ export class ConfigProviderService {
     }
 
     /**
+     * 获取指定配置项
+     */
+    get<T>(key: string, defaultValue?: T): T {
+        const keys = key.split('.');
+        let target: any = this.config;
+        for (const k of keys) {
+            if (!target || typeof target !== 'object' || !(k in target)) {
+                return defaultValue as T;
+            }
+            target = target[k];
+        }
+        return (target as T) ?? (defaultValue as T);
+    }
+
+    /**
      * 获取提供商配置
      */
     getProviderConfig(name: string): ProviderConfig | null {
-        return this.config.providers[name] || null;
+        const raw = this.config.providers[name];
+        if (!raw) {
+            return null;
+        }
+        try {
+            return ProviderConfigUtils.fillDefaults({ ...raw, name }, name);
+        } catch {
+            return raw;
+        }
     }
 
     /**
@@ -232,15 +250,25 @@ export class ConfigProviderService {
      */
     getAllProviderConfigs(): { [name: string]: ProviderConfig } {
         const savedConfigs = { ...this.config.providers };
-        
-        // Also include providers from defaults if they're not in saved config
-        // This ensures all known providers (like Groq) are available even if not yet configured
-        const allConfigs = { ...savedConfigs };
-        
+
+        const allConfigs: { [name: string]: ProviderConfig } = {};
+
+        // Fill defaults for saved configs first
+        for (const [providerName, providerConfig] of Object.entries(savedConfigs)) {
+            const defaults = PROVIDER_DEFAULTS[providerName];
+            if (defaults) {
+                allConfigs[providerName] = ProviderConfigUtils.fillDefaults({
+                    ...providerConfig,
+                    name: providerName
+                }, providerName);
+            } else {
+                allConfigs[providerName] = providerConfig;
+            }
+        }
+
+        // Include providers from defaults if they're not in saved config
         for (const providerName of Object.keys(PROVIDER_DEFAULTS)) {
             if (!allConfigs[providerName]) {
-                // Create a basic config from defaults for providers not yet in saved config
-                const defaults = PROVIDER_DEFAULTS[providerName];
                 allConfigs[providerName] = ProviderConfigUtils.fillDefaults({
                     name: providerName,
                     displayName: providerName.charAt(0).toUpperCase() + providerName.slice(1),
@@ -248,7 +276,7 @@ export class ConfigProviderService {
                 }, providerName);
             }
         }
-        
+
         return allConfigs;
     }
 
