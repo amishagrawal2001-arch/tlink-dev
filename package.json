@@ -92,7 +92,7 @@
     "npmlog": "6.0.2",
     "npx": "^10.2.2",
     "pako": "^2.1.0",
-    "patch-package": "^6.4.7",
+    "patch-package": "^8.0.1",
     "po-gettext-loader": "^1.0.0",
     "ps-node": "^0.1.6",
     "pug": "^2.0.4",
