@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { TerminalManagerService, TerminalInfo } from './terminal-manager.service';
 import { LoggerService } from '../core/logger.service';
 import { ConfigProviderService } from '../core/config-provider.service';
+import { EditorIntegrationService } from '../editor/editor-integration.service';
 
 /**
  * Terminal tool definitions
@@ -269,6 +270,247 @@ Note: If there are still incomplete tasks, please complete them first before cal
                 },
                 required: ['patch']
             }
+        },
+        // ========== Editor Context Tools ==========
+        {
+            name: 'get_active_editor_context',
+            description: 'Get information about the currently active editor including file path, cursor position, selected text, and nearby code. Essential for understanding what the user is working on.',
+            input_schema: {
+                type: 'object',
+                properties: {
+                    include_selection: {
+                        type: 'boolean',
+                        description: 'Include selected text in response (default: true)'
+                    },
+                    context_lines: {
+                        type: 'number',
+                        description: 'Number of lines of context around cursor (default: 10)'
+                    }
+                },
+                required: []
+            }
+        },
+        {
+            name: 'get_editor_diagnostics',
+            description: 'Get compilation errors, warnings, and linting issues in the active editor or a specific file. Use this to understand what needs to be fixed.',
+            input_schema: {
+                type: 'object',
+                properties: {
+                    file_path: {
+                        type: 'string',
+                        description: 'Optional file path. If not provided, uses active editor.'
+                    },
+                    severity: {
+                        type: 'string',
+                        enum: ['error', 'warning', 'info', 'all'],
+                        description: 'Filter by severity level (default: all)'
+                    }
+                },
+                required: []
+            }
+        },
+        {
+            name: 'insert_at_cursor',
+            description: 'Insert text at the current cursor position in the active editor.',
+            input_schema: {
+                type: 'object',
+                properties: {
+                    text: {
+                        type: 'string',
+                        description: 'Text to insert'
+                    },
+                    move_cursor_to_end: {
+                        type: 'boolean',
+                        description: 'Move cursor to end of inserted text (default: true)'
+                    }
+                },
+                required: ['text']
+            }
+        },
+        {
+            name: 'replace_selection',
+            description: 'Replace the currently selected text in the active editor.',
+            input_schema: {
+                type: 'object',
+                properties: {
+                    text: {
+                        type: 'string',
+                        description: 'Text to replace selection with'
+                    }
+                },
+                required: ['text']
+            }
+        },
+        // ========== Workspace & Search Tools ==========
+        {
+            name: 'search_code_content',
+            description: 'Search for text or regex patterns across workspace files. Returns file paths and matching lines with context.',
+            input_schema: {
+                type: 'object',
+                properties: {
+                    pattern: {
+                        type: 'string',
+                        description: 'Search pattern (supports regex)'
+                    },
+                    file_pattern: {
+                        type: 'string',
+                        description: 'File glob pattern to search within (e.g., "**/*.ts", "src/**/*.js")'
+                    },
+                    case_sensitive: {
+                        type: 'boolean',
+                        description: 'Case sensitive search (default: false)'
+                    },
+                    max_results: {
+                        type: 'number',
+                        description: 'Maximum number of results to return (default: 50)'
+                    }
+                },
+                required: ['pattern']
+            }
+        },
+        {
+            name: 'search_symbols',
+            description: 'Search for symbols (functions, classes, variables) across the workspace. Returns symbol definitions with locations.',
+            input_schema: {
+                type: 'object',
+                properties: {
+                    query: {
+                        type: 'string',
+                        description: 'Symbol name or pattern to search for'
+                    },
+                    kind: {
+                        type: 'string',
+                        enum: ['function', 'class', 'variable', 'interface', 'method', 'all'],
+                        description: 'Type of symbol to search for (default: all)'
+                    }
+                },
+                required: ['query']
+            }
+        },
+        {
+            name: 'get_project_info',
+            description: 'Get project metadata including project type, dependencies, configuration files, and structure.',
+            input_schema: {
+                type: 'object',
+                properties: {
+                    include_dependencies: {
+                        type: 'boolean',
+                        description: 'Include list of dependencies from package.json/requirements.txt (default: true)'
+                    }
+                },
+                required: []
+            }
+        },
+        {
+            name: 'find_files',
+            description: 'Find files matching a glob pattern. Faster than list_files for searching across workspace.',
+            input_schema: {
+                type: 'object',
+                properties: {
+                    pattern: {
+                        type: 'string',
+                        description: 'Glob pattern (e.g., "**/*.tsx", "src/**/test*.js")'
+                    },
+                    max_results: {
+                        type: 'number',
+                        description: 'Maximum number of files to return (default: 100)'
+                    }
+                },
+                required: ['pattern']
+            }
+        },
+        // ========== LSP Integration Tools ==========
+        {
+            name: 'get_type_info',
+            description: 'Get type information for a symbol at a specific position in a file (requires LSP support).',
+            input_schema: {
+                type: 'object',
+                properties: {
+                    file_path: {
+                        type: 'string',
+                        description: 'File path'
+                    },
+                    line: {
+                        type: 'number',
+                        description: 'Line number (0-based)'
+                    },
+                    character: {
+                        type: 'number',
+                        description: 'Character position in line (0-based)'
+                    }
+                },
+                required: ['file_path', 'line', 'character']
+            }
+        },
+        {
+            name: 'get_definition',
+            description: 'Get the definition location of a symbol at cursor position. Useful for "Go to Definition" functionality.',
+            input_schema: {
+                type: 'object',
+                properties: {
+                    file_path: {
+                        type: 'string',
+                        description: 'File path'
+                    },
+                    line: {
+                        type: 'number',
+                        description: 'Line number (0-based)'
+                    },
+                    character: {
+                        type: 'number',
+                        description: 'Character position in line (0-based)'
+                    }
+                },
+                required: ['file_path', 'line', 'character']
+            }
+        },
+        {
+            name: 'get_references',
+            description: 'Find all references to a symbol at cursor position. Shows where the symbol is used across the workspace.',
+            input_schema: {
+                type: 'object',
+                properties: {
+                    file_path: {
+                        type: 'string',
+                        description: 'File path'
+                    },
+                    line: {
+                        type: 'number',
+                        description: 'Line number (0-based)'
+                    },
+                    character: {
+                        type: 'number',
+                        description: 'Character position in line (0-based)'
+                    },
+                    include_declaration: {
+                        type: 'boolean',
+                        description: 'Include the declaration in results (default: true)'
+                    }
+                },
+                required: ['file_path', 'line', 'character']
+            }
+        },
+        {
+            name: 'get_hover_info',
+            description: 'Get hover information (documentation, type info) for a symbol at cursor position.',
+            input_schema: {
+                type: 'object',
+                properties: {
+                    file_path: {
+                        type: 'string',
+                        description: 'File path'
+                    },
+                    line: {
+                        type: 'number',
+                        description: 'Line number (0-based)'
+                    },
+                    character: {
+                        type: 'number',
+                        description: 'Character position in line (0-based)'
+                    }
+                },
+                required: ['file_path', 'line', 'character']
+            }
         }
     ];
 
@@ -279,7 +521,8 @@ Note: If there are still incomplete tasks, please complete them first before cal
     constructor(
         private terminalManager: TerminalManagerService,
         private logger: LoggerService,
-        private config: ConfigProviderService
+        private config: ConfigProviderService,
+        private editorIntegration: EditorIntegrationService
     ) {
         // No longer need static subscription to output, read directly from xterm buffer dynamically
     }
@@ -369,6 +612,84 @@ Note: If there are still incomplete tasks, please complete them first before cal
                     break;
                 case 'apply_patch':
                     result = this.applyPatch(this.normalizePatchInput(toolCall.input));
+                    break;
+                // ========== Editor Context Tools ==========
+                case 'get_active_editor_context':
+                    result = await this.getActiveEditorContext(
+                        toolCall.input.include_selection ?? true,
+                        toolCall.input.context_lines || 10
+                    );
+                    break;
+                case 'get_editor_diagnostics':
+                    result = await this.getEditorDiagnostics(
+                        toolCall.input.file_path,
+                        toolCall.input.severity || 'all'
+                    );
+                    break;
+                case 'insert_at_cursor':
+                    result = await this.insertAtCursor(
+                        toolCall.input.text,
+                        toolCall.input.move_cursor_to_end ?? true
+                    );
+                    break;
+                case 'replace_selection':
+                    result = await this.replaceSelection(toolCall.input.text);
+                    break;
+                // ========== Workspace & Search Tools ==========
+                case 'search_code_content':
+                    result = await this.searchCodeContent(
+                        toolCall.input.pattern,
+                        toolCall.input.file_pattern,
+                        toolCall.input.case_sensitive ?? false,
+                        toolCall.input.max_results || 50
+                    );
+                    break;
+                case 'search_symbols':
+                    result = await this.searchSymbols(
+                        toolCall.input.query,
+                        toolCall.input.kind || 'all'
+                    );
+                    break;
+                case 'get_project_info':
+                    result = await this.getProjectInfo(
+                        toolCall.input.include_dependencies ?? true
+                    );
+                    break;
+                case 'find_files':
+                    result = await this.findFiles(
+                        toolCall.input.pattern,
+                        toolCall.input.max_results || 100
+                    );
+                    break;
+                // ========== LSP Integration Tools ==========
+                case 'get_type_info':
+                    result = await this.getTypeInfo(
+                        toolCall.input.file_path,
+                        toolCall.input.line,
+                        toolCall.input.character
+                    );
+                    break;
+                case 'get_definition':
+                    result = await this.getDefinition(
+                        toolCall.input.file_path,
+                        toolCall.input.line,
+                        toolCall.input.character
+                    );
+                    break;
+                case 'get_references':
+                    result = await this.getReferences(
+                        toolCall.input.file_path,
+                        toolCall.input.line,
+                        toolCall.input.character,
+                        toolCall.input.include_declaration ?? true
+                    );
+                    break;
+                case 'get_hover_info':
+                    result = await this.getHoverInfo(
+                        toolCall.input.file_path,
+                        toolCall.input.line,
+                        toolCall.input.character
+                    );
                     break;
                 default:
                     throw new Error(`Unknown tool: ${toolCall.name}`);
@@ -972,5 +1293,470 @@ Note: If there are still incomplete tasks, please complete them first before cal
         } else {
             return `❌ Failed to switch to terminal ${index}, invalid index`;
         }
+    }
+
+    // ========== Editor Context Tools Implementation ==========
+
+    /**
+     * Get active editor context
+     */
+    private async getActiveEditorContext(includeSelection: boolean, contextLines: number): Promise<string> {
+        try {
+            const response = await this.editorIntegration.getActiveEditorContext(includeSelection, contextLines);
+
+            if (response && response.error) {
+                return `(${response.error})`;
+            }
+
+            if (!response || !response.file) {
+                return '(No active editor)';
+            }
+
+            const parts: string[] = [];
+            parts.push('=== Active Editor Context ===');
+            parts.push(`File: ${response.file}`);
+            parts.push(`Language: ${response.language || 'unknown'}`);
+            parts.push(`Lines: ${response.lineCount || 0}`);
+            parts.push(`Cursor: Line ${response.cursorLine + 1}, Column ${response.cursorColumn + 1}`);
+
+            if (response.selectedText && includeSelection) {
+                parts.push('\n=== Selected Text ===');
+                parts.push(response.selectedText);
+            }
+
+            if (response.contextBefore || response.contextAfter) {
+                parts.push('\n=== Context Around Cursor ===');
+                if (response.contextBefore) {
+                    parts.push('--- Before ---');
+                    parts.push(response.contextBefore);
+                }
+                parts.push(`>>> CURSOR AT LINE ${response.cursorLine + 1} <<<`);
+                if (response.contextAfter) {
+                    parts.push('--- After ---');
+                    parts.push(response.contextAfter);
+                }
+            }
+
+            return parts.join('\n');
+        } catch (error) {
+            return `(Error getting editor context: ${error instanceof Error ? error.message : 'Unknown error'})`;
+        }
+    }
+
+    /**
+     * Get editor diagnostics (errors, warnings)
+     */
+    private async getEditorDiagnostics(filePath?: string, severity: string = 'all'): Promise<string> {
+        try {
+            const response = await this.editorIntegration.getEditorDiagnostics(filePath, severity);
+
+            if (response && response.error) {
+                return `(${response.error})`;
+            }
+
+            if (!response || !response.diagnostics || response.diagnostics.length === 0) {
+                return '(No diagnostics found)';
+            }
+
+            const parts: string[] = [];
+            parts.push('=== Diagnostics ===');
+            parts.push(`File: ${response.file || filePath || 'active editor'}`);
+            parts.push(`Total: ${response.diagnostics.length} issue(s)\n`);
+
+            for (const diag of response.diagnostics) {
+                const severityIcon = diag.severity === 'error' ? '❌' :
+                                    diag.severity === 'warning' ? '⚠️' : 'ℹ️';
+                parts.push(`${severityIcon} Line ${diag.line + 1}, Col ${diag.column + 1}: ${diag.message}`);
+                if (diag.code) {
+                    parts.push(`   Code: ${diag.code}`);
+                }
+                parts.push('');
+            }
+
+            return parts.join('\n');
+        } catch (error) {
+            return `(Error getting diagnostics: ${error instanceof Error ? error.message : 'Unknown error'})`;
+        }
+    }
+
+    /**
+     * Insert text at cursor position
+     */
+    private async insertAtCursor(text: string, moveCursorToEnd: boolean): Promise<string> {
+        try {
+            const response = await this.editorIntegration.insertAtCursor(text, moveCursorToEnd);
+
+            if (response && response.error) {
+                return `❌ ${response.error}`;
+            }
+
+            if (response && response.success) {
+                return `✅ Inserted ${text.length} characters at cursor position`;
+            }
+
+            return '❌ Failed to insert text';
+        } catch (error) {
+            return `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        }
+    }
+
+    /**
+     * Replace selected text
+     */
+    private async replaceSelection(text: string): Promise<string> {
+        try {
+            const response = await this.editorIntegration.replaceSelection(text);
+
+            if (response && response.error) {
+                return `❌ ${response.error}`;
+            }
+
+            if (response && response.success) {
+                return `✅ Replaced selection with ${text.length} characters`;
+            }
+
+            return '❌ Failed to replace selection';
+        } catch (error) {
+            return `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        }
+    }
+
+    // ========== Workspace & Search Tools Implementation ==========
+
+    /**
+     * Search code content across workspace
+     */
+    private async searchCodeContent(
+        pattern: string,
+        filePattern?: string,
+        caseSensitive: boolean = false,
+        maxResults: number = 50
+    ): Promise<string> {
+        try {
+            const response = await this.editorIntegration.searchCodeContent(
+                pattern,
+                filePattern,
+                caseSensitive,
+                maxResults
+            );
+
+            if (response && response.error) {
+                return `(${response.error})`;
+            }
+
+            if (!response || !response.results || response.results.length === 0) {
+                return `(No matches found for pattern: ${pattern})`;
+            }
+
+            const parts: string[] = [];
+            parts.push('=== Search Results ===');
+            parts.push(`Pattern: ${pattern}`);
+            if (filePattern) {
+                parts.push(`File Pattern: ${filePattern}`);
+            }
+            parts.push(`Found: ${response.results.length} match(es)\n`);
+
+            for (const result of response.results) {
+                parts.push(`📄 ${result.file}`);
+                parts.push(`   Line ${result.line + 1}: ${result.text.trim()}`);
+                if (result.context) {
+                    parts.push(`   Context: ${result.context}`);
+                }
+                parts.push('');
+            }
+
+            return parts.join('\n');
+        } catch (error) {
+            return `(Error searching code: ${error instanceof Error ? error.message : 'Unknown error'})`;
+        }
+    }
+
+    /**
+     * Search for symbols in workspace
+     */
+    private async searchSymbols(query: string, kind: string = 'all'): Promise<string> {
+        try {
+            const response = await this.editorIntegration.searchSymbols(query, kind);
+
+            if (response && response.error) {
+                return `(${response.error})`;
+            }
+
+            if (!response || !response.symbols || response.symbols.length === 0) {
+                return `(No symbols found for: ${query})`;
+            }
+
+            const parts: string[] = [];
+            parts.push('=== Symbol Search Results ===');
+            parts.push(`Query: ${query}`);
+            parts.push(`Kind: ${kind}`);
+            parts.push(`Found: ${response.symbols.length} symbol(s)\n`);
+
+            for (const symbol of response.symbols) {
+                const kindIcon = this.getSymbolIcon(symbol.kind);
+                parts.push(`${kindIcon} ${symbol.name} (${symbol.kind})`);
+                parts.push(`   Location: ${symbol.file}:${symbol.line + 1}`);
+                if (symbol.containerName) {
+                    parts.push(`   Container: ${symbol.containerName}`);
+                }
+                parts.push('');
+            }
+
+            return parts.join('\n');
+        } catch (error) {
+            return `(Error searching symbols: ${error instanceof Error ? error.message : 'Unknown error'})`;
+        }
+    }
+
+    /**
+     * Get project information
+     */
+    private async getProjectInfo(includeDependencies: boolean): Promise<string> {
+        try {
+            const response = await this.editorIntegration.getProjectInfo(includeDependencies);
+
+            if (response && response.error) {
+                return `(${response.error})`;
+            }
+
+            const parts: string[] = [];
+            parts.push('=== Project Information ===');
+
+            if (response.projectType) {
+                parts.push(`Type: ${response.projectType}`);
+            }
+
+            if (response.workspaceRoot) {
+                parts.push(`Workspace: ${response.workspaceRoot}`);
+            }
+
+            if (response.configFiles && response.configFiles.length > 0) {
+                parts.push('\nConfiguration Files:');
+                for (const file of response.configFiles) {
+                    parts.push(`  - ${file}`);
+                }
+            }
+
+            if (includeDependencies && response.dependencies) {
+                parts.push('\nDependencies:');
+                if (response.dependencies.production && response.dependencies.production.length > 0) {
+                    parts.push('  Production:');
+                    for (const dep of response.dependencies.production.slice(0, 20)) {
+                        parts.push(`    - ${dep}`);
+                    }
+                    if (response.dependencies.production.length > 20) {
+                        parts.push(`    ... and ${response.dependencies.production.length - 20} more`);
+                    }
+                }
+                if (response.dependencies.development && response.dependencies.development.length > 0) {
+                    parts.push('  Development:');
+                    for (const dep of response.dependencies.development.slice(0, 10)) {
+                        parts.push(`    - ${dep}`);
+                    }
+                    if (response.dependencies.development.length > 10) {
+                        parts.push(`    ... and ${response.dependencies.development.length - 10} more`);
+                    }
+                }
+            }
+
+            if (response.scripts && Object.keys(response.scripts).length > 0) {
+                parts.push('\nAvailable Scripts:');
+                for (const [name, command] of Object.entries(response.scripts).slice(0, 10)) {
+                    parts.push(`  ${name}: ${command}`);
+                }
+            }
+
+            return parts.join('\n');
+        } catch (error) {
+            return `(Error getting project info: ${error instanceof Error ? error.message : 'Unknown error'})`;
+        }
+    }
+
+    /**
+     * Find files matching glob pattern
+     */
+    private async findFiles(pattern: string, maxResults: number): Promise<string> {
+        try {
+            const response = await this.editorIntegration.findFiles(pattern, maxResults);
+
+            if (response && response.error) {
+                return `(${response.error})`;
+            }
+
+            if (!response || !response.files || response.files.length === 0) {
+                return `(No files found matching: ${pattern})`;
+            }
+
+            const parts: string[] = [];
+            parts.push('=== File Search Results ===');
+            parts.push(`Pattern: ${pattern}`);
+            parts.push(`Found: ${response.files.length} file(s)\n`);
+
+            for (const file of response.files) {
+                parts.push(`📄 ${file}`);
+            }
+
+            return parts.join('\n');
+        } catch (error) {
+            return `(Error finding files: ${error instanceof Error ? error.message : 'Unknown error'})`;
+        }
+    }
+
+    // ========== LSP Integration Tools Implementation ==========
+
+    /**
+     * Get type information at position
+     */
+    private async getTypeInfo(filePath: string, line: number, character: number): Promise<string> {
+        try {
+            const response = await this.editorIntegration.getTypeInfo(filePath, line, character);
+
+            if (response && response.error) {
+                return `(${response.error})`;
+            }
+
+            if (!response || !response.typeInfo) {
+                return '(No type information available at this position)';
+            }
+
+            const parts: string[] = [];
+            parts.push('=== Type Information ===');
+            parts.push(`Location: ${filePath}:${line + 1}:${character + 1}\n`);
+
+            if (response.typeInfo.contents) {
+                parts.push(response.typeInfo.contents);
+            }
+
+            return parts.join('\n');
+        } catch (error) {
+            return `(Error getting type info: ${error instanceof Error ? error.message : 'Unknown error'})`;
+        }
+    }
+
+    /**
+     * Get definition location
+     */
+    private async getDefinition(filePath: string, line: number, character: number): Promise<string> {
+        try {
+            const response = await this.editorIntegration.getDefinition(filePath, line, character);
+
+            if (response && response.error) {
+                return `(${response.error})`;
+            }
+
+            if (!response || !response.definitions || response.definitions.length === 0) {
+                return '(No definition found)';
+            }
+
+            const parts: string[] = [];
+            parts.push('=== Definition ===');
+            parts.push(`Search Location: ${filePath}:${line + 1}:${character + 1}\n`);
+
+            for (const def of response.definitions) {
+                parts.push(`📍 ${def.file}:${def.line + 1}:${def.column + 1}`);
+                if (def.text) {
+                    parts.push(`   ${def.text}`);
+                }
+                parts.push('');
+            }
+
+            return parts.join('\n');
+        } catch (error) {
+            return `(Error getting definition: ${error instanceof Error ? error.message : 'Unknown error'})`;
+        }
+    }
+
+    /**
+     * Get references to symbol
+     */
+    private async getReferences(
+        filePath: string,
+        line: number,
+        character: number,
+        includeDeclaration: boolean
+    ): Promise<string> {
+        try {
+            const response = await this.editorIntegration.getReferences(
+                filePath,
+                line,
+                character,
+                includeDeclaration
+            );
+
+            if (response && response.error) {
+                return `(${response.error})`;
+            }
+
+            if (!response || !response.references || response.references.length === 0) {
+                return '(No references found)';
+            }
+
+            const parts: string[] = [];
+            parts.push('=== References ===');
+            parts.push(`Symbol Location: ${filePath}:${line + 1}:${character + 1}`);
+            parts.push(`Found: ${response.references.length} reference(s)\n`);
+
+            for (const ref of response.references) {
+                parts.push(`📍 ${ref.file}:${ref.line + 1}:${ref.column + 1}`);
+                if (ref.text) {
+                    parts.push(`   ${ref.text}`);
+                }
+                parts.push('');
+            }
+
+            return parts.join('\n');
+        } catch (error) {
+            return `(Error getting references: ${error instanceof Error ? error.message : 'Unknown error'})`;
+        }
+    }
+
+    /**
+     * Get hover information
+     */
+    private async getHoverInfo(filePath: string, line: number, character: number): Promise<string> {
+        try {
+            const response = await this.editorIntegration.getHoverInfo(filePath, line, character);
+
+            if (response && response.error) {
+                return `(${response.error})`;
+            }
+
+            if (!response || !response.hover) {
+                return '(No hover information available)';
+            }
+
+            const parts: string[] = [];
+            parts.push('=== Hover Information ===');
+            parts.push(`Location: ${filePath}:${line + 1}:${character + 1}\n`);
+
+            if (response.hover.contents) {
+                parts.push(response.hover.contents);
+            }
+
+            return parts.join('\n');
+        } catch (error) {
+            return `(Error getting hover info: ${error instanceof Error ? error.message : 'Unknown error'})`;
+        }
+    }
+
+    // ========== Helper Methods ==========
+
+    /**
+     * Get icon for symbol kind
+     */
+    private getSymbolIcon(kind: string): string {
+        const icons: Record<string, string> = {
+            'function': '🔧',
+            'method': '⚙️',
+            'class': '📦',
+            'interface': '🔷',
+            'variable': '📌',
+            'constant': '🔒',
+            'property': '🏷️',
+            'enum': '📋',
+            'module': '📚',
+            'namespace': '📁'
+        };
+        return icons[kind.toLowerCase()] || '•';
     }
 }
