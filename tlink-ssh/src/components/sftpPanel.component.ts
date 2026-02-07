@@ -1,6 +1,6 @@
 import * as C from 'constants'
 import { posix as path } from 'path'
-import { Component, Input, Output, EventEmitter, Inject, Optional, ElementRef, OnDestroy } from '@angular/core'
+import { Component, Input, Output, EventEmitter, Inject, Optional, ElementRef, OnDestroy, ViewChild, AfterViewChecked } from '@angular/core'
 import { FileUpload, DirectoryUpload, DirectoryDownload, MenuItemOptions, NotificationsService, PlatformService } from 'tlink-core'
 import { SFTPSession, SFTPFile } from '../session/sftp'
 import { SSHSession } from '../session/ssh'
@@ -18,7 +18,8 @@ interface PathSegment {
     templateUrl: './sftpPanel.component.pug',
     styleUrls: ['./sftpPanel.component.scss'],
 })
-export class SFTPPanelComponent implements OnDestroy {
+export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
+    @ViewChild('pathInput') pathInput?: ElementRef<HTMLInputElement>
     @Input() session: SSHSession
     @Output() closed = new EventEmitter<void>()
     sftp: SFTPSession
@@ -42,6 +43,7 @@ export class SFTPPanelComponent implements OnDestroy {
     private resizeUpHandler: (() => void)|null = null
     private navigationToken = 0
     private hardTimeoutId: NodeJS.Timeout|null = null
+    private pendingPathFocus = false
 
     constructor (
         private ngbModal: NgbModal,
@@ -511,11 +513,25 @@ export class SFTPPanelComponent implements OnDestroy {
 
     editPath (): void {
         this.editingPath = this.path || '/'
-        // Focus is handled by the template's autofocus; keep editing mode until blur/submit
+        this.pendingPathFocus = true
     }
 
     cancelEditPath (): void {
         this.editingPath = null
+        this.pendingPathFocus = false
+    }
+
+    ngAfterViewChecked (): void {
+        if (!this.pendingPathFocus) {
+            return
+        }
+        const input = this.pathInput?.nativeElement
+        if (!input) {
+            return
+        }
+        input.focus()
+        input.select()
+        this.pendingPathFocus = false
     }
 
     async confirmPath (): Promise<void> {

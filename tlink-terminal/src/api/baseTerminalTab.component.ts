@@ -386,7 +386,12 @@ export class BaseTerminalTabComponent<P extends BaseTerminalProfile> extends Bas
 
         this.focused$.subscribe(() => {
             this.configure()
-            this.frontend?.focus()
+            setTimeout(() => {
+                if (!this.hasFocus || this.shouldSkipFrontendFocus()) {
+                    return
+                }
+                this.frontend?.focus()
+            }, 0)
         })
 
         this.subscribeUntilDestroyed(this.platform.themeChanged$, () => {
@@ -950,6 +955,30 @@ export class BaseTerminalTabComponent<P extends BaseTerminalProfile> extends Bas
             this.platform.setClipboard({ text: content })
             this.notifications.notice(this.translate.instant('Copied'))
         })
+    }
+
+    private shouldSkipFrontendFocus (): boolean {
+        const root = this.element?.nativeElement as HTMLElement | undefined
+        if (!root) {
+            return false
+        }
+        const active = root.ownerDocument?.activeElement as HTMLElement | null
+        if (!active) {
+            return false
+        }
+        if (!root.contains(active)) {
+            return false
+        }
+        if (active.matches('input, textarea, select')) {
+            return true
+        }
+        if (active.isContentEditable) {
+            return true
+        }
+        if (active.closest('[contenteditable="true"], [data-no-terminal-focus], .no-terminal-focus')) {
+            return true
+        }
+        return false
     }
 
     private applyOutputHighlightingToData (data: string): string {

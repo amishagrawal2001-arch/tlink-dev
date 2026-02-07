@@ -31,7 +31,7 @@ export class TerminalConfigProvider extends ConfigProvider {
             hideTabOptionsButton: false,
             rightClick: 'menu',
             pasteOnMiddleClick: true,
-            copyOnSelect: false,
+            copyOnSelect: true,
             copyAsHTML: true,
             scrollOnInput: true,
             altIsMeta: false,

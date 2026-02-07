@@ -129,7 +129,8 @@ export class OpenAiCompatibleProviderService extends BaseAiProvider {
                     model: this.config?.model || 'gpt-3.5-turbo',
                     messages: this.transformMessages(request.messages),
                     temperature: request.temperature || 0.7,
-                    stream: request.stream || false
+                    stream: request.stream || false,
+                    ...(request.tools && request.tools.length > 0 ? { tools: request.tools } : {})
                 };
                 if (Number.isFinite(request.maxTokens) && (request.maxTokens as number) > 0) {
                     payload.max_tokens = request.maxTokens;
@@ -179,7 +180,8 @@ export class OpenAiCompatibleProviderService extends BaseAiProvider {
                             model: this.config?.model || 'gpt-3.5-turbo',
                             messages: this.transformMessages(request.messages),
                             temperature: request.temperature || 0.7,
-                            stream: false
+                            stream: false,
+                            ...(request.tools && request.tools.length > 0 ? { tools: request.tools } : {})
                         };
                         if (Number.isFinite(request.maxTokens) && (request.maxTokens as number) > 0) {
                             payload.max_tokens = request.maxTokens;
@@ -256,7 +258,8 @@ export class OpenAiCompatibleProviderService extends BaseAiProvider {
                         model: this.config?.model || 'gpt-3.5-turbo',
                         messages: this.transformMessages(request.messages),
                         temperature: request.temperature || 0.7,
-                        stream: true
+                        stream: true,
+                        ...(request.tools && request.tools.length > 0 ? { tools: request.tools } : {})
                     };
                     if (Number.isFinite(request.maxTokens) && (request.maxTokens as number) > 0) {
                         payload.max_tokens = request.maxTokens;

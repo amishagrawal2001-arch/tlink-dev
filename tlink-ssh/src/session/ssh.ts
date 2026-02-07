@@ -5,7 +5,7 @@ import stripAnsi from 'strip-ansi'
 import * as shellQuote from 'shell-quote'
 import { Injector } from '@angular/core'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
-import { ConfigService, FileProvidersService, NotificationsService, PromptModalComponent, LogService, Logger, TranslateService, Platform, HostAppService } from 'tlink-core'
+import { ConfigService, FileProvidersService, NotificationsService, PromptModalComponent, LogService, Logger, TranslateService, Platform, HostAppService, ProfilesService } from 'tlink-core'
 import { Socket } from 'net'
 import { Subject, Observable } from 'rxjs'
 import { HostKeyPromptModalComponent } from '../components/hostKeyPromptModal.component'
@@ -122,12 +122,15 @@ export class SSHSession {
     private notifications: NotificationsService
     private fileProviders: FileProvidersService
     private config: ConfigService
+    private profilesService: ProfilesService
     private translate: TranslateService
     private knownHosts: SSHKnownHostsService
     private privateKeyImporters: AutoPrivateKeyLocator[]
     private previouslyDisconnected = false
     private passwordPromptPromise: Promise<{ value: string, remember: boolean }|null>|null = null
     private passwordPrompted = false
+    private prePromptedPassword: string|null = null
+    private shouldRememberProfile = false
     private authAborted = false
     private activePasswordModal: any|null = null
 
@@ -143,6 +146,7 @@ export class SSHSession {
         this.notifications = injector.get(NotificationsService)
         this.fileProviders = injector.get(FileProvidersService)
         this.config = injector.get(ConfigService)
+        this.profilesService = injector.get(ProfilesService)
         this.translate = injector.get(TranslateService)
         this.knownHosts = injector.get(SSHKnownHostsService)
         this.privateKeyImporters = injector.get(AutoPrivateKeyLocator, [])
@@ -321,7 +325,16 @@ export class SSHSession {
         // to prevent race conditions where multiple prompts could be opened
         const modal = this.ngbModal.open(PromptModalComponent)
         this.activePasswordModal = modal
-        modal.componentInstance.prompt = `Password for ${this.authUsername}@${this.profile.options.host}`
+        const isEphemeralProfile = !this.profile.id
+        if (isEphemeralProfile) {
+            modal.componentInstance.prompt = `Password for ${this.profile.options.host}`
+            modal.componentInstance.secondaryPrompt = 'Username'
+            modal.componentInstance.secondaryPlaceholder = 'Username'
+            modal.componentInstance.secondaryValue = this.authUsername ?? this.profile.options.user ?? ''
+            modal.componentInstance.focusSecondary = !this.authUsername || this.authUsername === 'root'
+        } else {
+            modal.componentInstance.prompt = `Password for ${this.authUsername}@${this.profile.options.host}`
+        }
         modal.componentInstance.password = true
         modal.componentInstance.showRememberCheckbox = true
 
@@ -334,6 +347,21 @@ export class SSHSession {
                 // If user cancelled (res is null), mark as aborted to prevent retries
                 if (!res) {
                     this.authAborted = true
+                }
+                const enteredUsername = typeof res?.secondaryValue === 'string' ? res.secondaryValue.trim() : ''
+                if (enteredUsername) {
+                    this.authUsername = enteredUsername
+                    if (!this.profile.id && this.authUsername) {
+                        this.profile.options.user = this.authUsername
+                    }
+                    if (this.authUsername?.startsWith('$')) {
+                        try {
+                            const result = process.env[this.authUsername.slice(1)]
+                            this.authUsername = result ?? this.authUsername
+                        } catch {
+                            this.authUsername = 'root'
+                        }
+                    }
                 }
                 return res ?? null
             })
@@ -348,6 +376,45 @@ export class SSHSession {
             }) as Promise<{ value: string, remember: boolean }|null>
 
         return this.passwordPromptPromise
+    }
+
+    private async saveEphemeralProfileIfNeeded (): Promise<void> {
+        if (!this.shouldRememberProfile || this.profile.id) {
+            return
+        }
+        const host = this.profile.options.host
+        const username = this.authUsername ?? ''
+        if (!host || !username) {
+            return
+        }
+        const port = this.profile.options.port ?? 22
+        try {
+            const existingProfiles = await this.profilesService.getProfiles({ includeBuiltin: false, clone: true })
+            const existing = existingProfiles.find(p =>
+                p.type === 'ssh' &&
+                p.options?.host === host &&
+                (p.options?.port ?? 22) === port &&
+                p.options?.user === username,
+            )
+            if (existing) {
+                return
+            }
+
+            await this.profilesService.newProfile({
+                name: `${username}@${host}:${port}`,
+                type: 'ssh',
+                options: {
+                    host,
+                    port,
+                    user: username,
+                },
+            })
+            await this.config.save()
+        } catch (error) {
+            this.logger.warn('Failed to save quick-connect profile', error)
+        } finally {
+            this.shouldRememberProfile = false
+        }
     }
 
     async openSFTP (): Promise<SFTPSession> {
@@ -546,6 +613,25 @@ export class SSHSession {
             return
         }
 
+        const isEphemeralProfile = !this.profile.id
+        if (isEphemeralProfile && this.allAuthMethods.some(method => method.type === 'prompt-password')) {
+            const currentUser = this.authUsername ?? ''
+            if (!currentUser || currentUser === 'root') {
+                // Pre-prompt credentials so we don't auth with a default username first
+                this.passwordPrompted = true
+                const promptResult = await this.promptForPassword()
+                if (this.authAborted || !promptResult) {
+                    this.ssh.disconnect()
+                    return
+                }
+                if (promptResult.remember) {
+                    this.savedPassword = promptResult.value
+                    this.shouldRememberProfile = true
+                }
+                this.prePromptedPassword = promptResult.value
+            }
+        }
+
         await this.populateStoredPasswordsForResolvedUsername()
 
         if (this.authAborted) {
@@ -568,6 +654,7 @@ export class SSHSession {
         if (this.savedPassword) {
             this.passwordStorage.savePassword(this.profile, this.savedPassword, this.authUsername ?? undefined)
         }
+        await this.saveEphemeralProfileIfNeeded()
 
         for (const fw of this.profile.options.forwardedPorts ?? []) {
             this.addPortForward(Object.assign(new ForwardedPort(), fw))
@@ -735,21 +822,37 @@ export class SSHSession {
             throw new Error('No username')
         }
 
-        const noneResult = await this.ssh.authenticateNone(this.authUsername)
-        if (this.authAborted) {
-            return null
-        }
-        if (noneResult instanceof russh.AuthenticatedSSHClient) {
-            return noneResult
-        }
-
         let remainingMethods = [...this.allAuthMethods]
-        let methodsLeft = noneResult.remainingMethods
+        let methodsLeft: string[] = []
 
         function maybeSetRemainingMethods (r: russh.AuthFailure) {
             if (r.remainingMethods.length) {
                 methodsLeft = r.remainingMethods
             }
+        }
+
+        if (this.prePromptedPassword) {
+            const result = await this.ssh.authenticateWithPassword(this.authUsername, this.prePromptedPassword)
+            this.prePromptedPassword = null
+            if (this.authAborted) {
+                return null
+            }
+            if (result instanceof russh.AuthenticatedSSHClient) {
+                return result
+            }
+            maybeSetRemainingMethods(result)
+            if (!this.authAborted) {
+                this.passwordPrompted = false
+            }
+        } else {
+            const noneResult = await this.ssh.authenticateNone(this.authUsername)
+            if (this.authAborted) {
+                return null
+            }
+            if (noneResult instanceof russh.AuthenticatedSSHClient) {
+                return noneResult
+            }
+            maybeSetRemainingMethods(noneResult)
         }
 
         while (true) {
@@ -794,6 +897,7 @@ export class SSHSession {
                 if (promptResult) {
                     if (promptResult.remember) {
                         this.savedPassword = promptResult.value
+                        this.shouldRememberProfile = true
                     }
                     const result = await this.ssh.authenticateWithPassword(this.authUsername, promptResult.value)
                     if (result instanceof russh.AuthenticatedSSHClient) {

@@ -12,15 +12,26 @@ export class PromptModalComponent {
     @Input() password: boolean
     @Input() remember: boolean
     @Input() showRememberCheckbox: boolean
-    @ViewChild('input') input: ElementRef
+    @Input() secondaryValue: string
+    @Input() secondaryPrompt: string|undefined
+    @Input() secondaryPassword: boolean
+    @Input() secondaryPlaceholder: string|undefined
+    @Input() focusSecondary: boolean
+    showPassword = false
+    showSecondaryPassword = false
+    @ViewChild('primaryInput') primaryInput: ElementRef
+    @ViewChild('secondaryInput') secondaryInput?: ElementRef
 
     constructor (
         private modalInstance: NgbActiveModal,
     ) { }
 
     ngOnInit (): void {
+        this.showPassword = !this.password
+        this.showSecondaryPassword = !this.secondaryPassword
         setTimeout(() => {
-            this.input.nativeElement.focus()
+            const target = this.focusSecondary && this.secondaryInput ? this.secondaryInput : this.primaryInput
+            target?.nativeElement?.focus()
         })
     }
 
@@ -28,6 +39,7 @@ export class PromptModalComponent {
         this.modalInstance.close({
             value: this.value,
             remember: this.remember,
+            secondaryValue: this.secondaryValue,
         })
     }
 

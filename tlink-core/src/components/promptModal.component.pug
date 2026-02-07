@@ -8,15 +8,39 @@
     )
         i.fas.fa-times
 .modal-body
-    input.form-control(
-        [type]='password ? "password" : "text"',
-        autofocus,
-        [(ngModel)]='value',
-        #input,
-        [placeholder]='prompt',
-        (keyup.enter)='ok()',
-        (keyup.esc)='cancel()',
-    )
+    .input-group(*ngIf='secondaryPrompt')
+        input.form-control(
+            [type]='showSecondaryPassword ? "text" : (secondaryPassword ? "password" : "text")',
+            [(ngModel)]='secondaryValue',
+            #secondaryInput,
+            [placeholder]='secondaryPlaceholder || secondaryPrompt',
+            (keyup.enter)='ok()',
+            (keyup.esc)='cancel()',
+        )
+        button.btn.btn-outline-secondary(
+            *ngIf='secondaryPassword',
+            type='button',
+            (click)='showSecondaryPassword = !showSecondaryPassword',
+            [attr.aria-label]='showSecondaryPassword ? "Hide password" : "Show password"',
+        )
+            i.fas([class.fa-eye]='!showSecondaryPassword', [class.fa-eye-slash]='showSecondaryPassword')
+    .input-group([class.mt-3]='secondaryPrompt')
+        input.form-control(
+            [type]='showPassword ? "text" : (password ? "password" : "text")',
+            autofocus,
+            [(ngModel)]='value',
+            #primaryInput,
+            [placeholder]='prompt',
+            (keyup.enter)='ok()',
+            (keyup.esc)='cancel()',
+        )
+        button.btn.btn-outline-secondary(
+            *ngIf='password',
+            type='button',
+            (click)='showPassword = !showPassword',
+            [attr.aria-label]='showPassword ? "Hide password" : "Show password"',
+        )
+            i.fas([class.fa-eye]='!showPassword', [class.fa-eye-slash]='showPassword')
     .d-flex.align-items-center.mt-3.pt-2.checkbox-footer
         checkbox.checkbox-wrapper(
             *ngIf='showRememberCheckbox',

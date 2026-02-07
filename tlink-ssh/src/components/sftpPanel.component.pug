@@ -11,12 +11,14 @@
                     i.fas.fa-edit.me-1
                     span Path
                 span.path-value.flex-grow-1 {{path || '/'}}
-            .input-group.flex-grow-1(*ngIf='editingPath !== null')
+            .input-group.flex-grow-1(*ngIf='editingPath !== null', (mousedown)='$event.stopPropagation()', (click)='$event.stopPropagation()')
                 input.form-control.path-input(
                     type='text',
-                    autofocus,
+                    #pathInput,
                     (keydown.enter)='confirmPath()',
                     (keydown.esc)='cancelEditPath()',
+                    (mousedown)='$event.stopPropagation()',
+                    (click)='$event.stopPropagation()',
                     [(ngModel)]='editingPath'
                 )
                 button.btn.btn-outline-secondary.path-edit-close(
