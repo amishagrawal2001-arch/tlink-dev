@@ -47,6 +47,30 @@ export class OpenAiCompatibleProviderService extends BaseAiProvider {
         super(logger);
     }
 
+    private normalizeTools(tools?: any[]): any[] | undefined {
+        if (!tools || tools.length === 0) {
+            return undefined;
+        }
+
+        // If already OpenAI-style tools, keep as-is.
+        const alreadyOpenAi = tools.some(t => t?.type === 'function' && t?.function?.name);
+        if (alreadyOpenAi) {
+            return tools;
+        }
+
+        return tools.map((tool: any) => {
+            const parameters = tool?.parameters || tool?.input_schema || { type: 'object', properties: {} };
+            return {
+                type: 'function',
+                function: {
+                    name: tool?.name,
+                    description: tool?.description,
+                    parameters
+                }
+            };
+        });
+    }
+
     configure(config: any): void {
         super.configure(config);
         this.authConfig.credentials.apiKey = config.apiKey || '';
@@ -125,12 +149,13 @@ export class OpenAiCompatibleProviderService extends BaseAiProvider {
 
         try {
             const response = await this.withRetry(async () => {
+                const tools = this.normalizeTools(request.tools);
                 const payload: any = {
                     model: this.config?.model || 'gpt-3.5-turbo',
                     messages: this.transformMessages(request.messages),
                     temperature: request.temperature || 0.7,
                     stream: request.stream || false,
-                    ...(request.tools && request.tools.length > 0 ? { tools: request.tools } : {})
+                    ...(tools && tools.length > 0 ? { tools } : {})
                 };
                 if (Number.isFinite(request.maxTokens) && (request.maxTokens as number) > 0) {
                     payload.max_tokens = request.maxTokens;
@@ -176,12 +201,13 @@ export class OpenAiCompatibleProviderService extends BaseAiProvider {
                     // 如果禁用流式，使用非流式请求模拟流式响应
                     if (!useStreaming) {
                         this.logger.info('Streaming disabled, using non-streaming fallback');
+                        const tools = this.normalizeTools(request.tools);
                         const payload: any = {
                             model: this.config?.model || 'gpt-3.5-turbo',
                             messages: this.transformMessages(request.messages),
                             temperature: request.temperature || 0.7,
                             stream: false,
-                            ...(request.tools && request.tools.length > 0 ? { tools: request.tools } : {})
+                            ...(tools && tools.length > 0 ? { tools } : {})
                         };
                         if (Number.isFinite(request.maxTokens) && (request.maxTokens as number) > 0) {
                             payload.max_tokens = request.maxTokens;
@@ -254,12 +280,13 @@ export class OpenAiCompatibleProviderService extends BaseAiProvider {
                     }
 
                     // 正常流式请求 - 使用 'text' 而不是 'stream' (浏览器兼容)
+                    const tools = this.normalizeTools(request.tools);
                     const payload: any = {
                         model: this.config?.model || 'gpt-3.5-turbo',
                         messages: this.transformMessages(request.messages),
                         temperature: request.temperature || 0.7,
                         stream: true,
-                        ...(request.tools && request.tools.length > 0 ? { tools: request.tools } : {})
+                        ...(tools && tools.length > 0 ? { tools } : {})
                     };
                     if (Number.isFinite(request.maxTokens) && (request.maxTokens as number) > 0) {
                         payload.max_tokens = request.maxTokens;
