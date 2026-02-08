@@ -18,7 +18,7 @@ export interface SidePanelRegistration {
     mode?: string | null
 }
 
-const DEFAULT_WIDTH = 320
+const DEFAULT_WIDTH = 240
 
 @Injectable({ providedIn: 'root' })
 export class SidePanelService {
@@ -31,6 +31,7 @@ export class SidePanelService {
         mode: null,
     })
     private panels = new BehaviorSubject<SidePanelRegistration[]>([])
+    private widths = new Map<string, number>()
 
     readonly state$ = this.state.asObservable()
     readonly panels$ = this.panels.asObservable()
@@ -43,7 +44,7 @@ export class SidePanelService {
 
     show (panel: SidePanelRegistration): void {
         const current = this.state.value
-        const width = panel.width ?? DEFAULT_WIDTH
+        const width = this.widths.get(panel.id) ?? panel.width ?? DEFAULT_WIDTH
         const mode = panel.mode ?? null
         if (current.visible && current.id === panel.id && current.width === width && current.label === panel.label && current.mode === mode) {
             return
@@ -80,6 +81,23 @@ export class SidePanelService {
 
     getState (): SidePanelState {
         return this.state.value
+    }
+
+    setWidth (width: number): void {
+        const current = this.state.value
+        if (!current.visible) {
+            return
+        }
+        if (current.width === width) {
+            return
+        }
+        if (current.id) {
+            this.widths.set(current.id, width)
+        }
+        this.state.next({
+            ...current,
+            width,
+        })
     }
 
     isShowing (component: Type<any>): boolean {

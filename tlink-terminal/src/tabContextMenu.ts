@@ -7,6 +7,7 @@ import { MultifocusService } from './services/multifocus.service'
 import { ConnectableTerminalTabComponent } from './api/connectableTerminalTab.component'
 import { v4 as uuidv4 } from 'uuid'
 import slugify from 'slugify'
+import { SessionLogSettingsModalComponent } from './components/sessionLogSettingsModal.component'
 
 // Fallback base classes to avoid runtime crashes if core exports are undefined
 const TabContextMenuItemProviderRuntime = (CoreTabContextMenuItemProvider ?? class {}) as typeof CoreTabContextMenuItemProvider
@@ -315,6 +316,39 @@ export class SaveAsProfileContextMenu extends TabContextMenuItemProviderRuntime 
             const storedProfile = this.config.store.profiles?.find(p => p.id === tab.profile.id)
             const canPickDirectory = this.hostApp.platform !== Platform.Web
             const items: MenuItemOptions[] = []
+            if (canPickDirectory) {
+                items.push({
+                    label: this.translate.instant('Set session log file'),
+                    click: async () => {
+                        const modal = this.ngbModal.open(SessionLogSettingsModalComponent, { backdrop: 'static' })
+                        modal.componentInstance.directory = storedProfile?.sessionLog?.directory ?? tab.profile.sessionLog?.directory ?? ''
+                        modal.componentInstance.filenameTemplate = storedProfile?.sessionLog?.filenameTemplate ?? tab.profile.sessionLog?.filenameTemplate ?? ''
+                        modal.componentInstance.append = storedProfile?.sessionLog?.append ?? tab.profile.sessionLog?.append ?? false
+                        modal.componentInstance.canPickDirectory = canPickDirectory
+
+                        const result = await modal.result.catch(() => null)
+                        if (!result) {
+                            return
+                        }
+
+                        const directory = (result.directory ?? '').trim()
+                        const filenameTemplate = (result.filenameTemplate ?? '').trim()
+                        const nextSettings = {
+                            enabled: true,
+                            append: result.append ?? false,
+                            directory: directory || undefined,
+                            filenameTemplate: filenameTemplate || undefined,
+                        }
+
+                        tab.profile.sessionLog = nextSettings
+                        if (storedProfile) {
+                            storedProfile.sessionLog = nextSettings
+                            await this.config.save()
+                        }
+                        this.notifications.info(this.translate.instant('Session log settings updated'))
+                    },
+                })
+            }
             if (storedProfile && canPickDirectory) {
                 const hasDirectory = !!storedProfile.sessionLog?.directory?.trim()
                 items.push({

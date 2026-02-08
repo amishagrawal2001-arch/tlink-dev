@@ -2,7 +2,7 @@ import { Component, HostBinding, Inject, Injector } from '@angular/core'
 import { CdkDragDrop } from '@angular/cdk/drag-drop'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import deepClone from 'clone-deep'
-import { AppService, BaseTabComponent as CoreBaseTabComponent, MenuItemOptions, NotificationsService, PartialProfile, PartialProfileGroup, PlatformService, Profile, ProfileGroup, ProfileProvider, ProfilesService, PromptModalComponent, SidePanelService, SplitTabComponent, TranslateService } from 'tlink-core'
+import { AppService, BaseTabComponent as CoreBaseTabComponent, MenuItemOptions, NotificationsService, PartialProfile, PartialProfileGroup, PlatformService, Profile, ProfileGroup, ProfileProvider, ProfilesService, PromptModalComponent, SelectorService, SidePanelService, SplitTabComponent, TranslateService } from 'tlink-core'
 import { EditProfileGroupModalComponent, EditProfileGroupModalComponentResult, EditProfileModalComponent } from 'tlink-settings'
 import { BaseTerminalTabComponent } from '../api/baseTerminalTab.component'
 
@@ -61,6 +61,7 @@ export class SessionManagerTabComponent extends BaseTabComponentRuntime {
         private platform: PlatformService,
         private translate: TranslateService,
         @Inject(ProfileProvider) private profileProviders: ProfileProvider<Profile>[],
+        private selector: SelectorService,
         injector: Injector,
     ) {
         super(injector)
@@ -504,45 +505,57 @@ export class SessionManagerTabComponent extends BaseTabComponentRuntime {
     }
 
     async createProfile (group?: SessionProfileGroup): Promise<void> {
-        // Show profile selector with quick connect instead of just the create modal
-        const profile = await this.profiles.showProfileSelector().catch(() => null)
-        if (!profile) {
+        const targetGroup = group || (this.selectedGroups.length === 1 ? this.selectedGroups[0] : null)
+        const provider = await this.pickProfileProvider()
+        if (!provider) {
             return
         }
 
-        // Determine target group: use passed group, or selected group, or null
-        let targetGroup: SessionProfileGroup | null = group || null
-        if (!targetGroup && this.selectedGroups.length === 1) {
-            targetGroup = this.selectedGroups[0]
+        const draftProfile: PartialProfile<Profile> = {
+            id: '',
+            type: provider.id,
+            name: '',
+            group: targetGroup?.id,
+            options: {},
+            isBuiltin: false,
+            isTemplate: false,
         }
 
-        // If it's a quick connect profile (no ID), mark it for auto-save after connection
-        const isQuickConnect = !profile.id
-        const shouldAutoSave = isQuickConnect && targetGroup?.editable && targetGroup.id
-
-        if (shouldAutoSave && targetGroup) {
-            // Store the target group ID in the profile temporarily so we can save it after connection
-            ;(profile as any).__autoSaveGroupId = targetGroup.id
-            
-            // Ensure profile has a name (quick connect usually sets name to query, but be safe)
-            if (!profile.name || profile.name.trim() === '') {
-                // Try to extract name from connection options
-                const host = (profile as any).options?.host || 
-                            (profile as any).options?.hostname ||
-                            (profile as any).options?.address ||
-                            'Quick Connect'
-                profile.name = host
-            }
+        const result = await this.showProfileEditModal(draftProfile)
+        if (!result) {
+            return
         }
 
-        // Open the profile connection - we'll save it after successful connection
-        const tab = await this.profiles.openNewTabForProfile(profile)
-        
-        // If this is a quick connect profile that should be auto-saved, set up a listener
-        if (shouldAutoSave && tab && targetGroup?.id) {
-            // Wait for connection to be established, then save the profile
-            this.autoSaveQuickConnectProfile(tab, profile, targetGroup.id)
+        if (!result.name) {
+            const cfgProxy = this.profiles.getConfigProxyForProfile(result)
+            result.name = provider.getSuggestedName?.(cfgProxy) ?? this.translate.instant('New profile')
         }
+
+        await this.profiles.newProfile(result)
+        await this.config.save()
+        await this.refreshProfiles()
+    }
+
+    private async pickProfileProvider (): Promise<ProfileProvider<Profile> | null> {
+        const providers = [...this.profileProviders].sort((a, b) => a.name.localeCompare(b.name))
+        if (!providers.length) {
+            this.notifications.error('No profile providers available')
+            return null
+        }
+        if (providers.length === 1) {
+            return providers[0]
+        }
+
+        const options = providers.map(provider => ({
+            name: this.translate.instant(provider.name),
+            description: provider.getDescription?.(this.profiles.getConfigProxyForProfile({ type: provider.id, name: '', options: {} } as PartialProfile<Profile>)) ?? undefined,
+            result: provider,
+        }))
+
+        return await this.selector.show<ProfileProvider<Profile>>(
+            this.translate.instant('Select profile type'),
+            options,
+        ).catch(() => null)
     }
 
     private async autoSaveQuickConnectProfile (tab: BaseTabComponent, profile: PartialProfile<Profile>, groupId: string): Promise<void> {

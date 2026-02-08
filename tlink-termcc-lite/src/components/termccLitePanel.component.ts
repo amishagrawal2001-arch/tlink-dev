@@ -157,7 +157,7 @@ const PANEL: SidePanelRegistration = {
     id: 'termcc-lite',
     component: TermccLitePanelComponent,
     label: 'Termcc Lite',
-    width: 360,
+    width: 240,
 }
 
 export class TermccLiteCommandProvider extends CommandProvider {

@@ -26,6 +26,7 @@ import { MapButtonModalComponent } from './components/mapButtonModal.component'
 import { SessionManagerTabComponent } from './components/sessionManagerTab.component'
 import { ProfileCreateModalComponent } from './components/profileCreateModal.component'
 import { ColorTemplatesPanelComponent } from './components/colorTemplatesPanel.component'
+import { SessionLogSettingsModalComponent } from './components/sessionLogSettingsModal.component'
 
 import { TerminalDecorator } from './api/decorator'
 import { TerminalContextMenuItemProvider } from './api/contextMenuProvider'
@@ -103,6 +104,7 @@ import { SessionManagerCommandProvider } from './sessionManagerProvider'
         SessionManagerTabComponent,
         ProfileCreateModalComponent,
         ColorTemplatesPanelComponent,
+        SessionLogSettingsModalComponent,
     ],
     exports: [
         ColorPickerComponent,

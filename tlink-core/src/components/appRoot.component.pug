@@ -88,10 +88,18 @@ title-bar(
             )
                 i.fas.fa-cog
     .right-dock(*ngIf='rightDockPanels.length')
-        .side-panel-tabs
+        .side-panel-tabs(
+            cdkDropList,
+            [cdkDropListData]='rightDockPanels',
+            cdkDropListOrientation='vertical',
+            (cdkDropListDropped)='onRightDockReordered($event)'
+        )
             button.side-panel-toggle(
                 *ngFor='let panel of rightDockPanels',
                 type='button',
+                cdkDrag,
+                [cdkDragData]='panel',
+                cdkDragLockAxis='y',
                 (click)='toggleSidePanel(panel)',
                 (contextmenu)='openSidePanelMenu($event, panel)',
                 (mouseup)='onSidePanelMouseUp($event, panel)',
@@ -204,6 +212,11 @@ title-bar(
                         [tab]='tab',
                     )
                 .side-panel(*ngIf='sidePanelVisible && sidePanelComponent', [style.width.px]='sidePanelWidth')
+                    .side-panel-resizer(
+                        (mousedown)='onSidePanelResizeStart($event)',
+                        (touchstart)='onSidePanelResizeStart($event)'
+                    )
+                    .side-panel-resize-label(*ngIf='sidePanelResizing') {{ sidePanelWidth }}px
                     ng-container(*ngComponentOutlet='sidePanelComponent')
         .bottom-panel(*ngIf='shouldShowBottomPanel', [style.height.px]='bottomPanelHeight')
             .bottom-panel-resizer(

@@ -168,6 +168,7 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
         }
     }
 
+
     async setupOneSession (injector: Injector, profile: SSHProfile, multiplex = true): Promise<SSHSession> {
         let session = await this.sshMultiplexer.getSession(profile)
         if (!multiplex || !session || !profile.options.reuseSession) {

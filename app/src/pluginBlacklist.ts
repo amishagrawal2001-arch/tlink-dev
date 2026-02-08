@@ -8,4 +8,5 @@ export const PLUGIN_BLACKLIST = [
     'terminus-elastic-quick-cmds', // broken and abandoned, fork of quick-commands
     'tlink-fig', // abandoned,
     'tlink-plugin-fig-integration', // abandoned,
+    'tabby-ai-assistant', // legacy plugin; replaced by tlink-ai-assistant
 ]

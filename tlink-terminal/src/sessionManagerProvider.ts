@@ -5,7 +5,7 @@ import type { Command } from 'tlink-core'
 import { SessionManagerTabComponent } from './components/sessionManagerTab.component'
 import { ColorTemplatesPanelComponent } from './components/colorTemplatesPanel.component'
 
-const SESSION_MANAGER_WIDTH = 320
+const SESSION_MANAGER_WIDTH = 240
 const SESSION_MANAGER_PANEL: SidePanelRegistration = {
     id: 'session-manager',
     component: SessionManagerTabComponent,
@@ -38,7 +38,7 @@ const COLOR_TEMPLATES_PANEL: SidePanelRegistration = {
     id: 'color-templates',
     component: ColorTemplatesPanelComponent,
     label: 'Color Templates',
-    width: 420,
+    width: SESSION_MANAGER_WIDTH,
 }
 
 @Injectable()

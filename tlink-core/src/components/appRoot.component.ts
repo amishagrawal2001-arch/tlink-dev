@@ -86,7 +86,7 @@ export class AppRootComponent implements OnInit {
     transfersFloating = window.localStorage['transfersFloating'] === '1'
     sidePanelVisible = false
     sidePanelComponent: Type<any> | null = null
-    sidePanelWidth = 320
+    sidePanelWidth = 240
     sidePanelId = ''
     sidePanels: SidePanelRegistration[] = []
     rightDockPanels: SidePanelRegistration[] = []
@@ -101,6 +101,9 @@ export class AppRootComponent implements OnInit {
     private bottomPanelResizing = false
     private bottomPanelResizeStartY = 0
     private bottomPanelResizeStartHeight = 0
+    private sidePanelResizing = false
+    private sidePanelResizeStartX = 0
+    private sidePanelResizeStartWidth = 0
     private sidePanelColorPickerOpen = false
     private logger: Logger
 
@@ -217,7 +220,7 @@ export class AppRootComponent implements OnInit {
         })
         this.sidePanel.panels$.subscribe(panels => {
             this.sidePanels = panels.slice().sort((a, b) => a.label.localeCompare(b.label))
-            this.rightDockPanels = this.sidePanels.filter(panel => panel.id !== 'session-manager')
+            this.rightDockPanels = this.orderSidePanels(this.sidePanels)
             this.sshSidePanel = this.sidePanels.find(panel =>
                 panel.id?.toLowerCase().includes('ssh') || panel.label?.toLowerCase().includes('ssh'),
             ) ?? null
@@ -426,6 +429,15 @@ export class AppRootComponent implements OnInit {
         this.bottomPanelResizeStartHeight = this.bottomPanelHeight
     }
 
+    onSidePanelResizeStart (event: MouseEvent | TouchEvent): void {
+        event.preventDefault()
+        event.stopPropagation()
+        const clientX = event instanceof TouchEvent ? event.touches[0].clientX : event.clientX
+        this.sidePanelResizing = true
+        this.sidePanelResizeStartX = clientX
+        this.sidePanelResizeStartWidth = this.sidePanelWidth
+    }
+
     @HostListener('window:mousemove', ['$event'])
     onBottomResizeMove (event: MouseEvent): void {
         if (!this.bottomPanelResizing) {
@@ -437,9 +449,25 @@ export class AppRootComponent implements OnInit {
         this.bottomPanel.setHeight(next)
     }
 
+    @HostListener('window:mousemove', ['$event'])
+    onSidePanelResizeMove (event: MouseEvent): void {
+        if (!this.sidePanelResizing) {
+            return
+        }
+        const delta = this.sidePanelResizeStartX - event.clientX
+        const next = this.clampSidePanelWidth(this.sidePanelResizeStartWidth + delta)
+        this.sidePanelWidth = next
+        this.sidePanel.setWidth(next)
+    }
+
     @HostListener('window:mouseup')
     onBottomResizeEnd (): void {
         this.bottomPanelResizing = false
+    }
+
+    @HostListener('window:mouseup')
+    onSidePanelResizeEnd (): void {
+        this.sidePanelResizing = false
     }
 
     @HostListener('window:touchmove', ['$event'])
@@ -453,14 +481,36 @@ export class AppRootComponent implements OnInit {
         this.bottomPanel.setHeight(next)
     }
 
+    @HostListener('window:touchmove', ['$event'])
+    onSidePanelResizeMoveTouch (event: TouchEvent): void {
+        if (!this.sidePanelResizing || !event.touches.length) {
+            return
+        }
+        const delta = this.sidePanelResizeStartX - event.touches[0].clientX
+        const next = this.clampSidePanelWidth(this.sidePanelResizeStartWidth + delta)
+        this.sidePanelWidth = next
+        this.sidePanel.setWidth(next)
+    }
+
     @HostListener('window:touchend')
     onBottomResizeEndTouch (): void {
         this.bottomPanelResizing = false
     }
 
+    @HostListener('window:touchend')
+    onSidePanelResizeEndTouch (): void {
+        this.sidePanelResizing = false
+    }
+
     private clampBottomPanelHeight (value: number): number {
         const min = 160
         const max = Math.max(window.innerHeight - 120, min)
+        return Math.min(Math.max(value, min), max)
+    }
+
+    private clampSidePanelWidth (value: number): number {
+        const min = 240
+        const max = Math.max(window.innerWidth - 320, min)
         return Math.min(Math.max(value, min), max)
     }
 
@@ -541,6 +591,11 @@ export class AppRootComponent implements OnInit {
         this.app.emitTabsChanged()
     }
 
+    onRightDockReordered (event: CdkDragDrop<SidePanelRegistration[]>) {
+        moveItemInArray(this.rightDockPanels, event.previousIndex, event.currentIndex)
+        this.config.store.appearance.sidePanelOrder = this.rightDockPanels.map(panel => panel.id)
+    }
+
     onTransfersChange () {
         if (this.activeTransfers.length === 0) {
             this.activeTransfersDropdown.close()
@@ -587,6 +642,28 @@ export class AppRootComponent implements OnInit {
             ctx.tab = tab
         }
         return ctx
+    }
+
+    private orderSidePanels (panels: SidePanelRegistration[]): SidePanelRegistration[] {
+        const order = this.config.store?.appearance?.sidePanelOrder as string[] | undefined
+        if (!order?.length) {
+            return panels.slice()
+        }
+        const orderSet = new Set(order)
+        const byId = new Map(panels.map(panel => [panel.id, panel]))
+        const ordered: SidePanelRegistration[] = []
+        for (const id of order) {
+            const panel = byId.get(id)
+            if (panel) {
+                ordered.push(panel)
+            }
+        }
+        for (const panel of panels) {
+            if (!orderSet.has(panel.id)) {
+                ordered.push(panel)
+            }
+        }
+        return ordered
     }
 
     toggleMaximize (): void {

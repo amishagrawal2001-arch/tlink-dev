@@ -13,6 +13,8 @@ type SessionLogState = {
     settingsKey: string
 }
 
+const ANSI_SEQUENCE_REGEX = /(?:\x1b\[[0-?]*[ -/]*[@-~])|(?:\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))|(?:\x9b[0-?]*[ -/]*[@-~])/g
+
 @Injectable()
 export class SessionLoggerDecorator extends TerminalDecorator {
     private logger: Logger
@@ -142,13 +144,27 @@ export class SessionLoggerDecorator extends TerminalDecorator {
                 if (nextState) {
                     this.states.set(terminal, nextState)
                     ;(terminal as any).sessionLogPath = nextState.filePath
-                    this.enqueueWrite(nextState, data)
+                    this.enqueueWrite(nextState, this.formatLogData(data))
                 }
             })
             return
         }
 
-        this.enqueueWrite(state, data)
+        this.enqueueWrite(state, this.formatLogData(data))
+    }
+
+    private formatLogData (data: Buffer): Buffer {
+        if (!data.length) {
+            return data
+        }
+        let text = data.toString('utf8')
+        if (text.includes('\x1b') || text.includes('\x9b')) {
+            text = text.replace(ANSI_SEQUENCE_REGEX, '')
+        }
+        if (text.includes('\r')) {
+            text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+        }
+        return Buffer.from(text, 'utf8')
     }
 
     private getSettingsKey (settings: NonNullable<Profile['sessionLog']>): string {

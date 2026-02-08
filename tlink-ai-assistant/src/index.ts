@@ -10,7 +10,7 @@ import './styles/ai-assistant.scss';
 import { TranslateService } from './i18n';
 
 // Tlink modules
-import TlinkCorePlugin, { AppService, ConfigService, HostAppService, ToolbarButtonProvider, ConfigProvider, HotkeyProvider, HotkeysService } from 'tlink-core';
+import TlinkCorePlugin, { AppService, ConfigService, HostAppService, ToolbarButtonProvider, ConfigProvider, HotkeyProvider, HotkeysService, CLIHandler } from 'tlink-core';
 import TlinkTerminalPlugin from 'tlink-terminal';
 import { SettingsTabProvider } from 'tlink-settings';
 
@@ -103,6 +103,7 @@ import { AiToolbarButtonProvider } from './providers/tlink/ai-toolbar-button.pro
 import { AiSettingsTabProvider } from './providers/tlink/ai-settings-tab.provider';
 import { AiConfigProvider } from './providers/tlink/ai-config.provider';
 import { AiHotkeyProvider } from './providers/tlink/ai-hotkey.provider';
+import { AiAssistantCLIHandler } from './cli';
 
 @NgModule({
     imports: [
@@ -181,6 +182,7 @@ import { AiHotkeyProvider } from './providers/tlink/ai-hotkey.provider';
         { provide: SettingsTabProvider, useClass: AiSettingsTabProvider, multi: true },
         { provide: ConfigProvider, useClass: AiConfigProvider, multi: true },
         { provide: HotkeyProvider, useClass: AiHotkeyProvider, multi: true },
+        { provide: CLIHandler, useClass: AiAssistantCLIHandler, multi: true },
     ],
     declarations: [
         // Chat Components
