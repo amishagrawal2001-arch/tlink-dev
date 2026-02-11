@@ -169,6 +169,17 @@ export const PROVIDER_DEFAULTS: Record<string, ProviderDefaults> = {
         authConfig: { type: 'none', credentials: {} },
         displayName: 'Tlink Agent'
     },
+    tabby: {
+        baseURL: 'http://localhost:8080',
+        model: 'default',
+        maxTokens: 1000,
+        temperature: 0.7,
+        timeout: 30000,
+        retries: 3,
+        contextWindow: 16384,
+        authConfig: { type: 'bearer', credentials: {} },
+        displayName: 'Tabby'
+    },
     // Legacy alias kept for backward compatibility; will be normalized to tlink-agentic
     'tlink-proxy': {
         baseURL: 'http://localhost:3052/v1',

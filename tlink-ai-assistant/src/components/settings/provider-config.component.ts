@@ -189,6 +189,17 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
                 { key: 'model', label: 'Model', type: 'text', default: 'auto', required: false, placeholder: 'auto (proxy selects best model)' },
                 { key: 'contextWindow', label: 'Context Window', type: 'number', default: 128000, required: false, placeholder: 'Default: 128000' }
             ]
+        },
+        'tabby': {
+            name: 'Tabby',
+            description: 'Self-hosted AI coding assistant from TabbyML (OpenAI-compatible)',
+            icon: 'fa-code',
+            fields: [
+                { key: 'apiKey', label: 'API Key (Auth Token)', type: 'password', required: true, placeholder: 'Your Tabby auth token' },
+                { key: 'baseURL', label: 'Base URL', type: 'text', default: 'http://localhost:8080', required: true, placeholder: 'e.g. http://localhost:8080' },
+                { key: 'model', label: 'Model', type: 'text', default: 'default', required: false, placeholder: 'default (or specific model name)' },
+                { key: 'contextWindow', label: 'Context Window', type: 'number', default: 16384, required: false, placeholder: 'Default: 16384' }
+            ]
         }
     };
 

@@ -86,6 +86,16 @@
                                         <i class="fa fa-link"></i>
                                     </a>
                                 </ng-container>
+                                <ng-container *ngIf="providerName === 'tabby' && field.key === 'baseURL'">
+                                    <a
+                                        class="ml-2"
+                                        href="https://tabby.tabbyml.com/docs/api"
+                                        (click)="openExternal('https://tabby.tabbyml.com/docs/api', $event)"
+                                        rel="noopener"
+                                        title="Tabby API reference">
+                                        <i class="fa fa-link"></i>
+                                    </a>
+                                </ng-container>
                                 <ng-container *ngIf="providerName === 'openai' && field.key === 'model'">
                                     <i
                                         class="fa ml-2"

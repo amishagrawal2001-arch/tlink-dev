@@ -33,6 +33,7 @@ import { VllmProviderService } from './services/providers/vllm-provider.service'
 import { GroqProviderService } from './services/providers/groq-provider.service';
 import { TlinkProxyProviderService } from './services/providers/tlink-proxy.provider';
 import { TlinkAgentProviderService } from './services/providers/tlink-agent.provider';
+import { TabbyProviderService } from './services/providers/tabby-provider.service';
 
 // Security Services
 import { SecurityValidatorService } from './services/security/security-validator.service';
@@ -135,6 +136,7 @@ import { AiAssistantCLIHandler } from './cli';
         GroqProviderService,
         TlinkProxyProviderService,
         TlinkAgentProviderService,
+        TabbyProviderService,
 
         // Security Services
         SecurityValidatorService,
