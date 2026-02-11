@@ -26,6 +26,7 @@ This guide explains how to configure and modify AI providers in the Tlink AI Ass
 - **Anthropic Claude** - Claude 3 models
 - **Minimax** - MiniMax AI models
 - **GLM (ChatGLM)** - Zhipu AI ChatGLM models
+- **Tabby** - Self-hosted AI coding assistant (TabbyML)
 - **OpenAI Compatible** - Third-party services (DeepSeek, OneAPI, etc.)
 
 ### Steps to Configure:
@@ -152,6 +153,23 @@ This guide explains how to configure and modify AI providers in the Tlink AI Ass
 - Refresh the settings page
 
 ## Advanced Configuration
+
+### Tabby (Self-Hosted AI Coding Assistant)
+TabbyML is a self-hosted AI coding assistant that provides an OpenAI-compatible API:
+
+1. Select **"Tabby"** provider
+2. Enter your **Auth Token** (generate from Tabby dashboard)
+3. Set **Base URL** to your Tabby server
+   - Default: `http://localhost:8080`
+   - Remote: `http://your-server:8080`
+4. Set **Model** name (usually `default`)
+5. Set **Context Window** (default: 16384)
+
+**Setting up Tabby Server:**
+1. Install Tabby: `brew install tabbyml/tabby/tabby` (macOS) or see [Tabby docs](https://tabby.tabbyml.com)
+2. Start server: `tabby serve --model StarCoder-1B --host 0.0.0.0 --port 8080`
+3. Generate auth token from web UI (http://localhost:8080)
+4. Configure in Tlink AI Assistant settings
 
 ### OpenAI Compatible Services
 For services like DeepSeek, OneAPI, or other OpenAI-compatible APIs:

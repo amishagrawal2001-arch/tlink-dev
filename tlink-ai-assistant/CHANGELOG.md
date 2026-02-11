@@ -2,6 +2,24 @@
 
 All notable changes to the Tlink AI Assistant plugin will be documented in this file.
 
+## [1.0.39] - Tabby Provider Integration
+
+### Added
+- **Tabby AI Provider Support**: Integrated TabbyML self-hosted AI coding assistant
+  - New `TabbyProviderService` with OpenAI-compatible API format
+  - Support for chat, streaming, command generation, and explanation
+  - Bearer token authentication for secure connections
+  - Default configuration: `http://localhost:8080` with 16384 token context window
+  - UI configuration in provider settings with documentation link
+  - Full integration with existing provider management system
+
+### Documentation
+- **README Updates**: Added Tabby to supported providers list and feature overview
+- **Configuration Guide**: Added Tabby setup instructions with server installation steps
+- **CHANGELOG**: Documented Tabby provider integration in v1.0.39
+
+---
+
 ## [1.0.38] - Migration to Tlink
 
 ### Changed

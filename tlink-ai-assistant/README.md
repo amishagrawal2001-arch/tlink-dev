@@ -5,7 +5,7 @@ A powerful Tlink terminal AI assistant plugin that supports multiple AI provider
 ## 🌟 Features
 
 ### Core Features
-- **Multiple AI Provider Support** - Supports OpenAI, Anthropic, Minimax, GLM, Ollama, vLLM, and more
+- **Multiple AI Provider Support** - Supports OpenAI, Anthropic, Minimax, GLM, Ollama, vLLM, Tabby, and more
 - **Intelligent Command Generation** - Natural language to terminal command conversion with high accuracy
 - **Command Explanation** - Detailed explanations of command meanings and usage
 - **Error Fixing** - Automatic error analysis and repair suggestions
@@ -37,6 +37,7 @@ A powerful Tlink terminal AI assistant plugin that supports multiple AI provider
 | **Anthropic** | `https://api.anthropic.com` | Claude-3-Sonnet | High security, strong reasoning capabilities |
 | **Minimax** | `https://api.minimaxi.com/anthropic` | MiniMax-M2 | Optimized for code |
 | **GLM** | `https://open.bigmodel.cn/api/anthropic` | GLM-4.6 | Chinese optimized, supports dual mode |
+| **Tabby** | `http://localhost:8080` | default | Self-hosted coding assistant, OpenAI-compatible |
 
 #### GLM Dual Mode Support
 
