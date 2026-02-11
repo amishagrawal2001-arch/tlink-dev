@@ -100,12 +100,12 @@
                                                         </ng-container>
                                                     </span>
                                                     <span class="tool-name">{{ block.name }}</span>
-                                                    <span class="tool-status" *ngIf="block.status === 'executing'">执行中...</span>
+                                                    <span class="tool-status" *ngIf="block.status === 'executing'">Running...</span>
                                                     <span class="tool-duration" *ngIf="block.status !== 'executing' && block.duration">{{ block.duration }}ms</span>
                                                 </div>
                                                 <div *ngIf="block.output && block.output.content" class="tool-output">
                                                     <pre>{{ block.output.content }}</pre>
-                                                    <span *ngIf="block.output.truncated" class="truncated-note">...(已截断)</span>
+                                                    <span *ngIf="block.output.truncated" class="truncated-note">...(truncated)</span>
                                                 </div>
                                                 <div *ngIf="block.status === 'error' && block.errorMessage" class="tool-error">
                                                     <pre>{{ block.errorMessage }}</pre>
@@ -114,12 +114,12 @@
 
                                             <!-- 分隔线块 -->
                                             <div *ngIf="block.type === 'divider'" class="round-divider">
-                                                --- 第 {{ block.round }} 轮 ---
+                                                --- Round {{ block.round }} ---
                                             </div>
 
                                             <!-- 状态块 -->
                                             <div *ngIf="block.type === 'status'" class="agent-status">
-                                                {{ block.icon }} {{ block.text }}<span *ngIf="block.rounds"> ({{ block.rounds }} 轮)</span>
+                                                {{ block.icon }} {{ block.text }}<span *ngIf="block.rounds"> ({{ block.rounds }} rounds)</span>
                                             </div>
                                             
                                         </ng-container>
@@ -154,10 +154,10 @@
         </div>
 
         <!-- 滚动按钮 (在容器外部以便固定定位) -->
-        <button *ngIf="showScrollTop" class="scroll-btn scroll-top" (click)="scrollToTop()" title="滚动到顶部">
+        <button *ngIf="showScrollTop" class="scroll-btn scroll-top" (click)="scrollToTop()" title="Scroll to top">
             <i class="fa fa-chevron-up"></i>
         </button>
-        <button *ngIf="showScrollBottom" class="scroll-btn scroll-bottom" (click)="scrollToBottom()" title="滚动到底部">
+        <button *ngIf="showScrollBottom" class="scroll-btn scroll-bottom" (click)="scrollToBottom()" title="Scroll to bottom">
             <i class="fa fa-chevron-down"></i>
         </button>
     </div>

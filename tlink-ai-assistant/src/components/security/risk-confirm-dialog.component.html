@@ -18,18 +18,18 @@
                 <i [class]="getRiskLevelIcon()"></i>
             </div>
             <div class="warning-text">
-                <h4>安全警告</h4>
-                <p>此命令被识别为{{ getRiskLevelText() }}，请仔细确认后再执行。</p>
+                <h4>Security Warning</h4>
+                <p>This command is classified as {{ getRiskLevelText() }}. Please review carefully before executing.</p>
             </div>
         </div>
 
         <!-- 命令信息 -->
         <div class="command-info">
             <div class="info-section">
-                <label>将要执行的命令:</label>
+                <label>Command to be executed:</label>
                 <div class="command-display">
                     <code>{{ command }}</code>
-                    <button class="btn-copy" (click)="navigator.clipboard.writeText(command)" title="复制">
+                    <button class="btn-copy" (click)="navigator.clipboard.writeText(command)" title="Copy">
                         <i class="fa fa-copy"></i>
                     </button>
                 </div>
@@ -42,7 +42,7 @@
 
             <!-- 安全建议 -->
             <div class="info-section" *ngIf="suggestions.length > 0">
-                <label>安全建议:</label>
+                <label>Safety suggestions:</label>
                 <ul class="suggestions-list">
                     <li *ngFor="let suggestion of suggestions">
                         <i class="fa fa-lightbulb-o"></i>
@@ -57,12 +57,12 @@
             <div class="warning-box">
                 <i class="fa fa-exclamation-triangle"></i>
                 <div class="warning-content">
-                    <strong>⚠️ 重要提示</strong>
+                    <strong>⚠️ Important Notice</strong>
                     <p *ngIf="riskLevel === 'critical'">
-                        此命令可能导致系统损坏或数据丢失，请在执行前备份重要数据！
+                        This command may cause system damage or data loss. Please back up important data before executing.
                     </p>
                     <p *ngIf="riskLevel === 'high'">
-                        此命令将修改系统设置或删除文件，请确保您了解命令的作用。
+                        This command will modify system settings or delete files. Make sure you understand its impact.
                     </p>
                 </div>
             </div>
@@ -73,11 +73,11 @@
     <div class="dialog-footer">
         <button type="button" class="btn btn-secondary" (click)="cancel()">
             <i class="fa fa-times"></i>
-            取消
+            Cancel
         </button>
         <button type="button" class="btn btn-danger" [ngClass]="{ 'btn-critical': isHighRisk() }" (click)="confirm()">
             <i [class]="isHighRisk() ? 'fa fa-exclamation-triangle' : 'fa fa-check'"></i>
-            {{ isHighRisk() ? '仍要执行' : '确认执行' }}
+            {{ isHighRisk() ? 'Execute anyway' : 'Confirm execution' }}
         </button>
     </div>
 </div>

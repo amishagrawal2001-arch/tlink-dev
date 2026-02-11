@@ -37,9 +37,9 @@ export class ChatMessageComponent {
      */
     copyMessage(): void {
         navigator.clipboard.writeText(this.message.content).then(() => {
-            this.toastService.success('已复制到剪贴板', 2000);
+            this.toastService.success('Copied to clipboard', 2000);
         }).catch(error => {
-            this.toastService.error('复制失败，请重试');
+            this.toastService.error('Copy failed. Please try again.');
         });
     }
 
@@ -70,7 +70,7 @@ export class ChatMessageComponent {
      * 格式化时间
      */
     formatTime(timestamp: Date): string {
-        return timestamp.toLocaleTimeString('zh-CN', {
+        return timestamp.toLocaleTimeString('en-US', {
             hour: '2-digit',
             minute: '2-digit'
         });

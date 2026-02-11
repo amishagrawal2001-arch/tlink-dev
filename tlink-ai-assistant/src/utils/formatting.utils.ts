@@ -70,13 +70,13 @@ function formatRelativeTime(date: Date): string {
     const days = Math.floor(hours / 24);
 
     if (seconds < 60) {
-        return '刚刚';
+        return 'just now';
     } else if (minutes < 60) {
-        return `${minutes}分钟前`;
+        return `${minutes} minutes ago`;
     } else if (hours < 24) {
-        return `${hours}小时前`;
+        return `${hours} hours ago`;
     } else if (days < 7) {
-        return `${days}天前`;
+        return `${days} days ago`;
     } else {
         return date.toLocaleDateString();
     }
@@ -146,15 +146,15 @@ export function formatCommandOutput(output: string): string {
 export function formatRiskLevel(level: string): { text: string; class: string } {
     switch (level.toLowerCase()) {
         case 'low':
-            return { text: '低风险', class: 'text-success' };
+            return { text: 'Low risk', class: 'text-success' };
         case 'medium':
-            return { text: '中风险', class: 'text-warning' };
+            return { text: 'Medium risk', class: 'text-warning' };
         case 'high':
-            return { text: '高风险', class: 'text-danger' };
+            return { text: 'High risk', class: 'text-danger' };
         case 'critical':
-            return { text: '极风险', class: 'text-danger' };
+            return { text: 'Critical risk', class: 'text-danger' };
         default:
-            return { text: '未知', class: 'text-muted' };
+            return { text: 'Unknown', class: 'text-muted' };
     }
 }
 
@@ -165,13 +165,13 @@ export function formatConfidence(confidence: number): { text: string; class: str
     const percentage = Math.round(confidence * 100);
 
     if (percentage >= 90) {
-        return { text: `${percentage}% - 很高`, class: 'text-success' };
+        return { text: `${percentage}% - Very high`, class: 'text-success' };
     } else if (percentage >= 70) {
-        return { text: `${percentage}% - 高`, class: 'text-info' };
+        return { text: `${percentage}% - High`, class: 'text-info' };
     } else if (percentage >= 50) {
-        return { text: `${percentage}% - 中`, class: 'text-warning' };
+        return { text: `${percentage}% - Medium`, class: 'text-warning' };
     } else {
-        return { text: `${percentage}% - 低`, class: 'text-danger' };
+        return { text: `${percentage}% - Low`, class: 'text-danger' };
     }
 }
 
@@ -190,18 +190,18 @@ export function truncateText(text: string, maxLength: number, suffix: string = '
  * 格式化错误信息
  */
 export function formatError(error: Error | string): string {
-    if (!error) return '未知错误';
+    if (!error) return 'Unknown error';
 
     if (typeof error === 'string') {
         return error;
     }
 
-    const message = error.message || '未知错误';
+    const message = error.message || 'Unknown error';
     const stack = error.stack;
 
     // 如果是API错误，尝试解析
     if (message.includes('API') || message.includes('HTTP')) {
-        return `API错误: ${message}`;
+        return `API error: ${message}`;
     }
 
     return stack ? `${message}\n${stack}` : message;
@@ -290,10 +290,10 @@ export function formatList(items: string[], delimiter: string = ', '): string {
     }
 
     if (items.length === 2) {
-        return `${items[0]} 和 ${items[1]}`;
+        return `${items[0]} and ${items[1]}`;
     }
 
-    return items.slice(0, -1).join(delimiter) + '、以及 ' + items[items.length - 1];
+    return items.slice(0, -1).join(delimiter) + `, and ${items[items.length - 1]}`;
 }
 
 /**

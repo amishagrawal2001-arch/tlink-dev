@@ -684,7 +684,7 @@ export class CheckpointManager {
 
     private generateSummary(messages: ApiMessage[]): string {
         if (messages.length === 0) {
-            return '空检查点';
+            return 'Empty checkpoint';
         }
 
         const firstMessage = messages[0];
@@ -692,13 +692,13 @@ export class CheckpointManager {
 
         const firstContent = typeof firstMessage.content === 'string'
             ? firstMessage.content
-            : '[复杂内容]';
+            : '[complex content]';
 
         const lastContent = typeof lastMessage.content === 'string'
             ? lastMessage.content
-            : '[复杂内容]';
+            : '[complex content]';
 
-        return `检查点：${messages.length}条消息 | 从 "${firstContent.substring(0, 50)}..." 到 "${lastContent.substring(0, 50)}..."`;
+        return `Checkpoint: ${messages.length} messages | from "${firstContent.substring(0, 50)}..." to "${lastContent.substring(0, 50)}..."`;
     }
 
     private applyFilter(checkpoints: Checkpoint[], filter: CheckpointFilter): Checkpoint[] {

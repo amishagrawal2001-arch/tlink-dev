@@ -31,7 +31,7 @@ export interface AiAssistantConfig {
         fontSize: number;
     };
     /** Agent execution engine */
-    agentEngine: 'langgraph' | 'legacy';
+    agentEngine: 'langgraph' | 'legacy' | 'continue';
     /** Enable planner node in agent flow */
     agentPlannerEnabled: boolean;
     /** Enable reviewer node in agent flow */
@@ -81,7 +81,7 @@ const DEFAULT_CONFIG: AiAssistantConfig = {
         compactMode: false,
         fontSize: 14
     },
-    agentEngine: 'langgraph',
+    agentEngine: 'continue',
     agentPlannerEnabled: true,
     agentReviewerEnabled: true,
     agentMaxRounds: 50,

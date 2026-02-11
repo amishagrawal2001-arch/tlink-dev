@@ -14,72 +14,48 @@ title-bar(
     [class.has-right-dock]='rightDockPanels.length'
 )
     .left-dock
-        .left-dock-section
+        .left-dock-section(
+            cdkDropList,
+            [cdkDropListData]='leftDockVisibleOrder',
+            cdkDropListOrientation='vertical',
+            (cdkDropListDropped)='onLeftDockReordered($event)'
+        )
             button.left-dock-button(
+                *ngFor='let item of leftDockVisibleOrder; trackBy: trackByLeftDockItem',
                 type='button',
-                (click)='openProfilesAndConnections()',
-                ngbTooltip='Profiles & connections'
-            ) !{require('../icons/profiles.svg')}
-            button.left-dock-button(
-                type='button',
-                (click)='openSftpProfileSelector()',
-                ngbTooltip='Open SFTP'
+                cdkDrag,
+                [cdkDragData]='item',
+                (click)='onLeftDockItemClick(item)',
+                [class.active]='isLeftDockItemActive(item)',
+                [class.disabled]='isLeftDockItemDisabled(item)',
+                [ngbTooltip]='getLeftDockTooltip(item)'
             )
-                i.far.fa-folder-open
-            button.left-dock-button(
-                type='button',
-                (click)='openSidePanelById("session-manager")',
-                [class.active]='sidePanelVisible && sidePanelId === "session-manager"',
-                ngbTooltip='Session manager'
-            )
-                i.fas.fa-list
-            button.left-dock-button(
-                type='button',
-                (click)='openSidePanelById("remote-desktop")',
-                [class.active]='sidePanelVisible && sidePanelId === "remote-desktop"',
-                ngbTooltip='Remote desktop'
-            )
-                i.fas.fa-desktop
-            button.left-dock-button(
-                *ngIf='sshSidePanel || sshSidebarCommand',
-                type='button',
-                (click)='openSSHSidePanel()',
-                [class.active]='sidePanelVisible && sidePanelId === sshSidePanel?.id',
-                [ngbTooltip]='(sshSidePanel?.label || sshSidebarCommand?.label || "SSH sidebar")'
-            )
-                i.fas.fa-terminal
-            button.left-dock-button(
-                type='button',
-                (click)='openCodeEditor()',
-                ngbTooltip='Code editor'
-            ) !{require('../icons/code.svg')}
-            button.left-dock-button(
-                type='button',
-                (click)='openAIChat()',
-                ngbTooltip='AI Chat'
-            )
-                i.fas.fa-comments
-            button.left-dock-button(
-                type='button',
-                (click)='openAIAssistant()',
-                ngbTooltip='AI Assistant'
-            )
-                svg(xmlns="http://www.w3.org/2000/svg", width="16", height="16", fill="currentColor", viewBox="0 0 16 16")
-                    path(d="M6 12.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5ZM3 8.062C3 6.76 4.235 5.765 5.53 5.886a26.58 26.58 0 0 0 4.94 0C11.765 5.765 13 6.76 13 8.062v1.157a.933.933 0 0 1-.765.935c-.845.147-2.34.346-4.235.346-1.895 0-3.39-.2-4.235-.346A.933.933 0 0 1 3 9.219V8.062Zm4.542-.827a.25.25 0 0 0-.217.068l-.92.9a24.767 24.767 0 0 1-1.871-.183.25.25 0 0 0-.068.495c.55.076 1.232.149 2.02.193a.25.25 0 0 0 .189-.071l.754-.736.847 1.71a.25.25 0 0 0 .404.062l.932-.97a25.286 25.286 0 0 0 1.922-.188.25.25 0 0 0-.068-.495c-.538.074-1.207.145-1.98.189a.25.25 0 0 0-.166.076l-.754.785-.842-1.7a.25.25 0 0 0-.182-.135Z")
-                    path(d="M8.5 1.866a1 1 0 1 0-1 0V3h-2A4.5 4.5 0 0 0 1 7.5V8a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1v1a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1v-.5A4.5 4.5 0 0 0 10.5 3h-2V1.866ZM14 7.5V13a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7.5A3.5 3.5 0 0 1 5.5 4h5A3.5 3.5 0 0 1 14 7.5Z")
-            button.left-dock-button(
-                type='button',
-                [class.active]='websocketServerRunning',
-                [class.disabled]='websocketServerStarting',
-                (click)='toggleWebSocketServer()',
-                [ngbTooltip]='websocketServerRunning ? "Session sharing server running on port " + websocketServerPort + " (click to stop)" : "Start session sharing server"'
-            )
-                i.fas(
-                    [class.fa-plug]='!websocketServerRunning && !websocketServerStarting',
-                    [class.fa-power-off]='websocketServerRunning && !websocketServerStarting',
-                    [class.fa-spinner]='websocketServerStarting',
-                    [class.fa-spin]='websocketServerStarting'
-                )
+                ng-container([ngSwitch]='item')
+                    ng-container(*ngSwitchCase='"profiles"') !{require('../icons/profiles.svg')}
+                    ng-container(*ngSwitchCase='"sftp"')
+                        i.far.fa-folder-open
+                    ng-container(*ngSwitchCase='"session-manager"')
+                        i.fas.fa-list
+                    ng-container(*ngSwitchCase='"remote-desktop"')
+                        i.fas.fa-desktop
+                    ng-container(*ngSwitchCase='"ssh"')
+                        i.fas.fa-terminal
+                    ng-container(*ngSwitchCase='"code-editor"') !{require('../icons/code.svg')}
+                    ng-container(*ngSwitchCase='"ai-chat"')
+                        i.fas.fa-comments
+                    ng-container(*ngSwitchCase='"ai-assistant"')
+                        svg(xmlns="http://www.w3.org/2000/svg", width="16", height="16", fill="currentColor", viewBox="0 0 16 16")
+                            path(d="M6 12.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5ZM3 8.062C3 6.76 4.235 5.765 5.53 5.886a26.58 26.58 0 0 0 4.94 0C11.765 5.765 13 6.76 13 8.062v1.157a.933.933 0 0 1-.765.935c-.845.147-2.34.346-4.235.346-1.895 0-3.39-.2-4.235-.346A.933.933 0 0 1 3 9.219V8.062Zm4.542-.827a.25.25 0 0 0-.217.068l-.92.9a24.767 24.767 0 0 1-1.871-.183.25.25 0 0 0-.068.495c.55.076 1.232.149 2.02.193a.25.25 0 0 0 .189-.071l.754-.736.847 1.71a.25.25 0 0 0 .404.062l.932-.97a25.286 25.286 0 0 0 1.922-.188.25.25 0 0 0-.068-.495c-.538.074-1.207.145-1.98.189a.25.25 0 0 0-.166.076l-.754.785-.842-1.7a.25.25 0 0 0-.182-.135Z")
+                            path(d="M8.5 1.866a1 1 0 1 0-1 0V3h-2A4.5 4.5 0 0 0 1 7.5V8a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1v1a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1v-.5A4.5 4.5 0 0 0 10.5 3h-2V1.866ZM14 7.5V13a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7.5A3.5 3.5 0 0 1 5.5 4h5A3.5 3.5 0 0 1 14 7.5Z")
+                    ng-container(*ngSwitchCase='"copilot-chat"')
+                        i.fas.fa-comment-dots
+                    ng-container(*ngSwitchCase='"websocket"')
+                        i.fas(
+                            [class.fa-plug]='!websocketServerRunning && !websocketServerStarting',
+                            [class.fa-power-off]='websocketServerRunning && !websocketServerStarting',
+                            [class.fa-spinner]='websocketServerStarting',
+                            [class.fa-spin]='websocketServerStarting'
+                        )
         .left-dock-section.left-dock-bottom
             button.left-dock-button(
                 type='button',

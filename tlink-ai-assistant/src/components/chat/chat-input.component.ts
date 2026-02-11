@@ -12,7 +12,7 @@ import { AiAssistantService } from '../../services/core/ai-assistant.service';
 })
 export class ChatInputComponent implements OnInit, OnDestroy {
     @Input() disabled = false;
-    @Input() placeholder = '输入您的问题或描述要执行的命令...';
+    @Input() placeholder = 'Enter your question or describe the command to run...';
     @Output() send = new EventEmitter<string>();
 
     @ViewChild('textInput', { static: false }) textInput!: ElementRef<HTMLTextAreaElement>;

@@ -69,7 +69,7 @@ export class ContextSettingsComponent implements OnInit, OnDestroy {
     saveConfig(): void {
         this.configService.setContextConfig(this.config);
         this.contextManager.updateConfig(this.config);
-        this.toast.success(this.t?.contextSettings?.configSaved || '上下文配置已保存');
+        this.toast.success(this.t?.contextSettings?.configSaved || 'Context settings saved');
     }
 
     toggleAutoCompact(): void {
@@ -77,8 +77,8 @@ export class ContextSettingsComponent implements OnInit, OnDestroy {
         this.configService.setAutoCompactEnabled(this.autoCompactEnabled);
         this.toast.info(
             this.autoCompactEnabled
-                ? (this.t?.contextSettings?.autoCompactEnabled || '自动压缩已启用')
-                : (this.t?.contextSettings?.autoCompactDisabled || '自动压缩已禁用')
+                ? (this.t?.contextSettings?.autoCompactEnabled || 'Auto compaction enabled')
+                : (this.t?.contextSettings?.autoCompactDisabled || 'Auto compaction disabled')
         );
     }
 
@@ -86,6 +86,6 @@ export class ContextSettingsComponent implements OnInit, OnDestroy {
         this.config = { ...DEFAULT_CONTEXT_CONFIG };
         this.autoCompactEnabled = true;
         this.saveConfig();
-        this.toast.info(this.t?.common?.resetToDefault || '已重置为默认配置');
+        this.toast.info(this.t?.common?.resetToDefault || 'Reset to default settings');
     }
 }

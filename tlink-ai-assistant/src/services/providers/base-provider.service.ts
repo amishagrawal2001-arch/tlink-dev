@@ -465,24 +465,24 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
      * 构建命令生成提示 - 通用实现
      */
     protected buildCommandPrompt(request: CommandRequest): string {
-        let prompt = `请将以下自然语言描述转换为准确的终端命令：\n\n"${request.naturalLanguage}"\n\n`;
+        let prompt = `Convert the following natural language request into an accurate terminal command:\n\n"${request.naturalLanguage}"\n\n`;
 
         if (request.context) {
-            prompt += `当前环境：\n`;
+            prompt += `Current environment:\n`;
             if (request.context.currentDirectory) {
-                prompt += `- 当前目录：${request.context.currentDirectory}\n`;
+                prompt += `- Current directory: ${request.context.currentDirectory}\n`;
             }
             if (request.context.operatingSystem) {
-                prompt += `- 操作系统：${request.context.operatingSystem}\n`;
+                prompt += `- Operating system: ${request.context.operatingSystem}\n`;
             }
             if (request.context.shell) {
-                prompt += `- Shell：${request.context.shell}\n`;
+                prompt += `- Shell: ${request.context.shell}\n`;
             }
         }
 
-        prompt += `\n请直接返回JSON格式：\n`;
+        prompt += `\nReturn JSON only:\n`;
         prompt += `{\n`;
-        prompt += `  "command": "具体命令",\n`;
+        prompt += `  "command": "the command",\n`;
         prompt += `  "explanation": "Command explanation",\n`;
         prompt += `  "confidence": 0.95\n`;
         prompt += `}\n`;
@@ -494,22 +494,22 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
      * 构建Command explanation提示 - 通用实现
      */
     protected buildExplainPrompt(request: ExplainRequest): string {
-        let prompt = `请详细解释以下终端命令：\n\n\`${request.command}\`\n\n`;
+        let prompt = `Explain the following terminal command in detail:\n\n\`${request.command}\`\n\n`;
 
         if (request.context?.currentDirectory) {
-            prompt += `当前目录：${request.context.currentDirectory}\n`;
+            prompt += `Current directory: ${request.context.currentDirectory}\n`;
         }
         if (request.context?.operatingSystem) {
-            prompt += `操作系统：${request.context.operatingSystem}\n`;
+            prompt += `Operating system: ${request.context.operatingSystem}\n`;
         }
 
-        prompt += `\n请按以下JSON格式返回：\n`;
+        prompt += `\nReturn JSON only:\n`;
         prompt += `{\n`;
-        prompt += `  "explanation": "整体解释",\n`;
+        prompt += `  "explanation": "overall explanation",\n`;
         prompt += `  "breakdown": [\n`;
-        prompt += `    {"part": "命令部分", "description": "说明"}\n`;
+        prompt += `    {"part": "command part", "description": "details"}\n`;
         prompt += `  ],\n`;
-        prompt += `  "examples": ["使用示例"]\n`;
+        prompt += `  "examples": ["example usage"]\n`;
         prompt += `}\n`;
 
         return prompt;
@@ -519,22 +519,22 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
      * 构建结果分析提示 - 通用实现
      */
     protected buildAnalysisPrompt(request: AnalysisRequest): string {
-        let prompt = `请分析以下命令执行结果：\n\n`;
-        prompt += `命令：${request.command}\n`;
-        prompt += `退出码：${request.exitCode}\n`;
-        prompt += `输出：\n${request.output}\n\n`;
+        let prompt = `Analyze the following command execution result:\n\n`;
+        prompt += `Command: ${request.command}\n`;
+        prompt += `Exit code: ${request.exitCode}\n`;
+        prompt += `Output:\n${request.output}\n\n`;
 
         if (request.context?.workingDirectory) {
-            prompt += `工作目录：${request.context.workingDirectory}\n`;
+            prompt += `Working directory: ${request.context.workingDirectory}\n`;
         }
 
-        prompt += `\n请按以下JSON格式返回：\n`;
+        prompt += `\nReturn JSON only:\n`;
         prompt += `{\n`;
-        prompt += `  "summary": "结果总结",\n`;
-        prompt += `  "insights": ["洞察1", "洞察2"],\n`;
+        prompt += `  "summary": "summary",\n`;
+        prompt += `  "insights": ["insight 1", "insight 2"],\n`;
         prompt += `  "success": true/false,\n`;
         prompt += `  "issues": [\n`;
-        prompt += `    {"severity": "warning|error|info", "message": "问题描述", "suggestion": "建议"}\n`;
+        prompt += `    {"severity": "warning|error|info", "message": "issue description", "suggestion": "suggestion"}\n`;
         prompt += `  ]\n`;
         prompt += `}\n`;
 
@@ -563,7 +563,7 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
         const lines = content.split('\n').map(l => l.trim()).filter(l => l);
         return {
             command: lines[0] || '',
-            explanation: lines.slice(1).join(' ') || 'AI生成的命令',
+            explanation: lines.slice(1).join(' ') || 'AI-generated command',
             confidence: 0.5
         };
     }
@@ -624,46 +624,46 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
     protected getDefaultSystemPrompt(): string {
         return `You are a professional terminal command assistant, running in Tlink terminal.
 
-## 核心能力
-你可以通过以下工具直接操作终端：
-- write_to_terminal: 向终端写入并执行命令
-- read_terminal_output: 读取终端输出
-- get_terminal_list: 获取所有终端列表
-- get_terminal_cwd: 获取当前工作目录
-- focus_terminal: 切换到指定索引的终端（需要参数 terminal_index）
-- get_terminal_selection: 获取终端中选中的文本
+## Core capabilities
+You can use the following tools to operate the terminal:
+- write_to_terminal: write and execute a command
+- read_terminal_output: read terminal output
+- get_terminal_list: list all terminals
+- get_terminal_cwd: get the current working directory
+- focus_terminal: switch to a terminal by index (requires terminal_index)
+- get_terminal_selection: get selected text in the terminal
 
-## 重要规则
-1. 当用户请求执行命令（如"查看当前目录"、"列出文件"等），你必须使用 write_to_terminal 工具来执行
-2. **当用户请求切换终端（如"切换到终端0"、"打开终端4"等），你必须使用 focus_terminal 工具**
-3. 不要只是描述你"将要做什么"，而是直接调用工具执行
-4. 执行命令后，使用 read_terminal_output 读取结果并报告给用户
-5. 如果不确定当前目录或终端状态，先使用 get_terminal_cwd 或 get_terminal_list 获取信息
-6. **永远不要假装执行了操作，必须真正调用工具**
+## Important rules
+1. When the user requests executing a command (e.g., "show current directory", "list files"), you must use write_to_terminal.
+2. **When the user requests switching terminals (e.g., "switch to terminal 0", "open terminal 4"), you must use focus_terminal.**
+3. Do not just describe what you will do—call the tool directly.
+4. After executing a command, use read_terminal_output and report the result.
+5. If unsure about the current directory or terminal state, call get_terminal_cwd or get_terminal_list first.
+6. **Never pretend to execute actions—always call the tool.**
 
-## 命令执行策略
-### 快速命令（无需额外等待）
+## Command execution strategy
+### Fast commands (no extra wait)
 - dir, ls, cd, pwd, echo, cat, type, mkdir, rm, copy, move
-- 这些命令通常在 500ms 内完成
+- These usually complete within 500ms.
 
-### 慢速命令（需要等待完整输出）
-- systeminfo, ipconfig, netstat: 等待 3-8 秒
-- npm, yarn, pip, docker: 等待 5-10 秒
-- git: 等待 3 秒以上
-- ping, tracert: 可能需要 10+ 秒
+### Slow commands (wait for full output)
+- systeminfo, ipconfig, netstat: wait 3-8 seconds
+- npm, yarn, pip, docker: wait 5-10 seconds
+- git: wait 3+ seconds
+- ping, tracert: may need 10+ seconds
 
-**对于慢速命令**：
-1. 执行命令后，系统会自动等待
-2. 如果输出不完整，可以再次调用 read_terminal_output 获取更新的内容
-3. **不要猜测或假设命令输出，始终以实际读取到的输出为准**
+**For slow commands**:
+1. After executing, the system will wait automatically.
+2. If output seems incomplete, call read_terminal_output again.
+3. **Do not guess output—always use the actual read output.**
 
-## 示例
-用户："查看当前目录的文件"
-正确做法：调用 write_to_terminal 工具，参数 { "command": "dir", "execute": true }
-错误做法：仅回复文字"我将执行 dir 命令"
+## Examples
+User: "List files in the current directory"
+Correct: call write_to_terminal with { "command": "dir", "execute": true }
+Incorrect: reply "I will run dir"
 
-用户："切换到终端4"
-正确做法：调用 focus_terminal 工具，参数 { "terminal_index": 4 }
-错误做法：仅回复文字"已切换到终端4"（不调用工具）`;
+User: "Switch to terminal 4"
+Correct: call focus_terminal with { "terminal_index": 4 }
+Incorrect: reply "Switched to terminal 4" (without a tool call)`;
     }
 }

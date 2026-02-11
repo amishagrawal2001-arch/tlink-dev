@@ -251,6 +251,17 @@
                             </option>
                         </select>
                     </div>
+                    <div class="agent-engine-switcher">
+                        <label for="agentEngineSelect">Agent</label>
+                        <select
+                            id="agentEngineSelect"
+                            [(ngModel)]="selectedAgentEngine"
+                            (ngModelChange)="onAgentEngineChange($event)">
+                            <option *ngFor="let option of agentEngineOptions" [value]="option.value">
+                                {{ option.label }}
+                            </option>
+                        </select>
+                    </div>
                     <div class="intent-switcher" *ngIf="intentOptions.length > 0">
                         <label for="intentSelect">Intent</label>
                         <select

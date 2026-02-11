@@ -12,7 +12,7 @@ import { LoggerService } from '../core/logger.service';
 @Injectable()
 export class VllmProviderService extends BaseAiProvider {
     readonly name = 'vllm';
-    readonly displayName = 'vLLM (本地)';
+    readonly displayName = 'vLLM (Local)';
     readonly capabilities = [
         ProviderCapability.CHAT,
         ProviderCapability.STREAMING,
@@ -411,7 +411,7 @@ export class VllmProviderService extends BaseAiProvider {
         const warnings: string[] = [];
 
         if (!this.config?.model) {
-            warnings.push('未指定模型，将使用默认模型 meta-llama/Llama-3.1-8B');
+            warnings.push('No model specified; using default model meta-llama/Llama-3.1-8B.');
         }
 
         return {

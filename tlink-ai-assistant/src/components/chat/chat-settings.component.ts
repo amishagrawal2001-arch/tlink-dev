@@ -87,8 +87,8 @@ export class ChatSettingsComponent implements OnInit, OnDestroy {
             { value: 'auto', label: this.t.general.themeAuto },
             { value: 'light', label: this.t.general.themeLight },
             { value: 'dark', label: this.t.general.themeDark },
-            { value: 'pixel', label: this.t.general.themePixel || '像素复古' },
-            { value: 'tech', label: this.t.general.themeTech || '赛博科技' }
+            { value: 'pixel', label: this.t.general.themePixel || 'Pixel Retro' },
+            { value: 'tech', label: this.t.general.themeTech || 'Cyber Tech' }
         ];
     }
 

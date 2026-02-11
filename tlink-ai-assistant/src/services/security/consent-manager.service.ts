@@ -78,13 +78,13 @@ export class ConsentManagerService {
     ): Promise<boolean> {
         // 显示确认对话框
         const riskText = this.getRiskLevelText(riskLevel);
-        const message = `此命令为${riskText}风险：
+        const message = `This command is ${riskText} risk:
 
-命令: ${command}
+Command: ${command}
 
-解释: ${explanation}
+Explanation: ${explanation}
 
-确定要执行此命令吗？`;
+Do you want to run this command?`;
 
         const confirmed = confirm(message);
 
@@ -237,15 +237,15 @@ export class ConsentManagerService {
     private getRiskLevelText(riskLevel: RiskLevel): string {
         switch (riskLevel) {
             case RiskLevel.LOW:
-                return '低';
+                return 'low';
             case RiskLevel.MEDIUM:
-                return '中';
+                return 'medium';
             case RiskLevel.HIGH:
-                return '高';
+                return 'high';
             case RiskLevel.CRITICAL:
-                return '极';
+                return 'critical';
             default:
-                return '未知';
+                return 'unknown';
         }
     }
 

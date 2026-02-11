@@ -44,11 +44,11 @@ export class CommandPreviewComponent {
 
     getRiskText(): string {
         switch (this.riskLevel) {
-            case RiskLevel.LOW: return '低风险';
-            case RiskLevel.MEDIUM: return '中风险';
-            case RiskLevel.HIGH: return '高风险';
-            case RiskLevel.CRITICAL: return '极高风险';
-            default: return '未知风险';
+            case RiskLevel.LOW: return 'Low risk';
+            case RiskLevel.MEDIUM: return 'Medium risk';
+            case RiskLevel.HIGH: return 'High risk';
+            case RiskLevel.CRITICAL: return 'Critical risk';
+            default: return 'Unknown risk';
         }
     }
 
@@ -68,7 +68,7 @@ export class CommandPreviewComponent {
     copyCommand(): void {
         if (this.command) {
             navigator.clipboard.writeText(this.command.command);
-            this.statusMessage = '已复制到剪贴板';
+            this.statusMessage = 'Copied to clipboard';
             setTimeout(() => this.statusMessage = '', 2000);
         }
     }
@@ -82,12 +82,12 @@ export class CommandPreviewComponent {
         // Check if there are available terminals
         if (!this.terminalManager.hasTerminal()) {
             this.executionStatus = 'error';
-            this.statusMessage = '没有可用的终端，请先打开一个终端标签';
+            this.statusMessage = 'No available terminals. Open a terminal tab first.';
             return;
         }
 
         this.executionStatus = 'executing';
-        this.statusMessage = '正在执行...';
+        this.statusMessage = 'Executing...';
 
         try {
             // 如果选择了特定终端，先切换到该终端
@@ -100,7 +100,7 @@ export class CommandPreviewComponent {
 
             if (success) {
                 this.executionStatus = 'success';
-                this.statusMessage = '命令已发送到终端';
+                this.statusMessage = 'Command sent to terminal';
                 this.logger.info('Command executed', { command: this.command.command });
 
                 // 触发执行事件
@@ -110,11 +110,11 @@ export class CommandPreviewComponent {
                 setTimeout(() => this.close(), 2000);
             } else {
                 this.executionStatus = 'error';
-                this.statusMessage = '发送命令失败';
+                this.statusMessage = 'Failed to send command';
             }
         } catch (error) {
             this.executionStatus = 'error';
-            this.statusMessage = `执行错误: ${error instanceof Error ? error.message : '未知错误'}`;
+            this.statusMessage = `Execution error: ${error instanceof Error ? error.message : 'Unknown error'}`;
             this.logger.error('Failed to execute command', error);
         }
     }
@@ -126,13 +126,13 @@ export class CommandPreviewComponent {
         if (!this.command) return;
 
         if (!this.terminalManager.hasTerminal()) {
-            this.statusMessage = '没有可用的终端';
+            this.statusMessage = 'No available terminal';
             return;
         }
 
         const success = this.terminalManager.sendCommand(this.command.command, false);
         if (success) {
-            this.statusMessage = '命令已插入终端（未执行）';
+            this.statusMessage = 'Command inserted into terminal (not executed)';
             setTimeout(() => this.close(), 1500);
         }
     }
@@ -169,4 +169,3 @@ export class CommandPreviewComponent {
         }
     }
 }
-

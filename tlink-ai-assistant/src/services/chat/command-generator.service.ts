@@ -96,7 +96,7 @@ export class CommandGeneratorService {
         const context = this.terminalContext.getCurrentContext();
 
         const request: CommandRequest = {
-            naturalLanguage: `修复错误：${error.message}`,
+            naturalLanguage: `Fix this error: ${error.message}`,
             context: {
                 currentDirectory: context?.session.cwd,
                 operatingSystem: context?.systemInfo.platform,
@@ -118,15 +118,15 @@ export class CommandGeneratorService {
         const context = this.terminalContext.getCurrentContext();
 
         const prompt = `
-基于当前终端状态，为输入"${input}"生成3-5个可能的命令建议。
+Based on the current terminal state, generate 3-5 possible command suggestions for input "${input}".
 
-当前上下文：
-- 目录：${context?.session.cwd}
-- Shell：${context?.session.shell}
-- 系统：${context?.systemInfo.platform}
-- 最近命令：${context?.recentCommands.slice(0, 5).join(', ')}
+Current context:
+- Directory: ${context?.session.cwd}
+- Shell: ${context?.session.shell}
+- OS: ${context?.systemInfo.platform}
+- Recent commands: ${context?.recentCommands.slice(0, 5).join(', ')}
 
-请直接返回命令列表，每行一个，不要解释。
+Return only the command list, one per line, with no explanations.
         `;
 
         try {
@@ -165,33 +165,33 @@ export class CommandGeneratorService {
         context: TerminalContext | null,
         error: TerminalError | null
     ): string {
-        let prompt = `请将以下自然语言描述转换为准确的命令：\n\n"${request.naturalLanguage}"\n\n`;
+        let prompt = `Convert the following natural language request into an accurate command:\n\n"${request.naturalLanguage}"\n\n`;
 
         // 添加终端上下文
         if (context) {
-            prompt += `\n当前终端状态：\n`;
-            prompt += `- 当前目录：${context.session.cwd}\n`;
-            prompt += `- Shell类型：${context.session.shell}\n`;
-            prompt += `- 操作系统：${context.systemInfo.platform}\n`;
-            prompt += `- 用户：${context.session.user}\n`;
+            prompt += `\nCurrent terminal state:\n`;
+            prompt += `- Current directory: ${context.session.cwd}\n`;
+            prompt += `- Shell: ${context.session.shell}\n`;
+            prompt += `- OS: ${context.systemInfo.platform}\n`;
+            prompt += `- User: ${context.session.user}\n`;
 
             if (context.recentCommands.length > 0) {
-                prompt += `- 最近执行的命令：${context.recentCommands.slice(0, 3).join(', ')}\n`;
+                prompt += `- Recent commands: ${context.recentCommands.slice(0, 3).join(', ')}\n`;
             }
 
             if (context.projectInfo) {
-                prompt += `- 检测到项目类型：${context.projectInfo.type}\n`;
-                prompt += `- 项目根目录：${context.projectInfo.root}\n`;
+                prompt += `- Detected project type: ${context.projectInfo.type}\n`;
+                prompt += `- Project root: ${context.projectInfo.root}\n`;
             }
         }
 
         // 添加错误信息（如果有）
         if (error) {
-            prompt += `\n当前错误信息：\n`;
-            prompt += `- 错误类型：${error.type}\n`;
-            prompt += `- 错误消息：${error.message}\n`;
-            prompt += `- 失败命令：${error.command}\n`;
-            prompt += `- 退出码：${error.exitCode}\n`;
+            prompt += `\nCurrent error info:\n`;
+            prompt += `- Error type: ${error.type}\n`;
+            prompt += `- Error message: ${error.message}\n`;
+            prompt += `- Failed command: ${error.command}\n`;
+            prompt += `- Exit code: ${error.exitCode}\n`;
         }
 
         // 添加环境变量
@@ -203,28 +203,28 @@ export class CommandGeneratorService {
                 .join(', ');
 
             if (envInfo) {
-                prompt += `\n重要环境变量：${envInfo}\n`;
+                prompt += `\nImportant environment variables: ${envInfo}\n`;
             }
         }
 
         // 添加约束
         if (request.constraints) {
-            prompt += `\n约束条件：\n`;
+            prompt += `\nConstraints:\n`;
             if (request.constraints.maxLength) {
-                prompt += `- 命令最大长度：${request.constraints.maxLength}字符\n`;
+                prompt += `- Max command length: ${request.constraints.maxLength} characters\n`;
             }
             if (request.constraints.allowedCommands?.length) {
-                prompt += `- 允许使用的命令：${request.constraints.allowedCommands.join(', ')}\n`;
+                prompt += `- Allowed commands: ${request.constraints.allowedCommands.join(', ')}\n`;
             }
             if (request.constraints.forbiddenCommands?.length) {
-                prompt += `- 禁止使用的命令：${request.constraints.forbiddenCommands.join(', ')}\n`;
+                prompt += `- Forbidden commands: ${request.constraints.forbiddenCommands.join(', ')}\n`;
             }
         }
 
-        prompt += `\n请按照以下JSON格式返回：\n`;
+        prompt += `\nPlease respond in the following JSON format:\n`;
         prompt += `{\n`;
-        prompt += `  "command": "具体的命令",\n`;
-        prompt += `  "explanation": "命令的解释说明",\n`;
+        prompt += `  "command": "the command",\n`;
+        prompt += `  "explanation": "short explanation",\n`;
         prompt += `  "confidence": 0.95\n`;
         prompt += `}\n`;
 
@@ -235,16 +235,16 @@ export class CommandGeneratorService {
      * 获取系统提示词
      */
     private getSystemPrompt(): string {
-        return `你是一个专业的终端命令生成助手。你的任务是：
+        return `You are a professional terminal command generator. Your tasks:
 
-1. 将自然语言描述转换为准确、高效的终端命令
-2. 考虑当前操作系统和Shell环境
-3. 优先使用安全、最佳实践的命令
-4. 提供清晰的Command explanation
-5. 考虑当前工作目录和上下文环境
+1. Convert natural language requests into accurate, efficient terminal commands
+2. Consider the current OS and shell environment
+3. Prefer safe, best-practice commands
+4. Provide a clear command explanation
+5. Consider the current working directory and context
 
-请始终返回有效的命令，避免危险操作（如删除系统文件、格式化磁盘等）。
-如果无法确定准确的命令，请明确说明并提供替代方案。`;
+Always return valid commands and avoid dangerous operations (e.g., deleting system files, formatting disks).
+If you cannot determine an accurate command, say so and provide alternatives.`;
     }
 
     /**
@@ -270,7 +270,7 @@ export class CommandGeneratorService {
         // 备用解析：提取命令和解释
         const lines = content.split('\n').map(l => l.trim()).filter(l => l);
         const command = lines[0] || '';
-        const explanation = lines.slice(1).join(' ') || 'AI生成的命令建议';
+        const explanation = lines.slice(1).join(' ') || 'AI-generated command suggestion';
 
         return {
             command,

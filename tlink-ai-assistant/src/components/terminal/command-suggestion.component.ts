@@ -135,25 +135,25 @@ export class CommandSuggestionComponent implements OnInit, OnDestroy {
      */
     private getExplanationForCommand(command: string): string {
         const explanations: { [key: string]: string } = {
-            'git status': '查看当前Git仓库状态',
-            'git pull': '拉取远程最新代码',
-            'git add .': '添加所有文件到暂存区',
-            'git commit -m ""': '提交暂存区文件',
-            'git checkout -b ': '创建并切换到新分支',
-            'git log --oneline': '查看简化的提交历史',
-            'npm install': '安装项目依赖',
-            'npm run dev': '启动开发服务器',
-            'npm run build': '构建生产版本',
-            'npm test': '运行测试',
-            'docker build -t .': '构建Docker镜像',
-            'docker-compose up': '启动Docker容器',
-            'docker ps': '查看运行中的容器',
-            'kubectl get pods': '查看Kubernetes Pods',
-            'ls -la': '列出所有文件详细信息',
-            'grep -r "" .': '递归搜索文件内容'
+            'git status': 'View current Git repository status',
+            'git pull': 'Pull latest remote changes',
+            'git add .': 'Add all files to staging',
+            'git commit -m ""': 'Commit staged files',
+            'git checkout -b ': 'Create and switch to a new branch',
+            'git log --oneline': 'View condensed commit history',
+            'npm install': 'Install project dependencies',
+            'npm run dev': 'Start the development server',
+            'npm run build': 'Build production version',
+            'npm test': 'Run tests',
+            'docker build -t .': 'Build Docker image',
+            'docker-compose up': 'Start Docker containers',
+            'docker ps': 'List running containers',
+            'kubectl get pods': 'List Kubernetes pods',
+            'ls -la': 'List all files with details',
+            'grep -r "" .': 'Recursively search file contents'
         };
 
-        return explanations[command] || '执行命令';
+        return explanations[command] || 'Execute command';
     }
 
     /**

@@ -259,7 +259,7 @@ export class Memory {
             .filter(m => m.metadata.sessionId === sessionId);
 
         if (sessionMemories.length === 0) {
-            return '无相关记忆';
+            return 'No relevant memories';
         }
 
         // 将记忆转换为ApiMessage格式供AI摘要生成

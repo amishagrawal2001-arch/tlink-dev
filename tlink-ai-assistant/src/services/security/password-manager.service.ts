@@ -42,12 +42,12 @@ export class PasswordManagerService {
         if (this.isLocked()) {
             const remainingTime = this.getRemainingLockoutTime();
             this.logger.warn('Password attempts locked', { remainingTime });
-            alert(`账户已锁定，请等待 ${Math.ceil(remainingTime / 60000)} 分钟后再试`);
+            alert(`Account locked. Please wait ${Math.ceil(remainingTime / 60000)} minutes and try again.`);
             return false;
         }
 
         // 显示密码输入框
-        const password = prompt('请输入密码以执行此操作:');
+        const password = prompt('Enter your password to continue:');
         if (password === null) {
             // 用户取消
             return false;
@@ -68,7 +68,7 @@ export class PasswordManagerService {
                 this.lockoutUntil = Date.now() + this.LOCKOUT_TIME;
                 this.saveState();
                 this.logger.error('Password attempts exceeded, account locked');
-                alert(`密码错误次数过多，账户已锁定 ${this.LOCKOUT_TIME / 60000} 分钟`);
+                alert(`Too many incorrect attempts. Account locked for ${this.LOCKOUT_TIME / 60000} minutes.`);
             }
 
             return false;

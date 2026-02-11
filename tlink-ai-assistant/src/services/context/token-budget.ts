@@ -215,17 +215,17 @@ export class TokenBudget {
         const thresholds = this.checkThresholds();
 
         if (thresholds.shouldPrune) {
-            warnings.push('建议进行Prune操作以节省Token');
+            warnings.push('Consider Prune to save tokens.');
         }
         if (thresholds.shouldCompact) {
-            warnings.push('建议进行Compact操作以节省Token');
+            warnings.push('Consider Compact to save tokens.');
         }
         if (thresholds.shouldTruncate) {
-            warnings.push('严重警告：必须进行Truncate操作');
+            warnings.push('Critical warning: Truncate is required.');
         }
 
         if (utilizationRate > 0.9) {
-            warnings.push('Token使用率过高，请注意预算管理');
+            warnings.push('Token usage is very high. Please monitor the budget.');
         }
 
         return {

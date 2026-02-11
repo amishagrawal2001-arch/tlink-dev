@@ -150,7 +150,7 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
                 this.currentProvider = providerConfig?.displayName || firstProvider;
                 this.config.setDefaultProvider(firstProvider);
             } else {
-                this.currentProvider = '未配置';
+                this.currentProvider = 'Not configured';
             }
         }
     }
@@ -415,8 +415,8 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
 
                             // 替换等待提示为完成状态
                             aiMessage.content = aiMessage.content.replace(
-                                /🔧 正在执行工具.*?\.\.\./g,
-                                `✅ ${toolName} 完成`
+                                /🔧 .*?\.{3}/g,
+                                `✅ ${toolName} completed`
                             );
 
                             pendingToolCalls.delete(event.toolCall.id);
@@ -427,14 +427,14 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
                     else if (event.type === 'tool_result' && event.result) {
                         const isError = event.result.is_error;
                         const icon = isError ? '❌' : '📋';
-                        const header = isError ? '**工具执行失败**' : '**工具输出**';
+                        const header = isError ? '**Tool execution failed**' : '**Tool output**';
 
                         // 截断过长的结果
                         const maxPreviewLength = 800;
                         let resultPreview = event.result.content;
                         const isTruncated = resultPreview.length > maxPreviewLength;
                         if (isTruncated) {
-                            resultPreview = resultPreview.substring(0, maxPreviewLength) + '\n...(已截断)';
+                            resultPreview = resultPreview.substring(0, maxPreviewLength) + '\n...(truncated)';
                         }
 
                         // 格式化工具结果
@@ -445,8 +445,8 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
                     // 工具错误
                     else if (event.type === 'tool_error' && event.error) {
                         aiMessage.content = aiMessage.content.replace(
-                            /🔧 正在执行工具.*?\.\.\./g,
-                            `❌ 工具执行失败: ${event.error}`
+                            /🔧 .*?\.{3}/g,
+                            `❌ Tool execution failed: ${event.error}`
                         );
                         this.shouldScrollToBottom = true;
                     }
@@ -729,4 +729,3 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
         return date1.toDateString() === date2.toDateString();
     }
 }
-

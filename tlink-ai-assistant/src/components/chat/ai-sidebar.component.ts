@@ -60,6 +60,12 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
     charLimit = 4000;
     modelOptions: { name: string; label: string }[] = [];
     selectedModelProvider: string = '';
+    agentEngineOptions: { value: string; label: string }[] = [
+        { value: 'continue', label: 'Continue' },
+        { value: 'langgraph', label: 'LangGraph' },
+        { value: 'legacy', label: 'Legacy' }
+    ];
+    selectedAgentEngine: string = 'continue';
     private isSwitchingProvider: boolean = false;
     intentOptions: { value: string; label: string }[] = [
         { value: 'auto', label: 'Auto' },
@@ -117,6 +123,7 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
         // Load current provider information
         this.loadCurrentProvider();
         this.workingDir = this.config.get<string>('agentWorkingDir', '') || '';
+        this.selectedAgentEngine = (this.config.get<string>('agentEngine', 'continue') || 'continue').toLowerCase();
 
         // Listen to provider changes (reload on any config change)
         // Note: We check periodically or reload when switching providers
@@ -132,6 +139,7 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
                     this.buildModelOptions();
                 }
                 this.workingDir = this.config.get<string>('agentWorkingDir', '') || '';
+                this.selectedAgentEngine = (this.config.get<string>('agentEngine', 'continue') || 'continue').toLowerCase();
             });
 
         this.agentApproval.pending$
@@ -1366,6 +1374,13 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
     updateWorkingDir(value: string): void {
         this.workingDir = value;
         this.config.set('agentWorkingDir', value.trim());
+    }
+
+    onAgentEngineChange(value: string): void {
+        const normalized = (value || 'continue').toLowerCase();
+        this.selectedAgentEngine = normalized;
+        this.config.set('agentEngine', normalized);
+        this.logger.info('Agent engine updated', { engine: normalized });
     }
 
     openWorkdirPicker(): void {

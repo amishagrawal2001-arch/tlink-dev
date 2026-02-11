@@ -70,7 +70,7 @@ export class SummaryService {
             this.logger.error('Failed to generate summary', error);
             // 返回空摘要作为降级方案
             return {
-                summary: `[摘要失败，共 ${messages.length} 条消息]`,
+                summary: `[Summary failed for ${messages.length} messages]`,
                 tokensCost: 0,
                 originalMessageCount: messages.length
             };
@@ -86,14 +86,14 @@ export class SummaryService {
             if ('timestamp' in msg && msg.timestamp instanceof Date) {
                 return {
                     role: String(msg.role),
-                    content: typeof msg.content === 'string' ? msg.content : '[复杂内容]',
+                    content: typeof msg.content === 'string' ? msg.content : '[complex content]',
                     timestamp: msg.timestamp
                 };
             }
             // 处理 ApiMessage (有 ts: number)
             return {
                 role: String(msg.role),
-                content: typeof msg.content === 'string' ? msg.content : '[复杂内容]'
+                content: typeof msg.content === 'string' ? msg.content : '[complex content]'
             };
         });
     }
@@ -113,7 +113,7 @@ export class SummaryService {
             `[${m.role}]: ${m.content}`
         ).join('\n');
 
-        return `请简洁概括以下对话的主要内容和结论，不超过${maxLength}字。\n${truncated ? `(共 ${formattedMessages.length} 条消息，显示最后 ${maxMessages} 条)\n` : ''}\n${content}\n\n请直接返回摘要，不需要其他解释。`;
+        return `Please concisely summarize the main points and conclusions of the following conversation in no more than ${maxLength} characters.\n${truncated ? `(Total ${formattedMessages.length} messages, showing the last ${maxMessages})\n` : ''}\n${content}\n\nReturn only the summary.`;
     }
 
     /**

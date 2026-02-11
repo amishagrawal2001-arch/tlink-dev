@@ -374,29 +374,29 @@ export class PlatformDetectionService {
 
         // 基于OS的推荐
         if (platformInfo.os === OSType.WINDOWS) {
-            recommendations.push('建议使用Windows Terminal或WSL以获得更好的终端体验');
+            recommendations.push('Consider Windows Terminal or WSL for a better terminal experience.');
             if (platformInfo.terminal === TerminalType.WINDOWS_CMD) {
-                recommendations.push('CMD终端功能有限，建议升级到PowerShell或Windows Terminal');
+                recommendations.push('CMD is limited; consider PowerShell or Windows Terminal.');
             }
         }
 
         if (platformInfo.os === OSType.MACOS) {
             if (platformInfo.terminal === TerminalType.MACOS_TERMINAL) {
-                recommendations.push('建议使用iTerm2以获得更多功能和更好的性能');
+                recommendations.push('Consider iTerm2 for more features and better performance.');
             }
         }
 
         // 基于终端能力的推荐
         if (!platformInfo.capabilities.trueColor) {
-            recommendations.push('当前终端不支持TrueColor，颜色显示可能受限');
+            recommendations.push('This terminal does not support TrueColor; colors may be limited.');
         }
 
         if (!platformInfo.capabilities.unicode) {
-            recommendations.push('当前终端不支持Unicode，非ASCII字符可能显示异常');
+            recommendations.push('This terminal does not support Unicode; non-ASCII characters may render incorrectly.');
         }
 
         if (!platformInfo.capabilities.mouse) {
-            recommendations.push('当前终端不支持鼠标事件，交互功能可能受限');
+            recommendations.push('This terminal does not support mouse events; interactive features may be limited.');
         }
 
         return recommendations;
@@ -414,36 +414,36 @@ export class PlatformDetectionService {
         // 操作系统兼容性
         if (platformInfo.os === OSType.UNKNOWN) {
             score -= 20;
-            issues.push('未识别的操作系统');
-            workarounds.push('使用默认兼容性设置');
+            issues.push('Unrecognized operating system.');
+            workarounds.push('Use default compatibility settings.');
         }
 
         // 终端兼容性
         if (platformInfo.terminal === TerminalType.UNKNOWN) {
             score -= 15;
-            issues.push('未识别的终端类型');
-            workarounds.push('使用基础终端功能');
+            issues.push('Unrecognized terminal type.');
+            workarounds.push('Use basic terminal features.');
         }
 
         // 颜色支持
         if (platformInfo.capabilities.colors < 16) {
             score -= 10;
-            issues.push('终端颜色支持有限（少于16色）');
-            workarounds.push('使用ANSI基本颜色');
+            issues.push('Limited terminal colors (fewer than 16).');
+            workarounds.push('Use basic ANSI colors.');
         }
 
         // TrueColor支持
         if (!platformInfo.capabilities.trueColor) {
             score -= 5;
-            issues.push('不支持TrueColor');
-            workarounds.push('使用256色或基本颜色替代');
+            issues.push('TrueColor not supported.');
+            workarounds.push('Use 256 colors or basic colors instead.');
         }
 
         // Unicode支持
         if (!platformInfo.capabilities.unicode) {
             score -= 10;
-            issues.push('不支持Unicode字符');
-            workarounds.push('使用ASCII字符集');
+            issues.push('Unicode not supported.');
+            workarounds.push('Use ASCII character set.');
         }
 
         return {

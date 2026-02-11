@@ -12,52 +12,52 @@ export class RiskAssessmentService {
     private readonly DANGEROUS_PATTERNS = [
         {
             pattern: /rm\s+-rf\s+\//,
-            description: '删除根目录',
+            description: 'Delete root directory',
             severity: RiskLevel.CRITICAL
         },
         {
             pattern: /sudo\s+rm/,
-            description: 'sudo删除命令',
+            description: 'sudo delete command',
             severity: RiskLevel.CRITICAL
         },
         {
             pattern: />\s*\/dev\/null/,
-            description: '输出重定向到黑洞',
+            description: 'Redirect output to /dev/null',
             severity: RiskLevel.HIGH
         },
         {
             pattern: /chmod\s+777/,
-            description: '危险权限修改',
+            description: 'Dangerous permission change',
             severity: RiskLevel.HIGH
         },
         {
             pattern: /mv\s+.*\s+\//,
-            description: '移动到根目录',
+            description: 'Move to root directory',
             severity: RiskLevel.HIGH
         },
         {
             pattern: /fork\s*\(/,
-            description: 'fork炸弹',
+            description: 'Fork bomb',
             severity: RiskLevel.CRITICAL
         },
         {
             pattern: /dd\s+if=/,
-            description: 'dd命令（可能危险）',
+            description: 'dd command (potentially dangerous)',
             severity: RiskLevel.HIGH
         },
         {
             pattern: /format\s+/,
-            description: '格式化命令',
+            description: 'Format command',
             severity: RiskLevel.CRITICAL
         },
         {
             pattern: /del\s+\/s\s+/i,
-            description: 'Windows删除命令',
+            description: 'Windows delete command',
             severity: RiskLevel.HIGH
         },
         {
             pattern: /rd\s+\/s\s+/i,
-            description: 'Windows删除目录命令',
+            description: 'Windows delete directory command',
             severity: RiskLevel.HIGH
         }
     ];
@@ -112,7 +112,7 @@ export class RiskAssessmentService {
                     match: command.match(rule.pattern)?.[0] || '',
                     severity: rule.severity
                 });
-                reasons.push(`检测到危险模式：${rule.description}`);
+                reasons.push(`Dangerous pattern detected: ${rule.description}`);
 
                 if (this.getSeverityLevel(rule.severity) > this.getSeverityLevel(maxSeverity)) {
                     maxSeverity = rule.severity;
@@ -124,21 +124,21 @@ export class RiskAssessmentService {
         const hasSystemCommand = this.hasCommand(command, this.SYSTEM_COMMANDS);
         if (hasSystemCommand && maxSeverity < RiskLevel.MEDIUM) {
             maxSeverity = RiskLevel.MEDIUM;
-            reasons.push('包含系统修改命令');
+            reasons.push('Includes system-modifying command');
         }
 
         // 3. 检查网络命令
         const hasNetworkCommand = this.hasCommand(command, this.NETWORK_COMMANDS);
         if (hasNetworkCommand && maxSeverity < RiskLevel.MEDIUM) {
             maxSeverity = RiskLevel.MEDIUM;
-            reasons.push('包含网络命令，可能涉及外部请求');
+            reasons.push('Includes network command; may involve external requests');
         }
 
         // 4. 检查是否主要是只读命令
         const hasOnlyReadonly = this.hasOnlyReadonlyCommands(command, this.READONLY_COMMANDS);
         if (hasOnlyReadonly && maxSeverity < RiskLevel.MEDIUM) {
             maxSeverity = RiskLevel.LOW;
-            reasons.push('仅包含只读安全命令');
+            reasons.push('Contains only read-only safe commands');
         }
 
         // 5. 计算风险分数
@@ -242,27 +242,27 @@ export class RiskAssessmentService {
         const suggestions: string[] = [];
 
         if (level === RiskLevel.CRITICAL) {
-            suggestions.push('此命令非常危险，可能导致数据丢失或系统损坏');
-            suggestions.push('强烈建议在执行前备份重要数据');
-            suggestions.push('考虑使用更安全的替代方案');
+            suggestions.push('This command is extremely dangerous and may cause data loss or system damage');
+            suggestions.push('Strongly recommended to back up important data before executing');
+            suggestions.push('Consider using a safer alternative');
         } else if (level === RiskLevel.HIGH) {
-            suggestions.push('此命令可能修改系统或删除文件');
-            suggestions.push('请确认您了解命令的作用');
-            suggestions.push('建议先在测试环境中验证');
+            suggestions.push('This command may modify the system or delete files');
+            suggestions.push('Please make sure you understand the command');
+            suggestions.push('Consider validating in a test environment first');
         } else if (level === RiskLevel.MEDIUM) {
-            suggestions.push('此命令可能涉及系统操作');
-            suggestions.push('请确保您有适当的权限');
+            suggestions.push('This command may involve system operations');
+            suggestions.push('Ensure you have appropriate permissions');
         } else {
-            suggestions.push('此命令相对安全');
+            suggestions.push('This command appears relatively safe');
         }
 
         // 根据具体原因添加建议
-        if (reasons.some(r => r.includes('网络命令'))) {
-            suggestions.push('注意网络安全，避免访问未知来源');
+        if (reasons.some(r => r.toLowerCase().includes('network command'))) {
+            suggestions.push('Be cautious with network access and avoid unknown sources');
         }
 
-        if (reasons.some(r => r.includes('权限'))) {
-            suggestions.push('检查文件权限，避免给予过高的权限');
+        if (reasons.some(r => r.toLowerCase().includes('permission'))) {
+            suggestions.push('Check file permissions and avoid granting excessive privileges');
         }
 
         return suggestions;
@@ -300,15 +300,15 @@ export class RiskAssessmentService {
     getRiskLevelDescription(level: RiskLevel): string {
         switch (level) {
             case RiskLevel.LOW:
-                return '低风险 - 安全命令';
+                return 'Low risk - safe command';
             case RiskLevel.MEDIUM:
-                return '中风险 - 需要注意的命令';
+                return 'Medium risk - use caution';
             case RiskLevel.HIGH:
-                return '高风险 - 危险命令';
+                return 'High risk - dangerous command';
             case RiskLevel.CRITICAL:
-                return '极高风险 - 极危险命令';
+                return 'Critical risk - extremely dangerous command';
             default:
-                return '未知风险';
+                return 'Unknown risk';
         }
     }
 

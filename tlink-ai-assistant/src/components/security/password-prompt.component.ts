@@ -7,7 +7,7 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
     styleUrls: ['./password-prompt.component.scss']
 })
 export class PasswordPromptComponent {
-    @Input() title: string = '密码验证';
+    @Input() title: string = 'Password verification';
     password = '';
     errorMessage = '';
 
@@ -17,7 +17,7 @@ export class PasswordPromptComponent {
         if (this.password) {
             this.activeModal.close(this.password);
         } else {
-            this.errorMessage = '请输入密码';
+            this.errorMessage = 'Please enter a password';
         }
     }
 

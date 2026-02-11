@@ -242,7 +242,7 @@ export class ContextManager {
         // 添加截断标记
         const truncationMarker: ApiMessage = {
             role: 'system',
-            content: `[${removedMessages.length}条消息已被截断以节省Token成本]`,
+            content: `[${removedMessages.length} messages were truncated to save tokens]`,
             ts: Date.now(),
             isTruncationMarker: true,
             truncationId,
@@ -442,7 +442,7 @@ export class ContextManager {
             if (typeof msg.content === 'string' && msg.content.length > 1000) {
                 partsCompacted++;
                 const originalLength = msg.content.length;
-                const prunedContent = msg.content.substring(0, 500) + '\n[...输出已裁剪以节省Token...]';
+                const prunedContent = msg.content.substring(0, 500) + '\n[...output trimmed to save tokens...]';
 
                 // 估算节省的Token数
                 tokensSaved += Math.floor((originalLength - prunedContent.length) / 4);
@@ -478,7 +478,7 @@ export class ContextManager {
         return messages.map(msg => {
             const content = typeof msg.content === 'string'
                 ? msg.content
-                : '[复杂内容]';
+                : '[complex content]';
             return `${msg.role}: ${content}`;
         }).join('\n');
     }

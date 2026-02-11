@@ -449,14 +449,14 @@ export class ChatSessionService {
 
     private generateCheckpointSummary(messages: ChatMessage[]): string {
         if (messages.length === 0) {
-            return '空检查点';
+            return 'Empty checkpoint';
         }
 
         const firstMessage = messages[0];
         const lastMessage = messages[messages.length - 1];
         const messageCount = messages.length;
 
-        return `检查点：${messageCount}条消息 | 从 "${this.truncateText(firstMessage.content, 30)}" 到 "${this.truncateText(lastMessage.content, 30)}"`;
+        return `Checkpoint: ${messageCount} messages | from "${this.truncateText(firstMessage.content, 30)}" to "${this.truncateText(lastMessage.content, 30)}"`;
     }
 
     private truncateText(text: string, maxLength: number): string {

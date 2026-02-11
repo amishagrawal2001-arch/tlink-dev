@@ -206,7 +206,7 @@ export class ToolStreamProcessorService {
             }
         } catch (error) {
             this.logger.error('Error processing agent event', error);
-            this.emitError(`处理事件时出错: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            this.emitError(`Error processing agent event: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }
 

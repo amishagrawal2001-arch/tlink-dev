@@ -191,7 +191,7 @@ export class ToolOutputFormatterService {
         let cleaned = text;
 
         // 移除 <invoke>...</invoke> 块
-        cleaned = cleaned.replace(/<invoke[^>]*>[\s\S]*?<\/invoke>/gi, '[工具调用]');
+        cleaned = cleaned.replace(/<invoke[^>]*>[\s\S]*?<\/invoke>/gi, '[Tool call]');
 
         // 移除 <function_calls>...</function_calls> 块
         cleaned = cleaned.replace(/<function_calls>[\s\S]*?<\/function_calls>/gi, '');
@@ -216,8 +216,8 @@ export class ToolOutputFormatterService {
         const recentLines = lines.slice(-this.MAX_TERMINAL_LINES);
         
         // 检查是否包含标记
-        const hasStartMarker = lines.some(l => l.includes('=== 终端输出 ==='));
-        const hasEndMarker = lines.some(l => l.includes('=== 输出结束 ==='));
+        const hasStartMarker = lines.some(l => l.includes('=== TERMINAL OUTPUT ==='));
+        const hasEndMarker = lines.some(l => l.includes('=== OUTPUT END ==='));
 
         if (hasStartMarker && hasEndMarker) {
             // 提取标记之间的内容
@@ -225,11 +225,11 @@ export class ToolOutputFormatterService {
             const result: string[] = [];
 
             for (const line of lines) {
-                if (line.includes('=== 终端输出 ===')) {
+                if (line.includes('=== TERMINAL OUTPUT ===')) {
                     inSection = true;
                     continue;
                 }
-                if (line.includes('=== 输出结束 ===')) {
+                if (line.includes('=== OUTPUT END ===')) {
                     break;
                 }
                 if (inSection) {
@@ -252,10 +252,13 @@ export class ToolOutputFormatterService {
      */
     private filterAITerminalOutput(lines: string[]): string[] {
         const aiPatterns = [
-            /^🔧 正在执行工具/,
+            /^🔧 /,
             /^✅ .* \(.*ms\)$/,
+            /^📋 \*\*Output\*\*/,
+            /^📋 \*\*Tool output\*\*/,
             /^📋 \*\*输出\*\*/,
             /^📋 \*\*工具输出\*\*/,
+            /^❌ .* Tool execution failed/,
             /^❌ .* 工具执行失败/,
             /^---$/,
             /^\*\*.*\*\*/,
@@ -365,7 +368,7 @@ export class ToolOutputFormatterService {
      */
     private generateSummary(output: string, category: ToolCategory, isError: boolean): string {
         if (isError) {
-            return '执行出错';
+            return 'Execution error';
         }
 
         const lines = output.split('\n').filter(l => l.trim());
@@ -373,15 +376,15 @@ export class ToolOutputFormatterService {
         if (category === 'terminal') {
             // 检查是否成功
             if (output.includes('✅')) {
-                return '命令执行成功';
+                return 'Command succeeded';
             }
-            if (output.includes('命令已执行')) {
-                return '命令已执行';
+            if (output.includes('Command executed') || output.includes('命令已执行')) {
+                return 'Command executed';
             }
-            return `${lines.length} 行输出`;
+            return `${lines.length} lines of output`;
         }
 
-        return `${lines.length} 行`;
+        return `${lines.length} lines`;
     }
 
     // ========================================================================

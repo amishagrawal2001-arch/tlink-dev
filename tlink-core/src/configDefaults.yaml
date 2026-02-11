@@ -28,6 +28,7 @@ appearance:
   sidePanelTextColorLight: ''
   sidePanelFontSize: 9
   sidePanelOrder: []
+  leftDockOrder: []
   sidePanelColors:
     __nonStructural: true
 terminal:

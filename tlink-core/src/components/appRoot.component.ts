@@ -90,6 +90,8 @@ export class AppRootComponent implements OnInit {
     sidePanelId = ''
     sidePanels: SidePanelRegistration[] = []
     rightDockPanels: SidePanelRegistration[] = []
+    leftDockOrder: string[] = []
+    leftDockVisibleOrder: string[] = []
     sshSidePanel: SidePanelRegistration | null = null
     sshSidebarCommand: Command | null = null
     bottomPanelVisible = false
@@ -106,6 +108,18 @@ export class AppRootComponent implements OnInit {
     private sidePanelResizeStartWidth = 0
     private sidePanelColorPickerOpen = false
     private logger: Logger
+    private readonly defaultLeftDockOrder = [
+        'profiles',
+        'sftp',
+        'session-manager',
+        'remote-desktop',
+        'ssh',
+        'code-editor',
+        'ai-chat',
+        'ai-assistant',
+        'copilot-chat',
+        'websocket',
+    ]
 
     constructor (
         private hotkeys: HotkeysService,
@@ -224,6 +238,7 @@ export class AppRootComponent implements OnInit {
             this.sshSidePanel = this.sidePanels.find(panel =>
                 panel.id?.toLowerCase().includes('ssh') || panel.label?.toLowerCase().includes('ssh'),
             ) ?? null
+            this.refreshLeftDockOrder()
         })
         this.bottomPanel.state$.subscribe(state => {
             this.bottomPanelVisible = state.visible
@@ -239,6 +254,7 @@ export class AppRootComponent implements OnInit {
         config.ready$.toPromise().then(async () => {
             this.leftToolbarButtons = await this.getToolbarButtons(false)
             this.rightToolbarButtons = await this.getToolbarButtons(true)
+            this.refreshLeftDockOrder()
 
             setInterval(() => {
                 if (this.config.store.enableAutomaticUpdates) {
@@ -596,6 +612,17 @@ export class AppRootComponent implements OnInit {
         this.config.store.appearance.sidePanelOrder = this.rightDockPanels.map(panel => panel.id)
     }
 
+    onLeftDockReordered (event: CdkDragDrop<string[]>): void {
+        if (!this.leftDockVisibleOrder.length) {
+            return
+        }
+        moveItemInArray(this.leftDockVisibleOrder, event.previousIndex, event.currentIndex)
+        const nextOrder = this.mergeLeftDockOrder(this.leftDockVisibleOrder)
+        this.leftDockOrder = nextOrder
+        this.leftDockVisibleOrder = this.leftDockOrder.filter(id => this.isLeftDockItemVisible(id))
+        this.config.store.appearance.leftDockOrder = nextOrder
+    }
+
     onTransfersChange () {
         if (this.activeTransfers.length === 0) {
             this.activeTransfersDropdown.close()
@@ -624,6 +651,7 @@ export class AppRootComponent implements OnInit {
             .filter(x => x.locations?.includes(aboveZero ? CommandLocation.RightToolbar : CommandLocation.LeftToolbar))
             .filter(x => !x.label?.toLowerCase().includes('toggle ssh connections sidebar'))
             .filter(x => !x.label?.toLowerCase().includes('ai assistant')) // Filter AI Assistant from toolbar (only in dock)
+            .filter(x => !x.label?.toLowerCase().includes('open copilot')) // Filter Open Copilot Chat from toolbar (only in dock)
 
         if (!aboveZero) {
             return buttons
@@ -631,6 +659,148 @@ export class AppRootComponent implements OnInit {
         const settingsLabel = this.translate.instant('Settings')
         // Note: core:cycle-color-scheme is now shown in right toolbar (moved from left dock)
         return buttons.filter(button => button.label !== settingsLabel)
+    }
+
+    private buildLeftDockOrder (): string[] {
+        const saved = (this.config.store?.appearance?.leftDockOrder as string[] | undefined) ?? []
+        const known = new Set(this.defaultLeftDockOrder)
+        const cleaned = saved.filter(id => known.has(id))
+        for (const id of this.defaultLeftDockOrder) {
+            if (!cleaned.includes(id)) {
+                cleaned.push(id)
+            }
+        }
+        return cleaned
+    }
+
+    private mergeLeftDockOrder (visibleOrder: string[]): string[] {
+        const merged: string[] = []
+        const seen = new Set<string>()
+        for (const id of visibleOrder) {
+            if (!seen.has(id)) {
+                merged.push(id)
+                seen.add(id)
+            }
+        }
+        const existing = this.leftDockOrder.length ? this.leftDockOrder : this.defaultLeftDockOrder
+        for (const id of existing) {
+            if (!seen.has(id)) {
+                merged.push(id)
+                seen.add(id)
+            }
+        }
+        for (const id of this.defaultLeftDockOrder) {
+            if (!seen.has(id)) {
+                merged.push(id)
+                seen.add(id)
+            }
+        }
+        return merged
+    }
+
+    private refreshLeftDockOrder (): void {
+        this.leftDockOrder = this.buildLeftDockOrder()
+        this.leftDockVisibleOrder = this.leftDockOrder.filter(id => this.isLeftDockItemVisible(id))
+    }
+
+    trackByLeftDockItem (_index: number, item: string): string {
+        return item
+    }
+
+    isLeftDockItemVisible (item: string): boolean {
+        if (item === 'ssh') {
+            return !!(this.sshSidePanel || this.sshSidebarCommand)
+        }
+        return true
+    }
+
+    isLeftDockItemActive (item: string): boolean {
+        if (item === 'session-manager') {
+            return this.sidePanelVisible && this.sidePanelId === 'session-manager'
+        }
+        if (item === 'remote-desktop') {
+            return this.sidePanelVisible && this.sidePanelId === 'remote-desktop'
+        }
+        if (item === 'ssh') {
+            return this.sidePanelVisible && this.sidePanelId === this.sshSidePanel?.id
+        }
+        if (item === 'websocket') {
+            return this.websocketServerRunning
+        }
+        return false
+    }
+
+    isLeftDockItemDisabled (item: string): boolean {
+        if (item === 'websocket') {
+            return this.websocketServerStarting
+        }
+        return false
+    }
+
+    getLeftDockTooltip (item: string): string {
+        switch (item) {
+        case 'profiles':
+            return 'Profiles & connections'
+        case 'sftp':
+            return 'Open SFTP'
+        case 'session-manager':
+            return 'Session manager'
+        case 'remote-desktop':
+            return 'Remote desktop'
+        case 'ssh':
+            return this.sshSidePanel?.label || this.sshSidebarCommand?.label || 'SSH sidebar'
+        case 'code-editor':
+            return 'Code editor'
+        case 'ai-chat':
+            return 'AI Chat'
+        case 'ai-assistant':
+            return 'AI Assistant'
+        case 'copilot-chat':
+            return 'Open Copilot Chat'
+        case 'websocket':
+            return this.websocketServerRunning
+                ? `Session sharing server running on port ${this.websocketServerPort} (click to stop)`
+                : 'Start session sharing server'
+        default:
+            return ''
+        }
+    }
+
+    onLeftDockItemClick (item: string): void {
+        switch (item) {
+        case 'profiles':
+            this.openProfilesAndConnections()
+            break
+        case 'sftp':
+            void this.openSftpProfileSelector()
+            break
+        case 'session-manager':
+            this.openSidePanelById('session-manager')
+            break
+        case 'remote-desktop':
+            this.openSidePanelById('remote-desktop')
+            break
+        case 'ssh':
+            this.openSSHSidePanel()
+            break
+        case 'code-editor':
+            this.openCodeEditor()
+            break
+        case 'ai-chat':
+            void this.openAIChat()
+            break
+        case 'ai-assistant':
+            this.openAIAssistant()
+            break
+        case 'copilot-chat':
+            this.openCopilotChat()
+            break
+        case 'websocket':
+            void this.toggleWebSocketServer()
+            break
+        default:
+            break
+        }
     }
 
     private buildCommandContext (): CommandContext {
@@ -766,6 +936,29 @@ export class AppRootComponent implements OnInit {
             }
         }).catch((err) => {
             this.logger.warn('Failed to find AI Assistant command:', err)
+        })
+    }
+
+    openCopilotChat (): void {
+        // Find Open Copilot Chat command from toolbar button provider and execute it
+        this.commands.getCommands(this.buildCommandContext()).then(async commands => {
+            const copilotCmd = commands.find(cmd => {
+                const label = cmd.label?.toLowerCase() ?? ''
+                return label === 'open copilot chat' || label.includes('copilot')
+            })
+            if (copilotCmd) {
+                await copilotCmd.run()
+                return
+            }
+            this.logger.warn('Open Copilot Chat command not found')
+            await this.platform.showMessageBox({
+                type: 'warning',
+                message: 'Copilot Agent not available',
+                detail: 'Enable the Copilot Agent plugin in Settings > Plugins to use Open Copilot Chat.',
+                buttons: ['OK'],
+            })
+        }).catch((err) => {
+            this.logger.warn('Failed to run Open Copilot Chat:', err)
         })
     }
 

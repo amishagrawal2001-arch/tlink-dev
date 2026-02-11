@@ -351,11 +351,11 @@ export class DataSettingsComponent implements OnInit, OnDestroy {
                 const { shell } = (window as any).require('electron');
                 shell.openPath(this.dataDirectory);
             } else {
-                this.toast.warning('无法打开目录，请在文件管理器中手动打开: ' + this.dataDirectory);
+                this.toast.warning('Unable to open directory. Please open it manually in your file manager: ' + this.dataDirectory);
             }
         } catch (error) {
             this.logger.error('Failed to open data directory', error);
-            this.toast.error('打开目录失败');
+            this.toast.error('Failed to open directory');
         }
     }
 
@@ -372,7 +372,7 @@ export class DataSettingsComponent implements OnInit, OnDestroy {
             }
         } catch (error) {
             this.logger.error('Failed to view file', { file: file.name, error });
-            this.toast.error('查看文件失败');
+            this.toast.error('Failed to view file');
         }
     }
 
@@ -388,22 +388,22 @@ export class DataSettingsComponent implements OnInit, OnDestroy {
         a.download = filename;
         a.click();
         URL.revokeObjectURL(url);
-        this.toast.success(`已下载文件: ${filename}`);
+        this.toast.success(`Downloaded file: ${filename}`);
     }
 
     /**
      * 删除文件
      */
     deleteFile(file: DataFileInfo): void {
-        if (confirm(`确定要删除 ${file.name} 吗？此操作不可恢复。`)) {
+        if (confirm(`Delete ${file.name}? This action cannot be undone.`)) {
             const deleted = this.fileStorage.delete(file.name);
             if (deleted) {
                 this.loadDataFiles();
                 this.loadStatistics();
-                this.toast.success('文件已删除');
+                this.toast.success('File deleted');
                 this.logger.info('Data file deleted', { filename: file.name });
             } else {
-                this.toast.error('删除文件失败');
+                this.toast.error('Failed to delete file');
             }
         }
     }
@@ -421,11 +421,11 @@ export class DataSettingsComponent implements OnInit, OnDestroy {
             a.download = `tlink-ai-assistant-backup-${new Date().toISOString().split('T')[0]}.json`;
             a.click();
             URL.revokeObjectURL(url);
-            this.toast.success('数据导出成功');
+            this.toast.success('Data exported successfully');
             this.logger.info('All data exported');
         } catch (error) {
             this.logger.error('Failed to export data', error);
-            this.toast.error('导出数据失败');
+            this.toast.error('Failed to export data');
         }
     }
 
@@ -446,14 +446,14 @@ export class DataSettingsComponent implements OnInit, OnDestroy {
                         if (result.success) {
                             this.loadDataFiles();
                             this.loadStatistics();
-                            this.toast.success(`成功导入 ${result.imported.length} 个文件`);
+                            this.toast.success(`Imported ${result.imported.length} files successfully`);
                             this.logger.info('Data imported', { imported: result.imported });
                         } else {
-                            this.toast.error('导入失败: ' + result.errors.join(', '));
+                            this.toast.error('Import failed: ' + result.errors.join(', '));
                         }
                     } catch (error) {
                         this.logger.error('Failed to import data', error);
-                        this.toast.error('导入数据失败');
+                        this.toast.error('Failed to import data');
                     }
                 };
                 reader.readAsText(file);
@@ -466,21 +466,21 @@ export class DataSettingsComponent implements OnInit, OnDestroy {
      * 从 localStorage 迁移数据
      */
     migrateFromLocalStorage(): void {
-        if (confirm('确定要从浏览器存储迁移数据到文件存储吗？此操作不会删除原有数据。')) {
+        if (confirm('Migrate data from browser storage to file storage? This will not delete the original data.')) {
             try {
                 const migratedFiles = this.fileStorage.migrateFromLocalStorage();
                 if (migratedFiles.length > 0) {
                     this.loadDataFiles();
                     this.loadStatistics();
                     this.needsMigration = false;
-                    this.toast.success(`成功迁移 ${migratedFiles.length} 个文件`);
+                    this.toast.success(`Migrated ${migratedFiles.length} files successfully`);
                     this.logger.info('Data migrated from localStorage', { files: migratedFiles });
                 } else {
-                    this.toast.info('没有需要迁移的数据');
+                    this.toast.info('No data to migrate');
                 }
             } catch (error) {
                 this.logger.error('Failed to migrate data', error);
-                this.toast.error('迁移数据失败');
+                this.toast.error('Failed to migrate data');
             }
         }
     }
@@ -489,17 +489,17 @@ export class DataSettingsComponent implements OnInit, OnDestroy {
      * 清除所有数据
      */
     clearAllData(): void {
-        if (confirm('确定要清除所有数据吗？此操作不可恢复！')) {
-            if (confirm('再次确认：清除后将丢失所有聊天记录、记忆和配置。')) {
+        if (confirm('Clear all data? This action cannot be undone.')) {
+            if (confirm('Confirm again: this will delete all chat history, memories, and configuration.')) {
                 try {
                     const clearedCount = this.fileStorage.clearAll();
                     this.loadDataFiles();
                     this.loadStatistics();
-                    this.toast.success(`已清除 ${clearedCount} 个数据文件`);
+                    this.toast.success(`Cleared ${clearedCount} data files`);
                     this.logger.info('All data cleared', { count: clearedCount });
                 } catch (error) {
                     this.logger.error('Failed to clear data', error);
-                    this.toast.error('清除数据失败');
+                    this.toast.error('Failed to clear data');
                 }
             }
         }

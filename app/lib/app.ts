@@ -2,6 +2,7 @@ import { app, ipcMain, Menu, Tray, shell, screen, globalShortcut, MenuItemConstr
 import promiseIpc from 'electron-promise-ipc'
 import * as remote from '@electron/remote/main'
 import { exec } from 'mz/child_process'
+import { spawn, ChildProcess } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
 import { Subject, throttleTime } from 'rxjs'
@@ -25,6 +26,7 @@ export class Application {
     private sessionSharingServer = getSessionSharingServer()
     private windows: Window[] = []
     private aiAssistantWindow: Window | null = null
+    private continueProcesses = new Map<string, ChildProcess>()
     private globalHotkey$ = new Subject<void>()
     private quitRequested = false
     userPluginsPath: string
@@ -58,6 +60,114 @@ export class Application {
 
         ;(promiseIpc as any).on('plugin-manager:uninstall', (name) => {
             return pluginManager.uninstall(this.userPluginsPath, name)
+        })
+
+        ;(promiseIpc as any).on('continue:spawn', (payload) => {
+            const command = payload?.command
+            const args = Array.isArray(payload?.args) ? payload.args : []
+            const cwd = payload?.cwd
+            const env = payload?.env
+
+            return new Promise((resolve, reject) => {
+                if (!command) {
+                    reject(new Error('Missing Continue command'))
+                    return
+                }
+
+                const fs = require('fs')
+                let resolvedCwd = cwd
+                let cwdExists = true
+                if (resolvedCwd && !fs.existsSync(resolvedCwd)) {
+                    cwdExists = false
+                    resolvedCwd = undefined
+                }
+                let commandToUse = command
+                let commandExists = false
+                try {
+                    commandExists = fs.existsSync(command)
+                    if (commandExists) {
+                        try {
+                            commandToUse = fs.realpathSync(command)
+                        } catch {
+                            commandToUse = command
+                        }
+                    }
+                } catch {
+                    commandExists = false
+                }
+                console.log(`[Continue CLI] spawn request: ${commandToUse} ${args.join(' ')} (exists=${commandExists}) cwd=${resolvedCwd ?? 'default'} (cwdExists=${cwdExists})`)
+
+                const id = `continue_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+                const proc = spawn(commandToUse, args, { cwd: resolvedCwd, env })
+                let settled = false
+                let readyResolved = false
+                const readyTimeout = setTimeout(() => {
+                    if (settled) return
+                    settled = true
+                    reject(new Error('Continue server did not start in time'))
+                }, 15000)
+
+                proc.once('error', (err) => {
+                    if (settled) return
+                    settled = true
+                    clearTimeout(readyTimeout)
+                    const message = err instanceof Error ? err.message : String(err)
+                    const anyErr: any = err || {}
+                    const errorInfo = {
+                        message: `spawn ${command} failed: ${message}`,
+                        code: anyErr.code,
+                        errno: anyErr.errno,
+                        syscall: anyErr.syscall,
+                        path: anyErr.path,
+                        spawnargs: anyErr.spawnargs
+                    }
+                    console.error('[Continue CLI] spawn error', errorInfo)
+                    reject(errorInfo)
+                })
+
+                proc.once('spawn', () => {
+                    // wait for "Server started on ..." line before resolving
+                })
+
+                proc.stdout?.on('data', (data) => {
+                    const text = String(data).trim()
+                    if (!text) return
+                    console.log(`[Continue CLI] ${text}`)
+                    const clean = text.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '')
+                    if (!readyResolved) {
+                        const match = clean.match(/Server started on http:\/\/localhost:(\d+)/i)
+                        if (match) {
+                            readyResolved = true
+                            if (settled) return
+                            settled = true
+                            clearTimeout(readyTimeout)
+                            this.continueProcesses.set(id, proc)
+                            resolve({ id, pid: proc.pid, baseUrl: `http://localhost:${match[1]}` })
+                        }
+                    }
+                })
+                proc.stderr?.on('data', (data) => {
+                    console.error(`[Continue CLI] ${String(data).trim()}`)
+                })
+                proc.on('exit', () => {
+                    clearTimeout(readyTimeout)
+                    this.continueProcesses.delete(id)
+                })
+            })
+        })
+
+        ;(promiseIpc as any).on('continue:kill', (id) => {
+            const proc = this.continueProcesses.get(id)
+            if (!proc) {
+                return false
+            }
+            try {
+                proc.kill()
+            } catch {
+                // Ignore kill errors
+            }
+            this.continueProcesses.delete(id)
+            return true
         })
 
         ;(promiseIpc as any).on('get-default-mac-shell', async () => {

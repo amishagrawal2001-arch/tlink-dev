@@ -149,7 +149,7 @@ export class Compaction {
         // 添加截断标记
         const truncationMarker: ApiMessage = {
             role: 'system',
-            content: `[${removedMessages.length}条消息已被截断以节省Token成本]`,
+            content: `[${removedMessages.length} messages were truncated to save tokens]`,
             ts: Date.now(),
             isTruncationMarker: true,
             truncationId,
@@ -291,7 +291,7 @@ export class Compaction {
         if (prunedContent.length > 1000) {
             const preservedLength = 500 + 100;
             const removedLength = prunedContent.length - preservedLength;
-            prunedContent = prunedContent.substring(0, 500) + `\n[...${removedLength}字符已裁剪...]` + prunedContent.substring(prunedContent.length - 100);
+            prunedContent = prunedContent.substring(0, 500) + `\n[...${removedLength} characters trimmed...]` + prunedContent.substring(prunedContent.length - 100);
             tokensSaved += Math.floor(removedLength / 4);
             partsCompacted++;
         }
@@ -372,7 +372,7 @@ export class Compaction {
             try {
                 const parsed = JSON.parse(content);
                 const keys = Object.keys(parsed);
-                return `[JSON对象，包含${keys.length}个字段: ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? '...' : ''}]`;
+                return `[JSON object with ${keys.length} fields: ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? '...' : ''}]`;
             } catch {
                 // 非有效 JSON，继续处理
             }
@@ -383,11 +383,11 @@ export class Compaction {
             const lines = content.split('\n');
             const head = lines.slice(0, 5).join('\n');
             const tail = lines.slice(-3).join('\n');
-            return `${head}\n[...省略${lines.length - 8}行...]\n${tail}`;
+            return `${head}\n[...omitted ${lines.length - 8} lines...]\n${tail}`;
         }
 
         // 普通长文本：截断并添加省略标记
-        return content.substring(0, maxLength) + '\n[...内容已裁剪...]';
+        return content.substring(0, maxLength) + '\n[...content trimmed...]';
     }
 
     /**
@@ -400,7 +400,7 @@ export class Compaction {
             if (typeof content === 'string') {
                 // 对长文本结果进行裁剪
                 if (content.length > 1000) {
-                    content = content.substring(0, 500) + '\n[...输出已截断...]';
+                    content = content.substring(0, 500) + '\n[...output truncated...]';
                 }
             }
             return { ...block, content };
@@ -432,7 +432,7 @@ export class Compaction {
                 .join('\n');
         }
 
-        return '[复杂内容]';
+        return '[complex content]';
     }
 
     /**

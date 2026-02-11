@@ -27,7 +27,7 @@ export function generateIV(): string {
  */
 export function encrypt(text: string, key: string): string {
     if (text === null || text === undefined || key === null || key === undefined) {
-        throw new Error('文本和密钥不能为空');
+        throw new Error('Text and key must not be empty.');
     }
 
     try {
@@ -37,7 +37,7 @@ export function encrypt(text: string, key: string): string {
         const encrypted = CryptoJS.AES.encrypt(strText, strKey);
         return encrypted.toString();
     } catch (error) {
-        throw new Error(`加密失败: ${error instanceof Error ? error.message : String(error)}`);
+        throw new Error(`Encryption failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
@@ -46,7 +46,7 @@ export function encrypt(text: string, key: string): string {
  */
 export function decrypt(encryptedText: string, key: string): string {
     if (encryptedText === null || encryptedText === undefined || key === null || key === undefined) {
-        throw new Error('加密文本和密钥不能为空');
+        throw new Error('Encrypted text and key must not be empty.');
     }
 
     try {
@@ -56,7 +56,7 @@ export function decrypt(encryptedText: string, key: string): string {
         const decrypted = CryptoJS.AES.decrypt(strEncryptedText, strKey);
         return decrypted.toString(CryptoJS.enc.Utf8);
     } catch (error) {
-        throw new Error(`解密失败: ${error instanceof Error ? error.message : String(error)}`);
+        throw new Error(`Decryption failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
@@ -65,7 +65,7 @@ export function decrypt(encryptedText: string, key: string): string {
  */
 export function deriveKey(password: string, salt: string, iterations: number = 10000): string {
     if (!password || !salt) {
-        throw new Error('密码和盐值不能为空');
+        throw new Error('Password and salt must not be empty.');
     }
 
     try {
@@ -75,7 +75,7 @@ export function deriveKey(password: string, salt: string, iterations: number = 1
         });
         return key.toString();
     } catch (error) {
-        throw new Error(`密钥派生失败: ${error instanceof Error ? error.message : String(error)}`);
+        throw new Error(`Key derivation failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
@@ -91,14 +91,14 @@ export function generateSalt(): string {
  */
 export function hash(text: string, salt?: string): string {
     if (!text) {
-        throw new Error('文本不能为空');
+        throw new Error('Text must not be empty.');
     }
 
     try {
         const data = salt ? text + salt : text;
         return CryptoJS.SHA256(data).toString();
     } catch (error) {
-        throw new Error(`哈希失败: ${error instanceof Error ? error.message : String(error)}`);
+        throw new Error(`Hashing failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
@@ -119,14 +119,14 @@ export function verifyHash(text: string, hashValue: string, salt?: string): bool
  */
 export function encryptObject(obj: any, key: string): string {
     if (!obj || !key) {
-        throw new Error('对象和密钥不能为空');
+        throw new Error('Object and key must not be empty.');
     }
 
     try {
         const jsonString = JSON.stringify(obj);
         return encrypt(jsonString, key);
     } catch (error) {
-        throw new Error(`对象加密失败: ${error instanceof Error ? error.message : String(error)}`);
+        throw new Error(`Object encryption failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
@@ -135,14 +135,14 @@ export function encryptObject(obj: any, key: string): string {
  */
 export function decryptObject<T>(encryptedText: string, key: string): T {
     if (!encryptedText || !key) {
-        throw new Error('加密文本和密钥不能为空');
+        throw new Error('Encrypted text and key must not be empty.');
     }
 
     try {
         const jsonString = decrypt(encryptedText, key);
         return JSON.parse(jsonString) as T;
     } catch (error) {
-        throw new Error(`对象解密失败: ${error instanceof Error ? error.message : String(error)}`);
+        throw new Error(`Object decryption failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
@@ -158,7 +158,7 @@ export function generateToken(length: number = 32): string {
  */
 export function base64Encode(text: string): string {
     if (text === null || text === undefined) {
-        throw new Error('文本不能为空');
+        throw new Error('Text must not be empty.');
     }
 
     try {
@@ -166,7 +166,7 @@ export function base64Encode(text: string): string {
         const str = String(text);
         return CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse(str));
     } catch (error) {
-        throw new Error(`Base64编码失败: ${error instanceof Error ? error.message : String(error)}`);
+        throw new Error(`Base64 encoding failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
@@ -175,7 +175,7 @@ export function base64Encode(text: string): string {
  */
 export function base64Decode(encodedText: string): string {
     if (encodedText === null || encodedText === undefined) {
-        throw new Error('编码文本不能为空');
+        throw new Error('Encoded text must not be empty.');
     }
 
     try {
@@ -183,7 +183,7 @@ export function base64Decode(encodedText: string): string {
         const str = String(encodedText);
         return CryptoJS.enc.Base64.parse(str).toString(CryptoJS.enc.Utf8);
     } catch (error) {
-        throw new Error(`Base64解码失败: ${error instanceof Error ? error.message : String(error)}`);
+        throw new Error(`Base64 decoding failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
@@ -239,7 +239,7 @@ export function clearSensitiveData(obj: any): void {
  */
 export function createSecureConfig(data: any, masterPassword: string): { encrypted: string; salt: string } {
     if (!data || !masterPassword) {
-        throw new Error('数据和主密码不能为空');
+        throw new Error('Data and master password must not be empty.');
     }
 
     const salt = generateSalt();
@@ -254,7 +254,7 @@ export function createSecureConfig(data: any, masterPassword: string): { encrypt
  */
 export function parseSecureConfig(encryptedData: string, salt: string, masterPassword: string): any {
     if (!encryptedData || !salt || !masterPassword) {
-        throw new Error('加密数据、盐值和主密码不能为空');
+        throw new Error('Encrypted data, salt, and master password must not be empty.');
     }
 
     const key = deriveKey(masterPassword, salt);

@@ -39,15 +39,15 @@ export class RiskConfirmDialogComponent {
     getRiskLevelText(): string {
         switch (this.riskLevel) {
             case RiskLevel.LOW:
-                return '低风险';
+                return 'Low risk';
             case RiskLevel.MEDIUM:
-                return '中风险';
+                return 'Medium risk';
             case RiskLevel.HIGH:
-                return '高风险';
+                return 'High risk';
             case RiskLevel.CRITICAL:
-                return '极风险';
+                return 'Critical risk';
             default:
-                return '未知风险';
+                return 'Unknown risk';
         }
     }
 

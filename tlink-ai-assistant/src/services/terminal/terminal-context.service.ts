@@ -299,27 +299,27 @@ export class TerminalContextService {
 
         switch (type) {
             case 'command_not_found':
-                suggestions.push('检查命令拼写是否正确');
-                suggestions.push('使用 `which <command>` 或 `command -v <command>` 确认命令是否存在');
-                suggestions.push('使用 `apt install <package>` (Ubuntu/Debian) 或 `brew install <package>` (macOS) 安装缺失命令');
+                suggestions.push('Check the command spelling.');
+                suggestions.push('Use `which <command>` or `command -v <command>` to confirm the command exists.');
+                suggestions.push('Install the missing command using `apt install <package>` (Ubuntu/Debian) or `brew install <package>` (macOS).');
                 break;
 
             case 'permission_denied':
-                suggestions.push('使用 `sudo` 提升权限');
-                suggestions.push('检查文件权限：`ls -l <file>`');
-                suggestions.push('使用 `chmod` 修改文件权限');
+                suggestions.push('Use `sudo` to elevate permissions.');
+                suggestions.push('Check file permissions: `ls -l <file>`.');
+                suggestions.push('Use `chmod` to change file permissions.');
                 break;
 
             case 'file_not_found':
-                suggestions.push('检查文件路径是否正确');
-                suggestions.push('使用 `pwd` 确认当前目录');
-                suggestions.push('使用 `ls` 查看当前目录内容');
+                suggestions.push('Check that the file path is correct.');
+                suggestions.push('Use `pwd` to confirm the current directory.');
+                suggestions.push('Use `ls` to list the current directory.');
                 break;
 
             case 'syntax_error':
-                suggestions.push('检查命令语法');
-                suggestions.push('使用 `man <command>` 查看命令手册');
-                suggestions.push('使用 `--help` 或 `-h` 查看帮助信息');
+                suggestions.push('Check the command syntax.');
+                suggestions.push('Use `man <command>` to view the manual.');
+                suggestions.push('Use `--help` or `-h` to view help.');
                 break;
         }
 

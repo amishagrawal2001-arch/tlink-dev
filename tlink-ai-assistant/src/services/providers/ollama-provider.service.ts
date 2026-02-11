@@ -810,7 +810,7 @@ export class OllamaProviderService extends BaseAiProvider {
         const warnings: string[] = [];
 
         if (!this.config?.model) {
-            warnings.push('未指定模型，将使用默认模型 llama3.1');
+            warnings.push('No model specified; using default model llama3.1.');
         }
 
         return {

@@ -2,8 +2,8 @@
  * Tlink AI Assistant global styles
  */
 
-// 导入主题系统
-@import 'themes';
+// Theme system
+@use 'themes';
 
 // 主题颜色变量已移至 themes.scss
 // 这里只保留通用样式和组件样式
@@ -863,4 +863,3 @@
         opacity: 0;
     }
 }
-

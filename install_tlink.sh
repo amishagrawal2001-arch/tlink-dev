@@ -15,17 +15,30 @@ CLEAN_USER_PLUGINS="${TLINK_CLEAN_USER_PLUGINS:-0}"
 UPGRADE_NODE="${TLINK_UPGRADE_NODE:-1}"
 MIN_NODE_VERSION="${TLINK_NODE_MIN_VERSION:-22.12.0}"
 INSTALL_OLLAMA="${TLINK_INSTALL_OLLAMA:-1}"
-ONLY_INSTALL_OLLAMA=0
+INSTALL_TABBY="${TLINK_INSTALL_TABBY:-0}"
+TABBY_INSTALL_METHOD="${TLINK_TABBY_INSTALL_METHOD:-brew}"
+TABBY_DOCKER_IMAGE="${TLINK_TABBY_DOCKER_IMAGE:-registry.tabbyml.com/tabbyml/tabby}"
+TABBY_DOCKER_CONTAINER="${TLINK_TABBY_DOCKER_CONTAINER:-tabby}"
+TABBY_PORT="${TLINK_TABBY_PORT:-8080}"
+TABBY_DATA_DIR="${TLINK_TABBY_DATA_DIR:-$HOME/.tabby}"
+TABBY_MODEL="${TLINK_TABBY_MODEL:-StarCoder-1B}"
+TABBY_CHAT_MODEL="${TLINK_TABBY_CHAT_MODEL:-Qwen2-1.5B-Instruct}"
+TABBY_DEVICE="${TLINK_TABBY_DEVICE:-cuda}"
+TABBY_DOCKER_GPU="${TLINK_TABBY_DOCKER_GPU:-1}"
+TABBY_DOCKER_SELINUX="${TLINK_TABBY_DOCKER_SELINUX:-0}"
+ONLY_INSTALL_OPTIONAL=0
+EXPLICIT_INSTALL_OLLAMA=0
+EXPLICIT_INSTALL_TABBY=0
 SKIP_NODE_CHECK=0
 SKIP_YARN_CHECK=0
 
 if [[ $# -gt 0 ]]; then
-  ONLY_INSTALL_OLLAMA=1
+  ONLY_INSTALL_OPTIONAL=1
   for arg in "$@"; do
     case "$arg" in
-      --install-ollama) ;;
+      --install-ollama|--install-tabby|--install-tabby-docker|--no-install-ollama|--no-install-tabby|--tabby-install-method=*) ;;
       --help|-h) ;;
-      *) ONLY_INSTALL_OLLAMA=0 ;;
+      *) ONLY_INSTALL_OPTIONAL=0 ;;
     esac
   done
 fi
@@ -40,8 +53,12 @@ while [[ $# -gt 0 ]]; do
     --clean-user-plugins) CLEAN_USER_PLUGINS=1 ;;
     --upgrade-node) UPGRADE_NODE=1 ;;
     --no-upgrade-node) UPGRADE_NODE=0 ;;
-    --install-ollama) INSTALL_OLLAMA=1 ;;
+    --install-ollama) INSTALL_OLLAMA=1; EXPLICIT_INSTALL_OLLAMA=1 ;;
     --no-install-ollama) INSTALL_OLLAMA=0 ;;
+    --install-tabby) INSTALL_TABBY=1; EXPLICIT_INSTALL_TABBY=1 ;;
+    --install-tabby-docker) INSTALL_TABBY=1; EXPLICIT_INSTALL_TABBY=1; TABBY_INSTALL_METHOD="docker" ;;
+    --no-install-tabby) INSTALL_TABBY=0 ;;
+    --tabby-install-method=*) TABBY_INSTALL_METHOD="${1#*=}" ;;
     --install-only) SKIP_BUILD=1; SKIP_START=1 ;;
     --build-only) SKIP_INSTALL=1; SKIP_START=1 ;;
     --help|-h)
@@ -59,6 +76,10 @@ Options:
   --no-upgrade-node   Do not attempt to upgrade Node
   --install-ollama    Attempt to install Ollama (optional; if used alone, only installs Ollama)
   --no-install-ollama Skip Ollama installation
+  --install-tabby     Attempt to install Tabby using --tabby-install-method (default: brew)
+  --install-tabby-docker Attempt to launch Tabby in Docker using official defaults
+  --no-install-tabby  Skip Tabby installation
+  --tabby-install-method=<brew|docker> Choose Tabby install method for --install-tabby
   --install-only      Only install dependencies
   --build-only        Only run build
 EOF
@@ -72,6 +93,10 @@ EOF
   shift
 done
 
+if [[ "$ONLY_INSTALL_OPTIONAL" -eq 1 && "$EXPLICIT_INSTALL_OLLAMA" -eq 0 && "$EXPLICIT_INSTALL_TABBY" -eq 0 ]]; then
+  ONLY_INSTALL_OPTIONAL=0
+fi
+
 OS_NAME="$(uname -s)"
 case "$OS_NAME" in
   Darwin) OS="macos" ;;
@@ -82,7 +107,7 @@ esac
 
 log "Detected OS: $OS_NAME ($OS)"
 
-if [[ "$ONLY_INSTALL_OLLAMA" -eq 1 ]]; then
+if [[ "$ONLY_INSTALL_OPTIONAL" -eq 1 ]]; then
   SKIP_SYSTEM_DEPS=1
   SKIP_INSTALL=1
   SKIP_BUILD=1
@@ -90,6 +115,15 @@ if [[ "$ONLY_INSTALL_OLLAMA" -eq 1 ]]; then
   UPGRADE_NODE=0
   SKIP_NODE_CHECK=1
   SKIP_YARN_CHECK=1
+
+  if [[ "$EXPLICIT_INSTALL_OLLAMA" -eq 1 || "$EXPLICIT_INSTALL_TABBY" -eq 1 ]]; then
+    if [[ "$EXPLICIT_INSTALL_OLLAMA" -eq 0 ]]; then
+      INSTALL_OLLAMA=0
+    fi
+    if [[ "$EXPLICIT_INSTALL_TABBY" -eq 0 ]]; then
+      INSTALL_TABBY=0
+    fi
+  fi
 fi
 
 version_ge() {
@@ -254,6 +288,87 @@ install_ollama() {
   esac
 }
 
+install_tabby() {
+  if command -v tabby >/dev/null 2>&1; then
+    log "Tabby already installed."
+    return 0
+  fi
+
+  if ! command -v brew >/dev/null 2>&1; then
+    log "Homebrew not found. Install Homebrew and run: brew install tabbyml/tabby/tabby"
+    return 1
+  fi
+
+  log "Installing Tabby via Homebrew..."
+  if ! brew install tabbyml/tabby/tabby; then
+    log "Tabby install failed."
+    return 1
+  fi
+
+  if command -v brew >/dev/null 2>&1; then
+    log "Attempting to start Tabby service..."
+    brew services start tabby >/dev/null 2>&1 || true
+  fi
+
+  log "Tabby installed."
+  return 0
+}
+
+install_tabby_docker() {
+  if ! command -v docker >/dev/null 2>&1; then
+    log "Docker not found. Install Docker and re-run with --install-tabby-docker."
+    return 1
+  fi
+
+  mkdir -p "$TABBY_DATA_DIR"
+
+  local mount_spec="${TABBY_DATA_DIR}:/data"
+  if [[ "$TABBY_DOCKER_SELINUX" == "1" ]]; then
+    mount_spec="${mount_spec}:Z"
+  fi
+
+  if docker ps -a --format '{{.Names}}' | grep -Fxq "$TABBY_DOCKER_CONTAINER"; then
+    if docker ps --format '{{.Names}}' | grep -Fxq "$TABBY_DOCKER_CONTAINER"; then
+      log "Tabby Docker container \"$TABBY_DOCKER_CONTAINER\" is already running."
+    else
+      log "Starting existing Tabby Docker container \"$TABBY_DOCKER_CONTAINER\"..."
+      docker start "$TABBY_DOCKER_CONTAINER" >/dev/null
+    fi
+    log "Tabby should be available at http://localhost:${TABBY_PORT}"
+    return 0
+  fi
+
+  local docker_args=(
+    run -d
+    --name "$TABBY_DOCKER_CONTAINER"
+    -p "${TABBY_PORT}:8080"
+    -v "$mount_spec"
+  )
+
+  if [[ "$TABBY_DOCKER_GPU" == "1" ]]; then
+    docker_args+=(--gpus all)
+  fi
+
+  docker_args+=(
+    "$TABBY_DOCKER_IMAGE"
+    serve
+    --model "$TABBY_MODEL"
+    --chat-model "$TABBY_CHAT_MODEL"
+    --device "$TABBY_DEVICE"
+  )
+
+  log "Launching Tabby in Docker..."
+  if ! docker "${docker_args[@]}"; then
+    log "Tabby Docker launch failed."
+    log "Try TLINK_TABBY_DOCKER_GPU=0 for CPU-only Docker environments."
+    return 1
+  fi
+
+  log "Tabby container started. Endpoint: http://localhost:${TABBY_PORT}"
+  log "View logs with: docker logs -f ${TABBY_DOCKER_CONTAINER}"
+  return 0
+}
+
 resolve_user_plugins_dir() {
   case "$OS" in
     macos)
@@ -340,6 +455,20 @@ fi
 
 if [[ "$INSTALL_OLLAMA" -eq 1 ]]; then
   install_ollama || true
+fi
+
+if [[ "$INSTALL_TABBY" -eq 1 ]]; then
+  case "$TABBY_INSTALL_METHOD" in
+    brew)
+      install_tabby || true
+      ;;
+    docker)
+      install_tabby_docker || true
+      ;;
+    *)
+      log "Unknown Tabby install method: $TABBY_INSTALL_METHOD (expected brew or docker)"
+      ;;
+  esac
 fi
 
 if [[ "$CLEAN_USER_PLUGINS" -eq 1 ]]; then

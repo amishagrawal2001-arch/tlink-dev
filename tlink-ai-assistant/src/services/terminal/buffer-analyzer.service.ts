@@ -422,7 +422,7 @@ export class BufferAnalyzerService {
 
         if (hasWarning && !hasError) {
             result.suggestions = result.suggestions || [];
-            result.suggestions.push('命令执行成功，但有警告信息');
+            result.suggestions.push('Command succeeded, but there were warnings.');
         }
 
         return result;
@@ -540,23 +540,23 @@ export class BufferAnalyzerService {
     private generateErrorSuggestion(line: string, type: ErrorDetection['errors'][0]['type']): string | undefined {
         switch (type) {
             case 'syntax':
-                return '检查语法错误，确保所有括号、引号和分号正确匹配';
+                return 'Check syntax errors; ensure brackets, quotes, and semicolons match.';
             case 'permission':
-                return '使用 sudo 或检查文件/目录权限';
+                return 'Use sudo or check file/directory permissions.';
             case 'network':
-                return '检查网络连接和URL是否正确';
+                return 'Check your network connection and URL.';
             case 'runtime':
-                return '检查变量定义和函数调用';
+                return 'Check variable definitions and function calls.';
             default:
-                return '查看完整错误信息以获取更多详情';
+                return 'Review the full error output for details.';
         }
     }
 
     private generateWarningSuggestion(line: string): string | undefined {
         if (line.toLowerCase().includes('deprecated')) {
-            return '建议更新到最新的API或方法';
+            return 'Consider updating to the latest API or method.';
         }
-        return '查看警告信息以了解潜在问题';
+        return 'Review warnings for potential issues.';
     }
 
     private generateCommandSuggestions(command: string, output: string): string[] {
@@ -564,18 +564,18 @@ export class BufferAnalyzerService {
 
         // 基于错误类型生成建议
         if (output.includes('command not found')) {
-            suggestions.push('检查命令拼写是否正确');
-            suggestions.push('确认命令已安装并位于PATH中');
+            suggestions.push('Check the command spelling.');
+            suggestions.push('Verify the command is installed and in PATH.');
         }
 
         if (output.includes('permission denied')) {
-            suggestions.push('使用 sudo 提升权限');
-            suggestions.push('检查文件或目录的所有权和权限');
+            suggestions.push('Use sudo to elevate permissions.');
+            suggestions.push('Check file or directory ownership and permissions.');
         }
 
         if (output.includes('no such file')) {
-            suggestions.push('检查文件或目录路径是否正确');
-            suggestions.push('确认文件或目录是否存在');
+            suggestions.push('Check that the file or directory path is correct.');
+            suggestions.push('Confirm the file or directory exists.');
         }
 
         return suggestions;

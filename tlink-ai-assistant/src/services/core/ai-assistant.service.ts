@@ -17,6 +17,7 @@ import { AgentApprovalService } from './agent-approval.service';
 // Use lazy injection to get AiSidebarService to break circular dependency
 import type { AiSidebarService } from '../chat/ai-sidebar.service';
 import { LoggerService } from './logger.service';
+import { ContinueAgentService } from '../continue/continue-agent.service';
 import { BaseAiProvider, ProviderConfigUtils } from '../../types/provider.types';
 import { StateGraph, START, END } from '@langchain/langgraph';
 
@@ -46,6 +47,7 @@ export class AiAssistantService {
         private terminalManager: TerminalManagerService,
         private securityValidator: SecurityValidatorService,
         private agentApproval: AgentApprovalService,
+        private continueAgent: ContinueAgentService,
         private injector: Injector,
         private logger: LoggerService,
         // Inject all provider services
@@ -355,7 +357,7 @@ export class AiAssistantService {
 
             if (hallucinationDetected) {
                 // 附加警告消息，提醒用户
-                response.message.content += '\n\n⚠️ **检测到可能的幻觉**：AI声称执行了操作但未实际调用工具。\n实际执行的命令可能为空。请重新描述您的需求。';
+                response.message.content += '\n\n⚠️ **Possible hallucination detected**: the AI claimed to execute an action but no tool was actually called.\nThe actual executed command may be empty. Please restate your request.';
             }
 
             this.logger.info('Chat request completed successfully');
@@ -530,7 +532,7 @@ export class AiAssistantService {
 
             // 查找包含终端输出的工具结果
             const terminalOutput = toolResults.find(r =>
-                r.content.includes('=== 终端输出 ===') ||
+                r.content.includes('=== TERMINAL OUTPUT ===') ||
                 r.content.includes('✅ 命令已执行')
             );
 
@@ -631,7 +633,7 @@ export class AiAssistantService {
             });
 
             const terminalOutput = toolResults.find(r =>
-                r.content.includes('=== 终端输出 ===') ||
+                r.content.includes('=== TERMINAL OUTPUT ===') ||
                 r.content.includes('✅ 命令已执行')
             );
 
@@ -745,7 +747,7 @@ export class AiAssistantService {
             const context = this.terminalContext.getCurrentContext();
 
             const request: CommandRequest = {
-                naturalLanguage: selection || '帮我执行上一个命令',
+                naturalLanguage: selection || 'Run the previous command',
                 context: {
                     currentDirectory: context?.session.cwd,
                     operatingSystem: context?.systemInfo.platform,
@@ -941,19 +943,19 @@ export class AiAssistantService {
         let enhancedPrompt = basePrompt;
 
         if (context) {
-            enhancedPrompt += `\n\n当前环境：\n`;
-            enhancedPrompt += `- 目录：${context.session.cwd}\n`;
-            enhancedPrompt += `- Shell：${context.session.shell}\n`;
-            enhancedPrompt += `- 系统：${context.systemInfo.platform}\n`;
+            enhancedPrompt += `\n\nCurrent environment:\n`;
+            enhancedPrompt += `- Directory: ${context.session.cwd}\n`;
+            enhancedPrompt += `- Shell: ${context.session.shell}\n`;
+            enhancedPrompt += `- OS: ${context.systemInfo.platform}\n`;
 
             if (context.recentCommands.length > 0) {
-                enhancedPrompt += `- 最近命令：${context.recentCommands.slice(0, 3).join(' → ')}\n`;
+                enhancedPrompt += `- Recent commands: ${context.recentCommands.slice(0, 3).join(' → ')}\n`;
             }
 
             if (error) {
-                enhancedPrompt += `\n当前错误：\n`;
-                enhancedPrompt += `- 错误：${error.message}\n`;
-                enhancedPrompt += `- 命令：${error.command}\n`;
+                enhancedPrompt += `\nCurrent error:\n`;
+                enhancedPrompt += `- Error: ${error.message}\n`;
+                enhancedPrompt += `- Command: ${error.command}\n`;
             }
         }
 
@@ -1292,9 +1294,12 @@ export class AiAssistantService {
         request: ChatRequest,
         config: AgentLoopConfig = {}
     ): Observable<AgentStreamEvent> {
-        const engine = (this.config.get<string>('agentEngine', 'langgraph') || 'langgraph').toLowerCase();
+        const engine = (this.config.get<string>('agentEngine', 'continue') || 'continue').toLowerCase();
         if (engine === 'legacy') {
             return this.chatStreamWithLegacyAgentLoop(request, config);
+        }
+        if (engine === 'continue') {
+            return this.continueAgent.chatStreamWithContinueAgentLoop(request, config);
         }
         return this.chatStreamWithLangGraphLoop(request, config);
     }
@@ -1493,14 +1498,14 @@ export class AiAssistantService {
                                     conversationMessages.push({
                                         id: this.generateId(),
                                         role: MessageRole.USER,
-                                        content: `【系统提示】你输出了 <invoke> 格式的文本，但这不是正确的工具调用方式。请直接调用工具，不要用文本描述工具调用。系统会自动处理你的工具调用请求。`,
+                                        content: `[System] You output <invoke> formatted text, but this is not a valid tool call. Please call tools directly without describing them. The system will process tool calls automatically.`,
                                         timestamp: new Date()
                                     });
 
                                     // 发送重试事件
                                     subscriber.next({
                                         type: 'text_delta',
-                                        textDelta: '\n\n[系统：检测到格式错误，正在重试...]\n'
+                                        textDelta: '\n\n[System: Format error detected, retrying...]\n'
                                     });
 
                                     // 强制重试
@@ -1797,6 +1802,11 @@ export class AiAssistantService {
                 contentRetryCount: number;
                 hasToolResult: boolean;
                 hasPatchApplied: boolean;
+                hasContext: boolean;
+                hasEditorContext: boolean;
+                hasDiagnostics: boolean;
+                hasProjectInfo: boolean;
+                hasTerminalCwd: boolean;
             };
             const graphStateArgs = {
                 channels: {
@@ -1813,7 +1823,12 @@ export class AiAssistantService {
                     reviewerNotes: { reducer: (_left: string | undefined, right: string | undefined) => right ?? _left ?? '', default: () => '' },
                     contentRetryCount: { reducer: (_left: number | undefined, right: number | undefined) => right ?? _left ?? 0, default: () => 0 },
                     hasToolResult: { reducer: (_left: boolean | undefined, right: boolean | undefined) => right ?? _left ?? false, default: () => false },
-                    hasPatchApplied: { reducer: (_left: boolean | undefined, right: boolean | undefined) => right ?? _left ?? false, default: () => false }
+                    hasPatchApplied: { reducer: (_left: boolean | undefined, right: boolean | undefined) => right ?? _left ?? false, default: () => false },
+                    hasContext: { reducer: (_left: boolean | undefined, right: boolean | undefined) => right ?? _left ?? false, default: () => false },
+                    hasEditorContext: { reducer: (_left: boolean | undefined, right: boolean | undefined) => right ?? _left ?? false, default: () => false },
+                    hasDiagnostics: { reducer: (_left: boolean | undefined, right: boolean | undefined) => right ?? _left ?? false, default: () => false },
+                    hasProjectInfo: { reducer: (_left: boolean | undefined, right: boolean | undefined) => right ?? _left ?? false, default: () => false },
+                    hasTerminalCwd: { reducer: (_left: boolean | undefined, right: boolean | undefined) => right ?? _left ?? false, default: () => false }
                 }
             };
 
@@ -1826,6 +1841,24 @@ export class AiAssistantService {
                 timestamp: new Date()
             };
             conversationMessages.unshift(taskContextMessage);
+
+            const contextNode = async (state: LangGraphState): Promise<Partial<LangGraphState>> => {
+                if (state.hasContext) {
+                    return { hasContext: true };
+                }
+                const contextSnapshot = await this.collectCopilotContext();
+                if (!contextSnapshot.message) {
+                    return { hasContext: true };
+                }
+                return {
+                    messages: [...(state.messages || []), contextSnapshot.message],
+                    hasContext: true,
+                    hasEditorContext: contextSnapshot.hasEditorContext,
+                    hasDiagnostics: contextSnapshot.hasDiagnostics,
+                    hasProjectInfo: contextSnapshot.hasProjectInfo,
+                    hasTerminalCwd: contextSnapshot.hasTerminalCwd
+                };
+            };
 
             const plannerNode = async (state: LangGraphState): Promise<Partial<LangGraphState>> => {
                 if (!plannerEnabled || state.hasPlan) {
@@ -1895,6 +1928,25 @@ export class AiAssistantService {
 
                 const pendingToolCalls: ToolCall[] = [];
                 let roundTextContent = '';
+                const lastUserMessageText = this.getLastUserMessageText(state.messages || []);
+
+                if (this.shouldFetchTerminalCwd(lastUserMessageText) && !state.hasTerminalCwd) {
+                    const forcedCall: ToolCall = {
+                        id: this.generateId(),
+                        name: 'get_terminal_cwd',
+                        input: {}
+                    };
+                    return {
+                        messages: state.messages || [],
+                        pendingToolCalls: [forcedCall],
+                        lastText: '',
+                        shouldTerminate: false,
+                        termination: null,
+                        forceRetry: false,
+                        round: currentRound,
+                        reviewRequired: false
+                    };
+                }
 
                 const roundRequest: ChatRequest = {
                     ...request,
@@ -1987,11 +2039,44 @@ export class AiAssistantService {
                 );
 
                 const validToolNames = this.terminalTools.getToolDefinitions().map(t => t.name);
-                const validToolCalls = pendingToolCalls.filter(tc => validToolNames.includes(tc.name));
+                let validToolCalls = pendingToolCalls.filter(tc => validToolNames.includes(tc.name));
                 if (validToolCalls.length !== pendingToolCalls.length) {
                     this.logger.warn('Dropping invalid tool calls', {
                         invalid: pendingToolCalls.filter(tc => !validToolNames.includes(tc.name)).map(tc => tc.name)
                     });
+                }
+
+                const needsTerminalCwd = validToolCalls.some(tc => tc.name === 'write_to_terminal');
+                if (needsTerminalCwd && !state.hasTerminalCwd) {
+                    validToolCalls = [{
+                        id: this.generateId(),
+                        name: 'get_terminal_cwd',
+                        input: {}
+                    }, ...validToolCalls];
+                }
+
+                const needsEditorContext = validToolCalls.some(tc => tc.name === 'apply_patch' || tc.name === 'insert_at_cursor' || tc.name === 'replace_selection');
+                if (needsEditorContext && !state.hasEditorContext) {
+                    validToolCalls = [{
+                        id: this.generateId(),
+                        name: 'get_active_editor_context',
+                        input: { include_selection: true, context_lines: 20 }
+                    }, ...validToolCalls];
+                }
+
+                const invokeToolCalls = this.extractInvokeToolCalls(roundTextContent || '');
+                if (invokeToolCalls.length > 0 && validToolCalls.length === 0) {
+                    this.logger.info('Parsed <invoke> tool calls from assistant text', { count: invokeToolCalls.length });
+                    return {
+                        messages: updatedMessages,
+                        pendingToolCalls: invokeToolCalls,
+                        lastText: roundTextContent,
+                        shouldTerminate: false,
+                        termination: null,
+                        forceRetry: false,
+                        round: currentRound,
+                        reviewRequired: false
+                    };
                 }
 
                 const hasInvokeText = roundTextContent && (
@@ -2005,15 +2090,39 @@ export class AiAssistantService {
                     updatedMessages.push({
                         id: this.generateId(),
                         role: MessageRole.USER,
-                        content: `【系统提示】你输出了 <invoke> 格式的文本，但这不是正确的工具调用方式。请直接调用工具，不要用文本描述工具调用。系统会自动处理你的工具调用请求。`,
+                        content: `[System] You output <invoke> formatted text, but this is not a valid tool call. Please call tools directly without describing them. The system will process tool calls automatically.`,
                         timestamp: new Date()
                     });
                     subscriber.next({
                         type: 'text_delta',
-                        textDelta: '\n\n[系统：检测到格式错误，正在重试...]\n'
+                        textDelta: '\n\n[System: Format error detected, retrying...]\n'
                     });
                     return {
                         messages: updatedMessages,
+                        pendingToolCalls: [],
+                        lastText: roundTextContent,
+                        shouldTerminate: false,
+                        termination: null,
+                        forceRetry: true,
+                        round: currentRound
+                    };
+                }
+
+                const reasoningTextDetected = this.looksLikeReasoning(roundTextContent || '');
+                if (reasoningTextDetected && noActualToolCalls && agentState.currentRound < maxRounds) {
+                    const retryHint: ChatMessage = {
+                        id: this.generateId(),
+                        role: MessageRole.SYSTEM,
+                        content: 'Respond with the final answer only. Do not include internal reasoning or meta commentary. If you need info, call a tool.',
+                        timestamp: new Date()
+                    };
+                    const retryMessages = [...updatedMessages, retryHint];
+                    subscriber.next({
+                        type: 'text_delta',
+                        textDelta: '\n\n[System: Reasoning content detected, retrying...]\n'
+                    });
+                    return {
+                        messages: retryMessages,
                         pendingToolCalls: [],
                         lastText: roundTextContent,
                         shouldTerminate: false,
@@ -2336,6 +2445,10 @@ export class AiAssistantService {
 
                 this.logger.info(`Round ${agentState.currentRound}: ${toolCalls.length} tools to execute`);
                 const toolResults = await this.executeToolsSequentially(toolCalls, subscriber, agentState);
+                const hasTerminalCwd = state.hasTerminalCwd || toolResults.some(r => r.name === 'get_terminal_cwd' && !r.is_error);
+                const hasEditorContext = state.hasEditorContext || toolResults.some(r => r.name === 'get_active_editor_context' && !r.is_error);
+                const hasDiagnostics = state.hasDiagnostics || toolResults.some(r => r.name === 'get_editor_diagnostics' && !r.is_error);
+                const hasProjectInfo = state.hasProjectInfo || toolResults.some(r => r.name === 'get_project_info' && !r.is_error);
                 const updatedMessages: ChatMessage[] = [...(state.messages || [])];
                 const toolResultMessage = this.buildToolResultMessage(toolResults);
                 updatedMessages.push(toolResultMessage);
@@ -2369,7 +2482,11 @@ export class AiAssistantService {
                     round: state.round,
                     reviewRequired: reviewerEnabled && !postToolTermination.shouldTerminate,
                     hasToolResult: true,
-                    hasPatchApplied: state.hasPatchApplied || toolCalls.some(tc => tc.name === 'apply_patch')
+                    hasPatchApplied: state.hasPatchApplied || toolCalls.some(tc => tc.name === 'apply_patch'),
+                    hasTerminalCwd,
+                    hasEditorContext,
+                    hasDiagnostics,
+                    hasProjectInfo
                 };
             };
 
@@ -2451,11 +2568,13 @@ export class AiAssistantService {
             };
 
             const graph = new StateGraph<LangGraphState>(graphStateArgs)
+                .addNode('context', contextNode)
                 .addNode('planner', plannerNode)
                 .addNode('assistant', assistantNode)
                 .addNode('tools', toolsNode)
                 .addNode('reviewer', reviewerNode)
-                .addEdge(START, 'planner')
+                .addEdge(START, 'context')
+                .addEdge('context', 'planner')
                 .addEdge('planner', 'assistant')
                 .addConditionalEdges(
                     'assistant',
@@ -2490,7 +2609,12 @@ export class AiAssistantService {
                 round: 0,
                 contentRetryCount: 0,
                 hasToolResult: false,
-                hasPatchApplied: false
+                hasPatchApplied: false,
+                hasContext: false,
+                hasEditorContext: false,
+                hasDiagnostics: false,
+                hasProjectInfo: false,
+                hasTerminalCwd: false
             };
 
             graph.invoke(initialState)
@@ -2709,7 +2833,7 @@ export class AiAssistantService {
                 // 添加错误结果以便 AI 知道
                 results.push({
                     tool_use_id: toolCall.id,
-                    content: `工具执行失败: ${errorMessage}`,
+                    content: `Tool execution failed: ${errorMessage}`,
                     is_error: true
                 });
 
@@ -2866,7 +2990,7 @@ export class AiAssistantService {
                     return {
                         shouldTerminate: true,
                         reason: 'summarizing',
-                        message: '检测到 AI 正在总结，任务已完成'
+                        message: 'Detected summarization; task likely complete'
                     };
                 }
                 // 默认无工具调用结束
@@ -2885,7 +3009,7 @@ export class AiAssistantService {
                 return {
                     shouldTerminate: true,
                     reason: 'tool_success',
-                    message: '工具执行成功，任务完成'
+                    message: 'Tool execution succeeded; task complete'
                 };
             }
         }
@@ -2904,7 +3028,7 @@ export class AiAssistantService {
                     return {
                         shouldTerminate: true,
                         reason: 'repeated_tool',
-                        message: `工具 ${tc.name} 被重复调用 ${repeatCount + 1} 次，可能陷入循环`
+                        message: `Tool ${tc.name} was called ${repeatCount + 1} times; possible loop`
                     };
                 }
             }
@@ -2917,7 +3041,7 @@ export class AiAssistantService {
             return {
                 shouldTerminate: true,
                 reason: 'high_failure_rate',
-                message: `连续 ${failureCount} 次工具调用失败，停止执行`
+                message: `${failureCount} consecutive tool calls failed; stopping execution`
             };
         }
 
@@ -3391,6 +3515,14 @@ export class AiAssistantService {
         return `## Agent Mode - Code-Aware Assistant
 You are an intelligent code assistant with terminal operations, code editing, and workspace analysis capabilities. You understand code context and provide context-aware suggestions.
 
+### Cursor-Style Workflow
+1. Gather context first (active editor, diagnostics, project info).
+2. Provide a short plan before edits.
+3. Use tools for every action; do not describe edits without tool calls.
+4. Confirm terminal context with get_terminal_cwd before running commands.
+5. After edits, consider diagnostics or tests and summarize changes.
+6. Respond with the final answer only; do not reveal internal reasoning or chain-of-thought.
+
 ### 🔍 Code Context Tools (Check These First!)
 **Before making code changes:**
 - get_active_editor_context: See what file user is editing, cursor position, selected code
@@ -3436,6 +3568,93 @@ ${workingDirLine}
 ✅ For "find where X is defined" → Use search_symbols or get_definition
 ✅ For "fix errors" → Check get_editor_diagnostics first
 ✅ Wait for actual tool results before responding to user`;
+    }
+
+    private async collectCopilotContext(): Promise<{
+        message: ChatMessage | null;
+        hasEditorContext: boolean;
+        hasDiagnostics: boolean;
+        hasProjectInfo: boolean;
+        hasTerminalCwd: boolean;
+    }> {
+        const toolSpecs: Array<{ name: string; input: any; label: string }> = [
+            { name: 'get_active_editor_context', input: { include_selection: true, context_lines: 20 }, label: 'Active editor context' },
+            { name: 'get_editor_diagnostics', input: { severity: 'all' }, label: 'Editor diagnostics' },
+            { name: 'get_project_info', input: { include_dependencies: true }, label: 'Project info' },
+            { name: 'get_terminal_cwd', input: {}, label: 'Terminal working directory' }
+        ];
+
+        const results: Array<{ name: string; label: string; content: string; is_error?: boolean }> = [];
+        let hasEditorContext = false;
+        let hasDiagnostics = false;
+        let hasProjectInfo = false;
+        let hasTerminalCwd = false;
+
+        for (const spec of toolSpecs) {
+            try {
+                const result = await this.terminalTools.executeToolCall({
+                    id: this.generateId(),
+                    name: spec.name,
+                    input: spec.input
+                });
+                results.push({
+                    name: spec.name,
+                    label: spec.label,
+                    content: result.content || '',
+                    is_error: result.is_error
+                });
+                if (!result.is_error) {
+                    if (spec.name === 'get_active_editor_context') hasEditorContext = true;
+                    if (spec.name === 'get_editor_diagnostics') hasDiagnostics = true;
+                    if (spec.name === 'get_project_info') hasProjectInfo = true;
+                    if (spec.name === 'get_terminal_cwd') hasTerminalCwd = true;
+                }
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                results.push({
+                    name: spec.name,
+                    label: spec.label,
+                    content: `Error: ${message}`,
+                    is_error: true
+                });
+            }
+        }
+
+        if (results.length === 0) {
+            return {
+                message: null,
+                hasEditorContext,
+                hasDiagnostics,
+                hasProjectInfo,
+                hasTerminalCwd
+            };
+        }
+
+        const summaryParts = results.map((result) => {
+            const truncated = this.truncateContextOutput(result.content || '', 1200);
+            return `### ${result.label}\n${truncated || '(no data)'}`;
+        });
+        const combined = summaryParts.join('\n\n');
+        const contextText = `Auto context snapshot (Cursor-style):\n${this.truncateContextOutput(combined, 4000)}`;
+
+        return {
+            message: {
+                id: this.generateId(),
+                role: MessageRole.SYSTEM,
+                content: contextText,
+                timestamp: new Date()
+            },
+            hasEditorContext,
+            hasDiagnostics,
+            hasProjectInfo,
+            hasTerminalCwd
+        };
+    }
+
+    private truncateContextOutput(text: string, maxLength: number): string {
+        if (!text) return '';
+        if (text.length <= maxLength) return text;
+        return `${text.slice(0, maxLength)}\n...[truncated]`;
     }
 
     /**
@@ -3489,6 +3708,44 @@ ${workingDirLine}
         const match = /```[a-zA-Z0-9_-]*\n([\s\S]*?)```/m.exec(text || '');
         if (!match) return null;
         return match[1].replace(/\s+$/g, '');
+    }
+
+    private getLastUserMessageText(messages: ChatMessage[]): string {
+        const lastUser = [...messages].reverse().find(m => m.role === MessageRole.USER);
+        if (!lastUser) return '';
+        const content = lastUser.content as unknown;
+        if (typeof content === 'string') return content;
+        if (Array.isArray(content)) {
+            return (content as Array<any>).map((part: any) => {
+                if (!part) return '';
+                if (typeof part === 'string') return part;
+                if (part.type === 'text') return part.text || '';
+                return '';
+            }).join('');
+        }
+        return String((content as any) || '');
+    }
+
+    private shouldFetchTerminalCwd(message: string): boolean {
+        const text = (message || '').toLowerCase();
+        return /current\s+working\s+dir|working\s+dir|working\s+directory|current\s+dir|current\s+directory|\bcwd\b|\bpwd\b|where\s+am\s+i/.test(text);
+    }
+
+    private looksLikeReasoning(text: string): boolean {
+        const trimmed = (text || '').trim();
+        if (!trimmed) return false;
+        const patterns = [
+            /^okay,\s*let's/i,
+            /^let me/i,
+            /^i (need|should|will) /i,
+            /^hmm/i,
+            /^first, /i,
+            /^the user is /i,
+            /i should /i,
+            /i need to /i,
+            /let's see/i
+        ];
+        return patterns.some(p => p.test(trimmed));
     }
 
     private inferFileName(responseText: string, code: string, userText: string): string | null {
@@ -3554,6 +3811,51 @@ ${workingDirLine}
         }
 
         return [];
+    }
+
+    private extractInvokeToolCalls(text: string): ToolCall[] {
+        if (!text || !text.includes('<invoke')) return [];
+        const toolCalls: ToolCall[] = [];
+        const invokeRegex = /<invoke\s+name="([^"]+)"[^>]*>([\s\S]*?)<\/invoke>/gi;
+        let match: RegExpExecArray | null;
+        while ((match = invokeRegex.exec(text)) !== null) {
+            const name = match[1];
+            const body = match[2] || '';
+            const input: any = {};
+            const paramRegex = /<parameter\s+name="([^"]+)"[^>]*>([\s\S]*?)<\/parameter>/gi;
+            let paramMatch: RegExpExecArray | null;
+            while ((paramMatch = paramRegex.exec(body)) !== null) {
+                const paramName = paramMatch[1];
+                const rawValue = (paramMatch[2] || '').trim();
+                if (!paramName) continue;
+                input[paramName] = this.parseInvokeParamValue(rawValue);
+            }
+            toolCalls.push({
+                id: this.generateId(),
+                name,
+                input
+            });
+        }
+        return toolCalls;
+    }
+
+    private parseInvokeParamValue(rawValue: string): any {
+        if (!rawValue) return '';
+        const trimmed = rawValue.trim();
+        if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+            try {
+                return JSON.parse(trimmed);
+            } catch {
+                return trimmed;
+            }
+        }
+        if (trimmed === 'true') return true;
+        if (trimmed === 'false') return false;
+        const numberValue = Number(trimmed);
+        if (!Number.isNaN(numberValue) && trimmed === String(numberValue)) {
+            return numberValue;
+        }
+        return trimmed;
     }
 
     private extractHeredocPatch(text: string): string | null {

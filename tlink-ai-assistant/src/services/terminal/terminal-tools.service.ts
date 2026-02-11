@@ -728,9 +728,37 @@ Note: If there are still incomplete tasks, please complete them first before cal
         const path = this.getPath();
         const win: any = window as any;
         const configuredRoot = (this.config.get<string>('agentWorkingDir', '') || '').trim();
-        const cwd = configuredRoot || win?.process?.cwd?.() || '';
+        const cwd = this.normalizeWorkingDir(configuredRoot) || win?.process?.cwd?.() || '';
         if (!path) return inputPath;
         return path.isAbsolute(inputPath) ? inputPath : path.resolve(cwd, inputPath);
+    }
+
+    private normalizeWorkingDir(input: string): string {
+        if (!input) return '';
+        const path = this.getPath();
+        const fs = this.getFs();
+        const win: any = window as any;
+        let resolved = input;
+
+        if (input.startsWith('~')) {
+            const home = win?.process?.env?.HOME || win?.process?.env?.USERPROFILE || '';
+            if (home) {
+                const suffix = input.slice(1).replace(/^[/\\]+/, '');
+                resolved = suffix ? (path ? path.join(home, suffix) : `${home}/${suffix}`) : home;
+            }
+        }
+
+        if (path && resolved && !path.isAbsolute(resolved)) {
+            const base = win?.process?.cwd?.() || '';
+            resolved = base ? path.resolve(base, resolved) : resolved;
+        }
+
+        if (fs && resolved && !fs.existsSync(resolved)) {
+            this.logger.warn('Agent working dir does not exist, falling back to app cwd', { input, resolved });
+            return '';
+        }
+
+        return resolved;
     }
 
     private readFile(pathInput: string): string {
@@ -1071,7 +1099,7 @@ Note: If there are still incomplete tasks, please complete them first before cal
             });
 
             if (totalLines === 0) {
-                return '(终端 buffer 为空)';
+                return '(Terminal buffer is empty)';
             }
 
             const startLine = Math.max(0, totalLines - lines);
@@ -1089,7 +1117,7 @@ Note: If there are still incomplete tasks, please complete them first before cal
                 }
             }
 
-            const finalOutput = result.join('\n') || '(终端输出为空)';
+            const finalOutput = result.join('\n') || '(Terminal output is empty)';
             this.logger.info('【DEBUG】Read completed', {
                 linesRead: result.length,
                 outputLength: finalOutput.length
@@ -1101,7 +1129,7 @@ Note: If there are still incomplete tasks, please complete them first before cal
                 error: error instanceof Error ? error.message : String(error),
                 stack: error instanceof Error ? error.stack : ''
             });
-            return '(读取终端失败，请重试)';
+            return '(Failed to read terminal output, please retry)';
         }
     }
 
@@ -1122,7 +1150,7 @@ Note: If there are still incomplete tasks, please complete them first before cal
             : this.terminalManager.getActiveTerminal();
 
         if (!terminal) {
-            return '(无可用终端)';
+            return '(No available terminal)';
         }
 
         return this.readFromXtermBuffer(terminal, lines);

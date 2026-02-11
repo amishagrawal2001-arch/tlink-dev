@@ -8,7 +8,7 @@
  */
 export function validateApiKey(apiKey: string, provider: string): { valid: boolean; error?: string } {
     if (!apiKey || apiKey.trim().length === 0) {
-        return { valid: false, error: 'API密钥不能为空' };
+        return { valid: false, error: 'API key must not be empty.' };
     }
 
     // 移除前后空格
@@ -37,11 +37,11 @@ export function validateApiKey(apiKey: string, provider: string): { valid: boole
 function validateOpenAiKey(key: string): { valid: boolean; error?: string } {
     // OpenAI密钥通常以 sk- 开头
     if (!key.startsWith('sk-')) {
-        return { valid: false, error: 'OpenAI API密钥应以 sk- 开头' };
+        return { valid: false, error: 'OpenAI API key should start with sk-' };
     }
 
     if (key.length < 50) {
-        return { valid: false, error: 'OpenAI API密钥长度不足' };
+        return { valid: false, error: 'OpenAI API key is too short.' };
     }
 
     return { valid: true };
@@ -53,11 +53,11 @@ function validateOpenAiKey(key: string): { valid: boolean; error?: string } {
 function validateAnthropicKey(key: string): { valid: boolean; error?: string } {
     // Anthropic密钥通常以 sk-ant- 开头
     if (!key.startsWith('sk-ant-')) {
-        return { valid: false, error: 'Anthropic API密钥应以 sk-ant- 开头' };
+        return { valid: false, error: 'Anthropic API key should start with sk-ant-' };
     }
 
     if (key.length < 50) {
-        return { valid: false, error: 'Anthropic API密钥长度不足' };
+        return { valid: false, error: 'Anthropic API key is too short.' };
     }
 
     return { valid: true };
@@ -69,7 +69,7 @@ function validateAnthropicKey(key: string): { valid: boolean; error?: string } {
 function validateMinimaxKey(key: string): { valid: boolean; error?: string } {
     // Minimax密钥长度检查
     if (key.length < 20) {
-        return { valid: false, error: 'Deepseek API密钥长度不足' };
+        return { valid: false, error: 'Deepseek API key is too short.' };
     }
 
     return { valid: true };
@@ -81,7 +81,7 @@ function validateMinimaxKey(key: string): { valid: boolean; error?: string } {
 function validateGlmKey(key: string): { valid: boolean; error?: string } {
     // GLM密钥长度检查
     if (key.length < 20) {
-        return { valid: false, error: 'GLM API密钥长度不足' };
+        return { valid: false, error: 'GLM API key is too short.' };
     }
 
     return { valid: true };
@@ -92,17 +92,17 @@ function validateGlmKey(key: string): { valid: boolean; error?: string } {
  */
 export function validateUrl(url: string): { valid: boolean; error?: string } {
     if (!url || url.trim().length === 0) {
-        return { valid: false, error: 'URL不能为空' };
+        return { valid: false, error: 'URL must not be empty.' };
     }
 
     try {
         const parsedUrl = new URL(url);
         if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-            return { valid: false, error: 'URL必须使用HTTP或HTTPS协议' };
+            return { valid: false, error: 'URL must use HTTP or HTTPS.' };
         }
         return { valid: true };
     } catch {
-        return { valid: false, error: '无效的URL格式' };
+        return { valid: false, error: 'Invalid URL format.' };
     }
 }
 
@@ -111,14 +111,14 @@ export function validateUrl(url: string): { valid: boolean; error?: string } {
  */
 export function validateModel(model: string, _provider: string): { valid: boolean; error?: string } {
     if (!model || model.trim().length === 0) {
-        return { valid: false, error: '模型名称不能为空' };
+        return { valid: false, error: 'Model name must not be empty.' };
     }
 
     const trimmedModel = model.trim();
 
     // 验证模型名称格式
     if (!/^[a-zA-Z0-9._-]+$/.test(trimmedModel)) {
-        return { valid: false, error: '模型名称包含非法字符' };
+        return { valid: false, error: 'Model name contains invalid characters.' };
     }
 
     // Note: 更完整的提供商特定验证请使用 validateProviderModel()
@@ -131,11 +131,11 @@ export function validateModel(model: string, _provider: string): { valid: boolea
  */
 export function validateTemperature(temperature: number): { valid: boolean; error?: string } {
     if (typeof temperature !== 'number' || isNaN(temperature)) {
-        return { valid: false, error: '温度必须是有效数字' };
+        return { valid: false, error: 'Temperature must be a valid number.' };
     }
 
     if (temperature < 0 || temperature > 2) {
-        return { valid: false, error: '温度值必须在0-2之间' };
+        return { valid: false, error: 'Temperature must be between 0 and 2.' };
     }
 
     return { valid: true };
@@ -146,11 +146,11 @@ export function validateTemperature(temperature: number): { valid: boolean; erro
  */
 export function validateMaxTokens(maxTokens: number): { valid: boolean; error?: string } {
     if (typeof maxTokens !== 'number' || isNaN(maxTokens) || maxTokens <= 0) {
-        return { valid: false, error: '最大令牌数必须是正整数' };
+        return { valid: false, error: 'Max tokens must be a positive integer.' };
     }
 
     if (maxTokens > 32000) {
-        return { valid: false, error: '最大令牌数不能超过32000' };
+        return { valid: false, error: 'Max tokens cannot exceed 32000.' };
     }
 
     return { valid: true };
@@ -161,7 +161,7 @@ export function validateMaxTokens(maxTokens: number): { valid: boolean; error?: 
  */
 export function validateCommand(command: string): { valid: boolean; error?: string } {
     if (!command || command.trim().length === 0) {
-        return { valid: false, error: '命令不能为空' };
+        return { valid: false, error: 'Command must not be empty.' };
     }
 
     const trimmed = command.trim();
@@ -184,7 +184,7 @@ export function validateCommand(command: string): { valid: boolean; error?: stri
 
     for (const pattern of dangerousPatterns) {
         if (pattern.test(trimmed)) {
-            return { valid: false, error: '检测到潜在危险命令' };
+            return { valid: false, error: 'Potentially dangerous command detected.' };
         }
     }
 
@@ -196,12 +196,12 @@ export function validateCommand(command: string): { valid: boolean; error?: stri
  */
 export function validateEmail(email: string): { valid: boolean; error?: string } {
     if (!email || email.trim().length === 0) {
-        return { valid: false, error: '邮箱不能为空' };
+        return { valid: false, error: 'Email must not be empty.' };
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-        return { valid: false, error: '邮箱格式无效' };
+        return { valid: false, error: 'Invalid email format.' };
     }
 
     return { valid: true };
@@ -212,7 +212,7 @@ export function validateEmail(email: string): { valid: boolean; error?: string }
  */
 export function validatePassword(password: string): { valid: boolean; error?: string; score: number } {
     if (!password || password.length === 0) {
-        return { valid: false, error: '密码不能为空', score: 0 };
+        return { valid: false, error: 'Password must not be empty.', score: 0 };
     }
 
     let score = 0;
@@ -220,7 +220,7 @@ export function validatePassword(password: string): { valid: boolean; error?: st
 
     // 长度检查
     if (password.length < 8) {
-        errors.push('密码至少需要8个字符');
+        errors.push('Password must be at least 8 characters.');
     } else {
         score += 20;
     }
@@ -240,15 +240,15 @@ export function validatePassword(password: string): { valid: boolean; error?: st
     if (hasNumber) score += 10;
     if (hasSpecial) score += 10;
 
-    if (!hasLower) errors.push('需要包含小写字母');
-    if (!hasUpper) errors.push('需要包含大写字母');
-    if (!hasNumber) errors.push('需要包含数字');
-    if (!hasSpecial) errors.push('需要包含特殊字符');
+    if (!hasLower) errors.push('Must include a lowercase letter.');
+    if (!hasUpper) errors.push('Must include an uppercase letter.');
+    if (!hasNumber) errors.push('Must include a number.');
+    if (!hasSpecial) errors.push('Must include a special character.');
 
     // 常见密码检查
     const commonPasswords = ['password', '123456', 'qwerty', 'admin', 'letmein'];
     if (commonPasswords.includes(password.toLowerCase())) {
-        return { valid: false, error: '密码过于常见', score: 0 };
+        return { valid: false, error: 'Password is too common.', score: 0 };
     }
 
     const valid = errors.length === 0 && score >= 40;
@@ -264,11 +264,11 @@ export function validatePassword(password: string): { valid: boolean; error?: st
  */
 export function validatePort(port: number): { valid: boolean; error?: string } {
     if (typeof port !== 'number' || isNaN(port) || !Number.isInteger(port)) {
-        return { valid: false, error: '端口必须是整数' };
+        return { valid: false, error: 'Port must be an integer.' };
     }
 
     if (port < 1 || port > 65535) {
-        return { valid: false, error: '端口号必须在1-65535之间' };
+        return { valid: false, error: 'Port must be between 1 and 65535.' };
     }
 
     return { valid: true };
@@ -279,14 +279,14 @@ export function validatePort(port: number): { valid: boolean; error?: string } {
  */
 export function validateJson(jsonString: string): { valid: boolean; error?: string; data?: any } {
     if (!jsonString || jsonString.trim().length === 0) {
-        return { valid: false, error: 'JSON字符串不能为空' };
+        return { valid: false, error: 'JSON string must not be empty.' };
     }
 
     try {
         const data = JSON.parse(jsonString);
         return { valid: true, data };
     } catch (error) {
-        return { valid: false, error: '无效的JSON格式' };
+        return { valid: false, error: 'Invalid JSON format.' };
     }
 }
 
@@ -295,18 +295,18 @@ export function validateJson(jsonString: string): { valid: boolean; error?: stri
  */
 export function validateFilePath(path: string): { valid: boolean; error?: string } {
     if (!path || path.trim().length === 0) {
-        return { valid: false, error: '文件路径不能为空' };
+        return { valid: false, error: 'File path must not be empty.' };
     }
 
     // 检查路径长度
     if (path.length > 260) {
-        return { valid: false, error: '文件路径过长' };
+        return { valid: false, error: 'File path is too long.' };
     }
 
     // 检查非法字符
     const invalidChars = /[<>:"/\\|?*]/;
     if (invalidChars.test(path)) {
-        return { valid: false, error: '路径包含非法字符' };
+        return { valid: false, error: 'Path contains invalid characters.' };
     }
 
     return { valid: true };
@@ -378,11 +378,11 @@ export function validateProviderConfig(
 
     // 验证API密钥
     if (!config.apiKey || config.apiKey.trim().length === 0) {
-        errors.push('API密钥不能为空');
+        errors.push('API key must not be empty.');
     } else {
         const keyValidation = validateProviderApiKey(provider, config.apiKey);
         if (!keyValidation.valid) {
-            errors.push(keyValidation.error || 'API密钥格式无效');
+            errors.push(keyValidation.error || 'Invalid API key format.');
         }
     }
 
@@ -390,22 +390,22 @@ export function validateProviderConfig(
     if (config.model) {
         const modelValidation = validateProviderModel(provider, config.model);
         if (!modelValidation.valid) {
-            errors.push(modelValidation.error || '模型名称无效');
+            errors.push(modelValidation.error || 'Invalid model name.');
         } else if (modelValidation.warning) {
             warnings.push(modelValidation.warning);
         }
     } else {
-        warnings.push(`未指定模型，${provider}将使用默认模型`);
+        warnings.push(`No model specified; ${provider} will use its default model.`);
     }
 
     // 验证基础URL（对于需要自定义URL的提供商）
     if (needsCustomBaseURL(provider)) {
         if (!config.baseURL || config.baseURL.trim().length === 0) {
-            warnings.push(`未指定基础URL，将使用${provider}的默认端点`);
+            warnings.push(`No base URL specified; using ${provider}'s default endpoint.`);
         } else {
             const urlValidation = validateUrl(config.baseURL);
             if (!urlValidation.valid) {
-                errors.push(`基础URL无效: ${urlValidation.error}`);
+                errors.push(`Invalid base URL: ${urlValidation.error}`);
             }
         }
     }
@@ -429,42 +429,42 @@ export function validateProviderApiKey(
     switch (provider) {
         case 'openai':
             if (!trimmedKey.startsWith('sk-')) {
-                return { valid: false, error: 'OpenAI API密钥应以 sk- 开头' };
+                return { valid: false, error: 'OpenAI API key should start with sk-' };
             }
             if (trimmedKey.length < 50) {
-                return { valid: false, error: 'OpenAI API密钥长度不足' };
+                return { valid: false, error: 'OpenAI API key is too short.' };
             }
             break;
 
         case 'anthropic':
             if (!trimmedKey.startsWith('sk-ant-')) {
-                return { valid: false, error: 'Anthropic API密钥应以 sk-ant- 开头' };
+                return { valid: false, error: 'Anthropic API key should start with sk-ant-' };
             }
             if (trimmedKey.length < 50) {
-                return { valid: false, error: 'Anthropic API密钥长度不足' };
+                return { valid: false, error: 'Anthropic API key is too short.' };
             }
             break;
 
         case 'minimax':
             if (trimmedKey.length < 20) {
-                return { valid: false, error: 'Deepseek API密钥长度不足' };
+                return { valid: false, error: 'Deepseek API key is too short.' };
             }
             // Minimax密钥通常以sk-开头
             if (!trimmedKey.startsWith('sk-')) {
-                return { valid: false, error: 'Deepseek API密钥应以 sk- 开头' };
+                return { valid: false, error: 'Deepseek API key should start with sk-' };
             }
             break;
 
         case 'glm':
             if (trimmedKey.length < 20) {
-                return { valid: false, error: 'GLM API密钥长度不足' };
+                return { valid: false, error: 'GLM API key is too short.' };
             }
             break;
 
         case 'openai-compatible':
             // 兼容模式不验证具体格式
             if (trimmedKey.length < 10) {
-                return { valid: false, error: 'API密钥长度不足' };
+                return { valid: false, error: 'API key is too short.' };
             }
             break;
 
@@ -474,7 +474,7 @@ export function validateProviderApiKey(
 
         case 'ollama-cloud':
             if (trimmedKey.length < 10) {
-                return { valid: false, error: 'Ollama Cloud API密钥长度不足' };
+                return { valid: false, error: 'Ollama Cloud API key is too short.' };
             }
             break;
 
@@ -496,12 +496,12 @@ export function validateProviderModel(
     const trimmedModel = model.trim();
 
     if (!trimmedModel) {
-        return { valid: false, error: '模型名称不能为空' };
+        return { valid: false, error: 'Model name must not be empty.' };
     }
 
     // 检查模型名称格式
     if (!/^[a-zA-Z0-9._-/]+$/.test(trimmedModel)) {
-        return { valid: false, error: '模型名称包含非法字符' };
+        return { valid: false, error: 'Model name contains invalid characters.' };
     }
 
     // 检查是否在已知模型列表中
@@ -509,7 +509,7 @@ export function validateProviderModel(
     if (!isKnownModel) {
         return {
             valid: true,
-            warning: `模型 "${trimmedModel}" 不在${provider}的官方模型列表中`
+            warning: `Model "${trimmedModel}" is not in ${provider}'s official model list.`
         };
     }
 
@@ -612,17 +612,17 @@ export async function validateLocalServiceConnection(
             return { valid: true, latency };
         }
 
-        return { valid: false, error: `服务返回状态码 ${response.status}` };
+        return { valid: false, error: `Service returned status ${response.status}` };
     } catch (error) {
         clearTimeout(timeoutId);
 
         if (error instanceof Error) {
             if (error.name === 'AbortError') {
-                return { valid: false, error: '连接超时' };
+                return { valid: false, error: 'Connection timed out.' };
             }
             return { valid: false, error: error.message };
         }
 
-        return { valid: false, error: '无法连接到服务' };
+        return { valid: false, error: 'Unable to connect to service.' };
     }
 }
