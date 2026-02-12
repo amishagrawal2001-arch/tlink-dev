@@ -79,7 +79,7 @@ export class TabbyProviderService extends BaseAiProvider {
                     model: this.config?.model || 'default',
                     messages: this.transformMessages(request.messages),
                     max_tokens: request.maxTokens || this.config?.maxTokens,
-                    temperature: request.temperature || 0.7,
+                    temperature: request.temperature ?? this.config?.temperature ?? 0.7,
                     stream: false
                 });
 
@@ -118,10 +118,11 @@ export class TabbyProviderService extends BaseAiProvider {
                         model: this.config?.model || 'default',
                         messages: this.transformMessages(request.messages),
                         max_tokens: request.maxTokens || this.config?.maxTokens,
-                        temperature: request.temperature || 0.7,
+                        temperature: request.temperature ?? this.config?.temperature ?? 0.7,
                         stream: true
                     }, {
-                        responseType
+                        responseType,
+                        signal: abortController.signal
                     });
 
                     const stream = response.data;
@@ -273,7 +274,7 @@ export class TabbyProviderService extends BaseAiProvider {
             model: this.config?.model || 'default',
             messages: this.transformMessages(request.messages),
             max_tokens: request.maxTokens || 1,
-            temperature: request.temperature || 0
+            temperature: request.temperature ?? 0
         });
 
         return this.transformChatResponse(response.data);
