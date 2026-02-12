@@ -33,6 +33,7 @@ import { VllmProviderService } from '../providers/vllm-provider.service';
 import { GroqProviderService } from '../providers/groq-provider.service';
 import { TlinkProxyProviderService } from '../providers/tlink-proxy.provider';
 import { TlinkAgentProviderService } from '../providers/tlink-agent.provider';
+import { TabbyProviderService } from '../providers/tabby-provider.service';
 
 @Injectable({ providedIn: 'root' })
 export class AiAssistantService {
@@ -61,7 +62,8 @@ export class AiAssistantService {
         @Optional() private vllmProvider: VllmProviderService,
         @Optional() private groqProvider: GroqProviderService,
         @Optional() private tlinkProxyProvider?: TlinkProxyProviderService,
-        @Optional() private tlinkAgentProvider?: TlinkAgentProviderService
+        @Optional() private tlinkAgentProvider?: TlinkAgentProviderService,
+        @Optional() private tabbyProvider?: TabbyProviderService
     ) {
         // Build provider mapping table
         this.buildProviderMapping();
@@ -111,6 +113,9 @@ export class AiAssistantService {
         }
         if (this.groqProvider) {
             this.providerMapping['groq'] = this.groqProvider;
+        }
+        if (this.tabbyProvider) {
+            this.providerMapping['tabby'] = this.tabbyProvider;
         }
     }
 
