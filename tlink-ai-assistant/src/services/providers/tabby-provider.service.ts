@@ -74,19 +74,57 @@ export class TabbyProviderService extends BaseAiProvider {
         this.logRequest(request);
 
         try {
+            // Tabby doesn't properly support stream:false, so we use streaming and collect the result
             const response = await this.withRetry(async () => {
                 const result = await this.client!.post('/v1/chat/completions', {
                     model: this.config?.model || 'default',
                     messages: this.transformMessages(request.messages),
                     max_tokens: request.maxTokens || this.config?.maxTokens,
                     temperature: request.temperature ?? this.config?.temperature ?? 0.7,
-                    stream: false
+                    stream: true
+                }, {
+                    responseType: 'text'
                 });
 
-                this.logResponse(result.data);
-                return result.data;
+                // Parse streaming response and collect content
+                let fullContent = '';
+                const text = result.data?.toString() || String(result.data || '');
+                const lines = text.split('\n').filter(Boolean);
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const data = line.slice(6);
+                        if (data === '[DONE]') break;
+
+                        try {
+                            const parsed = JSON.parse(data);
+                            const choice = parsed.choices?.[0];
+                            if (choice?.delta?.content) {
+                                fullContent += choice.delta.content;
+                            }
+                        } catch (e) {
+                            // Ignore parse errors
+                        }
+                    }
+                }
+
+                // Return in OpenAI format
+                return {
+                    choices: [{
+                        message: {
+                            role: 'assistant',
+                            content: fullContent
+                        }
+                    }],
+                    usage: {
+                        prompt_tokens: 0,
+                        completion_tokens: 0,
+                        total_tokens: 0
+                    }
+                };
             });
 
+            this.logResponse(response);
             return this.transformChatResponse(response);
 
         } catch (error) {
