@@ -56,6 +56,13 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
     // 翻译对象
     t: any;
 
+    readonly tabbyInstallCommands = {
+        installerBrew: './install_tlink.sh --install-tabby',
+        installerDocker: './install_tlink.sh --install-tabby-docker',
+        brew: 'brew install tabbyml/tabby/tabby && brew services start tabby',
+        docker: 'docker run -d --name tabby -p 8080:8080 -v "$HOME/.tabby:/data" registry.tabbyml.com/tabbyml/tabby serve --model StarCoder-1B --chat-model Qwen2-1.5B-Instruct --device cuda'
+    };
+
     // API Key 格式校验规则
     private apiKeyPatterns: { [key: string]: RegExp } = {
         // OpenAI keys include formats like sk-xxxxx, sk-proj-xxxxx; allow hyphens and varying lengths
@@ -301,6 +308,55 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
                 this.logger.warn('Failed to open fallback URL', fallbackError);
             }
         }
+    }
+
+    copyCommand(command: string, label: string, event?: Event): void {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        const successMessage = `${label} command copied`;
+        const failMessage = 'Unable to copy command automatically. Please copy it manually.';
+
+        if (!command?.trim()) {
+            this.toast.error(failMessage);
+            return;
+        }
+
+        const fallbackCopy = () => {
+            try {
+                const textarea = document.createElement('textarea');
+                textarea.value = command;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.focus();
+                textarea.select();
+                const copied = document.execCommand('copy');
+                document.body.removeChild(textarea);
+                if (copied) {
+                    this.toast.success(successMessage);
+                } else {
+                    this.toast.error(failMessage);
+                }
+            } catch {
+                this.toast.error(failMessage);
+            }
+        };
+
+        try {
+            if (navigator?.clipboard?.writeText) {
+                navigator.clipboard.writeText(command)
+                    .then(() => this.toast.success(successMessage))
+                    .catch(() => fallbackCopy());
+                return;
+            }
+        } catch {
+            // no-op, fallback below
+        }
+
+        fallbackCopy();
     }
 
     async startOllama(event?: Event): Promise<void> {
@@ -866,8 +922,16 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
             case 'glm':
                 return `${baseURL}/chat/completions`;
             default:
-                return `${baseURL}/v1/chat/completions`;
+                return this.buildOpenAiCompatibleChatEndpoint(baseURL);
         }
+    }
+
+    private buildOpenAiCompatibleChatEndpoint(baseURL: string): string {
+        const cleanBase = (baseURL || '').replace(/\/+$/, '');
+        if (cleanBase.endsWith('/v1')) {
+            return `${cleanBase}/chat/completions`;
+        }
+        return `${cleanBase}/v1/chat/completions`;
     }
 
     /**

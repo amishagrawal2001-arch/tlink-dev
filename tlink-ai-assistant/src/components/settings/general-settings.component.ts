@@ -57,7 +57,8 @@ export class GeneralSettingsComponent implements OnInit, OnDestroy {
         'tlink-proxy': 'Tlink Agentic',
         'ollama': 'Ollama (Local)',
         'ollama-cloud': 'Ollama Cloud',
-        'vllm': 'vLLM (Local)'
+        'vllm': 'vLLM (Local)',
+        'tabby': 'Tabby (Self-hosted)'
     };
 
     constructor(
@@ -182,6 +183,7 @@ export class GeneralSettingsComponent implements OnInit, OnDestroy {
             'ollama': 'Locally running Ollama service (port 11434)',
             'ollama-cloud': 'Ollama Cloud hosted models',
             'vllm': 'Locally running vLLM service (port 8000)',
+            'tabby': 'Self-hosted Tabby server (default port 8080)',
             'tlink-agentic': 'Tlink Agentic gateway (agent tools enabled)',
             'tlink-agent': 'Tlink Agent gateway (alias of Agentic)'
         };

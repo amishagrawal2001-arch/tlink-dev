@@ -52,6 +52,50 @@
                             </div>
                         </div>
 
+                        <div class="tabby-install-guide" *ngIf="providerName === 'tabby'">
+                            <div class="tabby-guide-header">
+                                <span><i class="fa fa-wrench"></i> Tabby server setup</span>
+                                <a
+                                    href="https://tabby.tabbyml.com/docs/quick-start/installation/docker/"
+                                    (click)="openExternal('https://tabby.tabbyml.com/docs/quick-start/installation/docker/', $event)"
+                                    rel="noopener">
+                                    Install docs
+                                </a>
+                            </div>
+
+                            <div class="tabby-guide-command">
+                                <div class="command-label">Tlink installer (Homebrew)</div>
+                                <div class="command-row">
+                                    <code>{{ tabbyInstallCommands.installerBrew }}</code>
+                                    <button type="button" class="copy-command-btn" (click)="copyCommand(tabbyInstallCommands.installerBrew, 'Tlink Homebrew install', $event)">Copy</button>
+                                </div>
+                            </div>
+
+                            <div class="tabby-guide-command">
+                                <div class="command-label">Tlink installer (Docker)</div>
+                                <div class="command-row">
+                                    <code>{{ tabbyInstallCommands.installerDocker }}</code>
+                                    <button type="button" class="copy-command-btn" (click)="copyCommand(tabbyInstallCommands.installerDocker, 'Tlink Docker install', $event)">Copy</button>
+                                </div>
+                            </div>
+
+                            <div class="tabby-guide-command">
+                                <div class="command-label">Manual Homebrew</div>
+                                <div class="command-row">
+                                    <code>{{ tabbyInstallCommands.brew }}</code>
+                                    <button type="button" class="copy-command-btn" (click)="copyCommand(tabbyInstallCommands.brew, 'Tabby Homebrew install', $event)">Copy</button>
+                                </div>
+                            </div>
+
+                            <div class="tabby-guide-command">
+                                <div class="command-label">Manual Docker</div>
+                                <div class="command-row">
+                                    <code>{{ tabbyInstallCommands.docker }}</code>
+                                    <button type="button" class="copy-command-btn" (click)="copyCommand(tabbyInstallCommands.docker, 'Tabby Docker run', $event)">Copy</button>
+                                </div>
+                            </div>
+                        </div>
+
                         <div *ngFor="let field of cloudProviderTemplates[providerName].fields" class="form-group">
                             <label>
                                 {{ t.providers[field.key] || field.label }}
