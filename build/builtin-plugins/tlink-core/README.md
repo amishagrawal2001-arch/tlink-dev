@@ -1,0 +1,37 @@
+# Tlink Core Plugin
+
+See also:
+
+* [Settings plugin API](./settings/)
+* [Terminal plugin API](./terminal/)
+* [Local terminal API](./local/)
+* [Linkifier plugin API](./linkifier/)
+
+This module provides:
+
+* tabbed interface services
+* toolbar UI
+* config file management
+* hotkeys
+* tab recovery
+* logging
+* theming
+
+Using the API:
+
+```ts
+import { AppService, TabContextMenuItemProvider } from 'tlink-core'
+```
+
+Exporting your subclasses:
+
+```ts
+@NgModule({
+  ...
+  providers: [
+    ...
+    { provide: TabContextMenuItemProvider, useClass: MyContextMenu, multi: true },
+    ...
+  ]
+})
+```

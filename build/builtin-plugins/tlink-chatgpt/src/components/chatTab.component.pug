@@ -1,0 +1,301 @@
+.chat-header
+    .title
+        span AI Chat
+    .meta
+        span Profile: {{ activeProfileName }}
+        span Provider: {{ activeProviderLabel }}
+        span Model: {{ effectiveModel }}
+        span Base: {{ effectiveBaseUrl }}
+        span(*ngIf='systemPromptSet') System prompt set
+        span(*ngIf='networkForm.enabled && !networkForm.includeLastOutput') Raw output off
+        span(*ngIf='networkForm.enabled && networkForm.redactSensitiveData') Redaction on
+        span.warning(*ngIf='missingApiKey') API key missing
+    .actions
+        .terminal-picker
+            select.form-control.form-control-sm(
+                #terminalSelect,
+                [(ngModel)]='activeTerminalId',
+                (change)='onTerminalTargetChange()',
+                [disabled]='!terminalTargets.length',
+                [ngbTooltip]='"Select target terminal (Ctrl+Alt+T)"',
+                aria-label='Select target terminal'
+            )
+                option(*ngIf='!terminalTargets.length', [value]='') No terminal tabs available
+                option(*ngFor='let target of terminalTargets', [value]='target.id') {{ target.title }}
+        button.btn.btn-secondary.btn-sm(type='button', (click)='toggleSettings()') {{ showSettings ? 'Hide settings' : 'Settings' }}
+        button.btn.btn-secondary.btn-sm(type='button', (click)='clear()', [disabled]='!messages.length && !draft.length') Clear
+
+.chat-pinned-actions(*ngIf='networkForm.enabled && pinnedQuickActions.length')
+    .pinned-title Pinned actions
+    .pinned-buttons
+        button.btn.btn-outline-primary.btn-sm(
+            *ngFor='let action of pinnedQuickActions',
+            type='button',
+            (click)='runQuickAction(action)',
+            [disabled]='!networkForm.allowCommandRun || !activeTerminalId'
+        ) {{ action.label }}
+
+.chat-log-actions(*ngIf='activeSessionLogPath')
+    .pinned-title Session log
+    .pinned-buttons
+        button.btn.btn-outline-primary.btn-sm(
+            type='button',
+            (click)='summarizeSessionLog()',
+            [disabled]='sending || summarizingLog',
+            [ngbTooltip]='"Summarize the active session log with AI"'
+        )
+            i.fas.fa-spinner.fa-spin(aria-hidden='true', *ngIf='summarizingLog')
+            i.far.fa-file-alt(aria-hidden='true', *ngIf='!summarizingLog')
+            |  {{ summarizingLog ? 'Summarizing...' : 'Summarize log' }}
+        span.log-meta {{ activeSessionLogName }}
+
+.chat-settings(*ngIf='showSettings')
+    .settings-columns
+        .settings-card
+            .section-heading
+                span Profile & model
+                span.section-hint Manage API keys and provider settings
+            .profile-bar
+                .field
+                    label.form-label Active profile
+                    select.form-control([(ngModel)]='activeProfileId', (change)='onProfileChange()')
+                        option(*ngFor='let profile of profiles', [value]='profile.id') {{ profile.name }} ({{ getProviderLabel(profile.provider) }})
+                .profile-actions
+                    button.btn.btn-outline-primary.btn-sm(type='button', (click)='addProfile()') Add profile
+                    button.btn.btn-outline-danger.btn-sm(type='button', (click)='deleteProfile()') Delete profile
+            .settings-grid
+                .field
+                    label.form-label Profile name
+                    input.form-control(type='text', [(ngModel)]='profileForm.name')
+                .field
+                    label.form-label Provider
+                    select.form-control([(ngModel)]='profileForm.provider', (change)='onProviderChange()')
+                        option(*ngFor='let provider of providers', [value]='provider.id') {{ provider.label }}
+                .field
+                    label.form-label API key
+                    input.form-control(type='password', [(ngModel)]='profileForm.apiKey', [placeholder]='envApiKeyPlaceholder')
+                    .form-text {{ apiKeyHint }}
+                .field
+                    label.form-label Model
+                    input.form-control(type='text', [(ngModel)]='profileForm.model', [placeholder]='envModel || providerDefaultsModel')
+                .field
+                    label.form-label Base URL
+                    input.form-control(type='text', [(ngModel)]='profileForm.baseUrl', [placeholder]='envBaseUrl || providerDefaultsBaseUrl')
+                .field
+                    label.form-label Temperature
+                    input.form-control(type='number', step='0.1', min='0', max='2', [(ngModel)]='profileForm.temperature')
+                .field
+                    label.form-label Max tokens
+                    input.form-control(type='number', min='1', [(ngModel)]='profileForm.maxTokens')
+                .field.full
+                    label.form-label System prompt
+                    textarea.form-control(rows='3', [(ngModel)]='profileForm.systemPrompt', [placeholder]='envSystemPromptPlaceholder')
+            .settings-actions
+                button.btn.btn-primary(type='button', (click)='saveSettings()') Save profile
+                button.btn.btn-outline-danger(type='button', (click)='clearApiKey()', [disabled]='!profileForm.apiKey.trim().length') Clear API key
+        .settings-card
+            .section-heading
+                span Network assistant
+                span.section-hint Tune safety, targeting, and output capture
+            .settings-grid
+                .field
+                    label.form-label Enable
+                    .form-check
+                        input.form-check-input(type='checkbox', [(ngModel)]='networkForm.enabled', (change)='onNetworkSettingsChange()')
+                        label.form-check-label Enable network assistant
+                .field
+                    label.form-label Vendor
+                    select.form-control([(ngModel)]='networkForm.vendor', (change)='onNetworkVendorChange()')
+                        option(*ngFor='let vendor of networkVendors', [value]='vendor.id') {{ vendor.label }}
+                .field
+                    label.form-label Variant
+                    select.form-control([(ngModel)]='networkForm.variant', (change)='onNetworkSettingsChange()')
+                        option(*ngFor='let variant of networkVariants', [value]='variant.id') {{ variant.label }}
+                .field
+                    label.form-label Device label
+                    input.form-control(type='text', [(ngModel)]='networkForm.deviceLabel', placeholder='e.g. core-qfx01')
+                .field
+                    label.form-label OS version
+                    input.form-control(type='text', [(ngModel)]='networkForm.osVersion', placeholder='e.g. 23.4R1')
+                .field
+                    label.form-label Site
+                    input.form-control(type='text', [(ngModel)]='networkForm.site', placeholder='e.g. SJC-1')
+                .field
+                    label.form-label Role
+                    input.form-control(type='text', [(ngModel)]='networkForm.role', placeholder='e.g. Spine')
+                .field
+                    label.form-label Include raw output in prompt
+                    .form-check
+                        input.form-check-input(type='checkbox', [(ngModel)]='networkForm.includeLastOutput')
+                        label.form-check-label Attach recent terminal output
+                    .form-text Parsed facts remain included. Captured: {{ terminalOutput.length }} chars
+                .field
+                    label.form-label Allow run (confirm)
+                    .form-check
+                        input.form-check-input(type='checkbox', [(ngModel)]='networkForm.allowCommandRun')
+                        label.form-check-label Require confirmation before running
+                .field
+                    label.form-label Auto-troubleshoot after command
+                    .form-check
+                        input.form-check-input(type='checkbox', [(ngModel)]='networkForm.autoTroubleshootAfterCommand')
+                        label.form-check-label Analyze command output automatically
+                    .form-text Uses the latest terminal output to generate next steps.
+                .field
+                    label.form-label Redact sensitive data
+                    .form-check
+                        input.form-check-input(type='checkbox', [(ngModel)]='networkForm.redactSensitiveData')
+                        label.form-check-label Mask IPs/hostnames for cloud providers
+                    .form-text Applies to remote base URLs; local endpoints are untouched.
+                .field.full
+                    label.form-label Redaction preview
+                    .terminal-actions
+                        button.btn.btn-outline-secondary.btn-sm(type='button', (click)='toggleRedactionPreview()')
+                            | {{ redactionPreviewVisible ? 'Hide preview' : 'Show preview' }}
+                        button.btn.btn-outline-secondary.btn-sm(
+                            type='button',
+                            (click)='updateRedactionPreview()',
+                            [disabled]='!redactionPreviewVisible'
+                        ) Refresh
+                    .parsed-card(*ngIf='redactionPreviewVisible')
+                        .parsed-header
+                            span Preview of prompt context sent to AI
+                            span.parsed-meta {{ redactionPreview.length ? (redactionPreview.length + ' chars') : 'Empty' }}
+                        .parsed-body(*ngIf='redactionPreview.length') {{ redactionPreview }}
+                        .parsed-empty(*ngIf='!redactionPreview.length') No prompt context available.
+                .field.full
+                    label.form-label Target terminal
+                    .terminal-actions
+                        button.btn.btn-outline-secondary.btn-sm(type='button', (click)='useLastTerminal()', [disabled]='!lastTerminalTitle') Use last terminal
+                        button.btn.btn-outline-secondary.btn-sm(type='button', (click)='clearCapturedOutput()', [disabled]='!terminalOutput.length') Clear captured output
+                .field.full
+                    label.form-label Command allowlist (per variant)
+                    textarea.form-control(
+                        rows='3',
+                        [(ngModel)]='allowlistText',
+                        (input)='onAllowlistChange()',
+                        placeholder='show\nping\ntraceroute'
+                    )
+                    .form-text One prefix per line. Leave empty to use defaults.
+                    .terminal-actions
+                        button.btn.btn-outline-secondary.btn-sm(type='button', (click)='resetAllowlist()') Reset to defaults
+            .settings-actions
+                button.btn.btn-outline-secondary(type='button', (click)='saveNetworkSettings()') Save assistant
+
+    .settings-card.full-width
+        .section-heading
+            span Quick questions
+            span.section-hint Create shortcuts that appear under the chat box
+        .settings-grid
+            .field.full
+                .quick-question-editor
+                    .quick-question-row(*ngFor='let question of quickQuestions')
+                        input.form-control.quick-question-input(
+                            type='text',
+                            [(ngModel)]='question.label',
+                            (ngModelChange)='onQuickQuestionChange()',
+                            placeholder='Label'
+                        )
+                        input.form-control.quick-question-input(
+                            type='text',
+                            [(ngModel)]='question.prompt',
+                            (ngModelChange)='onQuickQuestionChange()',
+                            placeholder='Prompt'
+                        )
+                        button.btn.btn-outline-danger.btn-sm(type='button', (click)='removeQuickQuestion(question)') Remove
+                .form-text Quick questions appear under the input box. Leave prompt empty to hide the button.
+                .terminal-actions
+                    button.btn.btn-outline-primary.btn-sm(type='button', (click)='addQuickQuestion()') Add question
+                    button.btn.btn-outline-secondary.btn-sm(type='button', (click)='resetQuickQuestions()') Reset defaults
+
+.chat-messages(#messagesContainer)
+    .empty(*ngIf='!messages.length && !sending') Start a conversation to see replies here.
+    .message(*ngFor='let message of messages', [class.user]="message.role === 'user'", [class.assistant]="message.role === 'assistant'", [class.error]="message.role === 'error'")
+        .message-header
+            .label {{ message.label }}
+            button.message-copy(
+                *ngIf='message.role !== "user"',
+                type='button',
+                (click)='copyMessage(message)'
+            ) Copy
+        .content {{ message.content }}
+    .message.assistant.thinking(*ngIf='sending')
+        .label Assistant
+        .content Thinking...
+
+.chat-suggestions(*ngIf='suggestedCommands.length')
+    .suggestions-header
+        .suggestions-title
+            span Suggested commands
+            span.hint Read-only commands only. Confirm before running.
+        .suggestions-actions
+            span.suggestions-count {{ suggestedCommands.length }} item{{ suggestedCommands.length === 1 ? '' : 's' }}
+            button.btn.btn-outline-secondary.btn-sm(type='button', (click)='toggleSuggestedCommands()')
+                | {{ suggestedCommandsCollapsed ? 'Expand' : 'Collapse' }}
+            button.btn.btn-outline-secondary.btn-sm(type='button', (click)='clearSuggestedCommands()') Clear
+    .suggestion-list(*ngIf='!suggestedCommandsCollapsed')
+        .suggestion(*ngFor='let suggestion of suggestedCommands')
+            code {{ suggestion.command }}
+            .suggestion-meta(*ngIf='!suggestion.safe') {{ suggestion.reason || 'Blocked by safety check' }}
+            .suggestion-actions
+                button.btn.btn-outline-secondary.btn-sm(type='button', (click)='copyCommand(suggestion.command)') Copy
+                button.btn.btn-outline-primary.btn-sm(
+                    type='button',
+                    (click)='runSuggestedCommand(suggestion.command, suggestion.safe)',
+                    [disabled]='!networkForm.allowCommandRun || !suggestion.safe || !terminalTargets.length'
+                ) Run
+
+.chat-input
+    .chat-quick-questions(*ngIf='quickQuestions.length')
+        .quick-question-buttons
+            button.btn.btn-outline-secondary.btn-sm.quick-question-toggle(
+                type='button',
+                (click)='toggleQuickQuestionEditMode()',
+                [ngbTooltip]='quickQuestionEditMode ? "Done" : "Edit quick questions"'
+            )
+                i.fas.fa-check(*ngIf='quickQuestionEditMode')
+                i.fas.fa-pen(*ngIf='!quickQuestionEditMode')
+            ng-container(*ngIf='!quickQuestionEditMode')
+                button.btn.btn-outline-secondary.btn-sm.quick-question-button(
+                    *ngFor='let question of getVisibleQuickQuestions()',
+                    type='button',
+                    (click)='sendQuickQuestion(question)',
+                    [disabled]='sending || !question.prompt.trim().length',
+                    [attr.title]='question.prompt'
+                ) {{ question.label }}
+        .quick-question-editor-inline(*ngIf='quickQuestionEditMode')
+            .quick-question-row(*ngFor='let question of quickQuestions')
+                input.form-control.quick-question-input(
+                    type='text',
+                    [(ngModel)]='question.label',
+                    (ngModelChange)='onQuickQuestionChange()',
+                    placeholder='Label'
+                )
+                input.form-control.quick-question-input(
+                    type='text',
+                    [(ngModel)]='question.prompt',
+                    (ngModelChange)='onQuickQuestionChange()',
+                    placeholder='Prompt'
+                )
+                button.btn.btn-outline-danger.btn-sm(type='button', (click)='removeQuickQuestion(question)') Remove
+            .terminal-actions
+                button.btn.btn-outline-primary.btn-sm(type='button', (click)='addQuickQuestion()') Add question
+    .chat-input-box
+        textarea.form-control(
+            #draftInput=''
+            rows='3',
+            [(ngModel)]='draft',
+            (input)='onDraftInput($event)',
+            (keydown)='onInputKeydown($event)',
+            [disabled]='sending',
+            placeholder='Ask a question...'
+        )
+        .input-actions
+            .hint Shift+Enter for newline
+            .input-buttons
+                button.btn.btn-primary(
+                    type='button',
+                    (click)='send()',
+                    [disabled]='sending || !draft.trim().length',
+                    aria-label='Send'
+                )
+                    i.fas.fa-paper-plane(aria-hidden='true')

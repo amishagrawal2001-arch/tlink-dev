@@ -1,0 +1,25 @@
+@import url("../../node_modules/@xterm/xterm/css/xterm.css");
+
+@font-face {
+    font-family: "monospace-fallback";
+    src: url(../fonts/SourceCodePro.ttf) format("truetype");
+}
+
+.xterm-viewport {
+    scrollbar-width: none;
+}
+
+.xterm-viewport::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    background: transparent;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb {
+    background: transparent;
+}
+
+.xterm-decoration-overview-ruler {
+    right: 1px;
+    pointer-events: none;
+}

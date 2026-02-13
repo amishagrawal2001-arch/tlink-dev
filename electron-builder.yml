@@ -31,7 +31,8 @@ files:
 - '!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}'
 - '!**/deps/cpu_features/build'
 extraResources:
-- builtin-plugins
+- from: build/builtin-plugins
+  to: builtin-plugins
 - extras
 - build/certs
 - from: app/node_modules

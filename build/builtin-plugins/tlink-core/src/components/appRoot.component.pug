@@ -1,0 +1,226 @@
+title-bar(
+  *ngIf='ready && !hostWindow.isFullscreen && config.store.appearance.dock == "off" && isTitleBarNeeded()',
+  (dblclick)='toggleMaximize()',
+  [hideControls]='hostApp.platform !== Platform.Linux && !hostWindow.isFullscreen',
+  [class.inset]='hostApp.platform == Platform.macOS && !hostWindow.isFullscreen'
+)
+
+.content.has-left-dock(
+    *ngIf='ready',
+    [class.tabs-on-top]='config.store.appearance.tabsLocation == "top" || config.store.appearance.tabsLocation == "left" || config.store.appearance.tabsLocation == "right"',
+    [class.tabs-on-left]='hasVerticalTabs() && config.store.appearance.tabsLocation == "left"',
+    [class.tabs-titlebar-enabled]='isTitleBarNeeded()',
+    [class.tabs-on-right]='hasVerticalTabs() && config.store.appearance.tabsLocation == "right"',
+    [class.has-right-dock]='rightDockPanels.length'
+)
+    .left-dock
+        .left-dock-section(
+            cdkDropList,
+            [cdkDropListData]='leftDockVisibleOrder',
+            cdkDropListOrientation='vertical',
+            (cdkDropListDropped)='onLeftDockReordered($event)'
+        )
+            button.left-dock-button(
+                *ngFor='let item of leftDockVisibleOrder; trackBy: trackByLeftDockItem',
+                type='button',
+                cdkDrag,
+                [cdkDragData]='item',
+                (click)='onLeftDockItemClick(item)',
+                [class.active]='isLeftDockItemActive(item)',
+                [class.disabled]='isLeftDockItemDisabled(item)',
+                [ngbTooltip]='getLeftDockTooltip(item)'
+            )
+                ng-container([ngSwitch]='item')
+                    ng-container(*ngSwitchCase='"profiles"') !{require('../icons/profiles.svg')}
+                    ng-container(*ngSwitchCase='"sftp"')
+                        i.far.fa-folder-open
+                    ng-container(*ngSwitchCase='"session-manager"')
+                        i.fas.fa-list
+                    ng-container(*ngSwitchCase='"remote-desktop"')
+                        i.fas.fa-desktop
+                    ng-container(*ngSwitchCase='"ssh"')
+                        i.fas.fa-terminal
+                    ng-container(*ngSwitchCase='"code-editor"') !{require('../icons/code.svg')}
+                    ng-container(*ngSwitchCase='"ai-chat"')
+                        i.fas.fa-comments
+                    ng-container(*ngSwitchCase='"ai-assistant"')
+                        svg(xmlns="http://www.w3.org/2000/svg", width="16", height="16", fill="currentColor", viewBox="0 0 16 16")
+                            path(d="M6 12.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5ZM3 8.062C3 6.76 4.235 5.765 5.53 5.886a26.58 26.58 0 0 0 4.94 0C11.765 5.765 13 6.76 13 8.062v1.157a.933.933 0 0 1-.765.935c-.845.147-2.34.346-4.235.346-1.895 0-3.39-.2-4.235-.346A.933.933 0 0 1 3 9.219V8.062Zm4.542-.827a.25.25 0 0 0-.217.068l-.92.9a24.767 24.767 0 0 1-1.871-.183.25.25 0 0 0-.068.495c.55.076 1.232.149 2.02.193a.25.25 0 0 0 .189-.071l.754-.736.847 1.71a.25.25 0 0 0 .404.062l.932-.97a25.286 25.286 0 0 0 1.922-.188.25.25 0 0 0-.068-.495c-.538.074-1.207.145-1.98.189a.25.25 0 0 0-.166.076l-.754.785-.842-1.7a.25.25 0 0 0-.182-.135Z")
+                            path(d="M8.5 1.866a1 1 0 1 0-1 0V3h-2A4.5 4.5 0 0 0 1 7.5V8a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1v1a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1v-.5A4.5 4.5 0 0 0 10.5 3h-2V1.866ZM14 7.5V13a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7.5A3.5 3.5 0 0 1 5.5 4h5A3.5 3.5 0 0 1 14 7.5Z")
+                    ng-container(*ngSwitchCase='"copilot-chat"')
+                        i.fas.fa-comment-dots
+                    ng-container(*ngSwitchCase='"websocket"')
+                        i.fas(
+                            [class.fa-plug]='!websocketServerRunning && !websocketServerStarting',
+                            [class.fa-power-off]='websocketServerRunning && !websocketServerStarting',
+                            [class.fa-spinner]='websocketServerStarting',
+                            [class.fa-spin]='websocketServerStarting'
+                        )
+        .left-dock-section.left-dock-bottom
+            button.left-dock-button(
+                type='button',
+                (click)='openSettingsFromDock()',
+                ngbTooltip='Settings'
+            )
+                i.fas.fa-cog
+    .right-dock(*ngIf='rightDockPanels.length')
+        .side-panel-tabs(
+            cdkDropList,
+            [cdkDropListData]='rightDockPanels',
+            cdkDropListOrientation='vertical',
+            (cdkDropListDropped)='onRightDockReordered($event)'
+        )
+            button.side-panel-toggle(
+                *ngFor='let panel of rightDockPanels',
+                type='button',
+                cdkDrag,
+                [cdkDragData]='panel',
+                cdkDragLockAxis='y',
+                (click)='toggleSidePanel(panel)',
+                (contextmenu)='openSidePanelMenu($event, panel)',
+                (mouseup)='onSidePanelMouseUp($event, panel)',
+                [class.is-open]='sidePanelVisible && sidePanelId === panel.id',
+                [ngbTooltip]='panel.label',
+                [attr.aria-label]='panel.label',
+                [style.--side-panel-accent-rgb]='getSidePanelAccentRgb(panel)'
+            )
+                span {{panel.label}}
+    .tab-bar(
+        *ngIf='!hostWindow.isFullscreen || config.store.appearance.tabsInFullscreen',
+        [class.tab-bar-no-controls-overlay]='hostApp.platform == Platform.macOS',
+        (dblclick)='!isTitleBarNeeded() && toggleMaximize()'
+    )
+        .inset.background(*ngIf='hostApp.platform == Platform.macOS \
+        && !hostWindow.isFullscreen \
+        && config.store.appearance.frame == "thin" \
+        && (config.store.appearance.tabsLocation == "top" || config.store.appearance.tabsLocation == "left")')
+        .tabs(
+            cdkDropList,
+            [cdkDropListOrientation]='(config.store.appearance.tabsLocation == "top" || config.store.appearance.tabsLocation == "bottom") ? "horizontal" : "vertical"',
+            (cdkDropListDropped)='onTabsReordered($event)',
+            cdkAutoDropGroup='app-tabs'
+        )
+            tab-header(
+                *ngFor='let tab of app.tabs; let idx = index',
+                [index]='idx',
+                [tab]='tab',
+                [active]='tab == app.activeTab',
+                [@animateTab]='{value: "in", params: {size: targetTabSize}}',
+                [@.disabled]='hasVerticalTabs() || !config.store.accessibility.animations',
+                (click)='app.selectTab(tab)',
+                [class.fully-draggable]='hostApp.platform !== Platform.macOS',
+                [ngbTooltip]='tab.customTitle || tab.title'
+            )
+
+        .btn-group.background
+            .d-flex(
+                *ngFor='let button of leftToolbarButtons'
+            )
+                button.btn.btn-secondary.btn-tab-bar(
+                    [ngbTooltip]='button.label',
+                    (click)='button.run && button.run()',
+                    [fastHtmlBind]='button.icon'
+                )
+
+            .d-flex(
+                ngbDropdown,
+                container='body',
+                [autoClose]='false',
+                [display]='transfersFloating ? "static" : "dynamic"',
+                #activeTransfersDropdown='ngbDropdown'
+            )
+                button.btn.btn-secondary.btn-tab-bar(
+                    [hidden]='activeTransfers.length == 0',
+                    [ngbTooltip]='"File transfers"|translate',
+                    [class.btn-transfer-active]='activeTransfers.length > 0',
+                    ngbDropdownToggle
+                ) !{require('../icons/transfers.svg')}
+                transfers-menu(
+                    ngbDropdownMenu,
+                    [(transfers)]='activeTransfers',
+                    (transfersChange)='onTransfersChange()',
+                    (floatingChange)='onTransfersFloatingChange($event)'
+                )
+
+        .btn-space.background(
+            [class.persistent]='config.store.appearance.frame == "thin"',
+            [class.drag]='config.store.appearance.frame == "thin" \
+            && ((config.store.appearance.tabsLocation !== "left" && config.store.appearance.tabsLocation !== "right") || hostApp.platform !== Platform.macOS)'
+        )
+
+        .btn-group.background
+            .d-flex(
+                *ngFor='let button of rightToolbarButtons'
+            )
+                button.btn.btn-secondary.btn-tab-bar(
+                    [ngbTooltip]='button.label',
+                    (click)='button.run && button.run()',
+                    [fastHtmlBind]='button.icon'
+                )
+
+            button.btn.btn-secondary.btn-tab-bar.btn-update(
+                *ngIf='updatesAvailable',
+                [ngbTooltip]='"Update available - Click to install"|translate',
+                (click)='updater.update()'
+            ) !{require('../icons/gift.svg')}
+
+        window-controls.background(
+            *ngIf='config.store.appearance.frame == "thin" \
+            && config.store.appearance.tabsLocation !== "left" \
+            && config.store.appearance.tabsLocation !== "right" \
+            && hostApp.platform == Platform.Linux',
+        )
+
+        div.window-controls-spacer(
+            *ngIf='config.store.appearance.frame == "thin" && (hostApp.platform == Platform.Windows) && (config.store.appearance.tabsLocation == "top")',
+        )
+    .content-body([class.has-side-panel-tabs]='rightDockPanels.length')
+        .workspace-stack
+            .workspace
+                .workspace-main
+                    start-page.content-tab.content-tab-active(*ngIf='ready && app.tabs.length == 0')
+
+                    tab-body.content-tab(
+                        #tabBodies,
+                        *ngFor='let tab of unsortedTabs',
+                        [class.content-tab-active]='tab == app.activeTab',
+                        [active]='tab == app.activeTab',
+                        [tab]='tab',
+                    )
+                .side-panel(*ngIf='sidePanelVisible && sidePanelComponent', [style.width.px]='sidePanelWidth')
+                    .side-panel-resizer(
+                        (mousedown)='onSidePanelResizeStart($event)',
+                        (touchstart)='onSidePanelResizeStart($event)'
+                    )
+                    .side-panel-resize-label(*ngIf='sidePanelResizing') {{ sidePanelWidth }}px
+                    ng-container(*ngComponentOutlet='sidePanelComponent')
+        .bottom-panel(*ngIf='shouldShowBottomPanel', [style.height.px]='bottomPanelHeight')
+            .bottom-panel-resizer(
+                (mousedown)='onBottomResizeStart($event)',
+                (touchstart)='onBottomResizeStart($event)'
+            )
+            ng-container(*ngComponentOutlet='bottomPanelComponent', [ngComponentOutletInputs]='bottomPanelInputs')
+        .shortcut-bar
+            .shortcut-actions
+                button.btn.btn-sm.btn-icon.shortcut-icon-button(
+                    type='button',
+                    [disabled]='!canSplitShortcut',
+                    ngbTooltip='Split active session',
+                    (click)='openSplitShortcutMenu($event)'
+                )
+                    svg(width='14', height='14', viewBox='0 0 16 16', aria-hidden='true', focusable='false')
+                        rect(x='2', y='3', width='5', height='10', rx='1', ry='1', fill='none', stroke='currentColor', stroke-width='1.2')
+                        rect(x='9', y='3', width='5', height='10', rx='1', ry='1', fill='none', stroke='currentColor', stroke-width='1.2')
+                        line(x1='7.5', y1='2', x2='7.5', y2='14', stroke='currentColor', stroke-width='1.2', stroke-linecap='round')
+                button.btn.btn-sm.btn-icon.shortcut-icon-button(
+                    type='button',
+                    [disabled]='!canOpenCommandWindow',
+                    [class.active]='isCommandWindowOpen',
+                    ngbTooltip='Command window',
+                    (click)='toggleCommandWindowBottom()'
+                )
+                    svg(width='14', height='14', viewBox='0 0 16 16', aria-hidden='true', focusable='false')
+                        rect(x='1.5', y='2.5', width='13', height='11', rx='1.5', ry='1.5', fill='none', stroke='currentColor', stroke-width='1.2')
+                        polyline(points='4,5.5 6.5,8 4,10.5', fill='none', stroke='currentColor', stroke-width='1.2', stroke-linecap='round', stroke-linejoin='round')
+                        line(x1='7.5', y1='10.5', x2='12', y2='10.5', stroke='currentColor', stroke-width='1.2', stroke-linecap='round')
+ng-template(ngbModalContainer)

@@ -1,0 +1,59 @@
+.command-body([class.is-collapsed]='commandAreaHidden')
+    .command-header(*ngIf='inBottomPanel')
+        .command-title Terminal profile sessions
+    .command-separator(*ngIf='inBottomPanel')
+    .command-content(*ngIf='!commandAreaHidden')
+        .command-panel
+            .command-editor
+                textarea.form-control(
+                [attr.rows]='editorRows',
+                [(ngModel)]='commandText',
+                placeholder='Enter one command per line',
+                (keydown)='onCommandKeydown($event)',
+                (contextmenu)='openTargetContextMenu($event)'
+                )
+                .command-panel-footer
+                    .panel-actions
+                        button.btn.btn-outline-secondary.btn-sm.btn-icon(
+                            type='button',
+                            (click)='toggleCommandArea()',
+                            [ngbTooltip]='commandAreaHidden ? "Show" : "Hide"',
+                            [attr.aria-label]='commandAreaHidden ? "Show" : "Hide"'
+                        )
+                            i.fas([class.fa-eye]='commandAreaHidden', [class.fa-eye-slash]='!commandAreaHidden')
+                        button.btn.btn-outline-secondary.btn-sm.btn-icon(
+                            type='button',
+                            (click)='cycleTargetMode()',
+                            [ngbTooltip]='targetModeTooltip',
+                            [attr.aria-label]='targetModeTooltip'
+                        )
+                            i.fas(
+                                [class.fa-bullseye]='targetMode === "active"',
+                                [class.fa-columns]='targetMode === "visible"',
+                                [class.fa-layer-group]='targetMode === "all"'
+                            )
+                        button.btn.btn-outline-secondary.btn-sm.btn-icon(
+                            type='button',
+                            (click)='clearCommands()',
+                            [disabled]='commandAreaHidden || !commandText.trim().length',
+                            ngbTooltip='Clear',
+                            aria-label='Clear'
+                        )
+                            i.fas.fa-trash
+                        button.btn.btn-primary.btn-sm.btn-icon(
+                            type='button',
+                            (click)='sendCommands()',
+                            [disabled]='commandAreaHidden || !canSend',
+                            ngbTooltip='Send',
+                            aria-label='Send'
+                        )
+                            i.fas.fa-paper-plane
+                        button.btn.btn-outline-secondary.btn-sm.btn-icon(
+                            type='button',
+                            (click)='closeWindow()',
+                            ngbTooltip='Close',
+                            aria-label='Close'
+                        )
+                            i.fas.fa-times
+                    .panel-status {{ targetStatusLabel }} {{ connectedCount }} / {{ terminalTargets.length }} connected
+                .form-text Commands are sent exactly as typed.

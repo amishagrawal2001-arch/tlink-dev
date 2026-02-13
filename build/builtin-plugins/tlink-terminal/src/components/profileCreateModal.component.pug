@@ -1,0 +1,44 @@
+.modal-header
+    h5.modal-title Create profile
+    button.btn-close(type='button', aria-label='Close', (click)='cancel()')
+
+.modal-body
+    .mb-3(*ngIf='providers.length > 1')
+        label.form-label Provider
+        select.form-select([(ngModel)]='providerId')
+            option(*ngFor='let provider of providers', [value]='provider.id') {{provider.name}}
+
+    .mb-3
+        label.form-label Target
+        input.form-control(
+            type='text',
+            placeholder='user@host:port',
+            [(ngModel)]='target',
+        )
+        .form-text Example: root@xai-qfx5240-01:22
+
+    .mb-3
+        label.form-label Password (optional)
+        input.form-control(
+            type='password',
+            placeholder='Password (optional)',
+            [(ngModel)]='password',
+        )
+
+    .mb-3
+        label.form-label Name
+        input.form-control(
+            type='text',
+            placeholder='Optional',
+            [(ngModel)]='name',
+        )
+
+    .mb-3
+        label.form-label Group
+        select.form-select([(ngModel)]='groupId')
+            option(value='') Ungrouped
+            option(*ngFor='let group of groups', [value]='group.id') {{group.name}}
+
+.modal-footer
+    button.btn.btn-success((click)='create()') Create
+    button.btn.btn-outline-secondary((click)='cancel()') Cancel

@@ -7,12 +7,15 @@ import * as path from 'path'
 import * as url from 'url'
 import * as vars from './vars.mjs'
 import { getArtifactSuffix, getExtraResources, isOllamaBundleEnabled } from './bundle-ollama.mjs'
+import { ensureBuiltinPlugins } from './ensure-builtin-plugins.mjs'
 
 const __dirname = url.fileURLToPath(new URL('.', import.meta.url))
 
 const isTag = (process.env.GITHUB_REF || '').startsWith('refs/tags/')
 
 process.env.ARCH = (process.env.ARCH || process.arch) === 'arm' ? 'armv7l' : process.env.ARCH || process.arch
+
+ensureBuiltinPlugins()
 
 const bundleOllama = isOllamaBundleEnabled()
 const artifactSuffix = getArtifactSuffix(bundleOllama)

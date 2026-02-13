@@ -1,0 +1,11 @@
+{
+  "name": "tlink-agent-mcp",
+  "version": "1.0.0",
+  "description": "Bundle of tabby-vscode-agent as a built-in Tlink plugin (MCP server).",
+  "main": "../tabby-vscode-agent/build/index.js",
+  "private": true,
+  "keywords": [
+    "tlink-builtin-plugin",
+    "tlink-plugin"
+  ]
+}

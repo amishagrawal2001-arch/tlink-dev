@@ -73,6 +73,23 @@ $tab-border-radius: 4px;
     z-index: 6;
 }
 
+/* Reserve space for macOS traffic-light buttons in thin-frame mode */
+:host.platform-darwin .content:not(.tabs-titlebar-enabled) .left-dock {
+    padding-top: calc(12px + var(--tabs-height));
+    border-right: none;
+}
+
+/* Keep the left dock separator below native macOS window controls */
+:host.platform-darwin .content:not(.tabs-titlebar-enabled) .left-dock::after {
+    content: '';
+    position: absolute;
+    top: var(--tabs-height);
+    right: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--theme-bg-less);
+}
+
 .left-dock-section {
     display: flex;
     flex-direction: column;

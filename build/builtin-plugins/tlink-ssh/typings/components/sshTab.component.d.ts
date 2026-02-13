@@ -1,0 +1,46 @@
+import { Injector } from '@angular/core';
+import { NgbModal } from '@ng-bootstrap/ng-bootstrap';
+import { Platform, ProfilesService } from 'tlink-core';
+import { ConnectableTerminalTabComponent } from 'tlink-terminal';
+import { SSHService } from '../services/ssh.service';
+import { KeyboardInteractivePrompt, SSHSession } from '../session/ssh';
+import { SSHProfile } from '../api';
+import { SSHShellSession } from '../session/shell';
+import { SSHMultiplexerService } from '../services/sshMultiplexer.service';
+/** @hidden */
+export declare class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile> {
+    ssh: SSHService;
+    private ngbModal;
+    private profilesService;
+    private sshMultiplexer;
+    Platform: typeof Platform;
+    sshSession: SSHSession | null;
+    session: SSHShellSession | null;
+    sftpPanelVisible: boolean;
+    sftpPath: string;
+    enableToolbar: boolean;
+    startInSFTP: boolean;
+    sftpOnly: boolean;
+    activeKIPrompt: KeyboardInteractivePrompt | null;
+    openingLogDir: boolean;
+    openingLogFile: boolean;
+    private suppressAutoReconnect;
+    private sftpAutostarted;
+    private initializationPromise;
+    constructor(injector: Injector, ssh: SSHService, ngbModal: NgbModal, profilesService: ProfilesService, sshMultiplexer: SSHMultiplexerService);
+    ngOnInit(): void;
+    openSessionLogDirectory(): Promise<void>;
+    private resolveLogDirectory;
+    private expandPathVars;
+    private getBaseDirectory;
+    openSessionLogFile(): Promise<void>;
+    setupOneSession(injector: Injector, profile: SSHProfile, multiplex?: boolean): Promise<SSHSession>;
+    protected onSessionDestroyed(): void;
+    private initializeSessionMaybeMultiplex;
+    private initializeSftpOnlySession;
+    initializeSession(): Promise<void>;
+    showPortForwarding(): void;
+    canClose(): Promise<boolean>;
+    openSFTP(): Promise<void>;
+    protected isSessionExplicitlyTerminated(): boolean;
+}

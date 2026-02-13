@@ -1,0 +1,42 @@
+import { NgbModal } from '@ng-bootstrap/ng-bootstrap';
+import { ConfigService, NotificationsService, PlatformService, ProfilesService } from 'tlink-core';
+import { BaseTerminalTabComponent } from '../api/baseTerminalTab.component';
+import type { TerminalButtonBarButton } from '../api/interfaces';
+/** @hidden */
+export declare class TerminalButtonBarComponent {
+    config: ConfigService;
+    private notifications;
+    private platform;
+    private ngbModal;
+    private profiles;
+    tab: BaseTerminalTabComponent<any>;
+    constructor(config: ConfigService, notifications: NotificationsService, platform: PlatformService, ngbModal: NgbModal, profiles: ProfilesService);
+    trackByIndex(_index: number): number;
+    get buttons(): TerminalButtonBarButton[];
+    get isEnabled(): boolean;
+    get tabHasSFTP(): boolean;
+    openTabSFTP(): void;
+    getButtonLabel(button: TerminalButtonBarButton): string;
+    getButtonClass(button: TerminalButtonBarButton): string;
+    getDotClass(button: TerminalButtonBarButton): string;
+    getTooltip(button: TerminalButtonBarButton): string | null;
+    openContextMenu(event: MouseEvent, button?: TerminalButtonBarButton): void;
+    openMapButton(button?: TerminalButtonBarButton): Promise<void>;
+    deleteButton(button: TerminalButtonBarButton): void;
+    sendButton(button: TerminalButtonBarButton): Promise<void>;
+    private getAction;
+    private runScript;
+    private runLocalScript;
+    private parseCommand;
+    private appendEnter;
+    private sendTokens;
+    private sendTokensToTab;
+    private sleep;
+    private executeScriptOnTab;
+    private normalizeScript;
+    private detectScriptType;
+    private wrapScript;
+    private buildInterpreterCommand;
+    private getHeredocDelimiter;
+    private sendRawToTab;
+}

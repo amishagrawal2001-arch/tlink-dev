@@ -1,0 +1,18 @@
+.terminal-toolbar-spacer
+terminal-toolbar([tab]='this')
+.terminal-pane-close(
+    *ngIf='showInPaneClose',
+    [ngbTooltip]='"Close pane"|translate',
+    container='body'
+)
+    button.btn.btn-sm.btn-link(type='button', (click)='closePane()', aria-label='Close pane')
+        i.fas.fa-times
+terminal-button-bar([tab]='this')
+.content(#content, [style.opacity]='frontendIsReady ? 1 : 0')
+search-panel(
+    *ngIf='showSearchPanel && hasFocus && frontend',
+    @toolbarSlide,
+    [@.disabled]='!config.store.accessibility.animations',
+    [frontend]='frontend',
+    (close)='showSearchPanel = false; frontend.cancelSearch()'
+)

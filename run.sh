@@ -1,10 +1,5 @@
-#TLINK_DEV=1 ./node_modules/.bin/electron app -d --inspect
+#!/usr/bin/env bash
+set -euo pipefail
 
-## debug mode ##
-TLINK_CONFIG_DIRECTORY=/tmp/tlink-clean \
-TLINK_PLUGINS= \
-ELECTRON_ENABLE_LOGGING=1 \
-ELECTRON_ENABLE_STACK_DUMPING=1 \
-yarn start
-
-
+# Run dev mode with isolated profile by default so it can coexist with /Applications/Tlink.app.
+TLINK_DEV_SEPARATE_PROFILE="${TLINK_DEV_SEPARATE_PROFILE:-1}" yarn start

@@ -1,0 +1,13 @@
+/* eslint-disable @typescript-eslint/explicit-module-boundary-types */
+import { Component } from '@angular/core'
+
+import { ProfileSettingsComponent } from 'tlink-core'
+import { TelnetProfile } from '../session'
+
+/** @hidden */
+@Component({
+    templateUrl: './telnetProfileSettings.component.pug',
+})
+export class TelnetProfileSettingsComponent implements ProfileSettingsComponent<TelnetProfile> {
+    profile: TelnetProfile
+}

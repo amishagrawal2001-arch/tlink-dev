@@ -3,6 +3,7 @@
 import { build as builder } from 'electron-builder'
 import * as vars from './vars.mjs'
 import { getArtifactSuffix, getExtraResources, isOllamaBundleEnabled } from './bundle-ollama.mjs'
+import { ensureBuiltinPlugins } from './ensure-builtin-plugins.mjs'
 
 const isTag = (process.env.GITHUB_REF || '').startsWith('refs/tags/')
 
@@ -16,6 +17,8 @@ if (process.env.GITHUB_HEAD_REF) {
 
 process.env.APPLE_ID ??= process.env.APPSTORE_USERNAME
 process.env.APPLE_APP_SPECIFIC_PASSWORD ??= process.env.APPSTORE_PASSWORD
+
+ensureBuiltinPlugins()
 
 const bundleOllama = isOllamaBundleEnabled()
 const artifactSuffix = getArtifactSuffix(bundleOllama)

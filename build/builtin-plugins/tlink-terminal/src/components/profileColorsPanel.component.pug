@@ -1,0 +1,78 @@
+.profile-colors-panel
+    .panel-header
+        .title
+            i.fas.fa-palette.me-2
+            span Profile colors
+        button.btn.btn-sm.btn-link(
+            type='button',
+            (click)='closePanel()',
+            [ngbTooltip]='"Close panel"|translate',
+            [attr.aria-label]='"Close panel"|translate'
+        )
+            i.fas.fa-times
+
+    .panel-body
+        p.text-muted.small Adjust tab colors without opening the full profile editor.
+
+        .filter-row
+            .input-group
+                input.form-control(
+                    type='text',
+                    placeholder='Filter by name or group',
+                    [ngModel]='filterText',
+                    (ngModelChange)='onFilterChange($event)'
+                )
+                button.btn.btn-outline-secondary(
+                    type='button',
+                    *ngIf='filterText',
+                    (click)='onFilterChange("")',
+                    [ngbTooltip]='"Clear filter"|translate'
+                )
+                    i.fas.fa-times
+
+        .loading-state(*ngIf='loading')
+            i.fas.fa-spinner.fa-spin.me-2
+            span Loading profiles…
+
+        .empty-state(*ngIf='!loading && filteredProfiles.length === 0')
+            span No editable profiles found.
+
+        .profiles-list(*ngIf='!loading && filteredProfiles.length > 0')
+            .profile-row(
+                *ngFor='let profile of filteredProfiles; trackBy: profile?.id'
+            )
+                .swatch(
+                    [style.background]='badgeColor(profile)',
+                    [class.is-empty]='!profile.color'
+                )
+                    i.far.fa-circle(*ngIf='!profile.color')
+                .details
+                    .name {{profile.name}}
+                    .meta
+                        span.group {{groupLabel(profile)}}
+                        span.divider •
+                        span.type {{profile.type | uppercase}}
+                .actions
+                    button.color-chip(
+                        *ngFor='let color of palette',
+                        type='button',
+                        [style.background]='color.value',
+                        [disabled]='isSaving(profile)',
+                        (click)='quickApplyColor(profile, color.value)',
+                        [ngbTooltip]='color.name'
+                    )
+                    button.btn.btn-link.btn-icon(
+                        type='button',
+                        (click)='openColorPicker(profile)',
+                        [disabled]='isSaving(profile)',
+                        [ngbTooltip]='"Custom color"|translate'
+                    )
+                        i.fas.fa-eye-dropper
+                    button.btn.btn-link.btn-icon(
+                        type='button',
+                        (click)='clearColor(profile)',
+                        [disabled]='isSaving(profile) || !profile.color',
+                        [ngbTooltip]='"Clear color"|translate'
+                    )
+                        i.fas.fa-eraser
+                    i.fas.fa-spinner.fa-spin.saving-indicator(*ngIf='isSaving(profile)')

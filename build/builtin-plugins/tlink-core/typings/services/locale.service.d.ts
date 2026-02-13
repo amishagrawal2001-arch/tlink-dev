@@ -1,0 +1,36 @@
+import { PipeTransform } from '@angular/core';
+import { TranslateService, MissingTranslationHandler } from '@ngx-translate/core';
+import { TranslateMessageFormatCompiler } from 'ngx-translate-messageformat-compiler';
+import { Observable } from 'rxjs';
+import { ConfigService } from './config.service';
+import { LogService } from './log.service';
+export declare class CustomMissingTranslationHandler extends MissingTranslationHandler {
+    compiler: TranslateMessageFormatCompiler;
+    handle(params: {
+        key: string;
+        translateService: TranslateService;
+        interpolateParams?: Object;
+    }): any;
+}
+export declare class LocaleService {
+    private config;
+    private translate;
+    private logger;
+    static allLanguages: {
+        code: string;
+        name: string;
+    }[];
+    get localeChanged$(): Observable<string>;
+    private locale;
+    private localeChanged;
+    constructor(config: ConfigService, translate: TranslateService, log: LogService);
+    private patchTranslateService;
+    refresh(): void;
+    setLocale(lang: string): Promise<void>;
+    getLocale(): string;
+}
+export declare class TlinkFormatedDatePipe implements PipeTransform {
+    private locale;
+    constructor(locale: LocaleService);
+    transform(date: string): string;
+}

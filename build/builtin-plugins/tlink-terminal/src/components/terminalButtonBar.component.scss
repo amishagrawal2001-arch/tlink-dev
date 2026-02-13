@@ -1,0 +1,50 @@
+:host {
+    display: block;
+}
+
+.terminal-button-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--theme-bg-more-2);
+    background: var(--theme-bg-more);
+}
+
+.button-bar-btn {
+    font-size: 12px;
+    line-height: 1.2;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.button-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--theme-fg-more-2);
+    flex: 0 0 auto;
+}
+
+.dot-default { background: var(--theme-fg-more-2); }
+.dot-primary { background: var(--theme-primary); }
+.dot-success { background: var(--theme-success); }
+.dot-warning { background: var(--theme-warning); }
+.dot-danger { background: var(--theme-danger); }
+.dot-info { background: var(--theme-info); }
+
+.button-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.button-bar-empty {
+    font-size: 12px;
+    color: var(--theme-fg-more-2);
+    padding: 2px 0;
+}

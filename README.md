@@ -47,6 +47,10 @@ Notes:
 - Node.js >= 22.12.0 is required. `./install_tlink.sh` will try to upgrade if an older version is detected.
 - `./install_tlink.sh` works on macOS/Linux and on Windows via Git Bash or WSL. Use `--help` to see optional flags (skip install/build/start).
 - Ollama is optional and not bundled. By default, `install_tlink.sh` will attempt to install Ollama. Use `--no-install-ollama` to skip, or run `./install_tlink.sh --install-ollama` to only install Ollama.
+- Tabby is optional. Install/start it via Homebrew with `./install_tlink.sh --install-tabby`, or Docker with `./install_tlink.sh --install-tabby-docker`.
+- If macOS Launchpad does not show the installed app, run `./install_tlink.sh --refresh-launchpad` (or `--register-app` for registration only).
+- Dev mode now uses an isolated profile by default (`.../Tlink-dev`), so you can run the repo app and Launchpad app at the same time. Set `TLINK_DEV_SEPARATE_PROFILE=0` to use the shared profile.
+- Packaged copies launched outside `/Applications/Tlink.app` also use isolated local profiles by default. Set `TLINK_PACKAGED_SEPARATE_PROFILE=0` to force shared profile behavior.
 - macOS DMG build (optional):
   ```bash
   TLINK_BUILD_TARGETS=mac TLINK_BUILD_MAC_DMG_ONLY=1 ./build.sh

@@ -1,0 +1,37 @@
+:host {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+}
+
+.rdp-tab-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+}
+
+.rdp-toolbar {
+    flex: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.rdp-content {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+    background: #000;
+}
+
+.break-anywhere {
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+canvas {
+    display: block;
+    margin: 0 auto;
+    background: #000;
+    cursor: crosshair;
+}

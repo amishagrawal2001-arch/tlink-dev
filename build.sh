@@ -348,12 +348,7 @@ fi
 npm run build
 
 echo "==> Preparing builtin plugins"
-node scripts/prepackage-plugins.mjs
-
-if [[ ! -d "$ROOT_DIR/builtin-plugins" ]]; then
-    echo "ERROR: builtin-plugins folder not found after prepackage step." >&2
-    exit 1
-fi
+node --input-type=module -e "import { ensureBuiltinPlugins } from './scripts/ensure-builtin-plugins.mjs'; ensureBuiltinPlugins();"
 
 if [[ ",$TLINK_BUILD_TARGETS," == *",mac,"* ]]; then
     for arch in $MAC_ARCHES; do

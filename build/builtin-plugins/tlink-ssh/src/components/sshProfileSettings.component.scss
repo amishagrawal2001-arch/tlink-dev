@@ -1,0 +1,16 @@
+.username-input {
+    padding: 0.6rem 0.75rem;
+}
+
+:host {
+    .form-control,
+    .input-group-text {
+        background-color: var(--theme-bg-more);
+        border-color: var(--theme-bg-less);
+        color: var(--theme-fg);
+    }
+
+    .form-control::placeholder {
+        color: var(--theme-fg-more-2);
+    }
+}

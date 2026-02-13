@@ -1,0 +1,35 @@
+.auth-header
+    .auth-title
+        strong Keyboard-interactive auth
+        .text-muted.small {{prompt.name}}
+
+.auth-body
+    .mb-3
+        label {{prompt.prompts[step].prompt}}
+        input.form-control(
+            #input,
+            autofocus,
+            [type]='isPassword() ? "password": "text"',
+            [placeholder]='isPassword() ? ("Enter password"|translate) : ("Enter response"|translate)',
+            (keyup.enter)='next()',
+            (click)='onInputClick()',
+            [(ngModel)]='prompt.responses[step]'
+        )
+
+    .mb-3(*ngIf='isPassword()')
+        .toggle-wrapper.d-flex.align-items-center
+            toggle([(ngModel)]='remember')
+            span.ms-2(translate) Remember password
+
+.auth-footer.d-flex.gap-2.justify-content-end
+    button.btn.btn-secondary(
+        *ngIf='step > 0',
+        (click)='previous()',
+        translate
+    ) Back
+
+    button.btn.btn-primary(
+        (click)='next()'
+    )
+        span(*ngIf='step < prompt.prompts.length - 1', translate) Next
+        span(*ngIf='step == prompt.prompts.length - 1', translate) Finish

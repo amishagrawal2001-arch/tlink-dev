@@ -1,0 +1,32 @@
+.log-field {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    min-height: auto;
+
+    .header {
+        margin-right: 0;
+    }
+
+    & > .form-control,
+    & > .input-group {
+        width: 100%;
+    }
+
+    .input-group .form-control {
+        min-width: 0;
+    }
+}
+
+:host {
+    .form-control,
+    .input-group-text {
+        background-color: var(--theme-bg-more);
+        border-color: var(--theme-bg-less);
+        color: var(--theme-fg);
+    }
+
+    .form-control::placeholder {
+        color: var(--theme-fg-more-2);
+    }
+}

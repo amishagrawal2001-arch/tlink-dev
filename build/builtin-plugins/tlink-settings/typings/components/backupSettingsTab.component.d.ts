@@ -1,0 +1,40 @@
+import { OnInit } from '@angular/core';
+import { BackupService, Backup, BackupConfig, NotificationsService, TranslateService, ConfigService } from 'tlink-core';
+declare const BaseComponent: any;
+export declare class BackupSettingsTabComponent extends BaseComponent implements OnInit {
+    private backupService;
+    private config;
+    private notifications;
+    private translate;
+    backups: Backup[];
+    backupConfig: BackupConfig;
+    selectedBackup: Backup | null;
+    creatingBackup: boolean;
+    restoringBackup: boolean;
+    true: any;
+    constructor(backupService: BackupService, config: ConfigService, notifications: NotificationsService, translate: TranslateService);
+    ngOnInit(): Promise<void>;
+    loadBackupConfig(): void;
+    loadBackups(): Promise<void>;
+    toggleAutomaticBackups(): Promise<void>;
+    updateBackupInterval(): Promise<void>;
+    updateBackupRetention(): Promise<void>;
+    toggleIncludeWorkspaces(): Promise<void>;
+    toggleIncludeConfig(): Promise<void>;
+    toggleIncludeProfiles(): Promise<void>;
+    createManualBackup(): Promise<void>;
+    restoreBackup(backup: Backup): Promise<void>;
+    deleteBackup(backup: Backup): Promise<void>;
+    exportBackup(backup: Backup): Promise<void>;
+    importBackup(): Promise<void>;
+    formatDate(date: Date): string;
+    formatSize(bytes: number): string;
+    getBackupStats(): {
+        totalBackups: number;
+        totalSize: number;
+        oldestBackup: Date | null;
+        newestBackup: Date | null;
+    };
+    private getIpcRenderer;
+}
+export {};

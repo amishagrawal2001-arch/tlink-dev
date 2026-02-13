@@ -554,7 +554,9 @@ export class Window {
         })
 
         this.on('updater:check-for-updates', () => {
-            autoUpdater.checkForUpdates()
+            autoUpdater.checkForUpdates().catch(err => {
+                this.send('updater:error', err)
+            })
         })
 
         this.on('updater:quit-and-install', () => {

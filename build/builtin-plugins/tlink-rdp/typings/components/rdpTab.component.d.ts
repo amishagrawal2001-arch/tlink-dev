@@ -1,0 +1,42 @@
+import { Injector, OnDestroy, ElementRef, AfterViewInit } from '@angular/core';
+import { BaseTabComponent, PlatformService, TranslateService, NotificationsService, GetRecoveryTokenOptions, RecoveryToken, HostAppService } from 'tlink-core';
+import { Platform } from 'tlink-core';
+import { RDPProfile } from '../api';
+/** @hidden */
+export declare class RDPTabComponent extends BaseTabComponent implements AfterViewInit, OnDestroy {
+    hostClass: boolean;
+    canvas?: ElementRef<HTMLCanvasElement>;
+    profile: RDPProfile;
+    Platform: typeof Platform;
+    connecting: boolean;
+    connected: boolean;
+    connectionError: string | null;
+    private ctx;
+    private rdpSession;
+    private imageData;
+    protected platform: PlatformService;
+    protected hostApp: HostAppService;
+    protected translate: TranslateService;
+    protected notifications: NotificationsService;
+    protected injector: Injector;
+    private rdpService;
+    usingExternalClient: boolean;
+    constructor(injector: Injector);
+    ngAfterViewInit(): void;
+    ngOnDestroy(): void;
+    private resizeCanvas;
+    private getNativeWindowHandleHex;
+    private summarizeExternalError;
+    copyError(): void;
+    connect(): Promise<void>;
+    private handleBitmapUpdate;
+    onKeyDown(event: KeyboardEvent): void;
+    onKeyUp(event: KeyboardEvent): void;
+    onMouseDown(event: MouseEvent): void;
+    onMouseUp(event: MouseEvent): void;
+    onMouseMove(event: MouseEvent): void;
+    private getScancodeFromKeyEvent;
+    disconnect(): void;
+    getRecoveryToken(options?: GetRecoveryTokenOptions): Promise<RecoveryToken | null>;
+    canClose(): Promise<boolean>;
+}

@@ -26,9 +26,13 @@ TABBY_CHAT_MODEL="${TLINK_TABBY_CHAT_MODEL:-Qwen2-1.5B-Instruct}"
 TABBY_DEVICE="${TLINK_TABBY_DEVICE:-cuda}"
 TABBY_DOCKER_GPU="${TLINK_TABBY_DOCKER_GPU:-1}"
 TABBY_DOCKER_SELINUX="${TLINK_TABBY_DOCKER_SELINUX:-0}"
+APP_BUNDLE_PATH="${TLINK_APP_BUNDLE_PATH:-/Applications/Tlink.app}"
+APP_POSTINSTALL="${TLINK_APP_POSTINSTALL:-1}"
+REFRESH_LAUNCHPAD="${TLINK_REFRESH_LAUNCHPAD:-0}"
 ONLY_INSTALL_OPTIONAL=0
 EXPLICIT_INSTALL_OLLAMA=0
 EXPLICIT_INSTALL_TABBY=0
+EXPLICIT_APP_POSTINSTALL=0
 SKIP_NODE_CHECK=0
 SKIP_YARN_CHECK=0
 
@@ -36,7 +40,7 @@ if [[ $# -gt 0 ]]; then
   ONLY_INSTALL_OPTIONAL=1
   for arg in "$@"; do
     case "$arg" in
-      --install-ollama|--install-tabby|--install-tabby-docker|--no-install-ollama|--no-install-tabby|--tabby-install-method=*) ;;
+      --install-ollama|--install-tabby|--install-tabby-docker|--no-install-ollama|--no-install-tabby|--tabby-install-method=*|--register-app|--refresh-launchpad|--no-app-postinstall|--app-bundle-path=*) ;;
       --help|-h) ;;
       *) ONLY_INSTALL_OPTIONAL=0 ;;
     esac
@@ -59,6 +63,10 @@ while [[ $# -gt 0 ]]; do
     --install-tabby-docker) INSTALL_TABBY=1; EXPLICIT_INSTALL_TABBY=1; TABBY_INSTALL_METHOD="docker" ;;
     --no-install-tabby) INSTALL_TABBY=0 ;;
     --tabby-install-method=*) TABBY_INSTALL_METHOD="${1#*=}" ;;
+    --register-app) APP_POSTINSTALL=1; EXPLICIT_APP_POSTINSTALL=1 ;;
+    --refresh-launchpad) APP_POSTINSTALL=1; REFRESH_LAUNCHPAD=1; EXPLICIT_APP_POSTINSTALL=1 ;;
+    --no-app-postinstall) APP_POSTINSTALL=0 ;;
+    --app-bundle-path=*) APP_BUNDLE_PATH="${1#*=}" ;;
     --install-only) SKIP_BUILD=1; SKIP_START=1 ;;
     --build-only) SKIP_INSTALL=1; SKIP_START=1 ;;
     --help|-h)
@@ -80,6 +88,10 @@ Options:
   --install-tabby-docker Attempt to launch Tabby in Docker using official defaults
   --no-install-tabby  Skip Tabby installation
   --tabby-install-method=<brew|docker> Choose Tabby install method for --install-tabby
+  --register-app      Re-register installed /Applications/Tlink.app with macOS LaunchServices
+  --refresh-launchpad Re-register app and restart Dock so Launchpad index refreshes
+  --no-app-postinstall Skip macOS app registration helper
+  --app-bundle-path=<path> App bundle path for --register-app (default: /Applications/Tlink.app)
   --install-only      Only install dependencies
   --build-only        Only run build
 EOF
@@ -93,7 +105,7 @@ EOF
   shift
 done
 
-if [[ "$ONLY_INSTALL_OPTIONAL" -eq 1 && "$EXPLICIT_INSTALL_OLLAMA" -eq 0 && "$EXPLICIT_INSTALL_TABBY" -eq 0 ]]; then
+if [[ "$ONLY_INSTALL_OPTIONAL" -eq 1 && "$EXPLICIT_INSTALL_OLLAMA" -eq 0 && "$EXPLICIT_INSTALL_TABBY" -eq 0 && "$EXPLICIT_APP_POSTINSTALL" -eq 0 ]]; then
   ONLY_INSTALL_OPTIONAL=0
 fi
 
@@ -116,12 +128,15 @@ if [[ "$ONLY_INSTALL_OPTIONAL" -eq 1 ]]; then
   SKIP_NODE_CHECK=1
   SKIP_YARN_CHECK=1
 
-  if [[ "$EXPLICIT_INSTALL_OLLAMA" -eq 1 || "$EXPLICIT_INSTALL_TABBY" -eq 1 ]]; then
+  if [[ "$EXPLICIT_INSTALL_OLLAMA" -eq 1 || "$EXPLICIT_INSTALL_TABBY" -eq 1 || "$EXPLICIT_APP_POSTINSTALL" -eq 1 ]]; then
     if [[ "$EXPLICIT_INSTALL_OLLAMA" -eq 0 ]]; then
       INSTALL_OLLAMA=0
     fi
     if [[ "$EXPLICIT_INSTALL_TABBY" -eq 0 ]]; then
       INSTALL_TABBY=0
+    fi
+    if [[ "$EXPLICIT_APP_POSTINSTALL" -eq 0 ]]; then
+      APP_POSTINSTALL=0
     fi
   fi
 fi
@@ -289,28 +304,33 @@ install_ollama() {
 }
 
 install_tabby() {
-  if command -v tabby >/dev/null 2>&1; then
-    log "Tabby already installed."
-    return 0
-  fi
-
   if ! command -v brew >/dev/null 2>&1; then
     log "Homebrew not found. Install Homebrew and run: brew install tabbyml/tabby/tabby"
     return 1
   fi
 
-  log "Installing Tabby via Homebrew..."
-  if ! brew install tabbyml/tabby/tabby; then
-    log "Tabby install failed."
-    return 1
+  if ! brew tap tabbyml/tabby >/dev/null 2>&1; then
+    log "Warning: could not add tabbyml/tabby tap (continuing)."
   fi
 
-  if command -v brew >/dev/null 2>&1; then
-    log "Attempting to start Tabby service..."
-    brew services start tabby >/dev/null 2>&1 || true
+  if command -v tabby >/dev/null 2>&1; then
+    log "Tabby already installed."
+  else
+    log "Installing Tabby via Homebrew..."
+    if ! brew install tabbyml/tabby/tabby; then
+      log "Tabby install failed."
+      return 1
+    fi
+    log "Tabby installed."
   fi
 
-  log "Tabby installed."
+  log "Attempting to start Tabby service..."
+  if ! brew services start tabby >/dev/null 2>&1; then
+    log "Could not start brew service \"tabby\" automatically."
+    log "You can run Tabby manually: tabby serve --model ${TABBY_MODEL} --chat-model ${TABBY_CHAT_MODEL} --device ${TABBY_DEVICE}"
+  fi
+
+  log "Tabby endpoint: http://localhost:${TABBY_PORT}"
   return 0
 }
 
@@ -388,6 +408,42 @@ resolve_user_plugins_dir() {
       echo ""
       ;;
   esac
+}
+
+register_macos_app() {
+  if [[ "$OS" != "macos" ]]; then
+    return 0
+  fi
+
+  if [[ "$APP_POSTINSTALL" != "1" ]]; then
+    return 0
+  fi
+
+  if [[ ! -d "$APP_BUNDLE_PATH" ]]; then
+    if [[ "$EXPLICIT_APP_POSTINSTALL" -eq 1 || "$REFRESH_LAUNCHPAD" == "1" ]]; then
+      log "App registration skipped: bundle not found at $APP_BUNDLE_PATH"
+    fi
+    return 0
+  fi
+
+  local lsregister_bin
+  lsregister_bin="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+  if [[ -x "$lsregister_bin" ]]; then
+    log "Registering app bundle with LaunchServices..."
+    "$lsregister_bin" -f "$APP_BUNDLE_PATH" >/dev/null 2>&1 || log "Warning: LaunchServices registration failed."
+  else
+    log "Warning: LaunchServices tool not found: $lsregister_bin"
+  fi
+
+  if [[ "$APP_BUNDLE_PATH" == /Applications/* ]]; then
+    touch /Applications >/dev/null 2>&1 || true
+  fi
+
+  if [[ "$REFRESH_LAUNCHPAD" == "1" ]]; then
+    log "Refreshing Launchpad index (Dock restart)..."
+    defaults write com.apple.dock ResetLaunchPad -bool true >/dev/null 2>&1 || true
+    killall Dock >/dev/null 2>&1 || true
+  fi
 }
 
 if [[ "$SKIP_NODE_CHECK" -ne 1 ]] && ! command -v node >/dev/null 2>&1; then
@@ -496,6 +552,8 @@ if [[ "$REBUILD_NATIVE" -eq 1 ]]; then
   log "Rebuilding native modules..."
   node scripts/build-native.mjs
 fi
+
+register_macos_app
 
 if [[ "$SKIP_START" -ne 1 ]]; then
   log "Starting app..."

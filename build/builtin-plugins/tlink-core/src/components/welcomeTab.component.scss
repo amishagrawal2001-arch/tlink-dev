@@ -1,0 +1,17 @@
+:host {
+    display: flex;
+    flex-direction: column;
+    margin: auto;
+    flex: auto;
+    max-height: 100%;
+    overflow-y: auto;
+}
+
+.tlink-logo {
+    width: 60px;
+    height: 60px;
+    background: url('../../../build/icons/Tlink-logo.png');
+    background-repeat: no-repeat;
+    background-size: contain;
+    background-position: center;
+}

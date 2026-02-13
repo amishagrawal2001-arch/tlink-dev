@@ -345,7 +345,8 @@ export async function loadPlugins (foundPlugins: PluginInfo[], progress: Progres
                     cachedBuiltinModules[foundPlugin.packageName.replace('tlink-', 'terminus-')] = packageModule
                 }
                 const moduleExport = packageModule.default ?? packageModule
-                const pluginModule = moduleExport?.forRoot ? moduleExport.forRoot() : moduleExport
+                const forRootFactory = moduleExport?.forRoot ?? packageModule?.forRoot
+                const pluginModule = forRootFactory ? forRootFactory() : moduleExport
                 if (!pluginModule) {
                     throw new Error(`Plugin ${foundPlugin.name} did not export a module`)
                 }

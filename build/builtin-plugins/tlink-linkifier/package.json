@@ -1,0 +1,24 @@
+{
+  "name": "tlink-linkifier",
+  "version": "1.0.197-nightly.1",
+  "description": "Makes URLs, IPs and file paths clickable in Tlink",
+  "keywords": [
+    "tlink-builtin-plugin"
+  ],
+  "main": "dist/index.js",
+  "typings": "typings/index.d.ts",
+  "scripts": {
+    "build": "webpack --progress --color --display-modules",
+    "watch": "webpack --progress --color --watch"
+  },
+  "files": [
+    "dist",
+    "typings"
+  ],
+  "author": "Tlink Developers",
+  "license": "MIT",
+  "devDependencies": {
+    "@xterm/addon-web-links": "^0.10.0",
+    "untildify": "^4.0.0"
+  }
+}

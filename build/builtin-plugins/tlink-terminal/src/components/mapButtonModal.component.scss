@@ -1,0 +1,8 @@
+.modal-body {
+    min-height: 420px;
+}
+
+textarea.form-control {
+    font-family: var(--font-monospace, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
+    resize: vertical;
+}

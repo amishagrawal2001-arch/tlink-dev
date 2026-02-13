@@ -1,0 +1,56 @@
+.modal-body {
+    .form-control {
+        background-color: var(--bs-form-control-bg);
+        border: 1px solid rgba(var(--bs-body-color-rgb), 0.2);
+        color: var(--bs-body-color);
+    }
+}
+
+.checkbox-footer {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.checkbox-wrapper {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    padding: 6px 12px;
+    margin-right: auto;
+    transition: background 0.2s;
+
+    &:hover {
+        background: rgba(255, 255, 255, 0.12);
+    }
+
+    .form-check {
+        margin: 0;
+    }
+
+    .form-check-label {
+        color: inherit;
+        margin-left: 8px;
+        font-size: 0.9rem;
+    }
+
+    .form-check-input {
+        margin-top: 0.25em;
+    }
+}
+
+:host ::ng-deep checkbox .form-check-input {
+    margin-top: 0.25em;
+    width: 1.05em;
+    height: 1.05em;
+    background-color: #fff;
+    border: 2px solid rgba(0, 0, 0, 0.45);
+    appearance: auto;
+    -webkit-appearance: auto;
+
+    &:checked {
+        background-color: var(--bs-primary);
+        border-color: var(--bs-primary);
+    }
+
+    &:focus {
+        box-shadow: 0 0 0 0.2rem rgba(var(--bs-primary-rgb), 0.2);
+    }
+}

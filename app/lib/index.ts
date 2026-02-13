@@ -1,6 +1,7 @@
 import { app, ipcMain, Menu, dialog, nativeImage } from 'electron'
 import * as path from 'path'
 import * as fs from 'fs'
+import * as crypto from 'crypto'
 import * as nodeModule from 'module'
 
 // set userData Path on portable version
@@ -45,6 +46,57 @@ const appName = 'Tlink'
 app.setName(appName)
 if (process.platform === 'darwin') {
     app.setAboutPanelOptions({ applicationName: appName })
+}
+
+const applyIsolatedProfile = (suffix: string): void => {
+    const configuredProfilePath = process.env.TLINK_CONFIG_DIRECTORY
+    const baseUserDataPath = configuredProfilePath ?? app.getPath('userData')
+    const isolatedProfilePath = baseUserDataPath.endsWith(`-${suffix}`)
+        ? baseUserDataPath
+        : `${baseUserDataPath}-${suffix}`
+    fs.mkdirSync(isolatedProfilePath, { recursive: true })
+    const sourceConfigPath = path.join(baseUserDataPath, 'config.yaml')
+    const targetConfigPath = path.join(isolatedProfilePath, 'config.yaml')
+    if (
+        baseUserDataPath !== isolatedProfilePath
+        && fs.existsSync(sourceConfigPath)
+        && !fs.existsSync(targetConfigPath)
+    ) {
+        try {
+            fs.copyFileSync(sourceConfigPath, targetConfigPath)
+        } catch (error) {
+            console.warn(`Could not migrate config to isolated profile (${suffix}):`, error)
+        }
+    }
+    app.setPath('userData', isolatedProfilePath)
+    process.env.TLINK_CONFIG_DIRECTORY = isolatedProfilePath
+    console.log(`Using isolated profile (${suffix}): ${isolatedProfilePath}`)
+}
+
+const shouldIsolateDevProfile = (): boolean => !app.isPackaged
+    && process.env.TLINK_DEV === '1'
+    && process.env.TLINK_DEV_SEPARATE_PROFILE !== '0'
+
+const shouldIsolateSecondaryPackagedProfile = (): boolean => {
+    if (!app.isPackaged) {
+        return false
+    }
+    if (process.env.TLINK_PACKAGED_SEPARATE_PROFILE === '0') {
+        return false
+    }
+    if (process.env.TLINK_PACKAGED_SEPARATE_PROFILE === '1') {
+        return true
+    }
+    const executablePath = path.resolve(app.getPath('exe'))
+    return process.platform === 'darwin' && !executablePath.startsWith('/Applications/Tlink.app/')
+}
+
+if (shouldIsolateDevProfile()) {
+    applyIsolatedProfile('dev')
+} else if (shouldIsolateSecondaryPackagedProfile()) {
+    const executablePath = path.resolve(app.getPath('exe'))
+    const profileHash = crypto.createHash('sha1').update(executablePath).digest('hex').slice(0, 8)
+    applyIsolatedProfile(`local-${profileHash}`)
 }
 
 process.env.TLINK_PLUGINS ??= ''
@@ -121,7 +173,62 @@ app.on('second-instance', async (_event, newArgv, cwd) => {
     application.handleSecondInstance(newArgv, cwd)
 })
 
-if (!app.requestSingleInstanceLock()) {
+const isProcessAlive = (pid: number): boolean => {
+    try {
+        process.kill(pid, 0)
+        return true
+    } catch (error: any) {
+        return error?.code === 'EPERM'
+    }
+}
+
+const getSingletonLockPid = (lockTarget: string): number | null => {
+    const match = /-(\d+)$/.exec(lockTarget)
+    if (!match) {
+        return null
+    }
+    const pid = Number(match[1])
+    return Number.isFinite(pid) ? pid : null
+}
+
+const cleanupStaleSingletonLock = (): boolean => {
+    const userDataPath = app.getPath('userData')
+    const lockPath = path.join(userDataPath, 'SingletonLock')
+    if (!fs.existsSync(lockPath)) {
+        return false
+    }
+    try {
+        const lockTarget = fs.readlinkSync(lockPath)
+        const lockPid = getSingletonLockPid(lockTarget)
+        if (lockPid && isProcessAlive(lockPid)) {
+            return false
+        }
+    } catch {
+        // If lock metadata is unreadable, still try cleanup as a best effort.
+    }
+
+    const singletonFiles = ['SingletonLock', 'SingletonCookie', 'SingletonSocket']
+    let cleaned = false
+    for (const file of singletonFiles) {
+        const filePath = path.join(userDataPath, file)
+        try {
+            if (fs.existsSync(filePath)) {
+                fs.rmSync(filePath, { force: true })
+                cleaned = true
+            }
+        } catch (error) {
+            console.warn(`Failed removing stale ${file}:`, error)
+        }
+    }
+    return cleaned
+}
+
+let hasSingleInstanceLock = app.requestSingleInstanceLock()
+if (!hasSingleInstanceLock && cleanupStaleSingletonLock()) {
+    hasSingleInstanceLock = app.requestSingleInstanceLock()
+}
+
+if (!hasSingleInstanceLock) {
     app.quit()
     app.exit(0)
 }

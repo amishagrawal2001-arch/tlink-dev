@@ -1,0 +1,87 @@
+<div class="context-settings">
+    <h3>{{ t.contextSettings?.title || 'Context Management' }}</h3>
+
+    <!-- 自动压缩开关 -->
+    <div class="setting-section">
+        <div class="section-header">
+            <h4>{{ t.contextSettings?.autoCompact || 'Auto Compact' }}</h4>
+        </div>
+        <div class="setting-item">
+            <label>{{ t.contextSettings?.enableAutoCompact || 'Enable auto compaction' }}</label>
+            <div class="toggle-switch">
+                <input type="checkbox" id="auto-compact"
+                    [checked]="autoCompactEnabled"
+                    (change)="toggleAutoCompact()">
+                <label for="auto-compact">
+                    {{ autoCompactEnabled ? (t.common?.enabled || 'Enabled') : (t.common?.disabled || 'Disabled') }}
+                </label>
+            </div>
+            <p class="setting-desc">{{ t.contextSettings?.autoCompactDesc || 'Automatically compact history when context exceeds the threshold' }}</p>
+        </div>
+    </div>
+
+    <!-- Token 配置 -->
+    <div class="setting-section">
+        <div class="section-header">
+            <h4>{{ t.contextSettings?.tokenConfig || 'Token Configuration' }}</h4>
+        </div>
+
+        <!-- 当前供应商上下文信息 -->
+        <div class="provider-context-info">
+            <i class="fa fa-info-circle"></i>
+            <span>{{ t.contextSettings?.currentProviderLimit || 'Current provider context limit' }}: {{ activeProviderContextWindow | number }} Token</span>
+        </div>
+
+        <div class="setting-item">
+            <label>{{ t.contextSettings?.maxContextTokens || 'Max context tokens' }}</label>
+            <input type="number" class="form-control" [(ngModel)]="config.maxContextTokens"
+                min="10000" [max]="activeProviderContextWindow" step="10000">
+            <p class="setting-desc">{{ t.contextSettings?.maxContextTokensDesc || 'Cannot exceed the current provider context limit' }}</p>
+        </div>
+
+        <div class="setting-item">
+            <label>{{ t.contextSettings?.reservedOutputTokens || 'Reserved output tokens' }}</label>
+            <input type="number" class="form-control" [(ngModel)]="config.reservedOutputTokens"
+                min="1000" max="32000" step="1000">
+            <p class="setting-desc">{{ t.contextSettings?.reservedOutputTokensDesc || 'Tokens reserved for AI responses' }}</p>
+        </div>
+    </div>
+
+    <!-- 压缩阈值配置 -->
+    <div class="setting-section">
+        <div class="section-header">
+            <h4>{{ t.contextSettings?.thresholdConfig || 'Compaction thresholds' }}</h4>
+        </div>
+
+        <div class="setting-item">
+            <label>{{ t.contextSettings?.pruneThreshold || 'Prune threshold' }}: {{ (config.pruneThreshold * 100).toFixed(0) }}%</label>
+            <input type="range" class="form-range" [(ngModel)]="config.pruneThreshold"
+                min="0.5" max="0.9" step="0.05">
+            <p class="setting-desc">{{ t.contextSettings?.pruneThresholdDesc || 'Prune redundant content when usage exceeds this threshold (default: 70%)' }}</p>
+        </div>
+
+        <div class="setting-item">
+            <label>{{ t.contextSettings?.compactThreshold || 'Compact threshold' }}: {{ (config.compactThreshold * 100).toFixed(0) }}%</label>
+            <input type="range" class="form-range" [(ngModel)]="config.compactThreshold"
+                min="0.7" max="0.95" step="0.05">
+            <p class="setting-desc">{{ t.contextSettings?.compactThresholdDesc || 'Generate summary compaction when usage exceeds this threshold (default: 85%)' }}</p>
+        </div>
+
+        <div class="setting-item">
+            <label>{{ t.contextSettings?.messagesToKeep || 'Messages to keep' }}</label>
+            <input type="number" class="form-control" [(ngModel)]="config.messagesToKeep"
+                min="1" max="20" step="1">
+            <p class="setting-desc">{{ t.contextSettings?.messagesToKeepDesc || 'Number of most recent messages to keep during compaction (default: 3)' }}</p>
+        </div>
+    </div>
+
+    <!-- 操作按钮 -->
+    <div class="form-actions">
+        <button class="btn btn-primary" (click)="saveConfig()">
+            <i class="fa fa-save"></i> {{ t.providers?.saveConfig || 'Save configuration' }}
+        </button>
+        <button class="btn btn-secondary" (click)="resetToDefaults()">
+            <i class="fa fa-undo"></i> {{ t.common?.reset || 'Reset to defaults' }}
+        </button>
+    </div>
+</div>
