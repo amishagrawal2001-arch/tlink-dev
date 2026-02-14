@@ -40,6 +40,7 @@ export const builtinPlugins = [
     'tlink-plugin-manager',
     'tlink-linkifier',
     'tlink-auto-sudo-password',
+    'tlink-intellij-bridge',
     'tlink-chatgpt',
     'tlink-ai-assistant',
 ]

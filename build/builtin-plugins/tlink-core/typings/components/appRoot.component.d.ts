@@ -56,6 +56,7 @@ export declare class AppRootComponent implements OnInit {
     leftDockVisibleOrder: string[];
     sshSidePanel: SidePanelRegistration | null;
     sshSidebarCommand: Command | null;
+    intellijEditorCommand: Command | null;
     bottomPanelVisible: boolean;
     bottomPanelComponent: Type<any> | null;
     bottomPanelHeight: number;
@@ -128,6 +129,7 @@ export declare class AppRootComponent implements OnInit {
     openProfileSelector(): Promise<void>;
     openSftpProfileSelector(): Promise<void>;
     openAIChat(): Promise<void>;
+    openIntelliJEditor(): Promise<void>;
     openAIAssistant(): void;
     openCopilotChat(): void;
     websocketServerRunning: boolean;

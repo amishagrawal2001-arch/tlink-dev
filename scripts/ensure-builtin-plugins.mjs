@@ -3,6 +3,7 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import * as url from 'url'
 import * as vars from './vars.mjs'
+import { passthroughBuiltinPlugins, passthroughPluginValidation } from './builtin-plugin-layout.mjs'
 
 const __dirname = url.fileURLToPath(new URL('.', import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
@@ -13,6 +14,7 @@ const criticalMainPlugins = new Set([
     'tlink-settings',
     'tlink-terminal',
     'tlink-electron',
+    'tlink-intellij-bridge',
     'tlink-ai-assistant',
     'tabby-vscode-agent',
 ])
@@ -24,12 +26,28 @@ function getStagedFolderName(plugin) {
 }
 
 function getRequiredPlugins() {
-    return vars.builtinPlugins
+    const required = vars.builtinPlugins
         .filter(plugin => plugin !== 'tlink-web')
         .map(plugin => ({
             sourcePlugin: plugin,
             stagedPlugin: getStagedFolderName(plugin),
+            mode: 'package',
         }))
+
+    for (const plugin of passthroughBuiltinPlugins) {
+        const stagedPlugin = getStagedFolderName(plugin)
+        if (required.some(x => x.stagedPlugin === stagedPlugin)) {
+            continue
+        }
+        required.push({
+            sourcePlugin: plugin,
+            stagedPlugin,
+            mode: 'passthrough',
+            marker: passthroughPluginValidation[stagedPlugin],
+        })
+    }
+
+    return required
 }
 
 function parseJsonFile(filePath) {
@@ -121,10 +139,27 @@ function getPluginProblems() {
         problems.push(stageMetadataProblem)
     }
 
-    for (const { sourcePlugin, stagedPlugin } of getRequiredPlugins()) {
+    for (const requiredPlugin of getRequiredPlugins()) {
+        const {
+            sourcePlugin,
+            stagedPlugin,
+            mode,
+            marker,
+        } = requiredPlugin
         const stagedPluginDir = path.join(builtinPluginRoot, stagedPlugin)
-        const packagePath = path.join(stagedPluginDir, 'package.json')
+        if (!fs.existsSync(stagedPluginDir)) {
+            problems.push(`${stagedPlugin} (missing directory)`)
+            continue
+        }
 
+        if (mode === 'passthrough') {
+            if (marker && !fs.existsSync(path.join(stagedPluginDir, marker))) {
+                problems.push(`${stagedPlugin} (missing marker: ${marker})`)
+            }
+            continue
+        }
+
+        const packagePath = path.join(stagedPluginDir, 'package.json')
         if (!fs.existsSync(packagePath)) {
             problems.push(`${stagedPlugin} (missing package.json)`)
             continue

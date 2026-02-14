@@ -94,6 +94,7 @@ export class AppRootComponent implements OnInit {
     leftDockVisibleOrder: string[] = []
     sshSidePanel: SidePanelRegistration | null = null
     sshSidebarCommand: Command | null = null
+    intellijEditorCommand: Command | null = null
     bottomPanelVisible = false
     bottomPanelComponent: Type<any> | null = null
     bottomPanelHeight = 0
@@ -115,6 +116,7 @@ export class AppRootComponent implements OnInit {
         'remote-desktop',
         'ssh',
         'code-editor',
+        'intellij-editor',
         'ai-chat',
         'ai-assistant',
         'copilot-chat',
@@ -646,6 +648,7 @@ export class AppRootComponent implements OnInit {
         if (sshCmd) {
             this.sshSidebarCommand = sshCmd
         }
+        this.intellijEditorCommand = all.find(x => x.id === 'intellij-bridge:open-editor') ?? null
 
         const buttons = all
             .filter(x => x.locations?.includes(aboveZero ? CommandLocation.RightToolbar : CommandLocation.LeftToolbar))
@@ -711,6 +714,9 @@ export class AppRootComponent implements OnInit {
         if (item === 'ssh') {
             return !!(this.sshSidePanel || this.sshSidebarCommand)
         }
+        if (item === 'intellij-editor') {
+            return !!this.intellijEditorCommand
+        }
         return true
     }
 
@@ -751,6 +757,8 @@ export class AppRootComponent implements OnInit {
             return this.sshSidePanel?.label || this.sshSidebarCommand?.label || 'SSH sidebar'
         case 'code-editor':
             return 'Code editor'
+        case 'intellij-editor':
+            return this.intellijEditorCommand?.label || 'Open IntelliJ editor'
         case 'ai-chat':
             return 'AI Chat'
         case 'ai-assistant':
@@ -785,6 +793,9 @@ export class AppRootComponent implements OnInit {
             break
         case 'code-editor':
             this.openCodeEditor()
+            break
+        case 'intellij-editor':
+            void this.openIntelliJEditor()
             break
         case 'ai-chat':
             void this.openAIChat()
@@ -922,6 +933,21 @@ export class AppRootComponent implements OnInit {
             context.tab = tab
         }
         await this.commands.run('tlink-chatgpt:open', context)
+    }
+
+    async openIntelliJEditor (): Promise<void> {
+        const preferredId = this.intellijEditorCommand?.id
+        if (preferredId) {
+            await this.commands.run(preferredId, this.buildCommandContext())
+            return
+        }
+        const commands = await this.commands.getCommands(this.buildCommandContext())
+        const fallback = commands.find(cmd => cmd.id === 'intellij-bridge:open-editor')
+        if (fallback) {
+            await fallback.run()
+            return
+        }
+        this.logger.warn('IntelliJ bridge command not found')
     }
 
     openAIAssistant (): void {

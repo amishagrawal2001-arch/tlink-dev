@@ -4,6 +4,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import * as vars from './vars.mjs'
+import { passthroughBuiltinPlugins } from './builtin-plugin-layout.mjs'
 import log from 'npmlog'
 
 import * as url from 'url'
@@ -19,14 +20,12 @@ const stageMetadata = {
     electronVersion: vars.electronVersion,
     generatedAt: new Date().toISOString(),
 }
-const passthroughBuiltinPlugins = [
-    'builtin-plugins/tlink-agent-mcp',
-]
 const criticalMainPlugins = new Set([
     'tlink-core',
     'tlink-settings',
     'tlink-terminal',
     'tlink-electron',
+    'tlink-intellij-bridge',
     'tlink-ai-assistant',
     'builtin-plugins/tabby-vscode-agent',
 ])
