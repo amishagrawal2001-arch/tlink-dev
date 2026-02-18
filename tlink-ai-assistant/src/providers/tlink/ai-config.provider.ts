@@ -63,11 +63,6 @@ export class AiConfigProvider extends ConfigProvider {
                     model: 'auto',
                     baseURL: 'http://localhost:3052/v1' // Local proxy for testing
                 },
-                'tlink-agent': {
-                    apiKey: '',
-                    model: 'auto',
-                    baseURL: 'http://localhost:3052/v1'
-                },
                 // Legacy alias for backward compatibility; will be migrated to tlink-agentic at runtime
                 'tlink-proxy': {
                     apiKey: '',

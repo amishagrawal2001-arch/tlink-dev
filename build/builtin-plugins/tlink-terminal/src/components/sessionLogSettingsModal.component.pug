@@ -3,18 +3,26 @@
     button.btn-close(type='button', aria-label='Close', (click)='cancel()')
 
 .modal-body
+    .form-check.mb-3
+        input.form-check-input(
+            type='checkbox',
+            [(ngModel)]='enabled'
+        )
+        label.form-check-label(translate) Enable session logging
+
     .mb-3
         label.form-label(translate) Log directory
         .input-group
             input.form-control(
                 type='text',
                 placeholder='session-logs',
-                [(ngModel)]='directory'
+                [(ngModel)]='directory',
+                [disabled]='!enabled'
             )
             button.btn.btn-outline-secondary(
                 type='button',
                 (click)='browseDirectory()',
-                [disabled]='!canPickDirectory',
+                [disabled]='!canPickDirectory || !enabled',
                 translate
             ) Browse
         .form-text.text-muted(translate) Leave empty to use the default session-logs folder
@@ -24,7 +32,8 @@
         input.form-control(
             type='text',
             placeholder='{profile}-{timestamp}.log',
-            [(ngModel)]='filenameTemplate'
+            [(ngModel)]='filenameTemplate',
+            [disabled]='!enabled'
         )
         .form-text.text-muted
             span(translate) Tokens:
@@ -33,7 +42,8 @@
     .form-check
         input.form-check-input(
             type='checkbox',
-            [(ngModel)]='append'
+            [(ngModel)]='append',
+            [disabled]='!enabled'
         )
         label.form-check-label(translate) Append to existing file
 

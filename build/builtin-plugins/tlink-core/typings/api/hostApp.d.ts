@@ -18,6 +18,11 @@ export declare abstract class HostAppService {
     protected commandWindowBottomRequest: Subject<void>;
     protected buttonBarToggleRequest: Subject<void>;
     protected sessionManagerRequest: Subject<void>;
+    protected sessionLogFileRequest: Subject<void>;
+    protected workspaceSaveRequest: Subject<void>;
+    protected workspaceLoadRequest: Subject<void>;
+    protected workspaceExportRequest: Subject<void>;
+    protected workspaceImportRequest: Subject<void>;
     protected aiAssistantRequest: Subject<void>;
     protected configChangeBroadcast: Subject<void>;
     protected logger: Logger;
@@ -46,6 +51,26 @@ export declare abstract class HostAppService {
      * Fired when Session Manager is selected from the menu
      */
     get sessionManagerRequest$(): Observable<void>;
+    /**
+     * Fired when Set session log file is selected from the menu
+     */
+    get sessionLogFileRequest$(): Observable<void>;
+    /**
+     * Fired when Save Workspace is selected from the menu
+     */
+    get workspaceSaveRequest$(): Observable<void>;
+    /**
+     * Fired when Load Workspace is selected from the menu
+     */
+    get workspaceLoadRequest$(): Observable<void>;
+    /**
+     * Fired when Export Workspace is selected from the menu
+     */
+    get workspaceExportRequest$(): Observable<void>;
+    /**
+     * Fired when Import Workspace is selected from the menu
+     */
+    get workspaceImportRequest$(): Observable<void>;
     /**
      * Fired when another window modified the config file
      */

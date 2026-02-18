@@ -131,13 +131,13 @@ export class McpHotkeyService {
     });
 
     client.on('error', (err) => {
-      this.logger.warn('Failed to connect to VS Code extension via TCP, falling back to PowerShell.', err.message);
-      this.openCopilotWithPowerShell();
+      this.logger.warn('Failed to connect to VS Code extension via TCP, falling back to shell command.', err.message);
+      this.openCopilotWithShellFallback();
     });
   }
 
-  private openCopilotWithPowerShell(): void {
-    this.logger.info('Opening Copilot window via PowerShell');
+  private openCopilotWithShellFallback(): void {
+    this.logger.info('Opening Copilot window via shell fallback');
     
     // Show recommendation dialog
     this.modal.open(ExtensionRecommendationDialogComponent, {
@@ -146,12 +146,48 @@ export class McpHotkeyService {
       keyboard: true
     });
 
-    exec('pwsh.exe -Command "code --command workbench.action.chat.openInNewWindow"', (error, stdout, stderr) => {
+    const commandQueue = this.getCopilotOpenCommands();
+    this.tryOpenCopilotCommand(commandQueue, 0);
+  }
+
+  private getCopilotOpenCommands(): string[] {
+    const codeCommand = 'code --command workbench.action.chat.openInNewWindow';
+    const platform = (typeof process !== 'undefined' ? process.platform : '') || '';
+
+    if (platform === 'win32') {
+      return [
+        'pwsh.exe -NoProfile -Command "code --command workbench.action.chat.openInNewWindow"',
+        'powershell.exe -NoProfile -Command "code --command workbench.action.chat.openInNewWindow"',
+        codeCommand,
+      ];
+    }
+
+    if (platform === 'darwin') {
+      return [
+        codeCommand,
+        'open -a "Visual Studio Code" --args --command workbench.action.chat.openInNewWindow',
+      ];
+    }
+
+    // Linux and other platforms
+    return [codeCommand];
+  }
+
+  private tryOpenCopilotCommand(commands: string[], index: number): void {
+    if (index >= commands.length) {
+      this.logger.error('All fallback commands failed to open VS Code Copilot');
+      return;
+    }
+
+    const command = commands[index];
+    exec(command, (error, stdout) => {
       if (error) {
-        this.logger.error('Error running VS Code Copilot command:', error);
-      } else {
-        this.logger.info(`VS Code Copilot command executed: ${stdout}`);
+        this.logger.warn(`Fallback command failed: ${command}`, error.message);
+        this.tryOpenCopilotCommand(commands, index + 1);
+        return;
       }
+
+      this.logger.info(`VS Code Copilot command executed: ${stdout || command}`);
     });
   }
 }

@@ -2,9 +2,9 @@ import { app, ipcMain, Menu, Tray, shell, screen, globalShortcut, MenuItemConstr
 import promiseIpc from 'electron-promise-ipc'
 import * as remote from '@electron/remote/main'
 import { exec } from 'mz/child_process'
-import { spawn, ChildProcess } from 'child_process'
 import * as path from 'path'
 import * as fs from 'fs'
+import * as yaml from 'js-yaml'
 import { Subject, throttleTime } from 'rxjs'
 
 import { saveConfig } from './config'
@@ -26,7 +26,6 @@ export class Application {
     private sessionSharingServer = getSessionSharingServer()
     private windows: Window[] = []
     private aiAssistantWindow: Window | null = null
-    private continueProcesses = new Map<string, ChildProcess>()
     private globalHotkey$ = new Subject<void>()
     private quitRequested = false
     userPluginsPath: string
@@ -40,6 +39,10 @@ export class Application {
 
         ipcMain.handle('app:save-config', async (event, config) => {
             await saveConfig(config)
+            this.updateConfigStoreFromSerialized(config)
+            if (process.platform === 'darwin') {
+                this.setupMenu()
+            }
             this.broadcastExcept('host:config-change', event.sender, config)
         })
 
@@ -60,114 +63,6 @@ export class Application {
 
         ;(promiseIpc as any).on('plugin-manager:uninstall', (name) => {
             return pluginManager.uninstall(this.userPluginsPath, name)
-        })
-
-        ;(promiseIpc as any).on('continue:spawn', (payload) => {
-            const command = payload?.command
-            const args = Array.isArray(payload?.args) ? payload.args : []
-            const cwd = payload?.cwd
-            const env = payload?.env
-
-            return new Promise((resolve, reject) => {
-                if (!command) {
-                    reject(new Error('Missing Continue command'))
-                    return
-                }
-
-                const fs = require('fs')
-                let resolvedCwd = cwd
-                let cwdExists = true
-                if (resolvedCwd && !fs.existsSync(resolvedCwd)) {
-                    cwdExists = false
-                    resolvedCwd = undefined
-                }
-                let commandToUse = command
-                let commandExists = false
-                try {
-                    commandExists = fs.existsSync(command)
-                    if (commandExists) {
-                        try {
-                            commandToUse = fs.realpathSync(command)
-                        } catch {
-                            commandToUse = command
-                        }
-                    }
-                } catch {
-                    commandExists = false
-                }
-                console.log(`[Continue CLI] spawn request: ${commandToUse} ${args.join(' ')} (exists=${commandExists}) cwd=${resolvedCwd ?? 'default'} (cwdExists=${cwdExists})`)
-
-                const id = `continue_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-                const proc = spawn(commandToUse, args, { cwd: resolvedCwd, env })
-                let settled = false
-                let readyResolved = false
-                const readyTimeout = setTimeout(() => {
-                    if (settled) return
-                    settled = true
-                    reject(new Error('Continue server did not start in time'))
-                }, 15000)
-
-                proc.once('error', (err) => {
-                    if (settled) return
-                    settled = true
-                    clearTimeout(readyTimeout)
-                    const message = err instanceof Error ? err.message : String(err)
-                    const anyErr: any = err || {}
-                    const errorInfo = {
-                        message: `spawn ${command} failed: ${message}`,
-                        code: anyErr.code,
-                        errno: anyErr.errno,
-                        syscall: anyErr.syscall,
-                        path: anyErr.path,
-                        spawnargs: anyErr.spawnargs
-                    }
-                    console.error('[Continue CLI] spawn error', errorInfo)
-                    reject(errorInfo)
-                })
-
-                proc.once('spawn', () => {
-                    // wait for "Server started on ..." line before resolving
-                })
-
-                proc.stdout?.on('data', (data) => {
-                    const text = String(data).trim()
-                    if (!text) return
-                    console.log(`[Continue CLI] ${text}`)
-                    const clean = text.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '')
-                    if (!readyResolved) {
-                        const match = clean.match(/Server started on http:\/\/localhost:(\d+)/i)
-                        if (match) {
-                            readyResolved = true
-                            if (settled) return
-                            settled = true
-                            clearTimeout(readyTimeout)
-                            this.continueProcesses.set(id, proc)
-                            resolve({ id, pid: proc.pid, baseUrl: `http://localhost:${match[1]}` })
-                        }
-                    }
-                })
-                proc.stderr?.on('data', (data) => {
-                    console.error(`[Continue CLI] ${String(data).trim()}`)
-                })
-                proc.on('exit', () => {
-                    clearTimeout(readyTimeout)
-                    this.continueProcesses.delete(id)
-                })
-            })
-        })
-
-        ;(promiseIpc as any).on('continue:kill', (id) => {
-            const proc = this.continueProcesses.get(id)
-            if (!proc) {
-                return false
-            }
-            try {
-                proc.kill()
-            } catch {
-                // Ignore kill errors
-            }
-            this.continueProcesses.delete(id)
-            return true
         })
 
         ;(promiseIpc as any).on('get-default-mac-shell', async () => {
@@ -857,6 +752,7 @@ export class Application {
     }
 
     private setupMenu () {
+        const buttonBarEnabled = Boolean(this.configStore?.terminal?.buttonBar?.enabled)
         const template: MenuItemConstructorOptions[] = [
             {
                 label: 'Application',
@@ -871,6 +767,49 @@ export class Application {
                                 await this.newWindow()
                             }
                             this.windows[0].send('host:preferences-menu')
+                        },
+                    },
+                    { type: 'separator' },
+                    {
+                        label: 'Save Workspace',
+                        accelerator: 'CmdOrCtrl+Shift+S',
+                        click: async () => {
+                            if (!this.hasWindows()) {
+                                await this.newWindow()
+                            }
+                            const target = this.windows.find(window => window.isFocused()) ?? this.windows[0]
+                            target.send('host:workspace-save')
+                        },
+                    },
+                    {
+                        label: 'Load Workspace',
+                        accelerator: 'CmdOrCtrl+Shift+O',
+                        click: async () => {
+                            if (!this.hasWindows()) {
+                                await this.newWindow()
+                            }
+                            const target = this.windows.find(window => window.isFocused()) ?? this.windows[0]
+                            target.send('host:workspace-load')
+                        },
+                    },
+                    {
+                        label: 'Export Workspace',
+                        click: async () => {
+                            if (!this.hasWindows()) {
+                                await this.newWindow()
+                            }
+                            const target = this.windows.find(window => window.isFocused()) ?? this.windows[0]
+                            target.send('host:workspace-export')
+                        },
+                    },
+                    {
+                        label: 'Import Workspace',
+                        click: async () => {
+                            if (!this.hasWindows()) {
+                                await this.newWindow()
+                            }
+                            const target = this.windows.find(window => window.isFocused()) ?? this.windows[0]
+                            target.send('host:workspace-import')
                         },
                     },
                     { type: 'separator' },
@@ -902,6 +841,17 @@ export class Application {
                     { role: 'pasteAndMatchStyle' },
                     { role: 'delete' },
                     { role: 'selectAll' },
+                    { type: 'separator' },
+                    {
+                        label: 'Set session log file',
+                        click: async () => {
+                            if (!this.hasWindows()) {
+                                await this.newWindow()
+                            }
+                            const target = this.windows.find(window => window.isFocused()) ?? this.windows[0]
+                            target.send('host:set-session-log-file')
+                        },
+                    },
                 ],
             },
             {
@@ -928,12 +878,22 @@ export class Application {
                         },
                     },
                     {
-                        label: 'Button Bar',
+                        label: buttonBarEnabled ? 'Hide button bar' : 'Button Bar',
                         click: async () => {
                             if (!this.hasWindows()) {
                                 await this.newWindow()
                             }
                             const target = this.windows.find(window => window.isFocused()) ?? this.windows[0]
+                            if (!this.configStore.terminal) {
+                                this.configStore.terminal = {}
+                            }
+                            if (!this.configStore.terminal.buttonBar) {
+                                this.configStore.terminal.buttonBar = {}
+                            }
+                            this.configStore.terminal.buttonBar.enabled = !this.configStore.terminal.buttonBar.enabled
+                            if (process.platform === 'darwin') {
+                                this.setupMenu()
+                            }
                             target.send('host:button-bar')
                         },
                     },
@@ -980,5 +940,16 @@ export class Application {
         }
 
         Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+    }
+
+    private updateConfigStoreFromSerialized (config: string): void {
+        try {
+            const parsed = yaml.load(config)
+            if (parsed && typeof parsed === 'object') {
+                this.configStore = parsed
+            }
+        } catch {
+            // Ignore parse errors and keep the current in-memory config snapshot.
+        }
     }
 }

@@ -214,6 +214,7 @@ export class ThemeService implements OnDestroy {
     private readonly containerSelectors = [
         '.ai-chat-interface',
         '.ai-settings-tab',
+        '.tabby-server-settings-tab',
         '.ai-assistant',
         '.ai-sidebar-container',
         '.ai-chat-modal-left'

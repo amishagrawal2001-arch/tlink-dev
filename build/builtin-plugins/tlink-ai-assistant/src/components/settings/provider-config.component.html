@@ -1,8 +1,302 @@
-<div class="provider-config">
-    <h3>{{ t.providers.title }}</h3>
+<div class="provider-config" [class.tabby-only]="tabbyOnly">
+    <h3 *ngIf="!tabbyOnly">{{ t.providers.title }}</h3>
+
+    <!-- Tabby server setup -->
+    <div class="provider-section tabby-server-section" *ngIf="tabbyOnly">
+        <div class="section-header">
+            <i class="fa fa-wrench"></i>
+            <h4>Tabby Server</h4>
+            <span class="section-desc">Install, start, and manage local Tabby server access</span>
+        </div>
+
+        <div class="tabby-server-card">
+            <div class="config-form tabby-server-config">
+                <div class="tabby-install-guide">
+                    <div class="tabby-guide-header">
+                        <span><i class="fa fa-wrench"></i> Tabby server setup</span>
+                        <div class="tabby-guide-links">
+                            <a
+                                href="https://tabby.tabbyml.com/docs/quick-start/installation/docker/"
+                                (click)="openExternal('https://tabby.tabbyml.com/docs/quick-start/installation/docker/', $event)"
+                                rel="noopener">
+                                Install docs
+                            </a>
+                            <a
+                                href="https://tabby.tabbyml.com/docs/quick-start/register-account/"
+                                (click)="openExternal('https://tabby.tabbyml.com/docs/quick-start/register-account/', $event)"
+                                rel="noopener">
+                                Register docs
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="tabby-current-url">
+                        <span>Current URL</span>
+                        <code>{{ getTabbyBaseUrl() }}</code>
+                    </div>
+
+                    <div class="tabby-guide-actions">
+                        <button
+                            *ngIf="isNativeTabbyInstallSupported()"
+                            type="button"
+                            class="installer-action-btn"
+                            [disabled]="tabbyInstallInProgress"
+                            (click)="installTabbyWithInstaller('native', $event)">
+                            <i class="fa" [ngClass]="getTabbyPrimaryInstallIcon()"></i>
+                            {{ getTabbyPrimaryInstallLabel() }}
+                        </button>
+                        <button
+                            type="button"
+                            class="installer-action-btn"
+                            [disabled]="tabbyInstallInProgress"
+                            (click)="installTabbyWithInstaller('docker', $event)">
+                            <i class="fa" [ngClass]="isInstallingTabby('docker') ? 'fa-spinner fa-spin' : 'fa-cube'"></i>
+                            {{ isInstallingTabby('docker') ? 'Installing via Tlink...' : 'Install via Tlink (Docker)' }}
+                        </button>
+                        <button
+                            type="button"
+                            class="installer-action-btn"
+                            [disabled]="tabbyStartInProgress || tabbyRestartInProgress || tabbyStopInProgress"
+                            (click)="startTabbyServer($event)">
+                            <i class="fa" [ngClass]="isStartingTabby() ? 'fa-spinner fa-spin' : 'fa-play'"></i>
+                            {{ isStartingTabby() ? 'Starting Tabby...' : 'Start Tabby' }}
+                        </button>
+                        <button
+                            type="button"
+                            class="installer-action-btn"
+                            [disabled]="tabbyRestartInProgress || tabbyStartInProgress || tabbyStopInProgress || tabbyInstallInProgress"
+                            (click)="restartTabbyServer($event)">
+                            <i class="fa" [ngClass]="isRestartingTabby() ? 'fa-spinner fa-spin' : 'fa-refresh'"></i>
+                            {{ isRestartingTabby() ? 'Restarting Tabby...' : 'Restart Tabby' }}
+                        </button>
+                        <button
+                            type="button"
+                            class="installer-action-btn"
+                            [disabled]="tabbyStopInProgress || tabbyStartInProgress || tabbyRestartInProgress || tabbyInstallInProgress"
+                            (click)="stopTabbyServer($event)">
+                            <i class="fa" [ngClass]="isStoppingTabby() ? 'fa-spinner fa-spin' : 'fa-stop'"></i>
+                            {{ isStoppingTabby() ? 'Stopping Tabby...' : 'Stop Tabby' }}
+                        </button>
+                        <button
+                            type="button"
+                            class="installer-action-btn"
+                            (click)="openTabbyServerUrl($event)">
+                            <i class="fa fa-external-link"></i>
+                            Open Tabby URL
+                        </button>
+                    </div>
+
+                    <div class="tabby-model-manager">
+                        <div class="tabby-model-header">
+                            <span><i class="fa fa-cubes"></i> Tabby models</span>
+                            <a
+                                href="https://tabby.tabbyml.com/docs/models/"
+                                (click)="openExternal('https://tabby.tabbyml.com/docs/models/', $event)"
+                                rel="noopener">
+                                Model docs
+                            </a>
+                        </div>
+
+                        <div class="tabby-model-actions">
+                            <button
+                                type="button"
+                                class="installer-action-btn"
+                                [disabled]="tabbyInstalledModelsLoading || tabbyModelInstallInProgress"
+                                (click)="refreshInstalledTabbyModels($event)">
+                                <i class="fa" [ngClass]="tabbyInstalledModelsLoading ? 'fa-spinner fa-spin' : 'fa-refresh'"></i>
+                                {{ tabbyInstalledModelsLoading ? 'Refreshing installed...' : 'Refresh installed' }}
+                            </button>
+                        </div>
+
+                        <div class="tabby-guide-command">
+                            <div class="command-label">Installed models ({{ tabbyInstalledModels.length }})</div>
+                            <div class="tabby-installed-empty" *ngIf="!tabbyInstalledModelsLoading && tabbyInstalledModels.length === 0">
+                                No installed models found in <code>~/.tabby/models</code>.
+                            </div>
+                            <div class="tabby-installed-list" *ngIf="tabbyInstalledModels.length > 0">
+                                <span class="tabby-model-chip" *ngFor="let model of tabbyInstalledModels">
+                                    {{ model.vendor === 'TabbyML' ? model.id : (model.vendor + '/' + model.id) }}
+                                    <i class="fa" [ngClass]="model.hasGgml ? 'fa-check-circle' : 'fa-exclamation-circle'"></i>
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="tabby-guide-command">
+                            <div class="command-label">Active server models (writes <code>~/.tabby/config.toml</code>)</div>
+                            <div class="tabby-model-control-grid">
+                                <label for="tabby-completion-model">Completion</label>
+                                <select
+                                    id="tabby-completion-model"
+                                    class="tabby-model-input"
+                                    [(ngModel)]="tabbyActiveModels.completion">
+                                    <option *ngFor="let item of getTabbySelectableModels('completion')" [value]="item">
+                                        {{ item + (isTabbyInstalledModel(item) ? ' (installed)' : '') }}
+                                    </option>
+                                </select>
+                                <button
+                                    type="button"
+                                    class="installer-action-btn tabby-install-inline-btn"
+                                    [disabled]="tabbyModelInstallInProgress || tabbyInstallInProgress || tabbyStartInProgress || tabbyRestartInProgress || tabbyStopInProgress || isTabbyInstalledModel(tabbyActiveModels.completion)"
+                                    (click)="installActiveTabbyModel('completion', $event)">
+                                    <i class="fa" [ngClass]="tabbyModelInstallInProgress ? 'fa-spinner fa-spin' : 'fa-download'"></i>
+                                    {{ isTabbyInstalledModel(tabbyActiveModels.completion) ? 'Installed' : 'Install' }}
+                                </button>
+
+                                <label for="tabby-chat-model">Chat</label>
+                                <select
+                                    id="tabby-chat-model"
+                                    class="tabby-model-input"
+                                    [(ngModel)]="tabbyActiveModels.chat">
+                                    <option *ngFor="let item of getTabbySelectableModels('chat')" [value]="item">
+                                        {{ item + (isTabbyInstalledModel(item) ? ' (installed)' : '') }}
+                                    </option>
+                                </select>
+                                <button
+                                    type="button"
+                                    class="installer-action-btn tabby-install-inline-btn"
+                                    [disabled]="tabbyModelInstallInProgress || tabbyInstallInProgress || tabbyStartInProgress || tabbyRestartInProgress || tabbyStopInProgress || isTabbyInstalledModel(tabbyActiveModels.chat)"
+                                    (click)="installActiveTabbyModel('chat', $event)">
+                                    <i class="fa" [ngClass]="tabbyModelInstallInProgress ? 'fa-spinner fa-spin' : 'fa-download'"></i>
+                                    {{ isTabbyInstalledModel(tabbyActiveModels.chat) ? 'Installed' : 'Install' }}
+                                </button>
+
+                                <label for="tabby-embedding-model">Embedding</label>
+                                <select
+                                    id="tabby-embedding-model"
+                                    class="tabby-model-input"
+                                    [(ngModel)]="tabbyActiveModels.embedding">
+                                    <option *ngFor="let item of getTabbySelectableModels('embedding')" [value]="item">
+                                        {{ item + (isTabbyInstalledModel(item) ? ' (installed)' : '') }}
+                                    </option>
+                                </select>
+                                <button
+                                    type="button"
+                                    class="installer-action-btn tabby-install-inline-btn"
+                                    [disabled]="tabbyModelInstallInProgress || tabbyInstallInProgress || tabbyStartInProgress || tabbyRestartInProgress || tabbyStopInProgress || isTabbyInstalledModel(tabbyActiveModels.embedding)"
+                                    (click)="installActiveTabbyModel('embedding', $event)">
+                                    <i class="fa" [ngClass]="tabbyModelInstallInProgress ? 'fa-spinner fa-spin' : 'fa-download'"></i>
+                                    {{ isTabbyInstalledModel(tabbyActiveModels.embedding) ? 'Installed' : 'Install' }}
+                                </button>
+                            </div>
+
+                            <div class="tabby-model-actions">
+                                <button
+                                    type="button"
+                                    class="installer-action-btn"
+                                    [disabled]="tabbyModelConfigLoading || tabbyModelConfigSaving || tabbyModelInstallInProgress"
+                                    (click)="loadTabbyModelConfig($event)">
+                                    <i class="fa" [ngClass]="tabbyModelConfigLoading ? 'fa-spinner fa-spin' : 'fa-refresh'"></i>
+                                    {{ tabbyModelConfigLoading ? 'Loading config...' : 'Reload model config' }}
+                                </button>
+                                <button
+                                    type="button"
+                                    class="installer-action-btn"
+                                    [disabled]="tabbyModelConfigSaving || tabbyModelConfigLoading || tabbyModelInstallInProgress || tabbyInstallInProgress || tabbyStartInProgress || tabbyRestartInProgress || tabbyStopInProgress"
+                                    (click)="applyTabbyModelConfig($event)">
+                                    <i class="fa" [ngClass]="tabbyModelConfigSaving ? 'fa-spinner fa-spin' : 'fa-save'"></i>
+                                    {{ tabbyModelConfigSaving ? 'Applying model config...' : 'Apply model config' }}
+                                </button>
+                            </div>
+
+                            <div class="tabby-guide-note">
+                                Pick any docs-registry model, click Install next to it, then Apply model config and Restart Tabby.
+                            </div>
+                        </div>
+
+                        <div class="tabby-guide-command">
+                            <div class="command-label">Install model from docs registry</div>
+                            <div class="tabby-model-install-row">
+                                <select
+                                    class="tabby-model-input"
+                                    [(ngModel)]="tabbyCatalogFilter">
+                                    <option value="all">All types</option>
+                                    <option value="completion">Completion</option>
+                                    <option value="chat">Chat</option>
+                                    <option value="embedding">Embedding</option>
+                                </select>
+
+                                <select
+                                    class="tabby-model-input"
+                                    [(ngModel)]="tabbySelectedCatalogModel">
+                                    <option *ngFor="let item of getFilteredTabbyCatalogModels()" [value]="item.id">
+                                        {{ '[' + item.kind + '] ' + item.id + (isTabbyInstalledModel(item.id) ? ' (installed)' : '') }}
+                                    </option>
+                                </select>
+
+                                <input
+                                    type="text"
+                                    class="tabby-model-input"
+                                    [(ngModel)]="tabbyCustomModelId"
+                                    placeholder="Optional custom model id (overrides selected)">
+
+                                <button
+                                    type="button"
+                                    class="installer-action-btn"
+                                    [disabled]="tabbyModelInstallInProgress || tabbyInstallInProgress || tabbyStartInProgress || tabbyRestartInProgress || tabbyStopInProgress"
+                                    (click)="installTabbyModel($event)">
+                                    <i class="fa" [ngClass]="tabbyModelInstallInProgress ? 'fa-spinner fa-spin' : 'fa-download'"></i>
+                                    {{ tabbyModelInstallInProgress ? 'Installing model...' : 'Install model' }}
+                                </button>
+                            </div>
+                            <div class="tabby-guide-note">
+                                Uses <code>tabby download --model &lt;id&gt;</code>. After install, choose it in Active server models above and click Restart Tabby.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tabby-guide-note">
+                        If you only see login at the base URL, refer to Register docs. Some servers hide signup after the first account is created.
+                    </div>
+                    <div class="tabby-platform-note" *ngIf="!isNativeTabbyInstallSupported()">
+                        Direct native install is available on macOS and Windows. Use Docker on this platform.
+                    </div>
+
+                    <div class="tabby-guide-command" *ngIf="isMacPlatform()">
+                        <div class="command-label">Direct Homebrew command</div>
+                        <div class="command-row">
+                            <code>{{ tabbyInstallCommands.brew }}</code>
+                            <button type="button" class="copy-command-btn" (click)="copyCommand(tabbyInstallCommands.brew, 'Tabby Homebrew install', $event)">Copy</button>
+                        </div>
+                    </div>
+
+                    <div class="tabby-guide-command" *ngIf="isWindowsPlatform()">
+                        <div class="command-label">Direct Windows command</div>
+                        <div class="command-row">
+                            <code>{{ tabbyInstallCommands.windowsNative }}</code>
+                            <button type="button" class="copy-command-btn" (click)="copyCommand(tabbyInstallCommands.windowsNative, 'Tabby Windows install', $event)">Copy</button>
+                        </div>
+                    </div>
+
+                    <div class="tabby-guide-command">
+                        <div class="command-label">Manual Docker</div>
+                        <div class="command-row">
+                            <code>{{ getDockerCommandForCurrentPlatform() }}</code>
+                            <button type="button" class="copy-command-btn" (click)="copyCommand(getDockerCommandForCurrentPlatform(), 'Tabby Docker run', $event)">Copy</button>
+                        </div>
+                        <div class="tabby-guide-note">
+                            Need Docker Desktop?
+                            <a
+                                href="https://www.docker.com/products/docker-desktop/"
+                                (click)="openExternal('https://www.docker.com/products/docker-desktop/', $event)"
+                                rel="noopener">
+                                Download it here
+                            </a>
+                            and make sure it is running before retrying. Tlink will try auto-install (macOS/Windows) and auto-start when possible.
+                        </div>
+                        <div class="tabby-guide-note" *ngIf="isArm64Arch()">
+                            ARM64 host detected: Docker command uses `--platform linux/amd64` compatibility mode for Tabby image.
+                        </div>
+                        <div class="tabby-guide-note" *ngIf="isMacPlatform()">
+                            Docker Tabby image depends on NVIDIA CUDA runtime and is not supported on macOS hosts; Docker install request auto-switches to Homebrew.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- 云端提供商分组 -->
-    <div class="provider-section">
+    <div class="provider-section" *ngIf="!tabbyOnly">
         <div class="section-header">
             <i class="fa fa-cloud"></i>
             <h4>{{ t.providers.cloudProviders }}</h4>
@@ -48,50 +342,6 @@
                                     <label [for]="'enabled-' + providerName">
                                         {{ configs[providerName]?.enabled ? t.common.enabled : t.common.disabled }}
                                     </label>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="tabby-install-guide" *ngIf="providerName === 'tabby'">
-                            <div class="tabby-guide-header">
-                                <span><i class="fa fa-wrench"></i> Tabby server setup</span>
-                                <a
-                                    href="https://tabby.tabbyml.com/docs/quick-start/installation/docker/"
-                                    (click)="openExternal('https://tabby.tabbyml.com/docs/quick-start/installation/docker/', $event)"
-                                    rel="noopener">
-                                    Install docs
-                                </a>
-                            </div>
-
-                            <div class="tabby-guide-command">
-                                <div class="command-label">Tlink installer (Homebrew)</div>
-                                <div class="command-row">
-                                    <code>{{ tabbyInstallCommands.installerBrew }}</code>
-                                    <button type="button" class="copy-command-btn" (click)="copyCommand(tabbyInstallCommands.installerBrew, 'Tlink Homebrew install', $event)">Copy</button>
-                                </div>
-                            </div>
-
-                            <div class="tabby-guide-command">
-                                <div class="command-label">Tlink installer (Docker)</div>
-                                <div class="command-row">
-                                    <code>{{ tabbyInstallCommands.installerDocker }}</code>
-                                    <button type="button" class="copy-command-btn" (click)="copyCommand(tabbyInstallCommands.installerDocker, 'Tlink Docker install', $event)">Copy</button>
-                                </div>
-                            </div>
-
-                            <div class="tabby-guide-command">
-                                <div class="command-label">Manual Homebrew</div>
-                                <div class="command-row">
-                                    <code>{{ tabbyInstallCommands.brew }}</code>
-                                    <button type="button" class="copy-command-btn" (click)="copyCommand(tabbyInstallCommands.brew, 'Tabby Homebrew install', $event)">Copy</button>
-                                </div>
-                            </div>
-
-                            <div class="tabby-guide-command">
-                                <div class="command-label">Manual Docker</div>
-                                <div class="command-row">
-                                    <code>{{ tabbyInstallCommands.docker }}</code>
-                                    <button type="button" class="copy-command-btn" (click)="copyCommand(tabbyInstallCommands.docker, 'Tabby Docker run', $event)">Copy</button>
                                 </div>
                             </div>
                         </div>
@@ -183,6 +433,17 @@
                                         [attr.aria-label]="deepseekModelsLoading ? t.common.loading : 'Refresh models'">
                                     </i>
                                 </ng-container>
+                                <ng-container *ngIf="providerName === 'tabby' && field.key === 'model'">
+                                    <i
+                                        class="fa ml-2"
+                                        [ngClass]="tabbyModelsLoading ? 'fa-spinner fa-spin' : 'fa-refresh'"
+                                        role="button"
+                                        tabindex="0"
+                                        (click)="!tabbyModelsLoading && refreshTabbyModels()"
+                                        title="Refresh models"
+                                        [attr.aria-label]="tabbyModelsLoading ? t.common.loading : 'Refresh models'">
+                                    </i>
+                                </ng-container>
                                 <ng-container *ngIf="isAgentic(providerName) && field.key === 'model'">
                                     <span class="ml-2 d-inline-flex align-items-center" style="gap: 8px;">
                                         <i
@@ -253,6 +514,21 @@
                                 </select>
                             </div>
 
+                            <!-- Tabby model selector with refresh -->
+                            <div class="input-with-toggle"
+                                 *ngIf="providerName === 'tabby' && field.key === 'model' && configs[providerName] && tabbyModels.length > 0">
+                                <select
+                                    class="form-control"
+                                    [class]="getInputValidationClass(providerName, field.key)"
+                                    [(ngModel)]="configs[providerName][field.key]">
+                                    <option *ngFor="let m of tabbyModels" [value]="m.id">{{ m.ownedBy ? (m.ownedBy + ' • ' + m.id) : m.id }}</option>
+                                    <option *ngIf="configs[providerName][field.key] && !isTabbyModelKnown(configs[providerName][field.key])"
+                                            [value]="configs[providerName][field.key]">
+                                        {{ 'Custom: ' + configs[providerName][field.key] }}
+                                    </option>
+                                </select>
+                            </div>
+
                             <!-- Tlink Agentic model selector with refresh -->
                             <div class="input-with-toggle"
                                  *ngIf="isAgentic(providerName) && field.key === 'model' && configs[providerName] && proxyModels.length > 0">
@@ -279,13 +555,14 @@
                                        && !(providerName === 'openai' && field.key === 'model' && openAiModels.length > 0)
                                        && !(providerName === 'groq' && field.key === 'model' && groqModels.length > 0)
                                        && !(providerName === 'minimax' && field.key === 'model' && deepseekModels.length > 0)
+                                       && !(providerName === 'tabby' && field.key === 'model' && tabbyModels.length > 0)
                                        && !(isAgentic(providerName) && field.key === 'model' && proxyModels.length > 0)">
                                 <input
                                     [type]="isPasswordField(field) && !isPasswordVisible(providerName, field.key) ? 'password' : 'text'"
                                     class="form-control"
                                     [class]="getInputValidationClass(providerName, field.key)"
                                     [placeholder]="field.placeholder || ''"
-                                    [attr.list]="(providerName === 'openai' && field.key === 'model') ? 'openai-models-list' : (providerName === 'groq' && field.key === 'model') ? 'groq-models-list' : (providerName === 'minimax' && field.key === 'model') ? 'deepseek-models-list' : (isAgentic(providerName) && field.key === 'model') ? 'agentic-models-list' : null"
+                                    [attr.list]="(providerName === 'openai' && field.key === 'model') ? 'openai-models-list' : (providerName === 'groq' && field.key === 'model') ? 'groq-models-list' : (providerName === 'minimax' && field.key === 'model') ? 'deepseek-models-list' : (providerName === 'tabby' && field.key === 'model') ? 'tabby-models-list' : (isAgentic(providerName) && field.key === 'model') ? 'agentic-models-list' : null"
                                     [(ngModel)]="configs[providerName][field.key]">
                                 <button *ngIf="isPasswordField(field)"
                                         type="button"
@@ -302,6 +579,9 @@
                             </datalist>
                             <datalist *ngIf="providerName === 'minimax' && field.key === 'model'" id="deepseek-models-list">
                                 <option *ngFor="let m of deepseekModels" [value]="m.id">{{ m.ownedBy ? (m.ownedBy + ' • ' + m.id) : m.id }}</option>
+                            </datalist>
+                            <datalist *ngIf="providerName === 'tabby' && field.key === 'model'" id="tabby-models-list">
+                                <option *ngFor="let m of tabbyModels" [value]="m.id">{{ m.ownedBy ? (m.ownedBy + ' • ' + m.id) : m.id }}</option>
                             </datalist>
                             <datalist *ngIf="isAgentic(providerName) && field.key === 'model'" id="agentic-models-list">
                                 <option value="auto">Auto (proxy selects)</option>
@@ -353,7 +633,7 @@
     </div>
 
     <!-- 本地提供商分组 -->
-    <div class="provider-section local">
+    <div class="provider-section local" *ngIf="!tabbyOnly">
         <div class="section-header">
             <i class="fa fa-server"></i>
             <h4>{{ t.providers.localProviders }}</h4>

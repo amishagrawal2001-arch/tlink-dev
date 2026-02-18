@@ -1,6 +1,6 @@
 import { Type, OnInit } from '@angular/core';
 import { NgbDropdown, NgbModal } from '@ng-bootstrap/ng-bootstrap';
-import { CdkDragDrop } from '@angular/cdk/drag-drop';
+import { CdkDragDrop, CdkDragMove } from '@angular/cdk/drag-drop';
 import { HostAppService, Platform } from '../api/hostApp';
 import { HotkeysService } from '../services/hotkeys.service';
 import { TranslateService } from '@ngx-translate/core';
@@ -12,9 +12,14 @@ import { CommandService } from '../services/commands.service';
 import { BackupService } from '../services/backup.service';
 import { BaseTabComponent } from './baseTab.component';
 import { TabBodyComponent } from './tabBody.component';
-import { AppService, BottomPanelRegistration, BottomPanelService, Command, FileTransfer, HostWindowService, PlatformService, SidePanelRegistration, SidePanelService, ProfilesService, SelectorService } from '../api';
+import { AppService, BottomPanelRegistration, BottomPanelService, Command, FileTransfer, HostWindowService, PlatformService, SidePanelRegistration, SidePanelService, ProfilesService, SelectorService, WorkspaceService, NotificationsService } from '../api';
 import { TabsService } from '../services/tabs.service';
 type SplitDirection = 'r' | 'l' | 't' | 'b';
+type LeftDockChunk = {
+    id: string;
+    grouped: boolean;
+    items: string[];
+};
 /** @hidden */
 export declare class AppRootComponent implements OnInit {
     private hotkeys;
@@ -31,6 +36,8 @@ export declare class AppRootComponent implements OnInit {
     private platform;
     private profiles;
     private selector;
+    private workspaceService;
+    private notifications;
     private ngbModal;
     Platform: typeof Platform;
     ready: boolean;
@@ -54,9 +61,13 @@ export declare class AppRootComponent implements OnInit {
     rightDockPanels: SidePanelRegistration[];
     leftDockOrder: string[];
     leftDockVisibleOrder: string[];
+    leftDockGroupedItems: string[];
+    leftDockGroups: string[][];
+    leftDockChunks: LeftDockChunk[];
     sshSidePanel: SidePanelRegistration | null;
     sshSidebarCommand: Command | null;
     intellijEditorCommand: Command | null;
+    tabbyUrlCommand: Command | null;
     bottomPanelVisible: boolean;
     bottomPanelComponent: Type<any> | null;
     bottomPanelHeight: number;
@@ -70,9 +81,12 @@ export declare class AppRootComponent implements OnInit {
     private sidePanelResizeStartX;
     private sidePanelResizeStartWidth;
     private sidePanelColorPickerOpen;
+    private leftDockDragHoverTarget;
+    leftDockDropPreviewItem: string | null;
     private logger;
     private readonly defaultLeftDockOrder;
-    constructor(hotkeys: HotkeysService, commands: CommandService, updater: UpdaterService, hostWindow: HostWindowService, hostApp: HostAppService, config: ConfigService, app: AppService, translate: TranslateService, tabsService: TabsService, sidePanel: SidePanelService, bottomPanel: BottomPanelService, platform: PlatformService, profiles: ProfilesService, selector: SelectorService, log: LogService, ngbModal: NgbModal, _themes: ThemesService, _backup: BackupService);
+    private readonly defaultLeftDockGroup;
+    constructor(hotkeys: HotkeysService, commands: CommandService, updater: UpdaterService, hostWindow: HostWindowService, hostApp: HostAppService, config: ConfigService, app: AppService, translate: TranslateService, tabsService: TabsService, sidePanel: SidePanelService, bottomPanel: BottomPanelService, platform: PlatformService, profiles: ProfilesService, selector: SelectorService, workspaceService: WorkspaceService, notifications: NotificationsService, log: LogService, ngbModal: NgbModal, _themes: ThemesService, _backup: BackupService);
     get canSplitShortcut(): boolean;
     get canOpenCommandWindow(): boolean;
     get isCommandWindowOpen(): boolean;
@@ -107,6 +121,9 @@ export declare class AppRootComponent implements OnInit {
     onTabsReordered(event: CdkDragDrop<BaseTabComponent[]>): void;
     onRightDockReordered(event: CdkDragDrop<SidePanelRegistration[]>): void;
     onLeftDockReordered(event: CdkDragDrop<string[]>): void;
+    onLeftDockItemDragStarted(_draggedItem: string): void;
+    onLeftDockItemDragEnded(): void;
+    onLeftDockItemDragMoved(draggedItem: string, event: CdkDragMove<string>): void;
     onTransfersChange(): void;
     onTransfersFloatingChange(floating: boolean): void;
     get isVibrant(): any;
@@ -114,7 +131,24 @@ export declare class AppRootComponent implements OnInit {
     private buildLeftDockOrder;
     private mergeLeftDockOrder;
     private refreshLeftDockOrder;
+    private refreshLeftDockChunks;
     trackByLeftDockItem(_index: number, item: string): string;
+    trackByLeftDockChunk(_index: number, chunk: LeftDockChunk): string;
+    isLeftDockItemGrouped(item: string): boolean;
+    isLeftDockItemGroupStart(index: number): boolean;
+    isLeftDockItemGroupEnd(index: number): boolean;
+    openLeftDockItemMenu(event: MouseEvent, item: string): void;
+    private removeLeftDockItemFromGroup;
+    private buildLeftDockGroups;
+    private flattenLeftDockGroups;
+    private normalizeLeftDockGroups;
+    private setLeftDockGroups;
+    private reconcileLeftDockGroupsAfterReorder;
+    private resolveLeftDockDropTarget;
+    private resolveLeftDockDropTargetFromPointer;
+    private findNearestLeftDockButton;
+    private resolveLeftDockPointer;
+    private applyLeftDockGroupedDrop;
     isLeftDockItemVisible(item: string): boolean;
     isLeftDockItemActive(item: string): boolean;
     isLeftDockItemDisabled(item: string): boolean;
@@ -127,6 +161,11 @@ export declare class AppRootComponent implements OnInit {
     hasSidePanel(id: string): boolean;
     openSidePanelById(id: string): void;
     openProfileSelector(): Promise<void>;
+    saveWorkspaceFromMenu(): Promise<void>;
+    loadWorkspaceFromMenu(): Promise<void>;
+    exportWorkspaceFromMenu(): Promise<void>;
+    importWorkspaceFromMenu(): Promise<void>;
+    private buildWorkspaceExportFilename;
     openSftpProfileSelector(): Promise<void>;
     openAIChat(): Promise<void>;
     openIntelliJEditor(): Promise<void>;

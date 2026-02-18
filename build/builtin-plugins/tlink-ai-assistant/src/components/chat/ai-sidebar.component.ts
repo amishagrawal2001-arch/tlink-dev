@@ -61,11 +61,10 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
     modelOptions: { name: string; label: string }[] = [];
     selectedModelProvider: string = '';
     agentEngineOptions: { value: string; label: string }[] = [
-        { value: 'continue', label: 'Continue' },
         { value: 'langgraph', label: 'LangGraph' },
         { value: 'legacy', label: 'Legacy' }
     ];
-    selectedAgentEngine: string = 'continue';
+    selectedAgentEngine: string = 'langgraph';
     private isSwitchingProvider: boolean = false;
     intentOptions: { value: string; label: string }[] = [
         { value: 'auto', label: 'Auto' },
@@ -123,7 +122,11 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
         // Load current provider information
         this.loadCurrentProvider();
         this.workingDir = this.config.get<string>('agentWorkingDir', '') || '';
-        this.selectedAgentEngine = (this.config.get<string>('agentEngine', 'continue') || 'continue').toLowerCase();
+        const configuredEngine = this.config.get<string>('agentEngine', 'langgraph') || 'langgraph';
+        this.selectedAgentEngine = this.normalizeAgentEngine(configuredEngine);
+        if ((configuredEngine || '').toLowerCase() !== this.selectedAgentEngine) {
+            this.config.set('agentEngine', this.selectedAgentEngine);
+        }
 
         // Listen to provider changes (reload on any config change)
         // Note: We check periodically or reload when switching providers
@@ -139,7 +142,9 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
                     this.buildModelOptions();
                 }
                 this.workingDir = this.config.get<string>('agentWorkingDir', '') || '';
-                this.selectedAgentEngine = (this.config.get<string>('agentEngine', 'continue') || 'continue').toLowerCase();
+                this.selectedAgentEngine = this.normalizeAgentEngine(
+                    this.config.get<string>('agentEngine', 'langgraph') || 'langgraph'
+                );
             });
 
         this.agentApproval.pending$
@@ -288,7 +293,7 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
      */
     private buildModelOptions(): void {
         const normalize = (name: string | undefined | null): string =>
-            (name === 'tlink-proxy') ? 'tlink-agentic' : (name || '');
+            (name === 'tlink-proxy' || name === 'tlink-agent') ? 'tlink-agentic' : (name || '');
         const allConfigs = this.config.getAllProviderConfigs();
         const activeProvider = normalize(this.getActiveProviderName());
         const defaultProvider = normalize(this.config.getDefaultProvider());
@@ -326,11 +331,8 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
                     ...cfg,
                     name: cfg.name || canonicalName
                 }, canonicalName);
-                if (filled.name === 'tlink-agentic' || filled.name === 'tlink-proxy') {
+                if (filled.name === 'tlink-agentic' || filled.name === 'tlink-proxy' || filled.name === 'tlink-agent') {
                     filled.displayName = 'Tlink Agentic';
-                }
-                if (filled.name === 'tlink-agent') {
-                    filled.displayName = 'Tlink Agent';
                 }
                 const key = normalize(filled.name);
                 optionsMap.set(key, {
@@ -353,11 +355,8 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
                     name: canonicalName,
                     displayName: canonicalName.charAt(0).toUpperCase() + canonicalName.slice(1)
                 }, canonicalName);
-                if (fallbackConfig.name === 'tlink-agentic' || fallbackConfig.name === 'tlink-proxy') {
+                if (fallbackConfig.name === 'tlink-agentic' || fallbackConfig.name === 'tlink-proxy' || fallbackConfig.name === 'tlink-agent') {
                     fallbackConfig.displayName = 'Tlink Agentic';
-                }
-                if (fallbackConfig.name === 'tlink-agent') {
-                    fallbackConfig.displayName = 'Tlink Agent';
                 }
                 this.modelOptions.unshift({
                     name: canonicalName,
@@ -423,11 +422,8 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
         const status = this.aiService.getProviderStatus();
         const label = (name: string | undefined | null): string => {
             if (!name) return 'none';
-            if (name === 'tlink-agentic' || name === 'tlink-proxy') {
+            if (name === 'tlink-agentic' || name === 'tlink-proxy' || name === 'tlink-agent') {
                 return 'Tlink Agentic';
-            }
-            if (name === 'tlink-agent') {
-                return 'Tlink Agent';
             }
             const cfg = this.config.getProviderConfig(name);
             if (cfg?.displayName) return cfg.displayName;
@@ -1196,19 +1192,24 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
         try {
             // 使用 marked 库渲染 Markdown
             const { marked } = require('marked');
+            const renderer = new marked.Renderer();
+            // Disallow raw HTML from markdown input to avoid XSS sanitizer stripping warnings.
+            renderer.html = ({ text }: { text: string }) => this.escapeHtml(text ?? '');
 
             // 配置 marked 选项
             marked.setOptions({
                 breaks: true,       // 支持换行
                 gfm: true,          // 支持 GitHub Flavored Markdown
                 headerIds: false,   // 不生成标题 ID
-                mangle: false       // 不转义邮箱
+                mangle: false,      // 不转义邮箱
+                renderer,
             });
 
-            return marked.parse(content);
+            const rendered = marked.parse(content);
+            return this.sanitizeRenderedMarkdown(rendered);
         } catch (e) {
             // 如果 marked 失败，使用基本格式化
-            return content
+            const fallback = content
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
@@ -1216,6 +1217,7 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                 .replace(/\*(.*?)\*/g, '<em>$1</em>')
                 .replace(/`(.*?)`/g, '<code>$1</code>');
+            return this.sanitizeRenderedMarkdown(fallback);
         }
     }
 
@@ -1377,10 +1379,18 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
     }
 
     onAgentEngineChange(value: string): void {
-        const normalized = (value || 'continue').toLowerCase();
+        const normalized = this.normalizeAgentEngine(value);
         this.selectedAgentEngine = normalized;
         this.config.set('agentEngine', normalized);
         this.logger.info('Agent engine updated', { engine: normalized });
+    }
+
+    private normalizeAgentEngine(value: string): 'langgraph' | 'legacy' {
+        const normalized = (value || 'langgraph').toLowerCase();
+        if (normalized === 'legacy') {
+            return 'legacy';
+        }
+        return 'langgraph';
     }
 
     openWorkdirPicker(): void {
@@ -1473,5 +1483,50 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    private sanitizeRenderedMarkdown(html: string): string {
+        if (!html) {
+            return '';
+        }
+
+        const container = document.createElement('div');
+        container.innerHTML = html;
+
+        container.querySelectorAll<HTMLAnchorElement>('a[href]').forEach(link => {
+            const href = (link.getAttribute('href') ?? '').trim();
+            if (!this.isSafeMarkdownLink(href)) {
+                link.removeAttribute('href');
+                return;
+            }
+            link.setAttribute('target', '_blank');
+            link.setAttribute('rel', 'noopener noreferrer');
+        });
+
+        container.querySelectorAll<HTMLImageElement>('img[src]').forEach(image => {
+            const src = (image.getAttribute('src') ?? '').trim();
+            if (!this.isSafeMarkdownLink(src)) {
+                image.remove();
+            }
+        });
+
+        return container.innerHTML;
+    }
+
+    private isSafeMarkdownLink(value: string): boolean {
+        if (!value) {
+            return false;
+        }
+        const normalized = value.trim().toLowerCase();
+        return (
+            normalized.startsWith('https://') ||
+            normalized.startsWith('http://') ||
+            normalized.startsWith('mailto:') ||
+            normalized.startsWith('tel:') ||
+            normalized.startsWith('/') ||
+            normalized.startsWith('./') ||
+            normalized.startsWith('../') ||
+            normalized.startsWith('#')
+        );
     }
 }

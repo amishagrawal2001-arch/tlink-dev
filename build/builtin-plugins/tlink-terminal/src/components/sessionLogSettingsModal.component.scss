@@ -1,5 +1,55 @@
+:host {
+    display: block;
+    color: var(--theme-fg);
+}
+
+.modal-header,
+.modal-body,
+.modal-footer {
+    background: var(--theme-bg);
+    color: var(--theme-fg);
+}
+
 .modal-body {
+    .form-label,
+    .form-check-label {
+        color: var(--theme-fg);
+    }
+
+    .text-muted,
     .form-text {
-        opacity: 0.7;
+        color: var(--theme-fg-more) !important;
+    }
+
+    .form-control {
+        background-color: var(--theme-bg-more);
+        border-color: var(--theme-bg-less);
+        color: var(--theme-fg);
+    }
+
+    .form-control::placeholder {
+        color: var(--theme-fg-more-2);
+    }
+
+    .form-control:focus {
+        background-color: var(--theme-bg-more);
+        border-color: var(--theme-primary);
+        color: var(--theme-fg);
+        box-shadow: 0 0 0 0.15rem rgba(var(--bs-primary-rgb), 0.15);
+    }
+
+    .form-check-input {
+        background-color: var(--theme-bg-more);
+        border: 1px solid var(--theme-fg-more);
+    }
+
+    .form-check-input:focus {
+        border-color: var(--theme-primary);
+        box-shadow: 0 0 0 0.15rem rgba(var(--bs-primary-rgb), 0.15);
+    }
+
+    .form-check-input:checked {
+        background-color: var(--theme-primary);
+        border-color: var(--theme-primary);
     }
 }

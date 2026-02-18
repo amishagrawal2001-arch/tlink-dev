@@ -40,6 +40,44 @@ export class TabbyProviderService extends BaseAiProvider {
         this.initializeClient();
     }
 
+    private normalizeBaseURL(url: string): string {
+        if (!url) {
+            return '';
+        }
+        let base = url.trim().replace(/\/+$/, '');
+        base = base.replace(/(?:\/v1beta|\/v1)+$/, '');
+        return base;
+    }
+
+    private async postChatCompletions(payload: any, axiosOptions: any = {}): Promise<any> {
+        if (!this.client) {
+            throw new Error('Tabby client not initialized');
+        }
+
+        const endpoints = ['/v1beta/chat/completions', '/v1/chat/completions', '/chat/completions'];
+        let lastError: any;
+
+        for (let i = 0; i < endpoints.length; i++) {
+            const endpoint = endpoints[i];
+            try {
+                return await this.client.post(endpoint, payload, axiosOptions);
+            } catch (error: any) {
+                const status = error?.response?.status;
+                const isLast = i === endpoints.length - 1;
+
+                if (status === 404 && !isLast) {
+                    this.logger.warn('Tabby endpoint returned 404, trying fallback endpoint', { endpoint });
+                    lastError = error;
+                    continue;
+                }
+
+                throw error;
+            }
+        }
+
+        throw lastError || new Error('Tabby chat endpoint unavailable');
+    }
+
     private initializeClient(): void {
         if (!this.config?.apiKey) {
             this.logger.warn('Tabby API key not provided');
@@ -47,8 +85,14 @@ export class TabbyProviderService extends BaseAiProvider {
         }
 
         try {
+            const normalizedBaseURL = this.normalizeBaseURL(this.getBaseURL());
+            if (!normalizedBaseURL) {
+                this.logger.warn('Tabby server URL is empty after normalization');
+                return;
+            }
+
             this.client = axios.create({
-                baseURL: this.getBaseURL(),
+                baseURL: normalizedBaseURL,
                 timeout: this.getTimeout(),
                 headers: {
                     'Authorization': `Bearer ${this.config.apiKey}`,
@@ -57,7 +101,7 @@ export class TabbyProviderService extends BaseAiProvider {
             });
 
             this.logger.info('Tabby client initialized', {
-                baseURL: this.getBaseURL(),
+                baseURL: normalizedBaseURL,
                 model: this.config.model || 'default'
             });
         } catch (error) {
@@ -76,7 +120,7 @@ export class TabbyProviderService extends BaseAiProvider {
         try {
             // Tabby doesn't properly support stream:false, so we use streaming and collect the result
             const response = await this.withRetry(async () => {
-                const result = await this.client!.post('/v1/chat/completions', {
+                const result = await this.postChatCompletions({
                     model: this.config?.model || 'default',
                     messages: this.transformMessages(request.messages),
                     max_tokens: request.maxTokens || this.config?.maxTokens,
@@ -152,7 +196,7 @@ export class TabbyProviderService extends BaseAiProvider {
                     const useStreamingResponse = typeof window === 'undefined';
                     const responseType: any = useStreamingResponse ? 'stream' : 'text';
 
-                    const response = await this.client!.post('/v1/chat/completions', {
+                    const response = await this.postChatCompletions({
                         model: this.config?.model || 'default',
                         messages: this.transformMessages(request.messages),
                         max_tokens: request.maxTokens || this.config?.maxTokens,
@@ -308,7 +352,7 @@ export class TabbyProviderService extends BaseAiProvider {
             throw new Error('Tabby client not initialized');
         }
 
-        const response = await this.client.post('/v1/chat/completions', {
+        const response = await this.postChatCompletions({
             model: this.config?.model || 'default',
             messages: this.transformMessages(request.messages),
             max_tokens: request.maxTokens || 1,

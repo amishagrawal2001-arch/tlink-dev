@@ -9,6 +9,8 @@ export declare class OpenCopilotTool extends BaseTool {
     constructor(app: AppService, logger: McpLoggerService);
     private openCopilotWithTcp;
     private openCopilotWithShell;
+    private getCopilotOpenCommands;
+    private tryOpenCopilotCommand;
     getTool(): {
         name: string;
         description: string;

@@ -42,6 +42,23 @@
     &.local .section-header i {
         color: #00bcd4;
     }
+
+    &.tabby-server-section {
+        .section-header i {
+            color: #ff9800;
+        }
+
+        .tabby-server-card {
+            background: var(--ai-bg-secondary);
+            border: 1px solid var(--ai-border);
+            border-radius: 12px;
+            padding: 0 16px 16px;
+        }
+
+        .tabby-server-config {
+            padding-top: 16px;
+        }
+    }
 }
 
 /* 卡片网格 */
@@ -237,16 +254,209 @@
                     text-decoration: underline;
                 }
             }
+
+            .tabby-guide-links {
+                display: inline-flex;
+                align-items: center;
+                gap: 10px;
+                justify-content: flex-end;
+                flex-wrap: wrap;
+            }
         }
 
         .tabby-guide-command {
             margin-top: 8px;
         }
 
+        .tabby-current-url {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            font-size: 12px;
+            color: var(--ai-text-secondary);
+
+            span {
+                font-weight: 500;
+                color: var(--ai-text-primary);
+            }
+
+            code {
+                padding: 4px 8px;
+                border-radius: 6px;
+                background: var(--ai-bg-primary);
+                border: 1px solid var(--ai-border);
+                color: var(--ai-text-primary);
+                word-break: break-all;
+            }
+        }
+
+        .tabby-guide-actions {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .tabby-model-manager {
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid rgba(0, 123, 255, 0.25);
+            border-radius: 8px;
+            background: rgba(0, 123, 255, 0.06);
+        }
+
+        .tabby-model-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+            font-size: 12px;
+            color: var(--ai-text-primary);
+
+            span {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                font-weight: 600;
+            }
+
+            a {
+                color: var(--ai-primary);
+                text-decoration: none;
+
+                &:hover {
+                    text-decoration: underline;
+                }
+            }
+        }
+
+        .tabby-model-actions {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .tabby-installed-empty {
+            font-size: 12px;
+            color: var(--ai-text-secondary);
+            line-height: 1.45;
+            margin-top: 4px;
+        }
+
+        .tabby-installed-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 6px;
+        }
+
+        .tabby-model-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid var(--ai-border);
+            background: var(--ai-bg-primary);
+            color: var(--ai-text-primary);
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 12px;
+
+            .fa-check-circle {
+                color: #4caf50;
+            }
+
+            .fa-exclamation-circle {
+                color: #ff9800;
+            }
+        }
+
+        .tabby-model-install-row {
+            display: grid;
+            grid-template-columns: minmax(120px, 160px) minmax(200px, 1fr) minmax(200px, 1fr) auto;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .tabby-model-control-grid {
+            display: grid;
+            grid-template-columns: minmax(120px, 180px) minmax(220px, 1fr) auto;
+            gap: 8px 10px;
+            align-items: center;
+            margin-top: 6px;
+
+            label {
+                margin: 0;
+                font-size: 12px;
+                color: var(--ai-text-secondary);
+            }
+        }
+
+        .tabby-install-inline-btn {
+            min-width: 92px;
+            justify-content: center;
+        }
+
+        .tabby-model-input {
+            width: 100%;
+            min-width: 0;
+            padding: 7px 10px;
+            border: 1px solid var(--ai-border);
+            border-radius: 6px;
+            background: var(--ai-bg-primary);
+            color: var(--ai-text-primary);
+            font-size: 12px;
+        }
+
+        .tabby-platform-note {
+            margin-bottom: 10px;
+            font-size: 12px;
+            color: var(--ai-text-secondary);
+        }
+
+        .installer-action-btn {
+            border: 1px solid rgba(0, 123, 255, 0.45);
+            background: rgba(0, 123, 255, 0.18);
+            color: var(--ai-text-primary);
+            border-radius: 6px;
+            padding: 7px 12px;
+            cursor: pointer;
+            font-size: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+
+            &:hover:not(:disabled) {
+                border-color: var(--ai-primary);
+                background: rgba(0, 123, 255, 0.25);
+            }
+
+            &:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
+        }
+
         .command-label {
             font-size: 12px;
             color: var(--ai-text-secondary);
             margin-bottom: 4px;
+        }
+
+        .tabby-guide-note {
+            margin-top: 6px;
+            font-size: 12px;
+            color: var(--ai-text-secondary);
+
+            a {
+                color: var(--ai-primary);
+                text-decoration: none;
+
+                &:hover {
+                    text-decoration: underline;
+                }
+            }
         }
 
         .command-row {
@@ -280,6 +490,16 @@
             &:hover {
                 border-color: var(--ai-primary);
                 color: var(--ai-primary);
+            }
+        }
+
+        @media (max-width: 900px) {
+            .tabby-model-install-row {
+                grid-template-columns: 1fr;
+            }
+
+            .tabby-model-control-grid {
+                grid-template-columns: 1fr;
             }
         }
     }
@@ -758,6 +978,11 @@
     }
 
     .config-form .tabby-install-guide .command-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .config-form .tabby-install-guide .tabby-guide-actions {
         flex-direction: column;
         align-items: stretch;
     }

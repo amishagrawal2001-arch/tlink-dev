@@ -29,6 +29,11 @@ appearance:
   sidePanelFontSize: 9
   sidePanelOrder: []
   leftDockOrder: []
+  leftDockGroups: []
+  leftDockGroup:
+    - profiles
+    - ai-assistant
+    - tabby-url
   sidePanelColors:
     __nonStructural: true
 terminal:

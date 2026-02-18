@@ -2,8 +2,10 @@ import { ElementRef, Injector } from '@angular/core';
 import { AppService, BaseTabComponent, NotificationsService, PlatformService, ProfilesService } from 'tlink-core';
 import { PasswordStorageService } from 'tlink-ssh';
 import { BaseTerminalTabComponent } from 'tlink-terminal';
-type ChatProvider = 'openai' | 'openai-compatible' | 'groq' | 'anthropic' | 'gemini' | 'ollama';
+type ChatProvider = 'openai' | 'openai-compatible' | 'groq' | 'anthropic' | 'gemini' | 'ollama' | 'tlink-agentic';
+type AgentIntent = 'auto' | 'code' | 'translate' | 'summarize' | 'vision' | 'audio' | 'default';
 interface ChatMessage {
+    id: string;
     role: 'user' | 'assistant' | 'error';
     label: string;
     content: string;
@@ -27,6 +29,12 @@ interface ProviderDefinition {
     requiresApiKey: boolean;
     envPrefix: string;
 }
+interface AgentSettings {
+    enabled: boolean;
+    maxRounds: number;
+    intent: AgentIntent;
+    autoRunSafeCommands: boolean;
+}
 type DeviceVendor = 'juniper' | 'cisco' | 'arista';
 type DeviceVariant = 'junos' | 'evo' | 'onie' | 'ios' | 'ios-xe' | 'ios-xr' | 'nx-os' | 'eos';
 interface NetworkAssistantSettings {
@@ -39,6 +47,7 @@ interface NetworkAssistantSettings {
     role: string;
     includeLastOutput: boolean;
     allowCommandRun: boolean;
+    dryRunCommandMode: boolean;
     autoTroubleshootAfterCommand: boolean;
     allowlistByVariant: CommandAllowlist;
     redactSensitiveData: boolean;
@@ -58,6 +67,7 @@ interface SuggestedCommand {
     id: string;
     command: string;
     safe: boolean;
+    risk: 'low' | 'medium' | 'high';
     reason?: string;
 }
 type CommandAllowlist = Partial<Record<DeviceVariant, string[]>>;
@@ -139,7 +149,14 @@ export declare class ChatTabComponent extends BaseTabComponent {
     effectiveBaseUrl: string;
     systemPromptSet: boolean;
     missingApiKey: boolean;
+    agentModeSupported: boolean;
+    agentModeActive: boolean;
     networkForm: NetworkAssistantSettings;
+    agentForm: AgentSettings;
+    agentIntentOptions: Array<{
+        id: AgentIntent;
+        label: string;
+    }>;
     networkVendors: NetworkOption[];
     networkVariants: NetworkOption[];
     terminalTargets: TerminalTarget[];
@@ -170,6 +187,9 @@ export declare class ChatTabComponent extends BaseTabComponent {
     redactionPreview: string;
     redactionPreviewVisible: boolean;
     quickQuestionEditMode: boolean;
+    providerDiagnosticsRunning: boolean;
+    providerDiagnosticsStatus: 'idle' | 'success' | 'error';
+    providerDiagnosticsMessage: string;
     private activeTerminal?;
     private terminalOutputSubscription?;
     private terminalIdByTab;
@@ -179,8 +199,12 @@ export declare class ChatTabComponent extends BaseTabComponent {
     private pendingCommandAnalysis?;
     private activityFilterPersistTimeout?;
     private quickQuestionPersistTimeout?;
+    private chatHistoryPersistTimeout?;
     private lastProvider;
     private ollamaPullInProgress;
+    private activeRequestController?;
+    private activeRequestAbortReason;
+    private lastAgentCompatibilityWarningForProvider;
     constructor(notifications: NotificationsService, app: AppService, platform: PlatformService, profilesService: ProfilesService, passwordStorage: PasswordStorageService, injector: Injector);
     ngOnInit(): void;
     onGlobalKeydown(event: KeyboardEvent): void;
@@ -196,6 +220,7 @@ export declare class ChatTabComponent extends BaseTabComponent {
     onInputKeydown(event: KeyboardEvent): void;
     onDraftInput(event: Event): void;
     clear(): void;
+    cancelActiveRequest(): void;
     clearActivityLog(): void;
     toggleExportMenu(): void;
     closeExportMenu(): void;
@@ -234,6 +259,7 @@ export declare class ChatTabComponent extends BaseTabComponent {
     onProviderChange(): void;
     onNetworkVendorChange(): void;
     onNetworkSettingsChange(): void;
+    onAgentSettingsChange(): void;
     onAllowlistChange(): void;
     resetAllowlist(): void;
     onTerminalTargetChange(): void;
@@ -245,9 +271,22 @@ export declare class ChatTabComponent extends BaseTabComponent {
     saveSettings(): void;
     clearApiKey(): void;
     getProviderLabel(provider: ChatProvider): string;
+    testProviderConnection(): Promise<void>;
+    private resetProviderDiagnostics;
+    private validateProfileInput;
+    private validateEffectiveSettings;
+    private runProviderDiagnostics;
+    private runOpenAiDiagnostics;
+    private runAnthropicDiagnostics;
+    private runGeminiDiagnostics;
     private loadProfiles;
     private loadActiveProfileForm;
     private persistProfiles;
+    private loadChatHistory;
+    private normalizeChatMessage;
+    private scheduleChatHistoryPersist;
+    private persistChatHistory;
+    private removeChatHistoryForProfile;
     private createProfileFromLegacy;
     private createProfile;
     private createProfileName;
@@ -256,6 +295,7 @@ export declare class ChatTabComponent extends BaseTabComponent {
     private findProfile;
     private getActiveProfile;
     private refreshEffectiveSettings;
+    private supportsAgentProvider;
     private updateEnvStatus;
     private normalizeTemperature;
     private normalizeMaxTokens;
@@ -265,10 +305,26 @@ export declare class ChatTabComponent extends BaseTabComponent {
     private buildOpenAiMessages;
     private buildGeminiContents;
     private requestCompletion;
+    private getAgentToolDefinitions;
+    private requestAgentCompletion;
+    private extractOpenAiMessageContent;
+    private parseAgentToolArgs;
+    private executeAgentToolCall;
+    private agentToolListTerminalTargets;
+    private agentToolSelectTerminalTarget;
+    private agentToolGetTerminalOutput;
+    private agentToolRunTerminalCommand;
+    private agentToolOpenConnection;
+    private agentToolDisconnectConnection;
+    private serializeAgentToolResult;
     private requestOpenAi;
     private requestAnthropic;
     private requestGemini;
     private fetchPayload;
+    private reportRequestFailure;
+    private shouldRetryStatus;
+    private getRetryDelayMs;
+    private delay;
     private readEventStream;
     private handleRawResponse;
     private getOllamaErrorMessage;
@@ -277,7 +333,13 @@ export declare class ChatTabComponent extends BaseTabComponent {
     private pullOllamaModel;
     private queueOllamaModelPull;
     private appendMessage;
+    private updateMessageContent;
+    private removeMessageById;
     private getDraftValue;
+    private loadAgentSettings;
+    private normalizeAgentSettings;
+    private normalizeAgentIntent;
+    private persistAgentSettings;
     private loadNetworkSettings;
     private loadQuickQuestions;
     private normalizeQuickQuestion;
@@ -363,9 +425,7 @@ export declare class ChatTabComponent extends BaseTabComponent {
     private normalizeCloseTarget;
     private normalizeOpenTargets;
     private extractPatternTargetFromPhrase;
-    private isPatternTarget;
     private buildTargetMatcher;
-    private parseRegexLiteral;
     private tabMatchesTargets;
     private getTabCandidates;
     private parseGroupTarget;
@@ -381,14 +441,9 @@ export declare class ChatTabComponent extends BaseTabComponent {
     private splitTargets;
     private getConnectionProtocol;
     private getDisconnectProtocol;
-    private isDisconnectIntent;
     private isReconnectIntent;
     private isDisconnectAllPrompt;
-    private isSshConnectionIntent;
     private cleanConnectionTarget;
-    private normalizeHostToken;
-    private stripLeadingStopwords;
-    private stripCredentialSuffix;
     private getOllamaSettingsForExtraction;
     private extractTargetWithLocalLlm;
     private resolveProfilesForTarget;
@@ -434,7 +489,7 @@ export declare class ChatTabComponent extends BaseTabComponent {
     copyMessage(message: ChatMessage): void;
     toggleSuggestedCommands(): void;
     clearSuggestedCommands(): void;
-    runSuggestedCommand(command: string, safe: boolean, source?: string): Promise<void>;
+    runSuggestedCommand(command: string, safe: boolean, source?: string, risk?: 'low' | 'medium' | 'high', reason?: string): Promise<boolean>;
     private applyPaginationBypass;
     private getTerminalForRun;
     private scrollToBottom;

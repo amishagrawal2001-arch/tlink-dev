@@ -8,6 +8,7 @@ import { NotificationsService, PlatformService, TranslateService } from 'tlink-c
     styleUrls: ['./sessionLogSettingsModal.component.scss'],
 })
 export class SessionLogSettingsModalComponent {
+    @Input() enabled = true
     @Input() directory = ''
     @Input() filenameTemplate = ''
     @Input() append = false
@@ -36,6 +37,7 @@ export class SessionLogSettingsModalComponent {
 
     ok (): void {
         this.modalInstance.close({
+            enabled: this.enabled,
             directory: this.directory,
             filenameTemplate: this.filenameTemplate,
             append: this.append,

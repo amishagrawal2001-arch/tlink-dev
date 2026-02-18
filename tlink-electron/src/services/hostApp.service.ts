@@ -29,6 +29,11 @@ export class ElectronHostAppService extends HostAppService {
         electron.ipcRenderer.on('host:command-window-bottom', () => this.zone.run(() => this.commandWindowBottomRequest.next()))
         electron.ipcRenderer.on('host:button-bar', () => this.zone.run(() => this.buttonBarToggleRequest.next()))
         electron.ipcRenderer.on('host:session-manager', () => this.zone.run(() => this.sessionManagerRequest.next()))
+        electron.ipcRenderer.on('host:set-session-log-file', () => this.zone.run(() => this.sessionLogFileRequest.next()))
+        electron.ipcRenderer.on('host:workspace-save', () => this.zone.run(() => this.workspaceSaveRequest.next()))
+        electron.ipcRenderer.on('host:workspace-load', () => this.zone.run(() => this.workspaceLoadRequest.next()))
+        electron.ipcRenderer.on('host:workspace-export', () => this.zone.run(() => this.workspaceExportRequest.next()))
+        electron.ipcRenderer.on('host:workspace-import', () => this.zone.run(() => this.workspaceImportRequest.next()))
         electron.ipcRenderer.on('host:open-ai-assistant', (_$event, fullWindowMode?: boolean) => this.zone.run(() => {
             // Store the full window mode flag
             ;(window as any).__aiAssistantFullWindowMode = !!fullWindowMode

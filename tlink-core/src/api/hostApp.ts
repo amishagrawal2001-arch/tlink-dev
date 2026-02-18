@@ -21,6 +21,11 @@ export abstract class HostAppService {
     protected commandWindowBottomRequest = new Subject<void>()
     protected buttonBarToggleRequest = new Subject<void>()
     protected sessionManagerRequest = new Subject<void>()
+    protected sessionLogFileRequest = new Subject<void>()
+    protected workspaceSaveRequest = new Subject<void>()
+    protected workspaceLoadRequest = new Subject<void>()
+    protected workspaceExportRequest = new Subject<void>()
+    protected workspaceImportRequest = new Subject<void>()
     protected aiAssistantRequest = new Subject<void>()
     protected configChangeBroadcast = new Subject<void>()
     protected logger: Logger
@@ -37,6 +42,7 @@ export abstract class HostAppService {
      * Fired when Command Window is selected from the menu
      */
     get commandWindowRequest$ (): Observable<void> { return this.commandWindowRequest }
+
     /**
      * Fired when Command Window (Bottom) is selected from the menu
      */
@@ -53,6 +59,26 @@ export abstract class HostAppService {
      * Fired when Session Manager is selected from the menu
      */
     get sessionManagerRequest$ (): Observable<void> { return this.sessionManagerRequest }
+    /**
+     * Fired when Set session log file is selected from the menu
+     */
+    get sessionLogFileRequest$ (): Observable<void> { return this.sessionLogFileRequest }
+    /**
+     * Fired when Save Workspace is selected from the menu
+     */
+    get workspaceSaveRequest$ (): Observable<void> { return this.workspaceSaveRequest }
+    /**
+     * Fired when Load Workspace is selected from the menu
+     */
+    get workspaceLoadRequest$ (): Observable<void> { return this.workspaceLoadRequest }
+    /**
+     * Fired when Export Workspace is selected from the menu
+     */
+    get workspaceExportRequest$ (): Observable<void> { return this.workspaceExportRequest }
+    /**
+     * Fired when Import Workspace is selected from the menu
+     */
+    get workspaceImportRequest$ (): Observable<void> { return this.workspaceImportRequest }
 
     /**
      * Fired when another window modified the config file

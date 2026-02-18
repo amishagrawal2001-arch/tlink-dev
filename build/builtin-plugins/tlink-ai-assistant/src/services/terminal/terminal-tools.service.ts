@@ -3,6 +3,7 @@ import { TerminalManagerService, TerminalInfo } from './terminal-manager.service
 import { LoggerService } from '../core/logger.service';
 import { ConfigProviderService } from '../core/config-provider.service';
 import { EditorIntegrationService } from '../editor/editor-integration.service';
+import { McpToolBridgeService } from '../tools/mcp-tool-bridge.service';
 
 /**
  * Terminal tool definitions
@@ -522,7 +523,8 @@ Note: If there are still incomplete tasks, please complete them first before cal
         private terminalManager: TerminalManagerService,
         private logger: LoggerService,
         private config: ConfigProviderService,
-        private editorIntegration: EditorIntegrationService
+        private editorIntegration: EditorIntegrationService,
+        private mcpToolBridge: McpToolBridgeService
     ) {
         // No longer need static subscription to output, read directly from xterm buffer dynamically
     }
@@ -531,7 +533,7 @@ Note: If there are still incomplete tasks, please complete them first before cal
      * Get all tool definitions (including MCP tools)
      */
     getToolDefinitions(): ToolDefinition[] {
-        return [...this.tools];
+        return [...this.tools, ...this.mcpToolBridge.getToolDefinitions() as ToolDefinition[]];
     }
 
     /**
@@ -547,7 +549,7 @@ Note: If there are still incomplete tasks, please complete them first before cal
 
         // Validate tool name is in available tools list
         const availableTools = this.getToolDefinitions();
-        const toolExists = availableTools.some(t => t.name === toolCall.name);
+        const toolExists = availableTools.some(t => t.name === toolCall.name) || this.mcpToolBridge.canHandleTool(toolCall.name);
         
         if (!toolExists) {
             const errorMsg = `Unknown tool: "${toolCall.name}". Available tools: ${availableTools.map(t => t.name).join(', ')}`;
@@ -692,6 +694,10 @@ Note: If there are still incomplete tasks, please complete them first before cal
                     );
                     break;
                 default:
+                    if (this.mcpToolBridge.canHandleTool(toolCall.name)) {
+                        result = await this.mcpToolBridge.executeTool(toolCall.name, toolCall.input || {});
+                        break;
+                    }
                     throw new Error(`Unknown tool: ${toolCall.name}`);
             }
 

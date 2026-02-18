@@ -14,7 +14,7 @@
     --tabs-height: calc(38px * var(--spaciness));
     --side-tab-width: calc(200px * var(--spaciness));
     --left-dock-width: 48px;
-    --right-dock-width: 32px;
+    --right-dock-width: 46px;
 }
 
 $tab-border-radius: 4px;
@@ -128,6 +128,13 @@ $tab-border-radius: 4px;
         cursor: default;
     }
 
+    &.group-drop-target {
+        border-color: rgba(var(--bs-primary-rgb), 0.95);
+        background: rgba(var(--bs-primary-rgb), 0.18);
+        color: var(--theme-fg-more-2);
+        box-shadow: 0 0 0 2px rgba(var(--bs-primary-rgb), 0.25);
+    }
+
     &.active {
         background: var(--theme-bg-more);
         border-color: var(--theme-bg-less);
@@ -135,6 +142,23 @@ $tab-border-radius: 4px;
         
         &:hover {
             background: var(--theme-bg-more-2);
+        }
+    }
+
+    &.grouped {
+        background: transparent;
+        border-color: transparent;
+        color: var(--theme-fg-more-2);
+        border-radius: 999px;
+
+        &:hover:not(.disabled) {
+            background: var(--theme-bg-more-2);
+            border-color: transparent;
+        }
+
+        &.active {
+            background: var(--theme-bg-more-2);
+            border-color: var(--theme-bg-less);
         }
     }
 
@@ -155,6 +179,24 @@ $tab-border-radius: 4px;
         font-size: 18px;
         line-height: 1;
     }
+}
+
+.left-dock-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: calc(100% - 6px);
+    box-sizing: border-box;
+    padding: 8px 4px;
+    border-radius: 22px;
+    background: var(--theme-bg-more);
+    border: 1px solid var(--theme-bg-less);
+}
+
+.left-dock-group-button.left-dock-button {
+    width: 32px;
+    height: 32px;
 }
 
 .right-dock {
@@ -410,6 +452,17 @@ $tab-border-radius: 4px;
         align-items: center;
     }
 
+    .shortcut-spacer {
+        flex: 1 1 auto;
+    }
+
+    .shortcut-toolbar {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+        margin-left: auto;
+    }
+
     .btn-icon {
         display: inline-flex;
         align-items: center;
@@ -445,6 +498,34 @@ $tab-border-radius: 4px;
 
             &:disabled {
                 opacity: 0.6;
+            }
+        }
+
+        &.toolbar-icon-button {
+            border: none;
+            background: transparent;
+            color: var(--theme-fg-more);
+            padding: 2px;
+
+            &:hover:not(:disabled) {
+                background: var(--theme-bg-more);
+                color: var(--theme-fg-more-2);
+            }
+
+            &.active {
+                background: var(--theme-bg-more-2);
+                color: var(--theme-fg-more-2);
+            }
+
+            &:disabled {
+                opacity: 0.6;
+            }
+
+            i.fas,
+            i.far,
+            i.fab {
+                font-size: 13px;
+                line-height: 1;
             }
         }
     }
@@ -520,8 +601,14 @@ $tab-border-radius: 4px;
 .side-panel-tabs {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
     align-items: center;
+    width: calc(100% - 6px);
+    box-sizing: border-box;
+    padding: 8px 4px;
+    border-radius: 22px;
+    background: var(--theme-bg-more);
+    border: 1px solid var(--theme-bg-less);
 }
 
 .side-panel-toggle.cdk-drag-preview {
@@ -535,13 +622,15 @@ $tab-border-radius: 4px;
 .side-panel-toggle {
     pointer-events: auto;
     --side-panel-accent-rgb: var(--bs-primary-rgb);
-    background: rgba(var(--side-panel-accent-rgb), 0.14);
+    background: rgba(var(--side-panel-accent-rgb), 0.1);
     color: var(--side-panel-text-color-active, var(--theme-fg));
-    border: 1px solid rgba(var(--side-panel-accent-rgb), 0.35);
-    border-right: none;
-    border-radius: 0;
-    padding: 6px 6px;
-    min-width: 24px;
+    border: 1px solid rgba(var(--side-panel-accent-rgb), 0.3);
+    border-radius: 999px;
+    padding: 6px 5px;
+    min-width: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
     user-select: none;
     writing-mode: vertical-rl;
@@ -557,10 +646,10 @@ $tab-border-radius: 4px;
 }
 
 .side-panel-toggle.is-open {
-    background: rgba(var(--side-panel-accent-rgb), 0.5);
+    background: rgba(var(--side-panel-accent-rgb), 0.34);
     border-color: rgba(var(--side-panel-accent-rgb), 0.85);
     color: var(--side-panel-text-color-active, var(--theme-fg));
-    box-shadow: inset 3px 0 0 rgba(var(--side-panel-accent-rgb), 0.95);
+    box-shadow: 0 0 0 1px rgba(var(--side-panel-accent-rgb), 0.3);
 }
 
 .side-panel-toggle span {

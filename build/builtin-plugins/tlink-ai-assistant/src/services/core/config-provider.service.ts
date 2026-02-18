@@ -81,7 +81,7 @@ const DEFAULT_CONFIG: AiAssistantConfig = {
         compactMode: false,
         fontSize: 14
     },
-    agentEngine: 'continue',
+    agentEngine: 'langgraph',
     agentPlannerEnabled: true,
     agentReviewerEnabled: true,
     agentMaxRounds: 50,

@@ -52,7 +52,7 @@ export class GeneralSettingsComponent implements OnInit, OnDestroy {
         'glm': 'GLM (ChatGLM)',
         'openai-compatible': 'OpenAI Compatible',
         'tlink-agentic': 'Tlink Agentic',
-        'tlink-agent': 'Tlink Agent',
+        'tlink-agent': 'Tlink Agentic',
         // Legacy alias for backward compatibility
         'tlink-proxy': 'Tlink Agentic',
         'ollama': 'Ollama (Local)',
@@ -185,7 +185,7 @@ export class GeneralSettingsComponent implements OnInit, OnDestroy {
             'vllm': 'Locally running vLLM service (port 8000)',
             'tabby': 'Self-hosted Tabby server (default port 8080)',
             'tlink-agentic': 'Tlink Agentic gateway (agent tools enabled)',
-            'tlink-agent': 'Tlink Agent gateway (alias of Agentic)'
+            'tlink-agent': 'Tlink Agentic gateway (legacy alias)'
         };
         return descriptions[key] || `${this.providerNames[key] || key} provider`;
     }

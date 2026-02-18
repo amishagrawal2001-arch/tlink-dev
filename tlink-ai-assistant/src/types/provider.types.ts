@@ -157,18 +157,6 @@ export const PROVIDER_DEFAULTS: Record<string, ProviderDefaults> = {
         authConfig: { type: 'none', credentials: {} },  // No API key needed - proxy handles auth
         displayName: 'Tlink Agentic'
     },
-    // Separate agent provider (keeps its own config)
-    'tlink-agent': {
-        baseURL: 'http://localhost:3052/v1',
-        model: 'auto',
-        maxTokens: 1000,
-        temperature: 0.7,
-        timeout: 30000,
-        retries: 3,
-        contextWindow: 128000,
-        authConfig: { type: 'none', credentials: {} },
-        displayName: 'Tlink Agent'
-    },
     tabby: {
         baseURL: 'http://localhost:8080',
         model: 'default',
@@ -201,7 +189,7 @@ export namespace ProviderConfigUtils {
      */
     export function fillDefaults(config: Partial<ProviderConfig>, providerName: string): ProviderConfig {
         // Normalize legacy ids
-        const canonicalName = (providerName === 'tlink-proxy')
+        const canonicalName = (providerName === 'tlink-proxy' || providerName === 'tlink-agent')
             ? 'tlink-agentic'
             : providerName;
         const defaults = PROVIDER_DEFAULTS[canonicalName] || PROVIDER_DEFAULTS[providerName];
@@ -211,7 +199,7 @@ export namespace ProviderConfigUtils {
 
         // Normalize legacy display names for tlink Agentic
         let displayName = config.displayName || defaults.displayName || canonicalName;
-        if (providerName === 'tlink-proxy' || canonicalName === 'tlink-agentic') {
+        if (providerName === 'tlink-proxy' || providerName === 'tlink-agent' || canonicalName === 'tlink-agentic') {
             const legacy = displayName?.toLowerCase() || '';
             if (!displayName || legacy.includes('tlink edge')) {
                 displayName = 'Tlink Agentic';

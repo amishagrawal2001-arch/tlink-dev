@@ -6,12 +6,33 @@ import { AppService, BaseTabComponent, NotificationsService, PartialProfile, Pla
 import { PasswordStorageService, SSHProfile } from 'tlink-ssh'
 import { BaseTerminalTabComponent } from 'tlink-terminal'
 import { Subscription } from 'rxjs'
+import {
+    buildTargetMatcher as buildIntentTargetMatcher,
+    cleanConnectionTarget as cleanIntentConnectionTarget,
+    ConnectionProtocol,
+    extractPatternTargetFromPhrase as extractIntentPatternTargetFromPhrase,
+    getConnectionProtocol as getIntentConnectionProtocol,
+    getDisconnectProtocol as getIntentDisconnectProtocol,
+    isDisconnectAllPrompt as isIntentDisconnectAllPrompt,
+    isReconnectIntent as isIntentReconnectIntent,
+    normalizeGroupTarget as normalizeIntentGroupTarget,
+    normalizeOpenTargets as normalizeIntentOpenTargets,
+    parseDisconnectTargets as parseIntentDisconnectTargets,
+    ParsedSshCredentials,
+    ParsedSshHost,
+    parseGroupTarget as parseIntentGroupTarget,
+    parseHostTargets as parseIntentHostTargets,
+    parseHostToken as parseIntentHostToken,
+    parseSshCredentials as parseIntentSshCredentials,
+    splitTargets as splitIntentTargets,
+} from '../utils/connectionIntent.util'
 
 const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini'
 const DEFAULT_GROQ_MODEL = 'llama-3.1-8b-instant'
 const DEFAULT_ANTHROPIC_MODEL = 'claude-3-5-sonnet-20240620'
 const DEFAULT_GEMINI_MODEL = 'gemini-1.5-pro'
 const DEFAULT_OLLAMA_MODEL = 'llama3.1:8b'
+const DEFAULT_TLINK_AGENTIC_MODEL = 'auto'
 const LEGACY_OLLAMA_MODEL = 'llama3.1:8b-instruct'
 const DEFAULT_MAX_TOKENS = 512
 const DEFAULT_TEMPERATURE = 0.2
@@ -21,10 +42,13 @@ const DEFAULT_GROQ_BASE_URL = 'https://api.groq.com/openai/v1'
 const DEFAULT_ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1'
 const DEFAULT_GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1'
 const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434/v1'
+const DEFAULT_TLINK_AGENTIC_BASE_URL = 'http://localhost:3052/v1'
 
-type ChatProvider = 'openai' | 'openai-compatible' | 'groq' | 'anthropic' | 'gemini' | 'ollama'
+type ChatProvider = 'openai' | 'openai-compatible' | 'groq' | 'anthropic' | 'gemini' | 'ollama' | 'tlink-agentic'
+type AgentIntent = 'auto' | 'code' | 'translate' | 'summarize' | 'vision' | 'audio' | 'default'
 
 interface ChatMessage {
+    id: string
     role: 'user' | 'assistant' | 'error'
     label: string
     content: string
@@ -60,6 +84,10 @@ interface FetchContext {
     model: string
     baseUrl: string
     retry?: boolean
+    timeoutMs?: number
+    maxRetries?: number
+    silent?: boolean
+    onStreamChunk?: (content: string) => void
 }
 
 type OllamaPullState = 'started' | 'in-progress' | 'failed'
@@ -82,6 +110,21 @@ interface EnvOverrides {
     maxTokens?: number
 }
 
+interface AgentSettings {
+    enabled: boolean
+    maxRounds: number
+    intent: AgentIntent
+    autoRunSafeCommands: boolean
+}
+
+interface AgentToolExecutionResult {
+    ok: boolean
+    message: string
+    data?: unknown
+    terminate?: boolean
+    summary?: string
+}
+
 type DeviceVendor = 'juniper' | 'cisco' | 'arista'
 type DeviceVariant = 'junos' | 'evo' | 'onie' | 'ios' | 'ios-xe' | 'ios-xr' | 'nx-os' | 'eos'
 
@@ -95,6 +138,7 @@ interface NetworkAssistantSettings {
     role: string
     includeLastOutput: boolean
     allowCommandRun: boolean
+    dryRunCommandMode: boolean
     autoTroubleshootAfterCommand: boolean
     allowlistByVariant: CommandAllowlist
     redactSensitiveData: boolean
@@ -117,24 +161,11 @@ interface SuggestedCommand {
     id: string
     command: string
     safe: boolean
+    risk: 'low' | 'medium' | 'high'
     reason?: string
 }
 
 type CommandAllowlist = Partial<Record<DeviceVariant, string[]>>
-
-type ConnectionProtocol = 'ssh' | 'telnet'
-
-interface ParsedSshCredentials {
-    user?: string
-    password?: string
-    port?: number
-}
-
-interface ParsedSshHost {
-    host: string
-    user?: string
-    port?: number
-}
 
 interface PendingCommandAnalysis {
     command: string
@@ -190,11 +221,19 @@ const NETWORK_ASSISTANT_DEFAULTS: NetworkAssistantSettings = {
     role: '',
     includeLastOutput: true,
     allowCommandRun: true,
+    dryRunCommandMode: false,
     autoTroubleshootAfterCommand: true,
     allowlistByVariant: {},
     redactSensitiveData: false,
     autoAppendRunbookOutput: false,
     favoriteQuickActionsByVariant: {},
+}
+
+const AGENT_DEFAULTS: AgentSettings = {
+    enabled: false,
+    maxRounds: 4,
+    intent: 'auto',
+    autoRunSafeCommands: false,
 }
 
 const NETWORK_OUTPUT_MAX_CHARS = 6000
@@ -203,6 +242,13 @@ const RUNBOOK_OUTPUT_MAX_CHARS = 4000
 const COMMAND_ANALYSIS_DEBOUNCE_MS = 800
 const COMMAND_ANALYSIS_MAX_WAIT_MS = 8000
 const SESSION_LOG_SUMMARY_MAX_BYTES = 120_000
+const CHAT_REQUEST_TIMEOUT_MS = 45_000
+const CHAT_REQUEST_RETRY_BASE_DELAY_MS = 1200
+const CHAT_REQUEST_MAX_RETRIES = 1
+const CHAT_HISTORY_MAX_MESSAGES = 200
+const CHAT_HISTORY_PERSIST_DEBOUNCE_MS = 250
+const AGENT_MAX_ROUNDS_LIMIT = 12
+const AGENT_TOOL_RESULT_MAX_CHARS = 4000
 
 const DEVICE_VENDORS: NetworkOption[] = [
     { id: 'juniper', label: 'Juniper' },
@@ -692,9 +738,17 @@ const PROVIDER_BY_ID: Record<ChatProvider, ProviderDefinition> = {
         requiresApiKey: false,
         envPrefix: 'OLLAMA',
     },
+    'tlink-agentic': {
+        id: 'tlink-agentic',
+        label: 'Tlink Agentic',
+        defaultModel: DEFAULT_TLINK_AGENTIC_MODEL,
+        defaultBaseUrl: DEFAULT_TLINK_AGENTIC_BASE_URL,
+        requiresApiKey: false,
+        envPrefix: 'TLINK_AGENTIC',
+    },
 }
 
-const PROVIDER_ORDER: ChatProvider[] = ['ollama', 'openai', 'openai-compatible', 'groq', 'anthropic', 'gemini']
+const PROVIDER_ORDER: ChatProvider[] = ['ollama', 'tlink-agentic', 'openai', 'openai-compatible', 'groq', 'anthropic', 'gemini']
 
 function getProviderDefinition (provider: ChatProvider | string): ProviderDefinition {
     return PROVIDER_BY_ID[provider as ChatProvider] ?? PROVIDER_BY_ID.openai
@@ -703,6 +757,9 @@ function getProviderDefinition (provider: ChatProvider | string): ProviderDefini
 function normalizeProvider (provider: ChatProvider | string | undefined | null): ChatProvider {
     if (!provider) {
         return 'openai'
+    }
+    if (provider === 'tlink-agent' || provider === 'tlink-proxy') {
+        return 'tlink-agentic'
     }
     return provider in PROVIDER_BY_ID ? (provider as ChatProvider) : 'openai'
 }
@@ -792,8 +849,20 @@ export class ChatTabComponent extends BaseTabComponent {
     effectiveBaseUrl = DEFAULT_OLLAMA_BASE_URL
     systemPromptSet = false
     missingApiKey = false
+    agentModeSupported = true
+    agentModeActive = false
 
     networkForm: NetworkAssistantSettings = { ...NETWORK_ASSISTANT_DEFAULTS, autoAppendRunbookOutput: false }
+    agentForm: AgentSettings = { ...AGENT_DEFAULTS }
+    agentIntentOptions: Array<{ id: AgentIntent, label: string }> = [
+        { id: 'auto', label: 'Auto' },
+        { id: 'code', label: 'Code / Command' },
+        { id: 'translate', label: 'Translate' },
+        { id: 'summarize', label: 'Summarize' },
+        { id: 'vision', label: 'Vision' },
+        { id: 'audio', label: 'Audio' },
+        { id: 'default', label: 'General' },
+    ]
     networkVendors = DEVICE_VENDORS
     networkVariants = DEVICE_VARIANTS.juniper
 
@@ -825,6 +894,9 @@ export class ChatTabComponent extends BaseTabComponent {
     redactionPreview = ''
     redactionPreviewVisible = false
     quickQuestionEditMode = false
+    providerDiagnosticsRunning = false
+    providerDiagnosticsStatus: 'idle' | 'success' | 'error' = 'idle'
+    providerDiagnosticsMessage = ''
 
     private activeTerminal?: BaseTerminalTabComponent<any>
     private terminalOutputSubscription?: Subscription
@@ -835,8 +907,12 @@ export class ChatTabComponent extends BaseTabComponent {
     private pendingCommandAnalysis?: PendingCommandAnalysis
     private activityFilterPersistTimeout?: number
     private quickQuestionPersistTimeout?: number
+    private chatHistoryPersistTimeout?: number
     private lastProvider: ChatProvider = 'openai'
     private ollamaPullInProgress = false
+    private activeRequestController?: AbortController
+    private activeRequestAbortReason: 'cancelled' | 'timeout' | null = null
+    private lastAgentCompatibilityWarningForProvider = ''
 
     constructor (
         private notifications: NotificationsService,
@@ -971,7 +1047,16 @@ export class ChatTabComponent extends BaseTabComponent {
     clear (): void {
         this.messages = []
         this.suggestedCommands = []
+        this.scheduleChatHistoryPersist()
         this.scrollToBottom()
+    }
+
+    cancelActiveRequest (): void {
+        if (!this.sending || !this.activeRequestController) {
+            return
+        }
+        this.activeRequestAbortReason = 'cancelled'
+        this.activeRequestController.abort()
     }
 
     clearActivityLog (): void {
@@ -1231,6 +1316,8 @@ export class ChatTabComponent extends BaseTabComponent {
     onProfileChange (): void {
         this.loadActiveProfileForm()
         this.loadActivityFilters(this.activeProfileId)
+        this.loadChatHistory(this.activeProfileId)
+        this.resetProviderDiagnostics()
         this.persistProfiles()
         this.refreshEffectiveSettings()
     }
@@ -1253,6 +1340,7 @@ export class ChatTabComponent extends BaseTabComponent {
 
         this.profileForm.provider = provider
         this.lastProvider = provider
+        this.resetProviderDiagnostics()
         this.refreshEffectiveSettings()
     }
 
@@ -1281,6 +1369,12 @@ export class ChatTabComponent extends BaseTabComponent {
         if (this.redactionPreviewVisible) {
             this.updateRedactionPreview()
         }
+    }
+
+    onAgentSettingsChange (): void {
+        this.agentForm = this.normalizeAgentSettings(this.agentForm)
+        this.persistAgentSettings()
+        this.refreshEffectiveSettings()
     }
 
     onAllowlistChange (): void {
@@ -1330,6 +1424,8 @@ export class ChatTabComponent extends BaseTabComponent {
         this.profileForm = { ...newProfile }
         this.lastProvider = newProfile.provider
         this.loadActivityFilters(newProfile.id)
+        this.loadChatHistory(newProfile.id)
+        this.resetProviderDiagnostics()
         this.persistProfiles('Chat profile added')
         this.refreshEffectiveSettings()
     }
@@ -1344,13 +1440,17 @@ export class ChatTabComponent extends BaseTabComponent {
         if (index === -1) {
             return
         }
+        const deletedProfileId = this.profiles[index].id
 
         this.profiles.splice(index, 1)
         const nextProfile = this.profiles[Math.max(0, index - 1)]
         this.activeProfileId = nextProfile.id
         this.profileForm = { ...nextProfile }
         this.lastProvider = nextProfile.provider
+        this.removeChatHistoryForProfile(deletedProfileId)
         this.loadActivityFilters(this.activeProfileId)
+        this.loadChatHistory(this.activeProfileId)
+        this.resetProviderDiagnostics()
         this.persistProfiles('Chat profile removed')
         this.refreshEffectiveSettings()
     }
@@ -1361,10 +1461,17 @@ export class ChatTabComponent extends BaseTabComponent {
             return
         }
 
+        const validationError = this.validateProfileInput(this.profileForm)
+        if (validationError) {
+            this.notifications.error(validationError)
+            return
+        }
+
         const normalized = this.normalizeProfile(this.profileForm, this.activeProfileId)
         this.profiles[index] = normalized
         this.profileForm = { ...normalized }
         this.lastProvider = normalized.provider
+        this.resetProviderDiagnostics()
         this.persistProfiles('Chat profile saved')
         this.refreshEffectiveSettings()
     }
@@ -1376,6 +1483,231 @@ export class ChatTabComponent extends BaseTabComponent {
 
     getProviderLabel (provider: ChatProvider): string {
         return getProviderDefinition(provider).label
+    }
+
+    async testProviderConnection (): Promise<void> {
+        const settings = this.getEffectiveSettings()
+        const validationError = this.validateEffectiveSettings(settings)
+        if (validationError) {
+            this.providerDiagnosticsStatus = 'error'
+            this.providerDiagnosticsMessage = validationError
+            this.notifications.error(validationError)
+            return
+        }
+
+        this.providerDiagnosticsRunning = true
+        this.providerDiagnosticsStatus = 'idle'
+        this.providerDiagnosticsMessage = 'Testing provider connection...'
+
+        const startedAt = Date.now()
+        try {
+            const summary = await this.runProviderDiagnostics(settings)
+            const latency = Date.now() - startedAt
+            this.providerDiagnosticsStatus = 'success'
+            this.providerDiagnosticsMessage = `${summary} (${latency} ms)`
+            this.notifications.notice(this.providerDiagnosticsMessage)
+        } catch (error) {
+            const detail = error instanceof Error ? error.message : String(error)
+            this.providerDiagnosticsStatus = 'error'
+            this.providerDiagnosticsMessage = detail
+            this.notifications.error('Provider test failed', detail)
+        } finally {
+            this.providerDiagnosticsRunning = false
+        }
+    }
+
+    private resetProviderDiagnostics (): void {
+        this.providerDiagnosticsStatus = 'idle'
+        this.providerDiagnosticsMessage = ''
+    }
+
+    private validateProfileInput (profile: ChatProfile): string | null {
+        const provider = normalizeProvider(profile.provider)
+        const definition = getProviderDefinition(provider)
+        const settings: EffectiveChatSettings = {
+            provider,
+            providerLabel: definition.label,
+            profileName: profile.name || definition.label,
+            apiKey: profile.apiKey ?? '',
+            model: profile.model ?? '',
+            baseUrl: normalizeBaseUrl(profile.baseUrl ?? '', definition.defaultBaseUrl),
+            systemPrompt: profile.systemPrompt ?? '',
+            temperature: this.normalizeTemperature(profile.temperature),
+            maxTokens: this.normalizeMaxTokens(profile.maxTokens),
+            apiKeyRequired: definition.requiresApiKey,
+        }
+        return this.validateEffectiveSettings(settings)
+    }
+
+    private validateEffectiveSettings (settings: EffectiveChatSettings): string | null {
+        if (!settings.model.trim()) {
+            return 'Model is required'
+        }
+        if (!settings.baseUrl.trim()) {
+            return 'Base URL is required'
+        }
+        try {
+            // eslint-disable-next-line no-new
+            new URL(settings.baseUrl)
+        } catch {
+            return 'Base URL must be a valid URL'
+        }
+        if (settings.apiKeyRequired && !settings.apiKey.trim()) {
+            return `${settings.providerLabel} API key is required`
+        }
+        return null
+    }
+
+    private async runProviderDiagnostics (settings: EffectiveChatSettings): Promise<string> {
+        switch (settings.provider) {
+            case 'anthropic':
+                return this.runAnthropicDiagnostics(settings)
+            case 'gemini':
+                return this.runGeminiDiagnostics(settings)
+            case 'openai':
+            case 'openai-compatible':
+            case 'groq':
+            case 'ollama':
+            default:
+                return this.runOpenAiDiagnostics(settings)
+        }
+    }
+
+    private async runOpenAiDiagnostics (settings: EffectiveChatSettings): Promise<string> {
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+        }
+        if (settings.apiKey) {
+            headers.Authorization = `Bearer ${settings.apiKey}`
+        }
+
+        const payloadText = await this.fetchPayload(`${settings.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                model: settings.model,
+                temperature: 0,
+                max_tokens: 12,
+                stream: false,
+                messages: [{ role: 'user', content: 'Reply with the single word OK.' }],
+            }),
+        }, {
+            provider: settings.provider,
+            model: settings.model,
+            baseUrl: settings.baseUrl,
+            maxRetries: 0,
+            timeoutMs: 20_000,
+            silent: true,
+            retry: true,
+        })
+
+        if (!payloadText) {
+            throw new Error('No response payload returned')
+        }
+
+        try {
+            const payload = JSON.parse(payloadText)
+            const content = payload?.choices?.[0]?.message?.content ?? payload?.choices?.[0]?.text
+            if (typeof content === 'string' && content.trim().length) {
+                return `Connection OK (${settings.providerLabel}, model ${settings.model})`
+            }
+        } catch {
+            // fall through
+        }
+
+        throw new Error('Provider responded without usable content')
+    }
+
+    private async runAnthropicDiagnostics (settings: EffectiveChatSettings): Promise<string> {
+        const payloadText = await this.fetchPayload(`${settings.baseUrl}/messages`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': settings.apiKey,
+                'anthropic-version': '2023-06-01',
+            },
+            body: JSON.stringify({
+                model: settings.model,
+                max_tokens: 12,
+                temperature: 0,
+                messages: [{ role: 'user', content: 'Reply with the single word OK.' }],
+            }),
+        }, {
+            provider: settings.provider,
+            model: settings.model,
+            baseUrl: settings.baseUrl,
+            maxRetries: 0,
+            timeoutMs: 20_000,
+            silent: true,
+        })
+
+        if (!payloadText) {
+            throw new Error('No response payload returned')
+        }
+
+        try {
+            const payload = JSON.parse(payloadText)
+            const text = Array.isArray(payload?.content)
+                ? payload.content
+                    .map((part: { text?: string }) => part?.text)
+                    .filter((part: string | undefined) => typeof part === 'string' && part.trim().length)
+                    .join('\n')
+                : ''
+            if (text.trim().length) {
+                return `Connection OK (${settings.providerLabel}, model ${settings.model})`
+            }
+        } catch {
+            // fall through
+        }
+
+        throw new Error('Provider responded without usable content')
+    }
+
+    private async runGeminiDiagnostics (settings: EffectiveChatSettings): Promise<string> {
+        const queryKey = settings.apiKey ? `?key=${encodeURIComponent(settings.apiKey)}` : ''
+        const url = `${settings.baseUrl}/models/${encodeURIComponent(settings.model)}:generateContent${queryKey}`
+        const payloadText = await this.fetchPayload(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                contents: [{ role: 'user', parts: [{ text: 'Reply with the single word OK.' }] }],
+                generationConfig: {
+                    temperature: 0,
+                    maxOutputTokens: 12,
+                },
+            }),
+        }, {
+            provider: settings.provider,
+            model: settings.model,
+            baseUrl: settings.baseUrl,
+            maxRetries: 0,
+            timeoutMs: 20_000,
+            silent: true,
+        })
+
+        if (!payloadText) {
+            throw new Error('No response payload returned')
+        }
+
+        try {
+            const payload = JSON.parse(payloadText)
+            const parts = payload?.candidates?.[0]?.content?.parts
+            const text = Array.isArray(parts)
+                ? parts
+                    .map((part: { text?: string }) => part?.text)
+                    .filter((part: string | undefined) => typeof part === 'string' && part.trim().length)
+                    .join('')
+                : ''
+            if (text.trim().length) {
+                return `Connection OK (${settings.providerLabel}, model ${settings.model})`
+            }
+        } catch {
+            // fall through
+        }
+
+        throw new Error('Provider responded without usable content')
     }
 
     private loadProfiles (): void {
@@ -1421,6 +1753,86 @@ export class ChatTabComponent extends BaseTabComponent {
         this.config.save()
         if (noticeMessage) {
             this.notifications.notice(noticeMessage)
+        }
+    }
+
+    private loadChatHistory (profileId: string): void {
+        if (this.chatHistoryPersistTimeout) {
+            window.clearTimeout(this.chatHistoryPersistTimeout)
+            this.chatHistoryPersistTimeout = undefined
+        }
+        const store = this.getChatStore()
+        const historyByProfile = (store.chatHistoryByProfile ?? {}) as Record<string, ChatMessage[]>
+        const rawHistory = Array.isArray(historyByProfile[profileId]) ? historyByProfile[profileId] : []
+        const parsed = rawHistory
+            .map(entry => this.normalizeChatMessage(entry))
+            .filter((entry): entry is ChatMessage => !!entry)
+            .slice(-CHAT_HISTORY_MAX_MESSAGES)
+
+        this.messages = parsed
+        const lastAssistant = [...this.messages].reverse().find(message => message.role === 'assistant')
+        this.suggestedCommands = lastAssistant ? this.parseSuggestedCommands(lastAssistant.content) : []
+        this.scrollToBottom()
+    }
+
+    private normalizeChatMessage (message: Partial<ChatMessage>): ChatMessage | null {
+        if (!message || (message.role !== 'user' && message.role !== 'assistant' && message.role !== 'error')) {
+            return null
+        }
+        const content = typeof message.content === 'string' ? message.content : ''
+        if (!content.trim().length) {
+            return null
+        }
+        return {
+            id: message.id || generateId(),
+            role: message.role,
+            label: message.label || (message.role === 'user' ? 'You' : message.role === 'assistant' ? 'Assistant' : 'Error'),
+            content,
+        }
+    }
+
+    private scheduleChatHistoryPersist (): void {
+        if (this.chatHistoryPersistTimeout) {
+            window.clearTimeout(this.chatHistoryPersistTimeout)
+        }
+        this.chatHistoryPersistTimeout = window.setTimeout(() => {
+            this.chatHistoryPersistTimeout = undefined
+            this.persistChatHistory()
+        }, CHAT_HISTORY_PERSIST_DEBOUNCE_MS)
+    }
+
+    private persistChatHistory (): void {
+        const profileId = this.activeProfileId
+        if (!profileId) {
+            return
+        }
+        const store = this.getChatStore()
+        const historyByProfile = (store.chatHistoryByProfile ?? {}) as Record<string, ChatMessage[]>
+        const compactHistory = this.messages
+            .filter(message => message.content.trim().length > 0)
+            .slice(-CHAT_HISTORY_MAX_MESSAGES)
+            .map(message => ({
+                id: message.id || generateId(),
+                role: message.role,
+                label: message.label,
+                content: message.content,
+            }))
+
+        historyByProfile[profileId] = compactHistory
+        store.chatHistoryByProfile = historyByProfile
+        this.config.save()
+    }
+
+    private removeChatHistoryForProfile (profileId: string): void {
+        if (!profileId) {
+            return
+        }
+        const store = this.getChatStore()
+        const historyByProfile = (store.chatHistoryByProfile ?? {}) as Record<string, ChatMessage[]>
+        if (historyByProfile[profileId]) {
+            delete historyByProfile[profileId]
+            store.chatHistoryByProfile = historyByProfile
+            this.config.save()
         }
     }
 
@@ -1543,8 +1955,18 @@ export class ChatTabComponent extends BaseTabComponent {
         this.effectiveBaseUrl = settings.baseUrl
         this.systemPromptSet = !!settings.systemPrompt || this.networkForm.enabled
         this.missingApiKey = settings.apiKeyRequired && !settings.apiKey
+        this.agentModeSupported = this.supportsAgentProvider(settings.provider)
+        this.agentModeActive = this.agentForm.enabled && this.agentModeSupported
 
         this.updateEnvStatus(providerDefinition)
+    }
+
+    private supportsAgentProvider (provider: ChatProvider): boolean {
+        return provider === 'openai'
+            || provider === 'openai-compatible'
+            || provider === 'groq'
+            || provider === 'ollama'
+            || provider === 'tlink-agentic'
     }
 
     private updateEnvStatus (providerDefinition: ProviderDefinition): void {
@@ -1636,7 +2058,12 @@ export class ChatTabComponent extends BaseTabComponent {
     }
 
     private getConversationHistory (): ChatMessage[] {
-        return this.messages.filter(message => message.role === 'user' || message.role === 'assistant')
+        return this.messages.filter(message => {
+            if (message.role !== 'user' && message.role !== 'assistant') {
+                return false
+            }
+            return message.content.trim().length > 0
+        })
     }
 
     private buildOpenAiMessages (
@@ -1663,7 +2090,7 @@ export class ChatTabComponent extends BaseTabComponent {
         }))
     }
 
-    private async requestCompletion (): Promise<string | null> {
+    private async requestCompletion (onStreamChunk?: (content: string) => void): Promise<string | null> {
         const settings = this.getEffectiveSettings()
         if (settings.apiKeyRequired && !settings.apiKey) {
             const message = `${settings.providerLabel} API key is not set`
@@ -1672,20 +2099,151 @@ export class ChatTabComponent extends BaseTabComponent {
             return null
         }
 
+        if (this.agentForm.enabled) {
+            if (this.supportsAgentProvider(settings.provider)) {
+                this.lastAgentCompatibilityWarningForProvider = ''
+                return this.requestAgentCompletion(settings, onStreamChunk)
+            }
+            if (this.lastAgentCompatibilityWarningForProvider !== settings.provider) {
+                const warning = `Agent mode currently supports OpenAI-compatible providers. ${settings.providerLabel} will use regular chat mode.`
+                this.notifications.notice(warning)
+                this.lastAgentCompatibilityWarningForProvider = settings.provider
+            }
+        } else {
+            this.lastAgentCompatibilityWarningForProvider = ''
+        }
+
         switch (settings.provider) {
             case 'anthropic':
                 return this.requestAnthropic(settings)
             case 'gemini':
                 return this.requestGemini(settings)
+            case 'tlink-agentic':
             case 'ollama':
             case 'openai-compatible':
             case 'openai':
             default:
-                return this.requestOpenAi(settings)
+                return this.requestOpenAi(settings, onStreamChunk)
         }
     }
 
-    private async requestOpenAi (settings: EffectiveChatSettings): Promise<string | null> {
+    private getAgentToolDefinitions (): Array<Record<string, any>> {
+        return [
+            {
+                type: 'function',
+                function: {
+                    name: 'list_terminal_targets',
+                    description: 'List available terminal tabs and connection states.',
+                    parameters: {
+                        type: 'object',
+                        properties: {},
+                        additionalProperties: false,
+                    },
+                },
+            },
+            {
+                type: 'function',
+                function: {
+                    name: 'select_terminal_target',
+                    description: 'Select an active terminal by id, title, or host hint.',
+                    parameters: {
+                        type: 'object',
+                        properties: {
+                            targetId: { type: 'string' },
+                            target: { type: 'string' },
+                            targetTitle: { type: 'string' },
+                        },
+                        additionalProperties: false,
+                    },
+                },
+            },
+            {
+                type: 'function',
+                function: {
+                    name: 'get_terminal_output',
+                    description: 'Get the latest terminal output text and parsed summary.',
+                    parameters: {
+                        type: 'object',
+                        properties: {
+                            maxChars: { type: 'integer', minimum: 200, maximum: NETWORK_OUTPUT_MAX_CHARS },
+                        },
+                        additionalProperties: false,
+                    },
+                },
+            },
+            {
+                type: 'function',
+                function: {
+                    name: 'run_terminal_command',
+                    description: 'Run a safe diagnostic command in the active terminal.',
+                    parameters: {
+                        type: 'object',
+                        properties: {
+                            command: { type: 'string' },
+                            note: { type: 'string' },
+                        },
+                        required: ['command'],
+                        additionalProperties: false,
+                    },
+                },
+            },
+            {
+                type: 'function',
+                function: {
+                    name: 'open_connection',
+                    description: 'Open or reconnect SSH/Telnet sessions by host.',
+                    parameters: {
+                        type: 'object',
+                        properties: {
+                            protocol: { type: 'string', enum: ['ssh', 'telnet'] },
+                            target: { type: 'string' },
+                            username: { type: 'string' },
+                            password: { type: 'string' },
+                            port: { type: 'integer', minimum: 1, maximum: 65535 },
+                        },
+                        required: ['protocol', 'target'],
+                        additionalProperties: false,
+                    },
+                },
+            },
+            {
+                type: 'function',
+                function: {
+                    name: 'disconnect_connection',
+                    description: 'Disconnect SSH/Telnet sessions by host or disconnect all sessions.',
+                    parameters: {
+                        type: 'object',
+                        properties: {
+                            protocol: { type: 'string', enum: ['ssh', 'telnet'] },
+                            target: { type: 'string' },
+                            all: { type: 'boolean' },
+                        },
+                        required: ['protocol'],
+                        additionalProperties: false,
+                    },
+                },
+            },
+            {
+                type: 'function',
+                function: {
+                    name: 'task_complete',
+                    description: 'Call when the task is complete and include a concise summary.',
+                    parameters: {
+                        type: 'object',
+                        properties: {
+                            summary: { type: 'string' },
+                        },
+                        additionalProperties: false,
+                    },
+                },
+            },
+        ]
+    }
+
+    private async requestAgentCompletion (
+        settings: EffectiveChatSettings,
+        onStreamChunk?: (content: string) => void,
+    ): Promise<string | null> {
         const redactor = this.getRedactor(settings)
         const systemPrompt = this.buildEffectiveSystemPrompt(settings.systemPrompt, redactor)
         const headers: Record<string, string> = {
@@ -1695,20 +2253,444 @@ export class ChatTabComponent extends BaseTabComponent {
             headers.Authorization = `Bearer ${settings.apiKey}`
         }
 
-        const payloadText = await this.fetchPayload(`${settings.baseUrl}/chat/completions`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({
+        const maxRounds = this.normalizeAgentSettings(this.agentForm).maxRounds
+        const tools = this.getAgentToolDefinitions()
+        const messages: Array<Record<string, any>> = this.buildOpenAiMessages(systemPrompt, redactor)
+            .map(message => ({ ...message }))
+
+        let latestAssistantText = ''
+
+        for (let round = 1; round <= maxRounds; round++) {
+            const payloadBody: Record<string, any> = {
                 model: settings.model,
                 temperature: settings.temperature,
                 max_tokens: settings.maxTokens,
                 stream: false,
-                messages: this.buildOpenAiMessages(systemPrompt, redactor),
-            }),
+                messages,
+                tools,
+                tool_choice: 'auto',
+            }
+            const intent = this.normalizeAgentIntent(this.agentForm.intent)
+            if (settings.provider === 'tlink-agentic' && intent !== 'auto') {
+                payloadBody.intent = intent
+            }
+
+            const payloadText = await this.fetchPayload(`${settings.baseUrl}/chat/completions`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(payloadBody),
+            }, {
+                provider: settings.provider,
+                model: settings.model,
+                baseUrl: settings.baseUrl,
+                maxRetries: settings.provider === 'ollama' ? 0 : CHAT_REQUEST_MAX_RETRIES,
+                timeoutMs: CHAT_REQUEST_TIMEOUT_MS,
+            })
+
+            if (payloadText === null) {
+                return null
+            }
+
+            let payload: any
+            try {
+                payload = JSON.parse(payloadText)
+            } catch {
+                return this.handleRawResponse(payloadText)
+            }
+
+            const assistantMessage = payload?.choices?.[0]?.message
+            const assistantText = this.extractOpenAiMessageContent(assistantMessage).trim()
+            const toolCalls = Array.isArray(assistantMessage?.tool_calls) ? assistantMessage.tool_calls : []
+
+            if (assistantText.length) {
+                latestAssistantText = assistantText
+                onStreamChunk?.(latestAssistantText)
+            }
+
+            if (!toolCalls.length) {
+                if (assistantText.length) {
+                    return assistantText
+                }
+                if (latestAssistantText.length) {
+                    return latestAssistantText
+                }
+                return this.handleRawResponse(payloadText)
+            }
+
+            messages.push({
+                role: 'assistant',
+                content: assistantText,
+                tool_calls: toolCalls,
+            })
+
+            let taskCompleted = false
+            let completionSummary = ''
+            for (const toolCall of toolCalls) {
+                const toolName = String(toolCall?.function?.name || 'tool').trim()
+                onStreamChunk?.(`Agent: running ${toolName}...`)
+                const result = await this.executeAgentToolCall(toolCall)
+                if (result.terminate) {
+                    taskCompleted = true
+                    completionSummary = String(result.summary || '').trim()
+                }
+                messages.push({
+                    role: 'tool',
+                    tool_call_id: String(toolCall?.id || generateId()),
+                    content: this.serializeAgentToolResult(result),
+                })
+            }
+
+            if (taskCompleted) {
+                if (completionSummary.length) {
+                    return completionSummary
+                }
+                if (latestAssistantText.length) {
+                    return latestAssistantText
+                }
+                return 'Agent task completed.'
+            }
+        }
+
+        if (latestAssistantText.length) {
+            return `${latestAssistantText}\n\n(Agent stopped after ${maxRounds} rounds.)`
+        }
+        return `Agent stopped after ${maxRounds} rounds without a final response.`
+    }
+
+    private extractOpenAiMessageContent (message: any): string {
+        if (!message) {
+            return ''
+        }
+        if (typeof message.content === 'string') {
+            return message.content
+        }
+        if (Array.isArray(message.content)) {
+            return message.content
+                .map(part => {
+                    if (typeof part === 'string') {
+                        return part
+                    }
+                    if (typeof part?.text === 'string') {
+                        return part.text
+                    }
+                    return ''
+                })
+                .filter(Boolean)
+                .join('\n')
+        }
+        return ''
+    }
+
+    private parseAgentToolArgs (rawArgs: unknown): Record<string, any> {
+        if (rawArgs && typeof rawArgs === 'object' && !Array.isArray(rawArgs)) {
+            return rawArgs as Record<string, any>
+        }
+        if (typeof rawArgs === 'string' && rawArgs.trim().length) {
+            try {
+                const parsed = JSON.parse(rawArgs)
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    return parsed
+                }
+            } catch {
+                // Keep empty object when parsing fails.
+            }
+        }
+        return {}
+    }
+
+    private async executeAgentToolCall (toolCall: any): Promise<AgentToolExecutionResult> {
+        const toolName = String(toolCall?.function?.name || '').trim()
+        const args = this.parseAgentToolArgs(toolCall?.function?.arguments)
+
+        try {
+            switch (toolName) {
+                case 'list_terminal_targets':
+                    return this.agentToolListTerminalTargets()
+                case 'select_terminal_target':
+                    return this.agentToolSelectTerminalTarget(args)
+                case 'get_terminal_output':
+                    return this.agentToolGetTerminalOutput(args)
+                case 'run_terminal_command':
+                    return this.agentToolRunTerminalCommand(args)
+                case 'open_connection':
+                    return this.agentToolOpenConnection(args)
+                case 'disconnect_connection':
+                    return this.agentToolDisconnectConnection(args)
+                case 'task_complete':
+                    return {
+                        ok: true,
+                        message: 'Task marked complete.',
+                        terminate: true,
+                        summary: typeof args.summary === 'string' ? args.summary : '',
+                    }
+                default:
+                    return {
+                        ok: false,
+                        message: `Unsupported tool: ${toolName || 'unknown'}`,
+                    }
+            }
+        } catch (error) {
+            return {
+                ok: false,
+                message: error instanceof Error ? error.message : String(error),
+            }
+        }
+    }
+
+    private async agentToolListTerminalTargets (): Promise<AgentToolExecutionResult> {
+        return {
+            ok: true,
+            message: `Found ${this.terminalTargets.length} terminal target(s).`,
+            data: {
+                activeTerminalId: this.activeTerminalId || null,
+                terminals: this.terminalTargets.map(target => {
+                    const profile = target.tab.profile as PartialProfile<Profile> | undefined
+                    return {
+                        id: target.id,
+                        title: target.title,
+                        active: target.id === this.activeTerminalId,
+                        connected: !!target.tab.session?.open,
+                        profileType: profile?.type ?? '',
+                        profileName: profile?.name ?? '',
+                        host: profile?.options?.host ?? '',
+                    }
+                }),
+            },
+        }
+    }
+
+    private async agentToolSelectTerminalTarget (args: Record<string, any>): Promise<AgentToolExecutionResult> {
+        const lookup = String(args.targetId || args.target || args.targetTitle || '').trim()
+        if (!lookup.length) {
+            return {
+                ok: false,
+                message: 'targetId or target is required.',
+            }
+        }
+
+        const normalizedLookup = lookup.toLowerCase()
+        const byId = this.terminalTargets.find(target => target.id === lookup)
+        const byText = this.terminalTargets.find(target => {
+            const profile = target.tab.profile as PartialProfile<Profile> | undefined
+            const candidates = [
+                target.title,
+                profile?.name ?? '',
+                profile?.options?.host ?? '',
+                profile?.id ?? '',
+            ]
+                .map(value => String(value || '').toLowerCase())
+                .filter(Boolean)
+            return candidates.some(value => value.includes(normalizedLookup))
+        })
+        const selected = byId ?? byText
+
+        if (!selected) {
+            return {
+                ok: false,
+                message: `No terminal target matched "${lookup}".`,
+            }
+        }
+
+        this.setActiveTerminal(selected.tab)
+        return {
+            ok: true,
+            message: `Selected terminal "${selected.title}".`,
+            data: {
+                activeTerminalId: this.activeTerminalId,
+                title: selected.title,
+            },
+        }
+    }
+
+    private async agentToolGetTerminalOutput (args: Record<string, any>): Promise<AgentToolExecutionResult> {
+        const requestedMax = Number(args.maxChars)
+        const maxChars = Number.isFinite(requestedMax)
+            ? Math.max(200, Math.min(NETWORK_OUTPUT_MAX_CHARS, Math.floor(requestedMax)))
+            : 1500
+        const output = this.terminalOutput.slice(-maxChars).trim()
+        if (!output.length) {
+            return {
+                ok: true,
+                message: 'No terminal output captured yet.',
+                data: {
+                    output: '',
+                    parsedSummary: this.parsedSummary.trim(),
+                },
+            }
+        }
+
+        return {
+            ok: true,
+            message: `Returned ${Math.min(output.length, maxChars)} characters of terminal output.`,
+            data: {
+                output,
+                parsedSummary: this.parsedSummary.trim(),
+            },
+        }
+    }
+
+    private async agentToolRunTerminalCommand (args: Record<string, any>): Promise<AgentToolExecutionResult> {
+        const command = this.stripWrappingQuotes(String(args.command || '').trim())
+        if (!command.length) {
+            return {
+                ok: false,
+                message: 'command is required.',
+            }
+        }
+
+        const safety = this.checkCommandSafety(command)
+        if (!safety.safe) {
+            return {
+                ok: false,
+                message: safety.reason || 'Command blocked by safety checks.',
+                data: {
+                    command,
+                    risk: safety.risk,
+                },
+            }
+        }
+
+        if (this.agentForm.autoRunSafeCommands) {
+            const terminal = this.getTerminalForRun()
+            if (!terminal) {
+                return {
+                    ok: false,
+                    message: 'No terminal selected.',
+                }
+            }
+            if (!terminal.session?.open) {
+                return {
+                    ok: false,
+                    message: 'Selected terminal is not connected.',
+                }
+            }
+            const prepared = this.applyPaginationBypass(command)
+            terminal.sendInput(`${prepared}\r`)
+            this.addActivity('command', `Agent run: ${prepared}`, `Terminal: ${terminal.title || 'Terminal'}`)
+            this.queueCommandAnalysis(prepared)
+            return {
+                ok: true,
+                message: `Command sent: ${prepared}`,
+                data: {
+                    command: prepared,
+                    mode: 'auto',
+                },
+            }
+        }
+
+        const executed = await this.runSuggestedCommand(command, true, 'Agent tool', safety.risk, safety.reason)
+        return {
+            ok: executed,
+            message: executed
+                ? `Command executed: ${command}`
+                : `Command was not executed: ${command}`,
+            data: {
+                command,
+                mode: 'confirm',
+            },
+        }
+    }
+
+    private async agentToolOpenConnection (args: Record<string, any>): Promise<AgentToolExecutionResult> {
+        const protocol = String(args.protocol || '').toLowerCase() === 'telnet' ? 'telnet' : 'ssh'
+        const target = String(args.target || args.host || '').trim()
+        const username = String(args.username || args.user || '').trim()
+        const password = String(args.password || '').trim()
+        const rawPort = Number(args.port)
+        const port = Number.isFinite(rawPort) && rawPort > 0 ? Math.floor(rawPort) : null
+
+        if (!target.length) {
+            return {
+                ok: false,
+                message: 'target is required for open_connection.',
+            }
+        }
+
+        const hostWithPort = port ? `${target}:${port}` : target
+        const authHost = protocol === 'ssh' && username ? `${username}@${hostWithPort}` : hostWithPort
+        const passwordPart = protocol === 'ssh' && password.length ? ` with password ${password}` : ''
+        const prompt = `open ${protocol} connection to ${authHost}${passwordPart}`
+        const handled = await this.handleLocalConnectionRequest(prompt)
+
+        return {
+            ok: handled,
+            message: handled
+                ? `Connection request handled for ${authHost}.`
+                : `Failed to process connection request for ${authHost}.`,
+        }
+    }
+
+    private async agentToolDisconnectConnection (args: Record<string, any>): Promise<AgentToolExecutionResult> {
+        const protocol = String(args.protocol || '').toLowerCase() === 'telnet' ? 'telnet' : 'ssh'
+        const target = String(args.target || '').trim()
+        const all = !!args.all
+        const prompt = all
+            ? `close all ${protocol} connections`
+            : (target.length ? `close ${protocol} connection to ${target}` : `close ${protocol} connection`)
+        const handled = await this.handleLocalDisconnectRequest(prompt)
+
+        return {
+            ok: handled,
+            message: handled
+                ? `Disconnect request handled for ${all ? `all ${protocol} sessions` : (target || `active ${protocol} session`)}.`
+                : `Failed to process disconnect request for ${protocol}.`,
+        }
+    }
+
+    private serializeAgentToolResult (result: AgentToolExecutionResult): string {
+        let text = ''
+        try {
+            text = JSON.stringify(result)
+        } catch {
+            text = JSON.stringify({
+                ok: result.ok,
+                message: result.message,
+                terminate: !!result.terminate,
+                summary: result.summary ?? '',
+            })
+        }
+        if (text.length > AGENT_TOOL_RESULT_MAX_CHARS) {
+            return `${text.slice(0, AGENT_TOOL_RESULT_MAX_CHARS)}...(truncated)`
+        }
+        return text
+    }
+
+    private async requestOpenAi (
+        settings: EffectiveChatSettings,
+        onStreamChunk?: (content: string) => void,
+    ): Promise<string | null> {
+        const redactor = this.getRedactor(settings)
+        const systemPrompt = this.buildEffectiveSystemPrompt(settings.systemPrompt, redactor)
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+        }
+        if (settings.apiKey) {
+            headers.Authorization = `Bearer ${settings.apiKey}`
+        }
+
+        const payloadBody: Record<string, any> = {
+            model: settings.model,
+            temperature: settings.temperature,
+            max_tokens: settings.maxTokens,
+            stream: true,
+            messages: this.buildOpenAiMessages(systemPrompt, redactor),
+        }
+        const intent = this.normalizeAgentIntent(this.agentForm.intent)
+        if (settings.provider === 'tlink-agentic' && intent !== 'auto') {
+            payloadBody.intent = intent
+        }
+
+        const payloadText = await this.fetchPayload(`${settings.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payloadBody),
         }, {
             provider: settings.provider,
             model: settings.model,
             baseUrl: settings.baseUrl,
+            maxRetries: settings.provider === 'ollama' ? 0 : CHAT_REQUEST_MAX_RETRIES,
+            timeoutMs: CHAT_REQUEST_TIMEOUT_MS,
+            onStreamChunk,
         })
 
         if (payloadText === null) {
@@ -1748,6 +2730,12 @@ export class ChatTabComponent extends BaseTabComponent {
                     content: redactor ? redactor(message.content) : message.content,
                 })),
             }),
+        }, {
+            provider: settings.provider,
+            model: settings.model,
+            baseUrl: settings.baseUrl,
+            maxRetries: CHAT_REQUEST_MAX_RETRIES,
+            timeoutMs: CHAT_REQUEST_TIMEOUT_MS,
         })
 
         if (payloadText === null) {
@@ -1793,6 +2781,12 @@ export class ChatTabComponent extends BaseTabComponent {
                     ? { parts: [{ text: systemPrompt }] }
                     : undefined,
             }),
+        }, {
+            provider: settings.provider,
+            model: settings.model,
+            baseUrl: settings.baseUrl,
+            maxRetries: CHAT_REQUEST_MAX_RETRIES,
+            timeoutMs: CHAT_REQUEST_TIMEOUT_MS,
         })
 
         if (payloadText === null) {
@@ -1820,56 +2814,175 @@ export class ChatTabComponent extends BaseTabComponent {
     }
 
     private async fetchPayload (url: string, init: RequestInit, context?: FetchContext): Promise<string | null> {
-        let response: Response
-        try {
-            response = await fetch(url, init)
-        } catch (err) {
-            const message = `Chat request failed: ${String(err)}`
-            this.appendMessage('error', message)
-            this.notifications.error('Chat request failed', String(err))
-            return null
-        }
+        const timeoutMs = context?.timeoutMs ?? CHAT_REQUEST_TIMEOUT_MS
+        const maxRetries = Math.max(0, context?.maxRetries ?? CHAT_REQUEST_MAX_RETRIES)
+        let attempt = 0
 
-        let payloadText = ''
-        try {
-            const contentType = response.headers.get('content-type') ?? ''
-            if (contentType.includes('text/event-stream')) {
-                payloadText = await this.readEventStream(response)
-            } else {
-                payloadText = await response.text()
+        while (attempt <= maxRetries) {
+            const controller = new AbortController()
+            this.activeRequestController = controller
+            this.activeRequestAbortReason = null
+
+            const inputSignal = init.signal
+            const onInputAbort = (): void => {
+                this.activeRequestAbortReason = 'cancelled'
+                controller.abort()
             }
-        } catch (err) {
-            const message = `Chat request failed: ${String(err)}`
-            this.appendMessage('error', message)
-            this.notifications.error('Chat request failed', String(err))
-            return null
-        }
-
-        if (!response.ok) {
-            const errorMessage = payloadText.length ? payloadText : `${response.status} ${response.statusText}`
-            if (context?.provider === 'ollama' && !context.retry) {
-                const ollamaMessage = this.getOllamaErrorMessage(payloadText) ?? errorMessage
-                if (this.isOllamaModelMissing(ollamaMessage)) {
-                    const pullState = this.queueOllamaModelPull(context.model, context.baseUrl)
-                    const message = pullState === 'started'
-                        ? `Ollama model "${context.model}" is downloading. Retry once it finishes.`
-                        : pullState === 'in-progress'
-                            ? `Ollama model "${context.model}" is downloading. Try again shortly.`
-                            : `Ollama model "${context.model}" is not installed.`
-                    this.appendMessage('error', message)
-                    this.notifications.info(message)
-                    return null
+            if (inputSignal) {
+                if (inputSignal.aborted) {
+                    onInputAbort()
+                } else {
+                    inputSignal.addEventListener('abort', onInputAbort, { once: true })
                 }
             }
-            this.appendMessage('error', errorMessage)
-            this.notifications.error('Chat request failed', errorMessage)
-            return null
+
+            const timeoutHandle = window.setTimeout(() => {
+                this.activeRequestAbortReason = 'timeout'
+                controller.abort()
+            }, timeoutMs)
+
+            const cleanupAttempt = (): void => {
+                window.clearTimeout(timeoutHandle)
+                if (inputSignal) {
+                    inputSignal.removeEventListener('abort', onInputAbort)
+                }
+                if (this.activeRequestController === controller) {
+                    this.activeRequestController = undefined
+                }
+            }
+
+            let response: Response
+            try {
+                response = await fetch(url, {
+                    ...init,
+                    signal: controller.signal,
+                })
+            } catch (err) {
+                const abortReason = this.activeRequestAbortReason
+                cleanupAttempt()
+                this.activeRequestAbortReason = null
+
+                if (abortReason === 'cancelled') {
+                    if (!context?.silent) {
+                        this.notifications.notice('Chat request cancelled')
+                    }
+                    return null
+                }
+                if (abortReason === 'timeout') {
+                    const detail = `Request timed out after ${Math.round(timeoutMs / 1000)}s`
+                    this.reportRequestFailure(detail, context?.silent)
+                    return null
+                }
+
+                if (attempt < maxRetries) {
+                    attempt += 1
+                    await this.delay(this.getRetryDelayMs(attempt))
+                    continue
+                }
+
+                this.reportRequestFailure(`Chat request failed: ${String(err)}`, context?.silent, String(err))
+                return null
+            }
+
+            let payloadText = ''
+            try {
+                const contentType = response.headers.get('content-type') ?? ''
+                if (contentType.includes('text/event-stream')) {
+                    payloadText = await this.readEventStream(response, context?.onStreamChunk)
+                } else {
+                    payloadText = await response.text()
+                }
+            } catch (err) {
+                const abortReason = this.activeRequestAbortReason
+                cleanupAttempt()
+                this.activeRequestAbortReason = null
+
+                if (abortReason === 'cancelled') {
+                    if (!context?.silent) {
+                        this.notifications.notice('Chat request cancelled')
+                    }
+                    return null
+                }
+                if (abortReason === 'timeout') {
+                    const detail = `Request timed out after ${Math.round(timeoutMs / 1000)}s`
+                    this.reportRequestFailure(detail, context?.silent)
+                    return null
+                }
+
+                if (attempt < maxRetries) {
+                    attempt += 1
+                    await this.delay(this.getRetryDelayMs(attempt))
+                    continue
+                }
+
+                this.reportRequestFailure(`Chat request failed: ${String(err)}`, context?.silent, String(err))
+                return null
+            }
+
+            if (!response.ok) {
+                const errorMessage = payloadText.length ? payloadText : `${response.status} ${response.statusText}`
+                if (context?.provider === 'ollama' && !context.retry) {
+                    const ollamaMessage = this.getOllamaErrorMessage(payloadText) ?? errorMessage
+                    if (this.isOllamaModelMissing(ollamaMessage)) {
+                        cleanupAttempt()
+                        this.activeRequestAbortReason = null
+                        const pullState = this.queueOllamaModelPull(context.model, context.baseUrl)
+                        const message = pullState === 'started'
+                            ? `Ollama model "${context.model}" is downloading. Retry once it finishes.`
+                            : pullState === 'in-progress'
+                                ? `Ollama model "${context.model}" is downloading. Try again shortly.`
+                                : `Ollama model "${context.model}" is not installed.`
+                        if (!context.silent) {
+                            this.appendMessage('error', message)
+                            this.notifications.info(message)
+                        }
+                        return null
+                    }
+                }
+
+                if (attempt < maxRetries && this.shouldRetryStatus(response.status)) {
+                    cleanupAttempt()
+                    this.activeRequestAbortReason = null
+                    attempt += 1
+                    await this.delay(this.getRetryDelayMs(attempt))
+                    continue
+                }
+
+                cleanupAttempt()
+                this.activeRequestAbortReason = null
+                this.reportRequestFailure(errorMessage, context?.silent, errorMessage)
+                return null
+            }
+
+            cleanupAttempt()
+            this.activeRequestAbortReason = null
+            return payloadText
         }
 
-        return payloadText
+        return null
     }
 
-    private async readEventStream (response: Response): Promise<string> {
+    private reportRequestFailure (message: string, silent?: boolean, detail?: string): void {
+        if (silent) {
+            return
+        }
+        this.appendMessage('error', message)
+        this.notifications.error('Chat request failed', detail ?? message)
+    }
+
+    private shouldRetryStatus (status: number): boolean {
+        return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500
+    }
+
+    private getRetryDelayMs (attempt: number): number {
+        return CHAT_REQUEST_RETRY_BASE_DELAY_MS * attempt
+    }
+
+    private async delay (milliseconds: number): Promise<void> {
+        await new Promise(resolve => window.setTimeout(resolve, milliseconds))
+    }
+
+    private async readEventStream (response: Response, onStreamChunk?: (content: string) => void): Promise<string> {
         if (!response.body) {
             return ''
         }
@@ -1899,8 +3012,10 @@ export class ChatTabComponent extends BaseTabComponent {
                         const delta = payload?.choices?.[0]?.delta?.content
                             ?? payload?.choices?.[0]?.message?.content
                             ?? payload?.choices?.[0]?.text
+                            ?? payload?.delta?.text
                         if (typeof delta === 'string') {
                             output += delta
+                            onStreamChunk?.(output)
                         }
                     } catch {
                         // Ignore malformed chunks and keep going.
@@ -1910,7 +3025,11 @@ export class ChatTabComponent extends BaseTabComponent {
             }
         }
 
-        return output.trim()
+        const finalOutput = output.trim()
+        if (finalOutput.length) {
+            onStreamChunk?.(finalOutput)
+        }
+        return finalOutput
     }
 
     private handleRawResponse (payloadText: string): string | null {
@@ -1997,14 +3116,63 @@ export class ChatTabComponent extends BaseTabComponent {
         return 'started'
     }
 
-    private appendMessage (role: ChatMessage['role'], content: string): void {
-        this.messages = [...this.messages, {
+    private appendMessage (
+        role: ChatMessage['role'],
+        content: string,
+        options?: { parseCommands?: boolean, persist?: boolean },
+    ): string {
+        const id = generateId()
+        const entry: ChatMessage = {
+            id,
             role,
             label: role === 'user' ? 'You' : role === 'assistant' ? 'Assistant' : 'Error',
             content,
-        }]
-        if (role === 'assistant') {
+        }
+        this.messages = [...this.messages, entry]
+        if (role === 'assistant' && (options?.parseCommands ?? true) && content.trim().length) {
             this.suggestedCommands = this.parseSuggestedCommands(content)
+        }
+        if (options?.persist !== false) {
+            this.scheduleChatHistoryPersist()
+        }
+        return id
+    }
+
+    private updateMessageContent (id: string, content: string, parseCommands = false): void {
+        if (!id) {
+            return
+        }
+        let updated = false
+        this.messages = this.messages.map(message => {
+            if (message.id !== id) {
+                return message
+            }
+            updated = true
+            return {
+                ...message,
+                content,
+            }
+        })
+        if (!updated) {
+            return
+        }
+        if (parseCommands) {
+            const message = this.messages.find(item => item.id === id)
+            if (message?.role === 'assistant') {
+                this.suggestedCommands = this.parseSuggestedCommands(message.content)
+            }
+        }
+        this.scheduleChatHistoryPersist()
+    }
+
+    private removeMessageById (id: string): void {
+        if (!id) {
+            return
+        }
+        const before = this.messages.length
+        this.messages = this.messages.filter(message => message.id !== id)
+        if (this.messages.length !== before) {
+            this.scheduleChatHistoryPersist()
         }
     }
 
@@ -2013,6 +3181,46 @@ export class ChatTabComponent extends BaseTabComponent {
             return this.draft
         }
         return this.draftInputRef?.nativeElement?.value ?? ''
+    }
+
+    private loadAgentSettings (): void {
+        const store = this.getChatStore()
+        const raw = (store.agent ?? {}) as Partial<AgentSettings>
+        this.agentForm = this.normalizeAgentSettings(raw)
+    }
+
+    private normalizeAgentSettings (settings: Partial<AgentSettings>): AgentSettings {
+        const rounds = Number(settings.maxRounds ?? AGENT_DEFAULTS.maxRounds)
+        const safeRounds = Number.isFinite(rounds)
+            ? Math.max(1, Math.min(AGENT_MAX_ROUNDS_LIMIT, Math.floor(rounds)))
+            : AGENT_DEFAULTS.maxRounds
+        const intent = this.normalizeAgentIntent(settings.intent)
+
+        return {
+            enabled: !!settings.enabled,
+            maxRounds: safeRounds,
+            intent,
+            autoRunSafeCommands: !!settings.autoRunSafeCommands,
+        }
+    }
+
+    private normalizeAgentIntent (intent: AgentIntent | string | undefined | null): AgentIntent {
+        const allowed: AgentIntent[] = ['auto', 'code', 'translate', 'summarize', 'vision', 'audio', 'default']
+        const normalized = String(intent ?? '').trim().toLowerCase() as AgentIntent
+        return allowed.includes(normalized) ? normalized : 'auto'
+    }
+
+    private persistAgentSettings (noticeMessage?: string): void {
+        const store = this.getChatStore()
+        const normalized = this.normalizeAgentSettings(this.agentForm)
+        store.agent.enabled = normalized.enabled
+        store.agent.maxRounds = normalized.maxRounds
+        store.agent.intent = normalized.intent
+        store.agent.autoRunSafeCommands = normalized.autoRunSafeCommands
+        this.config.save()
+        if (noticeMessage) {
+            this.notifications.notice(noticeMessage)
+        }
     }
 
     private loadNetworkSettings (): void {
@@ -2061,7 +3269,22 @@ export class ChatTabComponent extends BaseTabComponent {
 
     private persistNetworkSettings (noticeMessage?: string): void {
         const store = this.getChatStore()
-        store.networkAssistant = { ...this.networkForm, autoAppendRunbookOutput: false }
+        const normalized = { ...this.networkForm, autoAppendRunbookOutput: false }
+        store.networkAssistant.enabled = !!normalized.enabled
+        store.networkAssistant.vendor = normalized.vendor
+        store.networkAssistant.variant = normalized.variant
+        store.networkAssistant.deviceLabel = normalized.deviceLabel
+        store.networkAssistant.osVersion = normalized.osVersion
+        store.networkAssistant.site = normalized.site
+        store.networkAssistant.role = normalized.role
+        store.networkAssistant.includeLastOutput = !!normalized.includeLastOutput
+        store.networkAssistant.allowCommandRun = !!normalized.allowCommandRun
+        store.networkAssistant.dryRunCommandMode = !!normalized.dryRunCommandMode
+        store.networkAssistant.autoTroubleshootAfterCommand = !!normalized.autoTroubleshootAfterCommand
+        store.networkAssistant.allowlistByVariant = normalized.allowlistByVariant
+        store.networkAssistant.redactSensitiveData = !!normalized.redactSensitiveData
+        store.networkAssistant.autoAppendRunbookOutput = false
+        store.networkAssistant.favoriteQuickActionsByVariant = normalized.favoriteQuickActionsByVariant
         this.config.save()
         if (noticeMessage) {
             this.notifications.notice(noticeMessage)
@@ -2314,6 +3537,7 @@ export class ChatTabComponent extends BaseTabComponent {
                 id: generateId(),
                 command: stripped,
                 safe: check.safe,
+                risk: check.risk,
                 reason: check.reason,
             }
         })
@@ -2364,21 +3588,21 @@ export class ChatTabComponent extends BaseTabComponent {
         return prefixes.some(prefix => normalized.startsWith(prefix))
     }
 
-    private checkCommandSafety (command: string): { safe: boolean, reason?: string } {
+    private checkCommandSafety (command: string): { safe: boolean, risk: 'low' | 'medium' | 'high', reason?: string } {
         for (const pattern of UNSAFE_COMMAND_START_PATTERNS) {
             if (pattern.test(command)) {
-                return { safe: false, reason: 'Matches a config-changing keyword' }
+                return { safe: false, risk: 'high', reason: 'Matches a config-changing keyword' }
             }
         }
         for (const pattern of UNSAFE_COMMAND_ANYWHERE_PATTERNS) {
             if (pattern.test(command)) {
-                return { safe: false, reason: 'Contains a disruptive action keyword' }
+                return { safe: false, risk: 'high', reason: 'Contains a disruptive action keyword' }
             }
         }
         if (!this.looksLikeCommand(command)) {
-            return { safe: false, reason: 'Not in allowed command prefixes' }
+            return { safe: false, risk: 'medium', reason: 'Not in allowed command prefixes' }
         }
-        return { safe: true }
+        return { safe: true, risk: 'low', reason: 'Allowlisted read-only command prefix' }
     }
 
     private refreshAllowlistText (): void {
@@ -2755,21 +3979,39 @@ export class ChatTabComponent extends BaseTabComponent {
         this.appendMessage('user', prompt)
         this.suggestedCommands = []
         this.sending = true
+        const assistantMessageId = this.appendMessage('assistant', '', {
+            parseCommands: false,
+            persist: false,
+        })
         this.scrollToBottom()
 
         try {
             if (await this.handleLocalDisconnectRequest(prompt)) {
+                this.removeMessageById(assistantMessageId)
                 return
             }
             if (await this.handleLocalConnectionRequest(prompt)) {
+                this.removeMessageById(assistantMessageId)
                 return
             }
-            const response = await this.requestCompletion()
+            const response = await this.requestCompletion(streamChunk => {
+                this.updateMessageContent(assistantMessageId, streamChunk, false)
+                this.scrollToBottom()
+            })
             if (response) {
-                this.appendMessage('assistant', response)
+                this.updateMessageContent(assistantMessageId, response, true)
+            } else {
+                const partial = this.messages.find(message => message.id === assistantMessageId)
+                if (partial?.content.trim().length) {
+                    this.updateMessageContent(assistantMessageId, partial.content, true)
+                } else {
+                    this.removeMessageById(assistantMessageId)
+                }
             }
         } finally {
             this.sending = false
+            this.activeRequestController = undefined
+            this.activeRequestAbortReason = null
             this.scrollToBottom()
         }
     }
@@ -3404,102 +4646,23 @@ export class ChatTabComponent extends BaseTabComponent {
     }
 
     private normalizeCloseTarget (value: string): string | null {
-        const cleaned = this.cleanConnectionTarget(value) ?? ''
+        const cleaned = cleanIntentConnectionTarget(value) ?? ''
         if (!cleaned) {
             return null
         }
-        const parsed = this.parseHostToken(cleaned)
-        return parsed?.host ?? cleaned
+        return parseIntentHostToken(cleaned)?.host ?? cleaned
     }
 
     private normalizeOpenTargets (targets: string[]): { directTargets: string[], patternTargets: string[] } {
-        const directTargets: string[] = []
-        const patternTargets: string[] = []
-        for (const target of targets) {
-            const pattern = this.extractPatternTargetFromPhrase(target)
-            if (pattern) {
-                patternTargets.push(pattern)
-                continue
-            }
-            if (this.isPatternTarget(target)) {
-                patternTargets.push(target)
-                continue
-            }
-            directTargets.push(target)
-        }
-        return { directTargets, patternTargets }
+        return normalizeIntentOpenTargets(targets)
     }
 
     private extractPatternTargetFromPhrase (value: string): string | null {
-        const cleaned = this.cleanConnectionTarget(value ?? '')
-        if (!cleaned) {
-            return null
-        }
-        if (this.isPatternTarget(cleaned)) {
-            return cleaned
-        }
-
-        const regexMatch = cleaned.match(/(?:regex|regexp|pattern|matches|matching)\s+(?<pattern>\/.+\/[a-z]*)/i)
-        if (regexMatch?.groups?.pattern) {
-            return regexMatch.groups.pattern.trim()
-        }
-
-        const startsMatch = cleaned.match(/(?:starts with|starting with|begins with|prefix(?: is)?)\s+(?<value>.+)$/i)
-        if (startsMatch?.groups?.value) {
-            const token = this.cleanConnectionTarget(startsMatch.groups.value)
-            return token ? `${token}*` : null
-        }
-
-        const endsMatch = cleaned.match(/(?:ends with|ending with|finishes with|suffix(?: is)?)\s+(?<value>.+)$/i)
-        if (endsMatch?.groups?.value) {
-            const token = this.cleanConnectionTarget(endsMatch.groups.value)
-            return token ? `*${token}` : null
-        }
-
-        const containsMatch = cleaned.match(/(?:contains|containing|includes|including|with string)\s+(?<value>.+)$/i)
-        if (containsMatch?.groups?.value) {
-            const token = this.cleanConnectionTarget(containsMatch.groups.value)
-            return token ? `*${token}*` : null
-        }
-
-        return null
-    }
-
-    private isPatternTarget (value: string): boolean {
-        return value.includes('*') || value.includes('?') || !!this.parseRegexLiteral(value)
+        return extractIntentPatternTargetFromPhrase(value)
     }
 
     private buildTargetMatcher (target: string): (value: string) => boolean {
-        const regex = this.parseRegexLiteral(target)
-        if (regex) {
-            return value => regex.test(value)
-        }
-        if (target.includes('*') || target.includes('?')) {
-            const escaped = target.replace(/[.+^${}()|[\]\\]/g, '\\$&')
-            const pattern = `^${escaped.replace(/\*/g, '.*').replace(/\?/g, '.')}$`
-            const wildcard = new RegExp(pattern, 'i')
-            return value => wildcard.test(value)
-        }
-        const normalized = target.toLowerCase()
-        return value => value.toLowerCase() === normalized
-    }
-
-    private parseRegexLiteral (value: string): RegExp | null {
-        if (!value.startsWith('/') || value.length < 2) {
-            return null
-        }
-        const lastSlash = value.lastIndexOf('/')
-        if (lastSlash <= 0) {
-            return null
-        }
-        const pattern = value.slice(1, lastSlash)
-        const rawFlags = value.slice(lastSlash + 1) || 'i'
-        const flags = rawFlags.replace('g', '') || 'i'
-        try {
-            return new RegExp(pattern, flags)
-        } catch {
-            return null
-        }
+        return buildIntentTargetMatcher(target)
     }
 
     private tabMatchesTargets (tab: BaseTerminalTabComponent<any>, matchers: Array<(value: string) => boolean>): boolean {
@@ -3529,82 +4692,15 @@ export class ChatTabComponent extends BaseTabComponent {
     }
 
     private parseGroupTarget (prompt: string): string | null {
-        const patterns = [
-            /all\s+devices?\s+(?:in|under)\s+(?<target>.+?)\s+profile\s+group\b/i,
-            /(?:in|under)\s+(?<target>.+?)\s+profile\s+group\b/i,
-            /(?<target>.+?)\s+profile\s+group\b/i,
-            /all\s+devices?\s+(?:in|under)\s+(?:profile\s+group|group|profile)\s*[:=]?\s+(?<target>.+)$/i,
-            /profile\s+group\s*[:=]?\s+(?<target>.+)$/i,
-            /device\s+in\s+(?:group\/profile|group|profile)\s*[:=]?\s+(?<target>.+)$/i,
-            /for\s+(?:device\s+in\s+)?(?:group\/profile|group|profile)\s*[:=]?\s+(?<target>.+)$/i,
-            /(?:group\/profile|group|profile(?!\s+group))\s*[:=]?\s+(?<target>.+)$/i,
-        ]
-
-        for (const pattern of patterns) {
-            const match = prompt.match(pattern)
-            if (!match) {
-                continue
-            }
-            const raw = match.groups?.target ?? match[1]
-            const cleaned = this.normalizeGroupTarget(raw)
-            if (cleaned) {
-                return cleaned
-            }
-        }
-
-        return null
+        return parseIntentGroupTarget(prompt)
     }
 
     private parseDisconnectTargets (prompt: string, protocol: ConnectionProtocol): string[] {
-        const action = '(?:close|disconnect|terminate|end|kill|stop)'
-        const protocolToken = protocol === 'telnet' ? 'telnet' : 'ssh'
-        const patterns = [
-            new RegExp(`${action}\\s+(?:all\\s+)?${protocolToken}\\s+(?:connections?|sessions?|tabs?)\\s+(?:to|for|with)\\s+(?<target>.+)$`, 'i'),
-            new RegExp(`${action}\\s+${protocolToken}\\s+(?:connections?|sessions?|tabs?)\\s+(?:to|for|with)\\s+(?<target>.+)$`, 'i'),
-            new RegExp(`${action}\\s+${protocolToken}\\s+(?:to|from|for|with)\\s+(?<target>.+)$`, 'i'),
-            new RegExp(`${action}\\s+(?:${protocolToken}\\s+)?(?:connection|session|tab)\\s+(?:to|for|with)\\s+(?<target>.+)$`, 'i'),
-            new RegExp(`${action}\\s+${protocolToken}\\s+(?<target>.+)$`, 'i'),
-            new RegExp(`${action}\\s+(?<target>.+)$`, 'i'),
-        ]
-
-        for (const pattern of patterns) {
-            const match = prompt.match(pattern)
-            if (!match) {
-                continue
-            }
-            const raw = match.groups?.target ?? match[1]
-            const cleaned = this.stripCredentialSuffix(this.cleanConnectionTarget(raw) ?? '')
-            const patternTarget = this.extractPatternTargetFromPhrase(cleaned) ?? cleaned
-            if (!patternTarget
-                || this.isDisconnectAllPrompt(cleaned)
-                || /^(?:connection|connections|session|sessions|tab|tabs)$/i.test(patternTarget)
-                || /^(?:ssh|telnet)\s*(?:connection|connections|session|sessions|tab|tabs)?$/i.test(patternTarget)) {
-                return []
-            }
-            return this.splitTargets(patternTarget)
-        }
-
-        return []
+        return parseIntentDisconnectTargets(prompt, protocol)
     }
 
     private normalizeGroupTarget (value: string | null | undefined): string | null {
-        const cleaned = this.cleanConnectionTarget(value ?? '')
-        if (!cleaned) {
-            return null
-        }
-        let target = cleaned
-            .replace(/^profile\s+group\s*/i, '')
-            .replace(/\s+profile\s+group$/i, '')
-            .replace(/^group\s*/i, '')
-            .replace(/\s+group$/i, '')
-            .trim()
-        if (!target) {
-            return null
-        }
-        if (/^(group|profile|profile\s+group|all|devices?)$/i.test(target)) {
-            return null
-        }
-        return target
+        return normalizeIntentGroupTarget(value)
     }
 
     private isGroupPhrasePrompt (prompt: string): boolean {
@@ -3612,112 +4708,15 @@ export class ChatTabComponent extends BaseTabComponent {
     }
 
     private parseHostTargets (prompt: string, protocol: ConnectionProtocol): string[] {
-        const patterns = protocol === 'telnet'
-            ? [
-                /open\s+telnet\s+connection\s+(?:with|to)\s+(?<target>.+)$/i,
-                /open\s+telnet\s+session\s+(?:with|to)\s+(?<target>.+)$/i,
-                /\btelnet\s+(?<target>.+)$/i,
-            ]
-            : [
-                /open\s+(?:an?\s+)?ssh\s+connection\s+(?:with|to)\s+(?<target>.+)$/i,
-                /open\s+(?:an?\s+)?ssh\s+session\s+(?:with|to)\s+(?<target>.+)$/i,
-                /open\s+(?:an?\s+)?ssh\s+connections?\s+(?<target>.+)$/i,
-                /\bssh\s+(?:to|into)\s+(?<target>.+)$/i,
-                /\bssh\s+connections?\s+(?<target>.+)$/i,
-                /\bssh\s+(?<target>.+)$/i,
-            ]
-
-        const sharedPatterns = [
-            /\bconnect\s+to\s+(?<target>.+)$/i,
-            /for\s+device\s+(?<target>.+)$/i,
-            /\bdevice\s+(?<target>.+)$/i,
-        ]
-
-        for (const pattern of [...patterns, ...sharedPatterns]) {
-            const match = prompt.match(pattern)
-            if (!match) {
-                continue
-            }
-            const raw = match.groups?.target ?? match[1]
-            const cleaned = this.stripCredentialSuffix(this.cleanConnectionTarget(raw) ?? '')
-            return this.splitTargets(cleaned)
-        }
-
-        return []
+        return parseIntentHostTargets(prompt, protocol)
     }
 
     private parseSshCredentials (prompt: string): ParsedSshCredentials {
-        const credentials: ParsedSshCredentials = {}
-
-        const slashMatch = prompt.match(/user\s*\/\s*pass(?:word)?\s*[:=]?\s*(?<user>[^\s/]+)\s*\/\s*(?<pass>[^\s,]+)/i)
-        if (slashMatch?.groups) {
-            credentials.user = slashMatch.groups.user
-            credentials.password = slashMatch.groups.pass
-        }
-
-        const combinedMatch = prompt.match(/user(?:name)?\s*,?\s*pass(?:word)?\s*[-:=]\s*(?<user>[^\s/]+)\s*\/\s*(?<pass>[^\s,]+)/i)
-        if (combinedMatch?.groups) {
-            credentials.user = combinedMatch.groups.user
-            credentials.password = combinedMatch.groups.pass
-        }
-
-        if (!credentials.user) {
-            const userMatch = prompt.match(/\buser(?:name)?\b\s*[:=,-]?\s*(?<user>[^\s,]+)/i)
-            if (userMatch?.groups?.user) {
-                credentials.user = userMatch.groups.user
-            }
-        }
-
-        if (!credentials.password) {
-            const passMatch = prompt.match(/\bpass(?:word)?\b\s*[:=,-]?\s*(?<pass>[^\s,]+)/i)
-            if (passMatch?.groups?.pass) {
-                credentials.password = passMatch.groups.pass
-            }
-        }
-
-        const portMatch = prompt.match(/\bport\b\s*[:=,-]?\s*(?<port>\d{2,5})/i)
-        if (portMatch?.groups?.port) {
-            credentials.port = Number(portMatch.groups.port)
-        }
-
-        return credentials
+        return parseIntentSshCredentials(prompt)
     }
 
     private parseHostToken (value: string): ParsedSshHost | null {
-        const cleaned = this.stripCredentialSuffix(this.cleanConnectionTarget(value) ?? '')
-        if (!cleaned) {
-            return null
-        }
-
-        let hostPart = this.normalizeHostToken(cleaned)
-        let user: string | undefined
-        let port: number | undefined
-
-        if (hostPart.includes('@')) {
-            const idx = hostPart.lastIndexOf('@')
-            user = hostPart.slice(0, idx)
-            hostPart = hostPart.slice(idx + 1)
-        }
-
-        if (hostPart.startsWith('[') && hostPart.includes(']')) {
-            const end = hostPart.indexOf(']')
-            const after = hostPart.slice(end + 1)
-            if (after.startsWith(':')) {
-                const parsed = Number(after.slice(1))
-                if (Number.isFinite(parsed)) {
-                    port = parsed
-                }
-            }
-            hostPart = hostPart.slice(1, end)
-        } else {
-            const parts = hostPart.split(':')
-            if (parts.length === 2 && /^\d+$/.test(parts[1])) {
-                port = Number(parts[1])
-                hostPart = parts[0]
-            }
-        }
-
-        return hostPart ? { host: hostPart, user, port } : null
+        return parseIntentHostToken(value)
     }
 
     private buildQuickConnectQuery (host: string, user?: string, port?: number): string {
@@ -3758,118 +4757,27 @@ export class ChatTabComponent extends BaseTabComponent {
     }
 
     private splitTargets (value: string): string[] {
-        if (!value) {
-            return []
-        }
-        const normalized = value.replace(/\s+and\s+/gi, ',')
-        return normalized
-            .split(/[;,]/)
-            .map(item => this.cleanConnectionTarget(item) ?? '')
-            .filter(item => item.length > 0)
+        return splitIntentTargets(value)
     }
 
     private getConnectionProtocol (prompt: string): ConnectionProtocol | null {
-        if (/\btelnet\b/i.test(prompt)) {
-            return 'telnet'
-        }
-        if (this.isSshConnectionIntent(prompt)) {
-            return 'ssh'
-        }
-        return null
+        return getIntentConnectionProtocol(prompt)
     }
 
     private getDisconnectProtocol (prompt: string): ConnectionProtocol | null {
-        if (!this.isDisconnectIntent(prompt)) {
-            return null
-        }
-        if (/\btelnet\b/i.test(prompt)) {
-            return 'telnet'
-        }
-        if (/\bssh\b/i.test(prompt)) {
-            return 'ssh'
-        }
-        return 'ssh'
-    }
-
-    private isDisconnectIntent (prompt: string): boolean {
-        return /\b(close|disconnect|terminate|end|kill|stop)\b/i.test(prompt)
+        return getIntentDisconnectProtocol(prompt)
     }
 
     private isReconnectIntent (prompt: string): boolean {
-        return /\b(reconnect|re-open|reopen|retry|restart)\b/i.test(prompt)
+        return isIntentReconnectIntent(prompt)
     }
 
     private isDisconnectAllPrompt (prompt: string): boolean {
-        return /\b(all|everything|all\s+connections|all\s+sessions|all\s+devices?)\b/i.test(prompt)
-    }
-
-    private isSshConnectionIntent (prompt: string): boolean {
-        return /open\s+(?:an?\s+)?ssh\s+connection/i.test(prompt)
-            || /open\s+(?:an?\s+)?ssh\s+session/i.test(prompt)
-            || /\bssh\s+(?:to|into)\b/i.test(prompt)
-            || /\bssh\s+\S+/i.test(prompt)
-            || /\bconnect\s+to\b/i.test(prompt)
-            || /\bopen\s+connection\b/i.test(prompt)
-            || /\bopen\s+session\b/i.test(prompt)
+        return isIntentDisconnectAllPrompt(prompt)
     }
 
     private cleanConnectionTarget (value: string): string | null {
-        if (!value) {
-            return null
-        }
-        let target = value.trim()
-        target = target.replace(/^[\"'`]+|[\"'`]+$/g, '')
-        target = target.replace(/[?.!,;:\s]+$/g, '')
-        target = target.replace(/\s+(please|pls|now)$/i, '')
-        target = target.trim()
-        return target.length ? target : null
-    }
-
-    private normalizeHostToken (value: string): string {
-        let hostPart = value.trim()
-        hostPart = hostPart.replace(/^(?:ssh|telnet)\s+/i, '')
-        hostPart = hostPart.replace(/^(?:connections?|sessions?|tabs?|devices?|hosts?)\s+(?:to|with|for|at)\s+/i, '')
-        hostPart = hostPart.replace(/^(?:connections?|sessions?|tabs?|devices?|hosts?)\s+/i, '')
-        hostPart = hostPart.replace(/^(?:to|with|for|at|into|on|via|using|from)\s+/i, '')
-        hostPart = this.stripLeadingStopwords(hostPart)
-        return hostPart.trim()
-    }
-
-    private stripLeadingStopwords (value: string): string {
-        const stopwords = [
-            'to',
-            'with',
-            'for',
-            'at',
-            'into',
-            'on',
-            'via',
-            'using',
-            'from',
-            'host',
-            'device',
-            'server',
-            'router',
-            'switch',
-            'named',
-            'called',
-        ]
-        let result = value.trim()
-        let changed = true
-        while (changed) {
-            changed = false
-            for (const word of stopwords) {
-                if (result.toLowerCase().startsWith(`${word} `)) {
-                    result = result.slice(word.length).trim()
-                    changed = true
-                }
-            }
-        }
-        return result
-    }
-
-    private stripCredentialSuffix (value: string): string {
-        return value.replace(/\s+(?:user(?:name)?|pass(?:word)?)\b.*$/i, '').trim()
+        return cleanIntentConnectionTarget(value)
     }
 
     private getOllamaSettingsForExtraction (): EffectiveChatSettings {
@@ -4117,9 +5025,12 @@ export class ChatTabComponent extends BaseTabComponent {
     private initializeFromConfig (): void {
         this.loadProfiles()
         this.loadActivityFilters(this.activeProfileId)
+        this.loadChatHistory(this.activeProfileId)
+        this.loadAgentSettings()
         this.loadNetworkSettings()
         this.loadQuickQuestions()
         this.refreshEffectiveSettings()
+        this.resetProviderDiagnostics()
     }
 
     private getChatStore (): Record<string, any> {
@@ -4659,35 +5570,55 @@ export class ChatTabComponent extends BaseTabComponent {
         this.suggestedCommandsCollapsed = false
     }
 
-    async runSuggestedCommand (command: string, safe: boolean, source?: string): Promise<void> {
+    async runSuggestedCommand (
+        command: string,
+        safe: boolean,
+        source?: string,
+        risk: 'low' | 'medium' | 'high' = 'low',
+        reason?: string,
+    ): Promise<boolean> {
         if (!this.networkForm.allowCommandRun || !safe) {
-            return
+            return false
         }
         const prepared = this.applyPaginationBypass(this.stripWrappingQuotes(command))
+        const label = source ? `${source} - ${prepared}` : `Run: ${prepared}`
+
+        if (this.networkForm.dryRunCommandMode) {
+            this.platform.setClipboard({ text: prepared })
+            this.addActivity('info', `Dry run only: ${label}`, reason ? `Risk: ${risk}. ${reason}` : `Risk: ${risk}`)
+            this.notifications.notice('Dry-run mode enabled: command copied, not executed')
+            return true
+        }
+
         const terminal = this.getTerminalForRun()
         if (!terminal) {
             this.notifications.error('No terminal selected')
-            return
+            return false
         }
         if (!terminal.session?.open) {
             this.notifications.error('Selected terminal is not connected')
-            return
+            return false
         }
         const response = await this.platform.showMessageBox({
             type: 'warning',
             message: 'Run command in selected terminal?',
-            detail: prepared,
-            buttons: ['Run', 'Cancel'],
+            detail: [
+                `Risk: ${risk.toUpperCase()}`,
+                reason ? `Safety note: ${reason}` : 'Safety note: Command passed allowlist checks.',
+                '',
+                prepared,
+            ].join('\n'),
+            buttons: ['Run once', 'Cancel'],
             defaultId: 0,
             cancelId: 1,
         })
         if (response.response !== 0) {
-            return
+            return false
         }
         terminal.sendInput(`${prepared}\r`)
-        const label = source ? `${source} - ${prepared}` : `Run: ${prepared}`
         this.addActivity('command', label, `Terminal: ${terminal.title || 'Terminal'}`)
         this.queueCommandAnalysis(prepared)
+        return true
     }
 
     private applyPaginationBypass (command: string): string {

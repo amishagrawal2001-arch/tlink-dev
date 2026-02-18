@@ -2,7 +2,7 @@
 import { Component, Input, HostListener, HostBinding, ViewChildren, ViewChild, Type, OnInit } from '@angular/core'
 import { trigger, style, animate, transition, state } from '@angular/animations'
 import { NgbDropdown, NgbModal } from '@ng-bootstrap/ng-bootstrap'
-import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop'
+import { CdkDragDrop, CdkDragMove, moveItemInArray } from '@angular/cdk/drag-drop'
 import Color from 'color'
 
 import { HostAppService, Platform } from '../api/hostApp'
@@ -20,11 +20,25 @@ import { SafeModeModalComponent } from './safeModeModal.component'
 import { ColorPickerModalComponent } from './colorPickerModal.component'
 import { TabBodyComponent } from './tabBody.component'
 import { SplitTabComponent } from './splitTab.component'
-import { AppService, BottomPanelRegistration, BottomPanelService, Command, CommandContext, CommandLocation, FileTransfer, HostWindowService, PlatformService, SidePanelRegistration, SidePanelService, ProfilesService, SelectorService, SelectorOption, PartialProfile, Profile } from '../api'
+import { AppService, BottomPanelRegistration, BottomPanelService, Command, CommandContext, CommandLocation, FileTransfer, HostWindowService, PlatformService, SidePanelRegistration, SidePanelService, ProfilesService, SelectorService, SelectorOption, PartialProfile, Profile, MenuItemOptions, WorkspaceService, Workspace, NotificationsService, PromptModalComponent } from '../api'
 import { TabsService } from '../services/tabs.service'
 import { CodeEditorTabComponent } from './codeEditorTab.component'
 
 type SplitDirection = 'r' | 'l' | 't' | 'b'
+type LeftDockDropTarget = {
+    item: string
+    insertAfter: boolean
+    isGroupDrop: boolean
+}
+type LeftDockChunk = {
+    id: string
+    grouped: boolean
+    items: string[]
+}
+type LeftDockPointer = {
+    x: number
+    y: number
+}
 
 function makeTabAnimation (dimension: string, size: number) {
     return [
@@ -72,8 +86,8 @@ function makeTabAnimation (dimension: string, size: number) {
 export class AppRootComponent implements OnInit {
     Platform = Platform
     @Input() ready = false
-    @Input() leftToolbarButtons: Command[]
-    @Input() rightToolbarButtons: Command[]
+    @Input() leftToolbarButtons: Command[] = []
+    @Input() rightToolbarButtons: Command[] = []
     @HostBinding('class.platform-win32') platformClassWindows = process.platform === 'win32'
     @HostBinding('class.platform-darwin') platformClassMacOS = process.platform === 'darwin'
     @HostBinding('class.platform-linux') platformClassLinux = process.platform === 'linux'
@@ -92,9 +106,13 @@ export class AppRootComponent implements OnInit {
     rightDockPanels: SidePanelRegistration[] = []
     leftDockOrder: string[] = []
     leftDockVisibleOrder: string[] = []
+    leftDockGroupedItems: string[] = []
+    leftDockGroups: string[][] = []
+    leftDockChunks: LeftDockChunk[] = []
     sshSidePanel: SidePanelRegistration | null = null
     sshSidebarCommand: Command | null = null
     intellijEditorCommand: Command | null = null
+    tabbyUrlCommand: Command | null = null
     bottomPanelVisible = false
     bottomPanelComponent: Type<any> | null = null
     bottomPanelHeight = 0
@@ -108,6 +126,8 @@ export class AppRootComponent implements OnInit {
     private sidePanelResizeStartX = 0
     private sidePanelResizeStartWidth = 0
     private sidePanelColorPickerOpen = false
+    private leftDockDragHoverTarget: LeftDockDropTarget | null = null
+    leftDockDropPreviewItem: string | null = null
     private logger: Logger
     private readonly defaultLeftDockOrder = [
         'profiles',
@@ -119,8 +139,14 @@ export class AppRootComponent implements OnInit {
         'intellij-editor',
         'ai-chat',
         'ai-assistant',
+        'tabby-url',
         'copilot-chat',
         'websocket',
+    ]
+    private readonly defaultLeftDockGroup = [
+        'profiles',
+        'ai-assistant',
+        'tabby-url',
     ]
 
     constructor (
@@ -138,6 +164,8 @@ export class AppRootComponent implements OnInit {
         private platform: PlatformService,
         private profiles: ProfilesService,
         private selector: SelectorService,
+        private workspaceService: WorkspaceService,
+        private notifications: NotificationsService,
         log: LogService,
         private ngbModal: NgbModal,
         _themes: ThemesService,
@@ -201,6 +229,18 @@ export class AppRootComponent implements OnInit {
         this.hostWindow.windowCloseRequest$.subscribe(async () => {
             this.app.closeWindow()
         })
+        this.hostApp.workspaceSaveRequest$.subscribe(() => {
+            void this.saveWorkspaceFromMenu()
+        })
+        this.hostApp.workspaceLoadRequest$.subscribe(() => {
+            void this.loadWorkspaceFromMenu()
+        })
+        this.hostApp.workspaceExportRequest$.subscribe(() => {
+            void this.exportWorkspaceFromMenu()
+        })
+        this.hostApp.workspaceImportRequest$.subscribe(() => {
+            void this.importWorkspaceFromMenu()
+        })
 
         if (window['safeModeReason']) {
             this.ngbModal.open(SafeModeModalComponent)
@@ -254,8 +294,14 @@ export class AppRootComponent implements OnInit {
         })
 
         config.ready$.toPromise().then(async () => {
-            this.leftToolbarButtons = await this.getToolbarButtons(false)
-            this.rightToolbarButtons = await this.getToolbarButtons(true)
+            try {
+                this.leftToolbarButtons = await this.getToolbarButtons(false)
+                this.rightToolbarButtons = await this.getToolbarButtons(true)
+            } catch (error: any) {
+                this.logger.warn('Failed to load toolbar buttons', error?.message ?? error)
+                this.leftToolbarButtons = this.leftToolbarButtons ?? []
+                this.rightToolbarButtons = this.rightToolbarButtons ?? []
+            }
             this.refreshLeftDockOrder()
 
             setInterval(() => {
@@ -618,11 +664,55 @@ export class AppRootComponent implements OnInit {
         if (!this.leftDockVisibleOrder.length) {
             return
         }
+        const draggedItem = event.item.data as string
+        const wasGrouped = this.isLeftDockItemGrouped(draggedItem)
+        const hoverTarget = this.leftDockDragHoverTarget
+        this.leftDockDragHoverTarget = null
+        this.leftDockDropPreviewItem = null
+        const dropTarget = (hoverTarget && hoverTarget.item !== draggedItem)
+            ? hoverTarget
+            : this.resolveLeftDockDropTarget(event)
+        if (dropTarget?.isGroupDrop && dropTarget.item !== draggedItem) {
+            this.applyLeftDockGroupedDrop(draggedItem, dropTarget.item, dropTarget.insertAfter)
+            return
+        }
         moveItemInArray(this.leftDockVisibleOrder, event.previousIndex, event.currentIndex)
         const nextOrder = this.mergeLeftDockOrder(this.leftDockVisibleOrder)
         this.leftDockOrder = nextOrder
         this.leftDockVisibleOrder = this.leftDockOrder.filter(id => this.isLeftDockItemVisible(id))
         this.config.store.appearance.leftDockOrder = nextOrder
+        if (wasGrouped) {
+            // Explicit non-group drop from a grouped icon means remove it from its group.
+            const groupsWithoutDragged = this.leftDockGroups
+                .map(group => group.filter(item => item !== draggedItem))
+                .filter(group => group.length > 0)
+            this.setLeftDockGroups(this.reconcileLeftDockGroupsAfterReorder(groupsWithoutDragged), false)
+        } else {
+            // Keep existing groups stable when reordering non-grouped icons.
+            this.setLeftDockGroups(this.leftDockGroups, false)
+        }
+        void this.config.save()
+        this.refreshLeftDockChunks()
+    }
+
+    onLeftDockItemDragStarted (_draggedItem: string): void {
+        this.leftDockDragHoverTarget = null
+        this.leftDockDropPreviewItem = null
+    }
+
+    onLeftDockItemDragEnded (): void {
+        this.leftDockDropPreviewItem = null
+    }
+
+    onLeftDockItemDragMoved (draggedItem: string, event: CdkDragMove<string>): void {
+        const target = this.resolveLeftDockDropTargetFromPointer(event.pointerPosition, draggedItem)
+        if (!target) {
+            this.leftDockDragHoverTarget = null
+            this.leftDockDropPreviewItem = null
+            return
+        }
+        this.leftDockDragHoverTarget = target
+        this.leftDockDropPreviewItem = target.isGroupDrop ? target.item : null
     }
 
     onTransfersChange () {
@@ -649,12 +739,14 @@ export class AppRootComponent implements OnInit {
             this.sshSidebarCommand = sshCmd
         }
         this.intellijEditorCommand = all.find(x => x.id === 'intellij-bridge:open-editor') ?? null
+        this.tabbyUrlCommand = all.find(x => x.label?.toLowerCase().includes('open tabby url')) ?? null
 
         const buttons = all
             .filter(x => x.locations?.includes(aboveZero ? CommandLocation.RightToolbar : CommandLocation.LeftToolbar))
             .filter(x => !x.label?.toLowerCase().includes('toggle ssh connections sidebar'))
             .filter(x => !x.label?.toLowerCase().includes('ai assistant')) // Filter AI Assistant from toolbar (only in dock)
             .filter(x => !x.label?.toLowerCase().includes('open copilot')) // Filter Open Copilot Chat from toolbar (only in dock)
+            .filter(x => !x.label?.toLowerCase().includes('open tabby url')) // Filter Open Tabby URL from toolbar (only in dock)
 
         if (!aboveZero) {
             return buttons
@@ -704,10 +796,399 @@ export class AppRootComponent implements OnInit {
     private refreshLeftDockOrder (): void {
         this.leftDockOrder = this.buildLeftDockOrder()
         this.leftDockVisibleOrder = this.leftDockOrder.filter(id => this.isLeftDockItemVisible(id))
+        this.setLeftDockGroups(this.buildLeftDockGroups(), false)
+        this.setLeftDockGroups(this.reconcileLeftDockGroupsAfterReorder(this.leftDockGroups), false)
+        this.refreshLeftDockChunks()
+    }
+
+    private refreshLeftDockChunks (): void {
+        const groupIndexByItem = new Map<string, number>()
+        this.leftDockGroups.forEach((group, index) => {
+            for (const item of group) {
+                groupIndexByItem.set(item, index)
+            }
+        })
+
+        const chunks: LeftDockChunk[] = []
+        const emittedGroups = new Set<number>()
+        for (const current of this.leftDockVisibleOrder) {
+            const groupIndex = groupIndexByItem.get(current)
+            if (groupIndex === undefined) {
+                chunks.push({
+                    id: `single:${current}`,
+                    grouped: false,
+                    items: [current],
+                })
+                continue
+            }
+            if (emittedGroups.has(groupIndex)) {
+                continue
+            }
+            emittedGroups.add(groupIndex)
+            const groupItemsSet = new Set(this.leftDockGroups[groupIndex])
+            const items = this.leftDockVisibleOrder.filter(item => groupItemsSet.has(item))
+            if (items.length < 2) {
+                chunks.push({
+                    id: `single:${current}`,
+                    grouped: false,
+                    items: [current],
+                })
+                continue
+            }
+            chunks.push({
+                id: `group:${groupIndex}:${items.join('|')}`,
+                grouped: true,
+                items,
+            })
+        }
+        this.leftDockChunks = chunks
     }
 
     trackByLeftDockItem (_index: number, item: string): string {
         return item
+    }
+
+    trackByLeftDockChunk (_index: number, chunk: LeftDockChunk): string {
+        return chunk.id
+    }
+
+    isLeftDockItemGrouped (item: string): boolean {
+        return this.leftDockGroupedItems.includes(item)
+    }
+
+    isLeftDockItemGroupStart (index: number): boolean {
+        const item = this.leftDockVisibleOrder[index]
+        if (!item || !this.isLeftDockItemGrouped(item)) {
+            return false
+        }
+        const prev = this.leftDockVisibleOrder[index - 1]
+        return !prev || !this.isLeftDockItemGrouped(prev)
+    }
+
+    isLeftDockItemGroupEnd (index: number): boolean {
+        const item = this.leftDockVisibleOrder[index]
+        if (!item || !this.isLeftDockItemGrouped(item)) {
+            return false
+        }
+        const next = this.leftDockVisibleOrder[index + 1]
+        return !next || !this.isLeftDockItemGrouped(next)
+    }
+
+    openLeftDockItemMenu (event: MouseEvent, item: string): void {
+        event.preventDefault()
+        event.stopPropagation()
+        const grouped = this.isLeftDockItemGrouped(item)
+        if (!grouped) {
+            return
+        }
+        const items: MenuItemOptions[] = [
+            {
+                label: 'Remove from group',
+                click: () => this.removeLeftDockItemFromGroup(item),
+            },
+        ]
+        this.platform.popupContextMenu(items, event)
+    }
+
+    private removeLeftDockItemFromGroup (item: string): void {
+        const nextGroups = this.leftDockGroups
+            .map(group => group.filter(id => id !== item))
+            .filter(group => group.length > 0)
+        this.setLeftDockGroups(this.reconcileLeftDockGroupsAfterReorder(nextGroups), false)
+        this.refreshLeftDockChunks()
+        void this.config.save()
+    }
+
+    private buildLeftDockGroups (): string[][] {
+        const groupsValue = this.config.store?.appearance?.leftDockGroups as string[][] | undefined
+        const legacyValue = this.config.store?.appearance?.leftDockGroup as string[] | undefined
+        let rawGroups: string[][]
+        if (Array.isArray(groupsValue) && groupsValue.length) {
+            rawGroups = groupsValue
+        } else if (Array.isArray(legacyValue) && legacyValue.length) {
+            rawGroups = [legacyValue]
+        } else {
+            rawGroups = [this.defaultLeftDockGroup]
+        }
+        return this.normalizeLeftDockGroups(rawGroups)
+    }
+
+    private flattenLeftDockGroups (groups: string[][]): string[] {
+        const flattened: string[] = []
+        for (const group of groups) {
+            for (const item of group) {
+                flattened.push(item)
+            }
+        }
+        return flattened
+    }
+
+    private normalizeLeftDockGroups (groups: string[][]): string[][] {
+        const known = new Set(this.defaultLeftDockOrder)
+        const order = this.leftDockOrder.length ? this.leftDockOrder : this.defaultLeftDockOrder
+        const indexMap = new Map(order.map((id, idx) => [id, idx]))
+        const seen = new Set<string>()
+        const normalized: string[][] = []
+
+        for (const group of groups) {
+            if (!Array.isArray(group)) {
+                continue
+            }
+            const cleaned: string[] = []
+            for (const item of group) {
+                if (!known.has(item) || seen.has(item)) {
+                    continue
+                }
+                cleaned.push(item)
+                seen.add(item)
+            }
+            cleaned.sort((a, b) => (indexMap.get(a) ?? Number.MAX_SAFE_INTEGER) - (indexMap.get(b) ?? Number.MAX_SAFE_INTEGER))
+            // A single icon should not be treated as a group.
+            if (cleaned.length >= 2) {
+                normalized.push(cleaned)
+            }
+        }
+
+        normalized.sort((a, b) => {
+            const aMin = Math.min(...a.map(item => indexMap.get(item) ?? Number.MAX_SAFE_INTEGER))
+            const bMin = Math.min(...b.map(item => indexMap.get(item) ?? Number.MAX_SAFE_INTEGER))
+            return aMin - bMin
+        })
+
+        return normalized
+    }
+
+    private setLeftDockGroups (groups: string[][], save = true): void {
+        const normalized = this.normalizeLeftDockGroups(groups)
+        this.leftDockGroups = normalized
+        this.leftDockGroupedItems = this.flattenLeftDockGroups(normalized)
+        const appearance = this.config.store?.appearance
+        if (!appearance) {
+            return
+        }
+        appearance.leftDockGroups = normalized
+        // Legacy flat list retained for compatibility with older config consumers.
+        appearance.leftDockGroup = [...this.leftDockGroupedItems]
+        if (save && this.config.store) {
+            void this.config.save()
+        }
+    }
+
+    private reconcileLeftDockGroupsAfterReorder (groups: string[][]): string[][] {
+        // Keep group membership stable across reorder operations.
+        // Group membership should only change via explicit drag-to-group or remove-from-group actions.
+        return this.normalizeLeftDockGroups(groups)
+    }
+
+    private resolveLeftDockDropTarget (event: CdkDragDrop<string[]>): LeftDockDropTarget | null {
+        const pointer = this.resolveLeftDockPointer(event)
+        if (!pointer) {
+            return null
+        }
+        return this.resolveLeftDockDropTargetFromPointer(pointer, event.item.data as string)
+    }
+
+    private resolveLeftDockDropTargetFromPointer (pointer: LeftDockPointer, draggedItem?: string): LeftDockDropTarget | null {
+        const leftDockSection = document.querySelector('.left-dock .left-dock-section') as HTMLElement | null
+        if (!leftDockSection) {
+            return null
+        }
+        const sectionRect = leftDockSection.getBoundingClientRect()
+        if (
+            pointer.x < sectionRect.left ||
+            pointer.x > sectionRect.right ||
+            pointer.y < sectionRect.top ||
+            pointer.y > sectionRect.bottom
+        ) {
+            return null
+        }
+
+        const dockButtons = Array.from(leftDockSection.querySelectorAll('[data-left-dock-item]')) as HTMLElement[]
+        const candidateButtons = dockButtons.filter(button => {
+            const item = button.dataset?.leftDockItem
+            if (!item || !this.leftDockVisibleOrder.includes(item)) {
+                return false
+            }
+            if (draggedItem && item === draggedItem) {
+                return false
+            }
+            return !button.closest('.cdk-drag-preview') && !button.closest('.cdk-drag-placeholder')
+        })
+        if (!candidateButtons.length) {
+            return null
+        }
+
+        const elementsFromPoint = typeof document.elementsFromPoint === 'function'
+            ? document.elementsFromPoint(pointer.x, pointer.y) as HTMLElement[]
+            : []
+        const candidates = elementsFromPoint.length
+            ? elementsFromPoint
+            : [document.elementFromPoint(pointer.x, pointer.y) as HTMLElement | null].filter(Boolean) as HTMLElement[]
+
+        let button: HTMLElement | null = null
+        let forceGroupDrop = false
+        for (const candidate of candidates) {
+            if (!candidate) {
+                continue
+            }
+            if (candidate.closest('.cdk-drag-preview') || candidate.closest('.cdk-drag-placeholder')) {
+                continue
+            }
+            const match = candidate.closest('[data-left-dock-item]') as HTMLElement | null
+            if (match && candidateButtons.includes(match)) {
+                button = match
+                break
+            }
+        }
+
+        if (!button) {
+            // If user hovers over a grouped capsule (not directly over icon), add into that group.
+            for (const candidate of candidates) {
+                if (!candidate) {
+                    continue
+                }
+                const groupEl = candidate.closest('[data-left-dock-group]') as HTMLElement | null
+                const groupItemsRaw = groupEl?.dataset?.leftDockGroup
+                if (!groupItemsRaw) {
+                    continue
+                }
+                const groupItems = groupItemsRaw.split('|').filter(Boolean)
+                const groupButtons = candidateButtons.filter(btn => {
+                    const item = btn.dataset?.leftDockItem
+                    return !!item && groupItems.includes(item)
+                })
+                if (!groupButtons.length) {
+                    continue
+                }
+                let nearestInGroup: { button: HTMLElement, distance: number } | null = null
+                for (const groupButton of groupButtons) {
+                    const rect = groupButton.getBoundingClientRect()
+                    const centerY = rect.top + (rect.height / 2)
+                    const distance = Math.abs(pointer.y - centerY)
+                    if (!nearestInGroup || distance < nearestInGroup.distance) {
+                        nearestInGroup = { button: groupButton, distance }
+                    }
+                }
+                button = nearestInGroup?.button ?? null
+                if (button) {
+                    forceGroupDrop = true
+                    break
+                }
+            }
+        }
+
+        if (!button) {
+            // Pointer can briefly miss icon DOM nodes while dragging; use nearest visible icon with tight bounds.
+            const nearest = this.findNearestLeftDockButton(pointer, candidateButtons)
+            if (nearest) {
+                const rect = nearest.getBoundingClientRect()
+                const centerY = rect.top + (rect.height / 2)
+                const verticalDistance = Math.abs(pointer.y - centerY)
+                const withinX = pointer.x >= rect.left - 10 && pointer.x <= rect.right + 10
+                const withinY = verticalDistance <= Math.max(18, rect.height * 0.8)
+                if (withinX && withinY) {
+                    button = nearest
+                }
+            }
+        }
+
+        if (!button) {
+            return null
+        }
+        const item = button?.dataset?.leftDockItem
+        if (!item || !this.leftDockVisibleOrder.includes(item)) {
+            return null
+        }
+        if (draggedItem && item === draggedItem) {
+            return null
+        }
+        const rect = button.getBoundingClientRect()
+        const centerY = rect.top + (rect.height / 2)
+        const distanceFromCenter = Math.abs(pointer.y - centerY)
+        const centerZone = Math.max(10, rect.height * 0.45)
+        const insideBounds = pointer.x >= rect.left && pointer.x <= rect.right && pointer.y >= rect.top && pointer.y <= rect.bottom
+        return {
+            item,
+            insertAfter: pointer.y > centerY,
+            // Group when dropped on an icon or inside a grouped capsule; near-gap drops remain reorder/remove.
+            isGroupDrop: forceGroupDrop || insideBounds || distanceFromCenter <= centerZone,
+        }
+    }
+
+    private findNearestLeftDockButton (pointer: LeftDockPointer, buttons: HTMLElement[]): HTMLElement | null {
+        let nearest: { button: HTMLElement, distanceSq: number } | null = null
+        for (const button of buttons) {
+            const rect = button.getBoundingClientRect()
+            const centerX = rect.left + (rect.width / 2)
+            const centerY = rect.top + (rect.height / 2)
+            const dx = pointer.x - centerX
+            const dy = pointer.y - centerY
+            const distanceSq = (dx * dx) + (dy * dy)
+            if (!nearest || distanceSq < nearest.distanceSq) {
+                nearest = { button, distanceSq }
+            }
+        }
+        return nearest?.button ?? null
+    }
+
+    private resolveLeftDockPointer (event: CdkDragDrop<string[]>): LeftDockPointer | null {
+        const dropPoint = (event as any).dropPoint as LeftDockPointer | undefined
+        if (dropPoint && Number.isFinite(dropPoint.x) && Number.isFinite(dropPoint.y)) {
+            return dropPoint
+        }
+
+        const nativeEvent = (event as any).event as MouseEvent | TouchEvent | undefined
+        if (!nativeEvent) {
+            return null
+        }
+        if (nativeEvent instanceof MouseEvent) {
+            return { x: nativeEvent.clientX, y: nativeEvent.clientY }
+        }
+
+        if (nativeEvent.changedTouches?.length) {
+            return {
+                x: nativeEvent.changedTouches[0].clientX,
+                y: nativeEvent.changedTouches[0].clientY,
+            }
+        }
+        if (nativeEvent.touches?.length) {
+            return {
+                x: nativeEvent.touches[0].clientX,
+                y: nativeEvent.touches[0].clientY,
+            }
+        }
+        return null
+    }
+
+    private applyLeftDockGroupedDrop (draggedItem: string, targetItem: string, insertAfter: boolean): void {
+        const nextVisibleOrder = this.leftDockVisibleOrder.filter(id => id !== draggedItem)
+        const targetIndex = nextVisibleOrder.indexOf(targetItem)
+        if (targetIndex === -1) {
+            return
+        }
+        const insertIndex = insertAfter ? targetIndex + 1 : targetIndex
+        nextVisibleOrder.splice(insertIndex, 0, draggedItem)
+        const nextOrder = this.mergeLeftDockOrder(nextVisibleOrder)
+        this.leftDockOrder = nextOrder
+        this.leftDockVisibleOrder = nextOrder.filter(id => this.isLeftDockItemVisible(id))
+        this.config.store.appearance.leftDockOrder = nextOrder
+
+        const groupsWithoutDragged = this.leftDockGroups
+            .map(group => group.filter(item => item !== draggedItem))
+            .filter(group => group.length > 0)
+        const targetGroupIndex = groupsWithoutDragged.findIndex(group => group.includes(targetItem))
+        if (targetGroupIndex >= 0) {
+            const targetGroup = [...groupsWithoutDragged[targetGroupIndex]]
+            const targetPosition = targetGroup.indexOf(targetItem)
+            const insertPosition = insertAfter ? targetPosition + 1 : targetPosition
+            targetGroup.splice(insertPosition, 0, draggedItem)
+            groupsWithoutDragged[targetGroupIndex] = targetGroup
+        } else {
+            groupsWithoutDragged.push(insertAfter ? [targetItem, draggedItem] : [draggedItem, targetItem])
+        }
+        this.setLeftDockGroups(this.reconcileLeftDockGroupsAfterReorder(groupsWithoutDragged), false)
+        this.refreshLeftDockChunks()
+        void this.config.save()
     }
 
     isLeftDockItemVisible (item: string): boolean {
@@ -716,6 +1197,9 @@ export class AppRootComponent implements OnInit {
         }
         if (item === 'intellij-editor') {
             return !!this.intellijEditorCommand
+        }
+        if (item === 'tabby-url') {
+            return !!this.tabbyUrlCommand
         }
         return true
     }
@@ -763,6 +1247,8 @@ export class AppRootComponent implements OnInit {
             return 'AI Chat'
         case 'ai-assistant':
             return 'AI Assistant'
+        case 'tabby-url':
+            return this.tabbyUrlCommand?.label || 'Open Tabby URL'
         case 'copilot-chat':
             return 'Open Copilot Chat'
         case 'websocket':
@@ -802,6 +1288,13 @@ export class AppRootComponent implements OnInit {
             break
         case 'ai-assistant':
             this.openAIAssistant()
+            break
+        case 'tabby-url':
+            if (this.tabbyUrlCommand?.run) {
+                void this.tabbyUrlCommand.run()
+            } else if (this.tabbyUrlCommand?.id) {
+                this.commands.run(this.tabbyUrlCommand.id, this.buildCommandContext())
+            }
             break
         case 'copilot-chat':
             this.openCopilotChat()
@@ -879,6 +1372,152 @@ export class AppRootComponent implements OnInit {
         if (profile) {
             await this.profiles.openNewTabForProfile(profile)
         }
+    }
+
+    async saveWorkspaceFromMenu (): Promise<void> {
+        const modal = this.ngbModal.open(PromptModalComponent, {
+            backdrop: 'static',
+        })
+        modal.componentInstance.prompt = this.translate.instant('Workspace name')
+        modal.componentInstance.value = ''
+        modal.componentInstance.password = false
+
+        try {
+            const result = await modal.result
+            const name = result?.value?.trim?.()
+            if (!name) {
+                return
+            }
+            await this.workspaceService.saveWorkspace(name, '', false)
+            this.notifications.notice(this.translate.instant('Workspace saved'))
+        } catch {
+            // User cancelled
+        }
+    }
+
+    async loadWorkspaceFromMenu (): Promise<void> {
+        if (this.selector.active) {
+            return
+        }
+
+        const workspaces = this.workspaceService
+            .getWorkspaces()
+            .slice()
+            .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+
+        if (!workspaces.length) {
+            this.notifications.notice(this.translate.instant('No workspaces saved yet. Save your current workspace to get started.'))
+            return
+        }
+
+        const options: SelectorOption<void>[] = workspaces.map((workspace: Workspace) => {
+            const tabsText = `${this.translate.instant('Tabs')}: ${workspace.tabs.length}`
+            const foldersText = workspace.codeEditorFolders.length
+                ? ` • ${this.translate.instant('Folders')}: ${workspace.codeEditorFolders.length}`
+                : ''
+
+            return {
+                name: workspace.name,
+                description: `${tabsText}${foldersText}`,
+                callback: async () => {
+                    const success = await this.workspaceService.loadWorkspace(workspace.id)
+                    if (success) {
+                        this.notifications.notice(this.translate.instant('Workspace loaded: {name}', { name: workspace.name }))
+                    } else {
+                        this.notifications.error(this.translate.instant('Failed to load workspace'))
+                    }
+                },
+            }
+        })
+
+        await this.selector.show(this.translate.instant('Load workspace'), options).catch(() => null)
+    }
+
+    async exportWorkspaceFromMenu (): Promise<void> {
+        if (this.selector.active) {
+            return
+        }
+
+        const workspaces = this.workspaceService
+            .getWorkspaces()
+            .slice()
+            .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+
+        if (!workspaces.length) {
+            this.notifications.notice(this.translate.instant('No workspaces saved yet. Save your current workspace to get started.'))
+            return
+        }
+
+        const options: SelectorOption<void>[] = workspaces.map((workspace: Workspace) => {
+            const tabsText = `${this.translate.instant('Tabs')}: ${workspace.tabs.length}`
+            const foldersText = workspace.codeEditorFolders.length
+                ? ` • ${this.translate.instant('Folders')}: ${workspace.codeEditorFolders.length}`
+                : ''
+
+            return {
+                name: workspace.name,
+                description: `${tabsText}${foldersText}`,
+                callback: async () => {
+                    const json = this.workspaceService.exportWorkspace(workspace.id)
+                    if (!json) {
+                        this.notifications.error(this.translate.instant('Failed to export workspace'))
+                        return
+                    }
+
+                    const data = new TextEncoder().encode(json)
+                    const filename = this.buildWorkspaceExportFilename(workspace.name)
+                    const download = await this.platform.startDownload(filename, 0o644, data.length)
+                    if (!download) {
+                        return
+                    }
+
+                    try {
+                        await download.write(data)
+                        this.notifications.notice(this.translate.instant('Workspace exported: {name}', { name: workspace.name }))
+                    } catch (error: any) {
+                        this.logger.error('Failed to export workspace:', error)
+                        this.notifications.error(this.translate.instant('Failed to export workspace'))
+                    } finally {
+                        (download as any).close?.()
+                    }
+                },
+            }
+        })
+
+        await this.selector.show(this.translate.instant('Export workspace'), options).catch(() => null)
+    }
+
+    async importWorkspaceFromMenu (): Promise<void> {
+        const uploads = await this.platform.startUpload({ multiple: false })
+        if (!uploads.length) {
+            return
+        }
+
+        const upload = uploads[0]
+        try {
+            const data = await upload.readAll()
+            const json = new TextDecoder().decode(data)
+            const workspace = await this.workspaceService.importFromJson(json)
+            if (!workspace) {
+                this.notifications.error(this.translate.instant('Failed to import workspace'))
+                return
+            }
+            this.notifications.notice(this.translate.instant('Workspace imported: {name}', { name: workspace.name }))
+        } catch (error: any) {
+            this.logger.error('Failed to import workspace:', error)
+            this.notifications.error(this.translate.instant('Failed to import workspace'))
+        } finally {
+            (upload as any).close?.()
+        }
+    }
+
+    private buildWorkspaceExportFilename (workspaceName: string): string {
+        const normalized = (workspaceName || '')
+            .trim()
+            .replace(/[\\/:*?"<>|]+/g, '-')
+            .replace(/\s+/g, ' ')
+            .slice(0, 80)
+        return `${normalized || 'workspace'}.tlink-workspace.json`
     }
 
     async openSftpProfileSelector (): Promise<void> {

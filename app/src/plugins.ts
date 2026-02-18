@@ -21,15 +21,41 @@ function normalizePath (p: string): string {
  * Where built-in plugins are loaded from.
  *
  * - In packaged builds: `${resourcesPath}/builtin-plugins`
- * - In source/dev runs (electron app): prefer `${repoRoot}/builtin-plugins` even if TLINK_DEV is not set
+ * - In source/dev runs (electron app): prefer `${repoRoot}` so plugin package imports
+ *   resolve to a single module identity (avoids DI token duplication in dev).
+ * - Outside explicit dev mode, still prefer `${repoRoot}/builtin-plugins` when available.
  *   because Electron's `resourcesPath` points to the Electron runtime, not the repo.
  */
+function getDevRepoRoot (): string {
+    const appPath = remote.app.getAppPath()
+    const appDir = path.dirname(appPath)
+    if (path.basename(appDir) === 'build') {
+        return path.dirname(appDir)
+    }
+    return appDir
+}
+
 function getBuiltinPluginsPath (): string {
     const packagedPath = path.join((process as any).resourcesPath, 'builtin-plugins')
-    const repoRootPath = path.join(path.dirname(remote.app.getAppPath()), 'builtin-plugins')
+    const repoRootPath = getDevRepoRoot()
+    const repoBuiltinPluginsPath = path.join(repoRootPath, 'builtin-plugins')
+    const cwdPath = process.cwd()
+    const cwdBuiltinPluginsPath = path.join(cwdPath, 'builtin-plugins')
 
     if (process.env.TLINK_DEV) {
-        return path.dirname(remote.app.getAppPath())
+        try {
+            if (require('fs').existsSync(repoRootPath)) {
+                return repoRootPath
+            }
+        } catch { /* ignore */ }
+
+        try {
+            if (require('fs').existsSync(cwdPath)) {
+                return cwdPath
+            }
+        } catch { /* ignore */ }
+
+        return repoRootPath
     }
 
     try {
@@ -39,8 +65,14 @@ function getBuiltinPluginsPath (): string {
     } catch { /* ignore */ }
 
     try {
-        if (require('fs').existsSync(repoRootPath)) {
-            return repoRootPath
+        if (require('fs').existsSync(repoBuiltinPluginsPath)) {
+            return repoBuiltinPluginsPath
+        }
+    } catch { /* ignore */ }
+
+    try {
+        if (require('fs').existsSync(cwdBuiltinPluginsPath)) {
+            return cwdBuiltinPluginsPath
         }
     } catch { /* ignore */ }
 
@@ -152,12 +184,12 @@ export function initModuleLookup (userPluginsPath: string): void {
     paths.unshift(path.join(remote.app.getAppPath(), 'node_modules'))
 
     if (process.env.TLINK_DEV) {
-        const repoRoot = path.dirname(remote.app.getAppPath())
+        const repoRoot = getDevRepoRoot()
         paths.unshift(repoRoot)
-        const devBuiltinPluginsPath = path.join(repoRoot, 'builtin-plugins')
-        if (require('fs').existsSync(devBuiltinPluginsPath)) {
-            paths.unshift(devBuiltinPluginsPath)
-        }
+        const repoBuiltinPluginsPath = path.join(repoRoot, 'builtin-plugins')
+        // Include nested built-in plugin wrappers (e.g., tlink-agent-mcp) for discovery
+        // while keeping module identity rooted at repoRoot.
+        paths.push(repoBuiltinPluginsPath)
     }
 
     paths.unshift(builtinPluginsPath)

@@ -1,8 +1,65 @@
-.modal-body {
-    min-height: 420px;
+:host {
+    display: block;
+    color: var(--theme-fg);
 }
 
-textarea.form-control {
-    font-family: var(--font-monospace, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
-    resize: vertical;
+.modal-header,
+.modal-body,
+.modal-footer {
+    background: var(--theme-bg);
+    color: var(--theme-fg);
+}
+
+.modal-body {
+    min-height: 420px;
+
+    .form-label,
+    .form-check-label,
+    h6 {
+        color: var(--theme-fg);
+    }
+
+    .text-muted,
+    .form-text {
+        color: var(--theme-fg-more) !important;
+    }
+
+    .form-control,
+    .form-select {
+        background-color: var(--theme-bg-more);
+        border-color: var(--theme-bg-less);
+        color: var(--theme-fg);
+    }
+
+    .form-control::placeholder {
+        color: var(--theme-fg-more-2);
+    }
+
+    .form-control:focus,
+    .form-select:focus {
+        background-color: var(--theme-bg-more);
+        border-color: var(--theme-primary);
+        color: var(--theme-fg);
+        box-shadow: 0 0 0 0.15rem rgba(var(--bs-primary-rgb), 0.15);
+    }
+
+    .form-check-input {
+        background-color: var(--theme-bg-more);
+        border: 1px solid var(--theme-fg-more);
+    }
+
+    .form-check-input:focus {
+        border-color: var(--theme-primary);
+        box-shadow: 0 0 0 0.15rem rgba(var(--bs-primary-rgb), 0.15);
+    }
+
+    .form-check-input:checked {
+        background-color: var(--theme-primary);
+        border-color: var(--theme-primary);
+    }
+
+    textarea.form-control {
+        font-family: var(--font-monospace, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
+        resize: vertical;
+    }
 }

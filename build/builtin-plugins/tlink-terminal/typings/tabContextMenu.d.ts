@@ -1,5 +1,5 @@
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap';
-import { BaseTabComponent as CoreBaseTabComponent, TabContextMenuItemProvider as CoreTabContextMenuItemProvider, NotificationsService, MenuItemOptions, TranslateService, ConfigService, HostAppService, PlatformService, SessionSharingService, LogService, SelectorService } from 'tlink-core';
+import { AppService, BaseTabComponent as CoreBaseTabComponent, TabContextMenuItemProvider as CoreTabContextMenuItemProvider, NotificationsService, MenuItemOptions, TranslateService, ConfigService, HostAppService, PlatformService, SessionSharingService, LogService, SelectorService } from 'tlink-core';
 import { TerminalContextMenuItemProvider } from './api/contextMenuProvider';
 import { MultifocusService } from './services/multifocus.service';
 declare const TabContextMenuItemProviderRuntime: typeof CoreTabContextMenuItemProvider;
@@ -49,13 +49,17 @@ export declare class SessionSharingContextMenu extends TabContextMenuItemProvide
 }
 /** @hidden */
 export declare class SaveAsProfileContextMenu extends TabContextMenuItemProviderRuntime {
+    private app;
     private config;
     private ngbModal;
     private notifications;
     private translate;
     private hostApp;
     private platform;
-    constructor(config: ConfigService, ngbModal: NgbModal, notifications: NotificationsService, translate: TranslateService, hostApp: HostAppService, platform: PlatformService);
+    constructor(app: AppService, config: ConfigService, ngbModal: NgbModal, notifications: NotificationsService, translate: TranslateService, hostApp: HostAppService, platform: PlatformService);
     getItems(tab: CoreBaseTabComponent): Promise<MenuItemOptions[]>;
+    private openSessionLogSettingsForActiveTab;
+    private getActiveTerminalTab;
+    private openSessionLogSettings;
 }
 export {};

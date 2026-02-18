@@ -8,6 +8,26 @@ import { TranslateService } from '../../i18n';
 import { AiAssistantService } from '../../services/core/ai-assistant.service';
 import { OllamaModelService, OllamaModel, ModelPullProgress } from '../../services/ollama/ollama-model.service';
 
+type TabbyModelKind = 'completion' | 'chat' | 'embedding';
+
+interface TabbyCatalogModel {
+    id: string;
+    kind: TabbyModelKind;
+}
+
+interface TabbyInstalledModel {
+    id: string;
+    vendor: string;
+    path: string;
+    hasGgml: boolean;
+}
+
+interface TabbyModelConfigSelection {
+    completion: string;
+    chat: string;
+    embedding: string;
+}
+
 @Component({
     selector: 'app-provider-config',
     templateUrl: './provider-config.component.html',
@@ -16,6 +36,7 @@ import { OllamaModelService, OllamaModel, ModelPullProgress } from '../../servic
 })
 export class ProviderConfigComponent implements OnInit, OnDestroy {
     @Input() providerStatus: any = {};
+    @Input() tabbyOnly = false;
     @Output() refreshStatus = new EventEmitter<void>();
     @Output() switchProvider = new EventEmitter<string>();
 
@@ -48,6 +69,66 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
     deepseekModels: { id: string; ownedBy?: string }[] = [];
     deepseekModelsLoading = false;
 
+    // Tabby models cache
+    tabbyModels: { id: string; ownedBy?: string }[] = [];
+    tabbyModelsLoading = false;
+    tabbyInstalledModels: TabbyInstalledModel[] = [];
+    tabbyInstalledModelsLoading = false;
+    tabbyModelInstallInProgress = false;
+    tabbyCatalogFilter: 'all' | TabbyModelKind = 'all';
+    tabbySelectedCatalogModel = 'StarCoder-1B';
+    tabbyCustomModelId = '';
+    tabbyModelConfigLoading = false;
+    tabbyModelConfigSaving = false;
+    tabbyModelConfigPath = '';
+    tabbyActiveModels: TabbyModelConfigSelection = {
+        completion: 'StarCoder-1B',
+        chat: 'Qwen2-1.5B-Instruct',
+        embedding: 'Nomic-Embed-Text'
+    };
+    readonly tabbyCatalogModels: TabbyCatalogModel[] = [
+        { id: 'StarCoder-1B', kind: 'completion' },
+        { id: 'StarCoder-3B', kind: 'completion' },
+        { id: 'StarCoder-7B', kind: 'completion' },
+        { id: 'StarCoder2-3B', kind: 'completion' },
+        { id: 'StarCoder2-7B', kind: 'completion' },
+        { id: 'CodeLlama-7B', kind: 'completion' },
+        { id: 'CodeLlama-13B', kind: 'completion' },
+        { id: 'DeepSeekCoder-1.3B', kind: 'completion' },
+        { id: 'DeepSeekCoder-6.7B', kind: 'completion' },
+        { id: 'CodeGemma-2B', kind: 'completion' },
+        { id: 'CodeGemma-7B', kind: 'completion' },
+        { id: 'CodeQwen-7B', kind: 'completion' },
+        { id: 'Qwen2.5-Coder-0.5B', kind: 'completion' },
+        { id: 'Qwen2.5-Coder-1.5B', kind: 'completion' },
+        { id: 'Qwen2.5-Coder-3B', kind: 'completion' },
+        { id: 'Qwen2.5-Coder-7B', kind: 'completion' },
+        { id: 'Qwen2.5-Coder-14B', kind: 'completion' },
+        { id: 'Codestral-22B', kind: 'completion' },
+        { id: 'DeepSeek-Coder-V2-Lite', kind: 'completion' },
+        { id: 'Mistral-7B', kind: 'chat' },
+        { id: 'CodeGemma-7B-Instruct', kind: 'chat' },
+        { id: 'CodeQwen-7B-Chat', kind: 'chat' },
+        { id: 'Qwen2.5-Coder-0.5B-Instruct', kind: 'chat' },
+        { id: 'Qwen2.5-Coder-1.5B-Instruct', kind: 'chat' },
+        { id: 'Qwen2.5-Coder-7B-Instruct', kind: 'chat' },
+        { id: 'Qwen2.5-Coder-14B-Instruct', kind: 'chat' },
+        { id: 'Qwen2.5-Coder-32B-Instruct', kind: 'chat' },
+        { id: 'Qwen2-1.5B-Instruct', kind: 'chat' },
+        { id: 'Qwen3-0.6B', kind: 'chat' },
+        { id: 'Qwen3-1.7B', kind: 'chat' },
+        { id: 'Qwen3-4B', kind: 'chat' },
+        { id: 'Qwen3-8B', kind: 'chat' },
+        { id: 'Qwen3-14B', kind: 'chat' },
+        { id: 'Qwen3-32B', kind: 'chat' },
+        { id: 'Qwen3-30B-A3B', kind: 'chat' },
+        { id: 'Qwen3-235B-A22B', kind: 'chat' },
+        { id: 'Codestral-22B', kind: 'chat' },
+        { id: 'Yi-Coder-9B-Chat', kind: 'chat' },
+        { id: 'Nomic-Embed-Text', kind: 'embedding' },
+        { id: 'Jina-Embeddings-V2-Code', kind: 'embedding' }
+    ];
+
     // Tlink Agentic models cache
     proxyModels: { id: string; ownedBy?: string; provider?: string }[] = [];
     proxyModelsLoading = false;
@@ -57,11 +138,18 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
     t: any;
 
     readonly tabbyInstallCommands = {
-        installerBrew: './install_tlink.sh --install-tabby',
-        installerDocker: './install_tlink.sh --install-tabby-docker',
         brew: 'brew install tabbyml/tabby/tabby && brew services start tabby',
-        docker: 'docker run -d --name tabby -p 8080:8080 -v "$HOME/.tabby:/data" registry.tabbyml.com/tabbyml/tabby serve --model StarCoder-1B --chat-model Qwen2-1.5B-Instruct --device cuda'
+        windowsNative: `powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $zip=Join-Path $env:TEMP 'tabby_windows.zip'; $dest=Join-Path $env:LOCALAPPDATA 'Tlink\\\\Tabby'; Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/TabbyML/tabby/releases/latest/download/tabby_x86_64-windows-msvc-cpu.zip' -OutFile $zip; if(Test-Path $dest){Remove-Item $dest -Recurse -Force}; Expand-Archive -Path $zip -DestinationPath $dest -Force; $exe=Get-ChildItem -Path $dest -Filter tabby.exe -Recurse | Select-Object -First 1; if(-not $exe){throw 'tabby.exe not found in package'}; $config=Join-Path $env:USERPROFILE '.tabby\\\\config.toml'; $args=if(Test-Path $config){'serve'}else{'serve --model StarCoder-1B --chat-model Qwen2-1.5B-Instruct'}; Start-Process -FilePath $exe.FullName -ArgumentList $args -WindowStyle Hidden; Write-Output ('Tabby started from ' + $exe.FullName)"`,
+        dockerUnix: 'docker run -d --name tabby -p 8080:8080 -v "$HOME/.tabby:/data" registry.tabbyml.com/tabbyml/tabby serve --model StarCoder-1B --chat-model Qwen2-1.5B-Instruct --device cpu --chat-device cpu',
+        dockerUnixArmCompat: 'docker run -d --name tabby -p 8080:8080 -v "$HOME/.tabby:/data" --platform linux/amd64 registry.tabbyml.com/tabbyml/tabby serve --model StarCoder-1B --chat-model Qwen2-1.5B-Instruct --device cpu --chat-device cpu',
+        dockerWindows: 'docker run -d --name tabby -p 8080:8080 -v "%USERPROFILE%\\\\.tabby:/data" registry.tabbyml.com/tabbyml/tabby serve --model StarCoder-1B --chat-model Qwen2-1.5B-Instruct --device cpu --chat-device cpu',
+        dockerWindowsArmCompat: 'docker run -d --name tabby -p 8080:8080 -v "%USERPROFILE%\\\\.tabby:/data" --platform linux/amd64 registry.tabbyml.com/tabbyml/tabby serve --model StarCoder-1B --chat-model Qwen2-1.5B-Instruct --device cpu --chat-device cpu'
     };
+    tabbyInstallInProgress = false;
+    tabbyInstallMethod: 'native' | 'docker' | null = null;
+    tabbyStartInProgress = false;
+    tabbyRestartInProgress = false;
+    tabbyStopInProgress = false;
 
     // API Key 格式校验规则
     private apiKeyPatterns: { [key: string]: RegExp } = {
@@ -84,7 +172,7 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
     }
 
     private getAgenticConfig() {
-        return this.configs['tlink-agentic'] || this.configs['tlink-proxy'] || this.configs['tlink-agent'];
+        return this.configs['tlink-agentic'] || this.configs['tlink-agent'] || this.configs['tlink-proxy'];
     }
 
     private getAgenticKey(): 'tlink-agentic' | 'tlink-proxy' | 'tlink-agent' | undefined {
@@ -186,17 +274,6 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
                 { key: 'contextWindow', label: 'Context Window', type: 'number', default: 128000, required: false, placeholder: 'Default: 128000' }
             ]
         },
-        'tlink-agent': {
-            name: 'Tlink Agent',
-            description: 'Tlink Agent gateway (alias of Tlink Agentic)',
-            icon: 'fa-cloud',
-            fields: [
-                { key: 'apiKey', label: 'API Key (Not needed)', type: 'password', required: false },
-                { key: 'baseURL', label: 'Base URL', type: 'text', default: 'http://localhost:3052/v1', required: true, placeholder: 'e.g. http://localhost:3052/v1' },
-                { key: 'model', label: 'Model', type: 'text', default: 'auto', required: false, placeholder: 'auto (proxy selects best model)' },
-                { key: 'contextWindow', label: 'Context Window', type: 'number', default: 128000, required: false, placeholder: 'Default: 128000' }
-            ]
-        },
         'tabby': {
             name: 'Tabby',
             description: 'Self-hosted AI coding assistant from TabbyML (OpenAI-compatible)',
@@ -261,6 +338,9 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
         this.preloadOpenAiModels();
         this.preloadGroqModels();
         this.preloadDeepseekModels();
+        this.preloadTabbyModels();
+        this.refreshInstalledTabbyModels(undefined, true);
+        this.loadTabbyModelConfig(undefined, true);
         // 检测本地供应商状态
         this.checkLocalProviderStatus();
         // Load Ollama models if Ollama is configured
@@ -357,6 +437,928 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
         }
 
         fallbackCopy();
+    }
+
+    isInstallingTabby(method: 'native' | 'docker'): boolean {
+        return this.tabbyInstallInProgress && this.tabbyInstallMethod === method;
+    }
+
+    isWindowsPlatform(): boolean {
+        return this.getPlatform() === 'win32';
+    }
+
+    isMacPlatform(): boolean {
+        return this.getPlatform() === 'darwin';
+    }
+
+    isNativeTabbyInstallSupported(): boolean {
+        return this.isWindowsPlatform() || this.isMacPlatform();
+    }
+
+    getTabbyPrimaryInstallLabel(): string {
+        if (!this.isNativeTabbyInstallSupported()) {
+            return 'Direct install unsupported on this OS';
+        }
+        if (this.isWindowsPlatform()) {
+            return this.isInstallingTabby('native')
+                ? 'Installing via Tlink...'
+                : 'Install via Tlink (Windows package)';
+        }
+        return this.isInstallingTabby('native')
+            ? 'Installing via Tlink...'
+            : 'Install via Tlink (Homebrew)';
+    }
+
+    getTabbyPrimaryInstallIcon(): string {
+        return this.isInstallingTabby('native')
+            ? 'fa-spinner fa-spin'
+            : (this.isWindowsPlatform() ? 'fa-windows' : 'fa-download');
+    }
+
+    isStartingTabby(): boolean {
+        return this.tabbyStartInProgress;
+    }
+
+    isRestartingTabby(): boolean {
+        return this.tabbyRestartInProgress;
+    }
+
+    isStoppingTabby(): boolean {
+        return this.tabbyStopInProgress;
+    }
+
+    getTabbyBaseUrl(): string {
+        const rawBase = this.configs['tabby']?.baseURL || 'http://localhost:8080';
+        return String(rawBase).trim().replace(/\/+$/, '');
+    }
+
+    async startTabbyServer(event?: Event, silent = false): Promise<boolean> {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        if (this.tabbyStartInProgress) {
+            if (!silent) {
+                this.toast.info('Tabby start is already in progress.');
+            }
+            return false;
+        }
+        if (this.tabbyRestartInProgress) {
+            if (!silent) {
+                this.toast.info('Tabby restart is already in progress.');
+            }
+            return false;
+        }
+        if (this.tabbyStopInProgress) {
+            if (!silent) {
+                this.toast.info('Tabby stop is already in progress.');
+            }
+            return false;
+        }
+
+        this.tabbyStartInProgress = true;
+        if (!silent) {
+            this.toast.info('Starting Tabby server...');
+        }
+
+        try {
+            const command = this.getTabbyStartCommandForCurrentPlatform();
+            const result = await this.executeShellCommand(command);
+            if (result.code !== 0) {
+                const shortOutput = this.getTailOutput(result.output);
+                const detail = shortOutput ? `\n\n${this.makeToastSafe(shortOutput)}` : '';
+                if (!silent) {
+                    this.toast.error(`Failed to start Tabby server.${detail}`, 9000);
+                }
+                this.logger.error('Tabby start command failed', {
+                    code: result.code,
+                    output: shortOutput
+                });
+                return false;
+            }
+
+            const reachable = await this.waitForTabbyReachability(20, 2000);
+            if (reachable) {
+                if (!silent) {
+                    this.toast.success('Tabby server started and is reachable.');
+                }
+                return true;
+            }
+
+            if (!silent) {
+                this.toast.warning('Tabby start command ran, but server is not reachable yet. Check ~/.tabby/tlink-tabby.log', 9000);
+            }
+            return false;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (!silent) {
+                this.toast.error(`Unable to start Tabby server: ${message}`);
+            }
+            this.logger.error('Failed to start Tabby server', { error: message });
+            return false;
+        } finally {
+            this.tabbyStartInProgress = false;
+        }
+    }
+
+    async restartTabbyServer(event?: Event): Promise<boolean> {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        if (this.tabbyRestartInProgress) {
+            this.toast.info('Tabby restart is already in progress.');
+            return false;
+        }
+        if (this.tabbyStartInProgress) {
+            this.toast.info('Tabby start is already in progress.');
+            return false;
+        }
+        if (this.tabbyInstallInProgress) {
+            this.toast.info('Tabby install is in progress. Restart after it completes.');
+            return false;
+        }
+        if (this.tabbyStopInProgress) {
+            this.toast.info('Tabby stop is in progress. Restart after it completes.');
+            return false;
+        }
+
+        this.tabbyRestartInProgress = true;
+        this.toast.info('Restarting Tabby server...');
+
+        try {
+            const command = this.getTabbyRestartCommandForCurrentPlatform();
+            const result = await this.executeShellCommand(command);
+            if (result.code !== 0) {
+                const shortOutput = this.getTailOutput(result.output);
+                const detail = shortOutput ? `\n\n${this.makeToastSafe(shortOutput)}` : '';
+                this.toast.error(`Failed to restart Tabby server.${detail}`, 9000);
+                this.logger.error('Tabby restart command failed', {
+                    code: result.code,
+                    output: shortOutput
+                });
+                return false;
+            }
+
+            const reachable = await this.waitForTabbyReachability(20, 2000);
+            if (reachable) {
+                this.toast.success('Tabby server restarted and is reachable.');
+                return true;
+            }
+
+            this.toast.warning('Tabby restart command ran, but server is not reachable yet. Check ~/.tabby/tlink-tabby.log', 9000);
+            return false;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.toast.error(`Unable to restart Tabby server: ${message}`);
+            this.logger.error('Failed to restart Tabby server', { error: message });
+            return false;
+        } finally {
+            this.tabbyRestartInProgress = false;
+        }
+    }
+
+    async stopTabbyServer(event?: Event): Promise<boolean> {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        if (this.tabbyStopInProgress) {
+            this.toast.info('Tabby stop is already in progress.');
+            return false;
+        }
+        if (this.tabbyStartInProgress) {
+            this.toast.info('Tabby start is in progress. Stop after it completes.');
+            return false;
+        }
+        if (this.tabbyRestartInProgress) {
+            this.toast.info('Tabby restart is in progress. Stop after it completes.');
+            return false;
+        }
+        if (this.tabbyInstallInProgress) {
+            this.toast.info('Tabby install is in progress. Stop after it completes.');
+            return false;
+        }
+
+        this.tabbyStopInProgress = true;
+        this.toast.info('Stopping Tabby server...');
+
+        try {
+            const command = this.getTabbyStopCommandForCurrentPlatform();
+            const result = await this.executeShellCommand(command);
+            if (result.code !== 0) {
+                const shortOutput = this.getTailOutput(result.output);
+                const detail = shortOutput ? `\n\n${this.makeToastSafe(shortOutput)}` : '';
+                this.toast.error(`Failed to stop Tabby server.${detail}`, 9000);
+                this.logger.error('Tabby stop command failed', {
+                    code: result.code,
+                    output: shortOutput
+                });
+                return false;
+            }
+
+            const stopped = await this.waitForTabbyStopped(12, 1000);
+            if (stopped) {
+                this.toast.success('Tabby server stopped.');
+                return true;
+            }
+
+            this.toast.warning('Tabby stop command ran, but service still appears reachable on configured URL.', 9000);
+            return false;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.toast.error(`Unable to stop Tabby server: ${message}`);
+            this.logger.error('Failed to stop Tabby server', { error: message });
+            return false;
+        } finally {
+            this.tabbyStopInProgress = false;
+        }
+    }
+
+    async openTabbyServerUrl(event?: Event): Promise<void> {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        const base = this.getTabbyBaseUrl();
+        if (!base) {
+            this.toast.error('Tabby URL is empty. Set Base URL first.');
+            return;
+        }
+
+        const webUrl = this.getTabbyWebUrl(base);
+        await this.openExternal(webUrl);
+    }
+
+    private getTabbyWebUrl(baseURL: string): string {
+        const trimmed = String(baseURL || '').trim().replace(/\/+$/, '');
+        if (!trimmed) {
+            return trimmed;
+        }
+
+        // Convert API endpoints to web root: /v1, /v1beta, /models
+        return trimmed
+            .replace(/\/(v1beta|v1)\/models$/i, '')
+            .replace(/\/(v1beta|v1)$/i, '')
+            .replace(/\/models$/i, '');
+    }
+
+    async installTabbyWithInstaller(method: 'native' | 'docker', event?: Event): Promise<void> {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        if (this.tabbyInstallInProgress) {
+            this.toast.info('Tabby installation is already running. Please wait...');
+            return;
+        }
+
+        const requestedMethod = method;
+        let effectiveMethod: 'native' | 'docker' = method;
+        if (requestedMethod === 'docker' && this.isMacPlatform()) {
+            effectiveMethod = 'native';
+            this.toast.info('Tabby Docker image requires NVIDIA CUDA and is not supported on macOS. Switching to Homebrew install.', 7000);
+        }
+
+        const methodLabel = this.getInstallMethodLabel(effectiveMethod);
+
+        this.tabbyInstallInProgress = true;
+        this.tabbyInstallMethod = effectiveMethod;
+        this.toast.info(`Starting Tabby install via ${methodLabel}...`, 4000);
+
+        try {
+            if (effectiveMethod === 'docker') {
+                const dockerReady = await this.ensureDockerReady();
+                if (!dockerReady.ready) {
+                    const dockerHint = dockerReady.message || this.getDockerFailureHint(dockerReady.output || '');
+                    const fallback = 'Docker is not ready. Start Docker Desktop and retry.';
+                    this.toast.error(dockerHint || fallback, 9000);
+                    this.logger.warn('Docker not ready for Tabby installer', {
+                        method: effectiveMethod,
+                        output: this.getTailOutput(dockerReady.output || '')
+                    });
+                    return;
+                }
+
+                if (dockerReady.autoInstalled) {
+                    this.toast.success('Docker Desktop installed and Docker daemon is ready.');
+                } else if (dockerReady.autoStarted) {
+                    this.toast.success('Docker Desktop started and Docker daemon is ready.');
+                }
+
+                await this.cleanupExistingTabbyDockerContainer();
+            }
+
+            const command = this.getDirectInstallCommand(effectiveMethod);
+
+            this.logger.info('Running Tabby installer command', {
+                method: effectiveMethod,
+                requestedMethod,
+                platform: this.getPlatform()
+            });
+
+            const result = await this.executeShellCommand(command);
+            if (result.code === 0) {
+                this.toast.success(`Tabby install command completed via ${methodLabel}.`);
+                const reachable = await this.checkTabbyReachability();
+                if (effectiveMethod === 'docker' && !reachable) {
+                    await this.diagnoseDockerTabbyStartup();
+                }
+            } else {
+                if (
+                    effectiveMethod === 'native' &&
+                    this.isMacPlatform() &&
+                    this.isMacBrewServiceStartFailure(result.output)
+                ) {
+                    const recovered = await this.tryStartTabbyDirectlyOnMac();
+                    if (recovered) {
+                        return;
+                    }
+                }
+
+                const shortOutput = this.getTailOutput(result.output);
+                const dockerHint = effectiveMethod === 'docker'
+                    ? this.getDockerFailureHint(result.output)
+                    : null;
+                const toastMessage = dockerHint || (
+                    `Tabby install failed via ${methodLabel}.` +
+                    (shortOutput ? `\n\n${this.makeToastSafe(shortOutput)}` : '')
+                );
+                this.toast.error(toastMessage, 9000);
+                this.logger.error('Tabby installer command failed', {
+                    method: effectiveMethod,
+                    requestedMethod,
+                    code: result.code,
+                    output: shortOutput
+                });
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.toast.error(`Failed to run Tabby installer: ${message}`);
+            this.logger.error('Failed to run Tabby installer command', {
+                method: effectiveMethod,
+                requestedMethod,
+                error: message
+            });
+        } finally {
+            this.tabbyInstallInProgress = false;
+            this.tabbyInstallMethod = null;
+        }
+    }
+
+    private getPlatform(): string {
+        return String((window as any)?.process?.platform || '').toLowerCase();
+    }
+
+    private getArchitecture(): string {
+        return String((window as any)?.process?.arch || '').toLowerCase();
+    }
+
+    isArm64Arch(): boolean {
+        const arch = this.getArchitecture();
+        return arch === 'arm64' || arch === 'aarch64';
+    }
+
+    private getInstallMethodLabel(method: 'native' | 'docker'): string {
+        if (method === 'docker') {
+            return 'Docker';
+        }
+        if (this.isWindowsPlatform()) {
+            return 'Windows package';
+        }
+        return 'Homebrew';
+    }
+
+    private getDirectInstallCommand(method: 'native' | 'docker'): string {
+        const platform = this.getPlatform();
+
+        if (method === 'docker') {
+            return this.getDockerCommandForCurrentPlatform();
+        }
+
+        if (platform === 'darwin') {
+            return this.tabbyInstallCommands.brew;
+        }
+
+        if (platform === 'win32') {
+            return this.tabbyInstallCommands.windowsNative;
+        }
+
+        throw new Error('Direct native install is supported on macOS and Windows. Use Docker on this platform.');
+    }
+
+    private getTabbyStartCommandForCurrentPlatform(): string {
+        const platform = this.getPlatform();
+
+        if (platform === 'darwin') {
+            return [
+                'TABBY_BIN="$(command -v tabby || true)"',
+                'if [ -z "$TABBY_BIN" ] && [ -x "/opt/homebrew/bin/tabby" ]; then TABBY_BIN="/opt/homebrew/bin/tabby"; fi',
+                'if [ -z "$TABBY_BIN" ] && [ -x "/usr/local/bin/tabby" ]; then TABBY_BIN="/usr/local/bin/tabby"; fi',
+                'if [ -z "$TABBY_BIN" ]; then echo "tabby binary not found"; exit 1; fi',
+                'mkdir -p "$HOME/.tabby"',
+                'pkill -f "tabby serve" >/dev/null 2>&1 || true',
+                'pkill -f "llama-server -m $HOME/.tabby/models/TabbyML/" >/dev/null 2>&1 || true',
+                'sleep 1',
+                'if lsof -nP -iTCP:8080 -sTCP:LISTEN >/dev/null 2>&1; then echo "tabby already listening on 8080"; exit 0; fi',
+                'if [ -f "$HOME/.tabby/config.toml" ]; then TABBY_SERVE_ARGS="serve --host 0.0.0.0 --port 8080 --device metal --chat-device metal"; else TABBY_SERVE_ARGS="serve --model StarCoder-1B --chat-model Qwen2-1.5B-Instruct --host 0.0.0.0 --port 8080 --device metal --chat-device metal"; fi',
+                'nohup "$TABBY_BIN" $TABBY_SERVE_ARGS > "$HOME/.tabby/tlink-tabby.log" 2>&1 < /dev/null &',
+                'echo "Started Tabby: $TABBY_BIN"'
+            ].join('\n');
+        }
+
+        if (platform === 'win32') {
+            return `powershell -NoProfile -ExecutionPolicy Bypass -Command "$tabby=(Get-Command tabby -ErrorAction SilentlyContinue); if(-not $tabby){ throw 'tabby binary not found in PATH' }; $config=Join-Path $env:USERPROFILE '.tabby\\\\config.toml'; $args=if(Test-Path $config){'serve --host 0.0.0.0 --port 8080 --device cpu --chat-device cpu'}else{'serve --model StarCoder-1B --chat-model Qwen2-1.5B-Instruct --host 0.0.0.0 --port 8080 --device cpu --chat-device cpu'}; Start-Process -FilePath $tabby.Source -ArgumentList $args -WindowStyle Hidden; Write-Output ('Started Tabby: ' + $tabby.Source)"`;
+        }
+
+        throw new Error('Auto-start Tabby is supported on macOS and Windows in Tlink. Start Tabby manually on this OS.');
+    }
+
+    private getTabbyRestartCommandForCurrentPlatform(): string {
+        const platform = this.getPlatform();
+
+        if (platform === 'darwin') {
+            return this.getTabbyStartCommandForCurrentPlatform();
+        }
+
+        if (platform === 'win32') {
+            return `powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Process tabby -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 750; $tabby=(Get-Command tabby -ErrorAction SilentlyContinue); if(-not $tabby){ throw 'tabby binary not found in PATH' }; $config=Join-Path $env:USERPROFILE '.tabby\\\\config.toml'; $args=if(Test-Path $config){'serve --host 0.0.0.0 --port 8080 --device cpu --chat-device cpu'}else{'serve --model StarCoder-1B --chat-model Qwen2-1.5B-Instruct --host 0.0.0.0 --port 8080 --device cpu --chat-device cpu'}; Start-Process -FilePath $tabby.Source -ArgumentList $args -WindowStyle Hidden; Write-Output ('Restarted Tabby: ' + $tabby.Source)"`;
+        }
+
+        throw new Error('Auto-restart Tabby is supported on macOS and Windows in Tlink. Restart Tabby manually on this OS.');
+    }
+
+    private getTabbyStopCommandForCurrentPlatform(): string {
+        const platform = this.getPlatform();
+
+        if (platform === 'darwin') {
+            return [
+                'pkill -f "tabby serve" >/dev/null 2>&1 || true',
+                'pkill -f "llama-server -m $HOME/.tabby/models/TabbyML/" >/dev/null 2>&1 || true',
+                'sleep 1',
+                'echo "Stop command sent for Tabby."'
+            ].join('\n');
+        }
+
+        if (platform === 'win32') {
+            return `powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Process tabby -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Get-Process llama-server -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 750; Write-Output 'Stop command sent for Tabby.'"`;
+        }
+
+        throw new Error('Auto-stop Tabby is supported on macOS and Windows in Tlink. Stop Tabby manually on this OS.');
+    }
+
+    private getTabbyDownloadCommandForCurrentPlatform(modelId: string): string {
+        const platform = this.getPlatform();
+
+        if (platform === 'win32') {
+            const escapedModel = this.escapeForPowerShellSingleQuote(modelId);
+            return `powershell -NoProfile -ExecutionPolicy Bypass -Command "$tabby=(Get-Command tabby -ErrorAction SilentlyContinue); if(-not $tabby){ throw 'tabby binary not found in PATH' }; & $tabby.Source download --model '${escapedModel}'; if($LASTEXITCODE -ne 0){ exit $LASTEXITCODE }"`;
+        }
+
+        const escapedModel = this.quoteForPosixShell(modelId);
+        return [
+            'TABBY_BIN="$(command -v tabby || true)"',
+            'if [ -z "$TABBY_BIN" ] && [ -x "/opt/homebrew/bin/tabby" ]; then TABBY_BIN="/opt/homebrew/bin/tabby"; fi',
+            'if [ -z "$TABBY_BIN" ] && [ -x "/usr/local/bin/tabby" ]; then TABBY_BIN="/usr/local/bin/tabby"; fi',
+            'if [ -z "$TABBY_BIN" ]; then echo "tabby binary not found"; exit 1; fi',
+            `"${'$'}TABBY_BIN" download --model ${escapedModel}`
+        ].join('\n');
+    }
+
+    private quoteForPosixShell(raw: string): string {
+        return `'${String(raw).replace(/'/g, `'\\''`)}'`;
+    }
+
+    private escapeForPowerShellSingleQuote(raw: string): string {
+        return String(raw).replace(/'/g, "''");
+    }
+
+    getDockerCommandForCurrentPlatform(): string {
+        const isArm64 = this.isArm64Arch();
+        if (this.isWindowsPlatform()) {
+            return isArm64
+                ? this.tabbyInstallCommands.dockerWindowsArmCompat
+                : this.tabbyInstallCommands.dockerWindows;
+        }
+
+        return isArm64
+            ? this.tabbyInstallCommands.dockerUnixArmCompat
+            : this.tabbyInstallCommands.dockerUnix;
+    }
+
+    private executeShellCommand(command: string, cwd?: string): Promise<{ code: number | null; output: string }> {
+        return new Promise((resolve, reject) => {
+            const win: any = window as any;
+            const childProcess = win?.require?.('child_process');
+            if (!childProcess?.spawn) {
+                reject(new Error('Shell execution is not available in this environment.'));
+                return;
+            }
+
+            const child = childProcess.spawn(command, {
+                shell: true,
+                cwd,
+                env: win?.process?.env
+            });
+
+            let output = '';
+            const append = (chunk: any) => {
+                output += chunk?.toString ? chunk.toString() : String(chunk ?? '');
+                if (output.length > 24000) {
+                    output = output.slice(-24000);
+                }
+            };
+
+            child.stdout?.on('data', append);
+            child.stderr?.on('data', append);
+            child.on('error', reject);
+            child.on('close', (code: number | null) => resolve({ code, output }));
+        });
+    }
+
+    private getTailOutput(output: string, maxLines = 8): string {
+        if (!output?.trim()) {
+            return '';
+        }
+        const lines = output
+            .split(/\r?\n/)
+            .map(line => line.trim())
+            .filter(Boolean);
+        return lines.slice(-maxLines).join('\n').slice(0, 600);
+    }
+
+    private async ensureDockerReady(): Promise<{ ready: boolean; output?: string; message?: string; autoStarted?: boolean; autoInstalled?: boolean }> {
+        const probe = async () => this.executeShellCommand(this.getDockerInfoProbeCommand());
+
+        const firstProbe = await probe();
+        if (firstProbe.code === 0) {
+            return { ready: true };
+        }
+
+        let combinedOutput = firstProbe.output || '';
+        let autoInstalled = false;
+
+        if (this.isDockerCliMissing(firstProbe.output)) {
+            const installCommand = this.getDockerDesktopInstallCommand();
+            if (!installCommand) {
+                return {
+                    ready: false,
+                    output: firstProbe.output,
+                    message: 'Docker CLI is not installed. Install Docker Desktop, then retry.\nhttps://www.docker.com/products/docker-desktop/'
+                };
+            }
+
+            this.toast.info('Docker CLI not found. Trying to install Docker Desktop...', 7000);
+            const installResult = await this.executeShellCommand(installCommand);
+            combinedOutput = `${combinedOutput}\n${installResult.output || ''}`.trim();
+
+            if (installResult.code !== 0) {
+                return {
+                    ready: false,
+                    output: combinedOutput,
+                    message: 'Unable to auto-install Docker Desktop. Install it manually, then retry.\nhttps://www.docker.com/products/docker-desktop/'
+                };
+            }
+
+            autoInstalled = true;
+            this.toast.info('Docker Desktop install command completed. Launching Docker...', 6000);
+        }
+
+        const startOutcome = await this.startDockerDesktopAndWait(combinedOutput);
+        if (startOutcome.ready) {
+            return {
+                ...startOutcome,
+                autoInstalled
+            };
+        }
+
+        if (autoInstalled) {
+            return {
+                ...startOutcome,
+                autoInstalled: true,
+                message: startOutcome.message || 'Docker Desktop was installed, but Docker daemon is not ready yet. Wait a moment and retry.'
+            };
+        }
+
+        return startOutcome;
+    }
+
+    private async startDockerDesktopAndWait(priorOutput: string): Promise<{ ready: boolean; output?: string; message?: string; autoStarted?: boolean }> {
+        const startCommand = this.getDockerDesktopStartCommand();
+        if (!startCommand) {
+            return {
+                ready: false,
+                output: priorOutput,
+                message: 'Docker is installed but not running. Start Docker daemon manually and retry.'
+            };
+        }
+
+        this.toast.info('Docker is not running. Trying to start Docker Desktop...', 5000);
+        const startResult = await this.executeShellCommand(startCommand);
+        const combined = `${priorOutput || ''}\n${startResult.output || ''}`.trim();
+        if (startResult.code !== 0) {
+            return {
+                ready: false,
+                output: combined,
+                message: 'Unable to auto-start Docker Desktop. Start it manually, wait until it is running, then retry.\nhttps://www.docker.com/products/docker-desktop/'
+            };
+        }
+
+        const probe = async () => this.executeShellCommand(this.getDockerInfoProbeCommand());
+        const timeoutMs = 90_000;
+        const intervalMs = 3_000;
+        const deadline = Date.now() + timeoutMs;
+        let lastOutput = combined;
+
+        while (Date.now() < deadline) {
+            await this.sleep(intervalMs);
+            const nextProbe = await probe();
+            if (nextProbe.code === 0) {
+                return { ready: true, output: combined, autoStarted: true };
+            }
+            lastOutput = nextProbe.output || lastOutput;
+            if (this.isDockerCliMissing(lastOutput)) {
+                return {
+                    ready: false,
+                    output: lastOutput,
+                    message: 'Docker CLI is not installed. Install Docker Desktop, then retry.\nhttps://www.docker.com/products/docker-desktop/'
+                };
+            }
+        }
+
+        return {
+            ready: false,
+            output: lastOutput,
+            message: 'Docker Desktop was launched, but Docker daemon is not ready yet. Wait a bit and retry.'
+        };
+    }
+
+    private getDockerInfoProbeCommand(): string {
+        if (this.isWindowsPlatform()) {
+            return `powershell -NoProfile -ExecutionPolicy Bypass -Command "$cmd=Get-Command docker -ErrorAction SilentlyContinue; if($cmd){ & docker info; exit $LASTEXITCODE }; $candidates=@('$Env:ProgramFiles\\\\Docker\\\\Docker\\\\resources\\\\bin\\\\docker.exe','$Env:LocalAppData\\\\Programs\\\\Docker\\\\Docker\\\\resources\\\\bin\\\\docker.exe'); $exe=$candidates | Where-Object { Test-Path $_ } | Select-Object -First 1; if($exe){ & $exe info; exit $LASTEXITCODE }; Write-Error 'docker CLI not found'; exit 1"`;
+        }
+
+        return 'if command -v docker >/dev/null 2>&1; then docker info; elif [ -x "/Applications/Docker.app/Contents/Resources/bin/docker" ]; then "/Applications/Docker.app/Contents/Resources/bin/docker" info; else echo "docker CLI not found" >&2; exit 1; fi';
+    }
+
+    private getDockerDesktopInstallCommand(): string | null {
+        const platform = this.getPlatform();
+        if (platform === 'darwin') {
+            return 'brew install --cask docker';
+        }
+
+        if (platform === 'win32') {
+            return `powershell -NoProfile -ExecutionPolicy Bypass -Command "if(-not (Get-Command winget -ErrorAction SilentlyContinue)){ throw 'winget is not available' }; winget install -e --id Docker.DockerDesktop --accept-package-agreements --accept-source-agreements --silent"`;
+        }
+
+        return null;
+    }
+
+    private isDockerCliMissing(output: string): boolean {
+        const text = String(output || '').toLowerCase();
+        return text.includes('docker: command not found') ||
+            text.includes('docker cli not found') ||
+            text.includes('docker is not recognized') ||
+            text.includes("'docker' is not recognized");
+    }
+
+    private getDockerDesktopStartCommand(): string | null {
+        const platform = this.getPlatform();
+        if (platform === 'darwin') {
+            return 'open -ga Docker';
+        }
+
+        if (platform === 'win32') {
+            return `powershell -NoProfile -ExecutionPolicy Bypass -Command "$candidates=@('$Env:ProgramFiles\\\\Docker\\\\Docker\\\\Docker Desktop.exe','$Env:LocalAppData\\\\Programs\\\\Docker\\\\Docker Desktop.exe'); $exe=$candidates | Where-Object { Test-Path $_ } | Select-Object -First 1; if(-not $exe){ throw 'Docker Desktop executable not found' }; Start-Process -FilePath $exe; Write-Output ('Started Docker Desktop: ' + $exe)"`;
+        }
+
+        return null;
+    }
+
+    private makeToastSafe(text: string): string {
+        return String(text || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
+    private getDockerFailureHint(output: string): string | null {
+        const text = String(output || '').toLowerCase();
+        const dockerDesktopUrl = 'https://www.docker.com/products/docker-desktop/';
+
+        const missingCli =
+            text.includes('docker: command not found') ||
+            text.includes('docker is not recognized') ||
+            text.includes("'docker' is not recognized");
+
+        if (missingCli) {
+            return `Docker CLI is not installed. Install Docker Desktop, then retry.\n${dockerDesktopUrl}`;
+        }
+
+        const armManifestMismatch =
+            text.includes('no matching manifest') &&
+            text.includes('linux/arm64');
+
+        if (armManifestMismatch) {
+            return 'Docker image does not provide linux/arm64 on this registry. Retrying with --platform linux/amd64 is required. Please retry install.';
+        }
+
+        const cudaRuntimeMissing =
+            text.includes('libcuda.so.1') ||
+            text.includes('cuda') && text.includes('cannot open shared object file');
+
+        if (cudaRuntimeMissing) {
+            return 'Tabby Docker image requires NVIDIA CUDA runtime. This host cannot provide libcuda.so.1. Use native install (Homebrew on macOS / Windows package on Windows).';
+        }
+
+        const daemonUnavailable =
+            text.includes('failed to connect to the docker api') ||
+            text.includes('cannot connect to the docker daemon') ||
+            text.includes('is the docker daemon running') ||
+            text.includes('docker.sock: connect: no such file or directory') ||
+            text.includes('docker.sock') && text.includes('connection refused');
+
+        if (daemonUnavailable) {
+            return `Docker is installed but not running. Start Docker Desktop and wait until it shows as running, then retry.\n${dockerDesktopUrl}`;
+        }
+
+        const dockerPermission =
+            text.includes('permission denied') &&
+            (text.includes('docker.sock') || text.includes('/var/run/docker.sock'));
+
+        if (dockerPermission) {
+            return `Docker is running but access to docker.sock is denied for this user. Fix Docker permissions (or run with proper group rights), then retry.`;
+        }
+
+        return null;
+    }
+
+    private isMacBrewServiceStartFailure(output: string): boolean {
+        const text = String(output || '').toLowerCase();
+        return (
+            text.includes('homebrew.mxcl.tabby.plist') ||
+            text.includes('brew services') && text.includes('tabby') ||
+            text.includes('launchctl') ||
+            text.includes('exited with 5')
+        );
+    }
+
+    private async tryStartTabbyDirectlyOnMac(): Promise<boolean> {
+        this.toast.warning('Homebrew service start failed. Trying direct Tabby launch...', 6000);
+
+        const command = [
+            'TABBY_BIN="$(command -v tabby || true)"',
+            'if [ -z "$TABBY_BIN" ] && [ -x "/opt/homebrew/bin/tabby" ]; then TABBY_BIN="/opt/homebrew/bin/tabby"; fi',
+            'if [ -z "$TABBY_BIN" ] && [ -x "/usr/local/bin/tabby" ]; then TABBY_BIN="/usr/local/bin/tabby"; fi',
+            'if [ -z "$TABBY_BIN" ]; then echo "tabby binary not found"; exit 1; fi',
+            'mkdir -p "$HOME/.tabby"',
+            'if [ -f "$HOME/.tabby/config.toml" ]; then TABBY_SERVE_ARGS="serve --host 0.0.0.0 --port 8080 --device cpu --chat-device cpu"; else TABBY_SERVE_ARGS="serve --model StarCoder-1B --chat-model Qwen2-1.5B-Instruct --host 0.0.0.0 --port 8080 --device cpu --chat-device cpu"; fi',
+            'nohup "$TABBY_BIN" $TABBY_SERVE_ARGS > "$HOME/.tabby/tlink-tabby.log" 2>&1 < /dev/null &',
+            'echo "Started Tabby directly: $TABBY_BIN"'
+        ].join('\n');
+
+        const result = await this.executeShellCommand(command);
+        if (result.code !== 0) {
+            const tail = this.getTailOutput(result.output);
+            this.logger.error('Failed to start Tabby directly on macOS after brew services failure', { output: tail });
+            return false;
+        }
+
+        const reachable = await this.waitForTabbyReachability(8, 2500);
+        if (reachable) {
+            this.toast.success('Tabby started directly (without brew services) and is reachable at http://localhost:8080');
+            return true;
+        }
+
+        this.toast.warning('Tabby launch command ran, but service is not reachable yet. Check logs at ~/.tabby/tlink-tabby.log', 9000);
+        return true;
+    }
+
+    private async cleanupExistingTabbyDockerContainer(): Promise<void> {
+        try {
+            const result = await this.executeShellCommand('docker rm -f tabby');
+            if (result.code === 0) {
+                this.logger.info('Removed existing tabby Docker container before relaunch.');
+            }
+        } catch {
+            // Ignore cleanup failures; docker run will report actionable errors.
+        }
+    }
+
+    private async diagnoseDockerTabbyStartup(): Promise<void> {
+        try {
+            const inspect = await this.executeShellCommand('docker inspect tabby --format "{{.State.Running}}|{{.State.ExitCode}}|{{.State.Status}}"');
+            const stateLine = inspect.output.split(/\r?\n/).map(x => x.trim()).find(Boolean) || '';
+            const stateLower = stateLine.toLowerCase();
+
+            if (stateLower.startsWith('true|')) {
+                this.toast.info('Tabby container is running. Service may still be warming up models.');
+                return;
+            }
+
+            const logs = await this.executeShellCommand('docker logs --tail 80 tabby');
+            const tail = this.getTailOutput(logs.output, 12);
+            const lower = String(logs.output || '').toLowerCase();
+
+            if (lower.includes('libcuda.so.1') || lower.includes('no such file or directory') && lower.includes('cuda')) {
+                this.toast.error(
+                    'Tabby Docker image requires NVIDIA CUDA runtime (libcuda.so.1). On macOS, use native Homebrew install instead of Docker.',
+                    10000
+                );
+                this.logger.error('Tabby Docker startup failed with CUDA runtime error', {
+                    state: stateLine,
+                    logs: tail
+                });
+                return;
+            }
+
+            if (tail) {
+                this.toast.error(`Tabby container exited during startup.\n\n${this.makeToastSafe(tail)}`, 10000);
+            } else {
+                this.toast.error('Tabby container exited during startup. Check Docker logs: docker logs tabby', 8000);
+            }
+            this.logger.error('Tabby Docker startup diagnostics', {
+                state: stateLine,
+                logs: tail
+            });
+        } catch (error) {
+            this.logger.warn('Failed to diagnose Tabby Docker startup', { error: String(error) });
+        }
+    }
+
+    private async waitForTabbyReachability(attempts = 6, delayMs = 2000): Promise<boolean> {
+        for (let i = 0; i < attempts; i++) {
+            const reachable = await this.checkTabbyReachability(true);
+            if (reachable) {
+                return true;
+            }
+
+            if (i < attempts - 1) {
+                await this.sleep(delayMs);
+            }
+        }
+        return false;
+    }
+
+    private async waitForTabbyStopped(attempts = 8, delayMs = 1000): Promise<boolean> {
+        for (let i = 0; i < attempts; i++) {
+            const reachable = await this.checkTabbyReachability(true);
+            if (!reachable) {
+                return true;
+            }
+
+            if (i < attempts - 1) {
+                await this.sleep(delayMs);
+            }
+        }
+        return false;
+    }
+
+    private async checkTabbyReachability(silent = false): Promise<boolean> {
+        const base = this.getTabbyBaseUrl();
+        // Try non-auth endpoints first to avoid noisy 401 logs when auth is enabled.
+        const endpoints = [`${base}/health`, `${base}/v1/health`, base];
+
+        for (const endpoint of endpoints) {
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'GET',
+                    signal: AbortSignal.timeout(3000)
+                });
+                if (response.ok) {
+                    if (!silent) {
+                        this.toast.success(`Tabby server is reachable at ${base}`);
+                    }
+                    return true;
+                }
+
+                if (response.status === 401 || response.status === 403) {
+                    if (!silent) {
+                        this.toast.success(`Tabby server is reachable at ${base} (auth required)`);
+                    }
+                    return true;
+                }
+
+                if (response.status < 500 && response.status !== 404) {
+                    if (!silent) {
+                        this.toast.success(`Tabby server is reachable at ${base}`);
+                    }
+                    return true;
+                }
+            } catch {
+                // Try next endpoint
+            }
+        }
+
+        if (!silent) {
+            this.toast.warning(`Tabby install finished, but ${base} is not reachable yet. It may still be starting up.`);
+        }
+        return false;
     }
 
     async startOllama(event?: Event): Promise<void> {
@@ -510,10 +1512,41 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
      */
     private loadConfigs(): void {
         const allConfigs = this.config.getAllProviderConfigs();
+        const savedAgenticConfig = this.config.getProviderConfig('tlink-agentic');
+        const savedAgentConfig = this.config.getProviderConfig('tlink-agent');
+        const savedProxyConfig = this.config.getProviderConfig('tlink-proxy');
+        let migratedAgenticConfig: any | null = null;
 
-        // Migrate legacy id tlink-proxy to tlink-agentic
-        if (allConfigs['tlink-proxy'] && !allConfigs['tlink-agentic']) {
-            allConfigs['tlink-agentic'] = { ...allConfigs['tlink-proxy'], name: 'tlink-agentic' };
+        // Migrate legacy ids to tlink-agentic
+        if (savedAgentConfig && !savedAgenticConfig) {
+            migratedAgenticConfig = {
+                ...(allConfigs['tlink-agentic'] || {}),
+                ...savedAgentConfig,
+                name: 'tlink-agentic',
+                displayName: 'Tlink Agentic'
+            };
+            allConfigs['tlink-agentic'] = migratedAgenticConfig;
+        }
+        if (savedProxyConfig && !savedAgenticConfig && !migratedAgenticConfig) {
+            migratedAgenticConfig = {
+                ...(allConfigs['tlink-agentic'] || {}),
+                ...savedProxyConfig,
+                name: 'tlink-agentic',
+                displayName: 'Tlink Agentic'
+            };
+            allConfigs['tlink-agentic'] = migratedAgenticConfig;
+        }
+        if (migratedAgenticConfig) {
+            this.config.setProviderConfig('tlink-agentic', migratedAgenticConfig);
+        }
+        if (savedAgentConfig) {
+            this.config.deleteProviderConfig('tlink-agent');
+        }
+        if (savedProxyConfig) {
+            this.config.deleteProviderConfig('tlink-proxy');
+        }
+        if (allConfigs['tlink-agent']) {
+            delete allConfigs['tlink-agent'];
         }
         if (allConfigs['tlink-proxy'] && allConfigs['tlink-agentic']) {
             // Remove the legacy entry to avoid duplicate provider rows in the UI
@@ -521,7 +1554,7 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
         }
         // Update default provider if legacy id
         const defaultProvider = this.config.getDefaultProvider();
-        if (defaultProvider === 'tlink-proxy') {
+        if (defaultProvider === 'tlink-proxy' || defaultProvider === 'tlink-agent') {
             this.config.setDefaultProvider('tlink-agentic');
         }
 
@@ -553,7 +1586,7 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
 
         this.configs = allConfigs;
         const sel = this.config.getDefaultProvider();
-        this.selectedProvider = (sel === 'tlink-proxy') ? 'tlink-agentic' : sel;
+        this.selectedProvider = (sel === 'tlink-proxy' || sel === 'tlink-agent') ? 'tlink-agentic' : sel;
     }
 
     /**
@@ -913,6 +1946,11 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
             case 'openai':
                 // Use models endpoint to avoid consuming RPM/TPM on a chat request during tests
                 return `${baseURL}/models`;
+            case 'tabby': {
+                const cleanBase = (baseURL || '').replace(/\/+$/, '');
+                const rootBase = cleanBase.replace(/\/(v1beta|v1)$/, '');
+                return `${rootBase}/v1/health`;
+            }
             case 'ollama-cloud': {
                 const cleanBase = (baseURL || '').replace(/\/+$/, '');
                 return cleanBase.endsWith('/api') ? `${cleanBase}/tags` : `${cleanBase}/api/tags`;
@@ -922,12 +1960,16 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
             case 'glm':
                 return `${baseURL}/chat/completions`;
             default:
-                return this.buildOpenAiCompatibleChatEndpoint(baseURL);
+                return this.buildOpenAiCompatibleChatEndpoint(baseURL, providerName);
         }
     }
 
-    private buildOpenAiCompatibleChatEndpoint(baseURL: string): string {
+    private buildOpenAiCompatibleChatEndpoint(baseURL: string, providerName: string): string {
         const cleanBase = (baseURL || '').replace(/\/+$/, '');
+        if (providerName === 'tabby') {
+            const rootBase = cleanBase.replace(/\/(v1beta|v1)$/, '');
+            return `${rootBase}/v1beta/chat/completions`;
+        }
         if (cleanBase.endsWith('/v1')) {
             return `${cleanBase}/chat/completions`;
         }
@@ -1195,6 +2237,535 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
     }
 
     /**
+     * Check if a Tabby model id is already in the fetched list.
+     */
+    isTabbyModelKnown(modelId: string | undefined): boolean {
+        if (!modelId) {
+            return false;
+        }
+        return this.tabbyModels.some(m => m.id === modelId);
+    }
+
+    /**
+     * Get docs-backed Tabby model registry list filtered by selected model type.
+     */
+    getFilteredTabbyCatalogModels(): TabbyCatalogModel[] {
+        const models = this.tabbyCatalogFilter === 'all'
+            ? this.tabbyCatalogModels
+            : this.tabbyCatalogModels.filter(m => m.kind === this.tabbyCatalogFilter);
+
+        return [...models].sort((a, b) => a.id.localeCompare(b.id));
+    }
+
+    /**
+     * Check whether a model appears to be installed locally in ~/.tabby/models.
+     */
+    isTabbyInstalledModel(modelId: string | undefined): boolean {
+        if (!modelId) {
+            return false;
+        }
+        const needle = modelId.trim().toLowerCase();
+        return this.tabbyInstalledModels.some(m => m.id.toLowerCase() === needle);
+    }
+
+    getTabbySelectableModels(kind: TabbyModelKind): string[] {
+        const options = new Set<string>();
+        const addModel = (raw: unknown) => {
+            if (typeof raw !== 'string') {
+                return;
+            }
+            const value = raw.trim();
+            if (value) {
+                options.add(value);
+            }
+        };
+
+        addModel(this.tabbyActiveModels[kind]);
+
+        if (kind === 'chat') {
+            addModel(this.configs['tabby']?.model);
+        }
+
+        this.tabbyInstalledModels.forEach(model => {
+            if (this.getTabbyModelKind(model.id) === kind) {
+                addModel(model.id);
+            }
+        });
+
+        this.tabbyModels.forEach(model => {
+            if (this.getTabbyModelKind(model.id) === kind) {
+                addModel(model.id);
+            }
+        });
+
+        this.tabbyCatalogModels.forEach(model => {
+            if (model.kind === kind) {
+                addModel(model.id);
+            }
+        });
+
+        if (options.size === 0) {
+            addModel(this.getDefaultTabbyModelForKind(kind));
+        }
+
+        return Array.from(options).sort((a, b) => a.localeCompare(b));
+    }
+
+    async loadTabbyModelConfig(event?: Event, silent = false): Promise<void> {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        if (this.tabbyModelConfigLoading) {
+            if (!silent) {
+                this.toast.info('Tabby model config load is already in progress.');
+            }
+            return;
+        }
+
+        this.tabbyModelConfigLoading = true;
+        try {
+            const win: any = window as any;
+            const fs = win?.require?.('fs');
+            const path = win?.require?.('path');
+            const os = win?.require?.('os');
+            if (!fs || !path || !os) {
+                throw new Error('File system access is unavailable in this environment.');
+            }
+
+            const configPath = path.join(os.homedir(), '.tabby', 'config.toml');
+            this.tabbyModelConfigPath = configPath;
+
+            let parsed: Partial<TabbyModelConfigSelection> = {};
+            if (fs.existsSync(configPath)) {
+                const content = String(fs.readFileSync(configPath, 'utf8') || '');
+                parsed = this.parseTabbyModelConfigToml(content);
+            }
+
+            this.tabbyActiveModels.completion = String(parsed.completion || '').trim() || this.getDefaultTabbyModelForKind('completion');
+            this.tabbyActiveModels.chat = String(parsed.chat || '').trim() || this.getDefaultTabbyModelForKind('chat');
+            this.tabbyActiveModels.embedding = String(parsed.embedding || '').trim() || this.getDefaultTabbyModelForKind('embedding');
+
+            if (!silent) {
+                if (fs.existsSync(configPath)) {
+                    this.toast.success('Loaded Tabby model config from ~/.tabby/config.toml');
+                } else {
+                    this.toast.info('No ~/.tabby/config.toml found yet. Select models and click Apply model config.');
+                }
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (!silent) {
+                this.toast.error(`Failed to load Tabby model config: ${message.substring(0, 200)}`);
+            }
+            this.logger.error('Failed to load Tabby model config', { error: message });
+        } finally {
+            this.tabbyModelConfigLoading = false;
+        }
+    }
+
+    async applyTabbyModelConfig(event?: Event): Promise<void> {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        if (this.tabbyModelConfigSaving) {
+            this.toast.info('Tabby model config apply is already in progress.');
+            return;
+        }
+        if (this.tabbyInstallInProgress || this.tabbyStartInProgress || this.tabbyRestartInProgress || this.tabbyStopInProgress || this.tabbyModelInstallInProgress) {
+            this.toast.info('Tabby server/model action is in progress. Retry after it completes.');
+            return;
+        }
+
+        const completion = String(this.tabbyActiveModels.completion || '').trim();
+        const chat = String(this.tabbyActiveModels.chat || '').trim();
+        const embedding = String(this.tabbyActiveModels.embedding || '').trim();
+
+        if (!completion || !chat || !embedding) {
+            this.toast.error('Completion, chat, and embedding model values are required.');
+            return;
+        }
+        const isValidId = (value: string) => /^[A-Za-z0-9._/-]+$/.test(value);
+        if (!isValidId(completion) || !isValidId(chat) || !isValidId(embedding)) {
+            this.toast.error('Model ids may only contain letters, numbers, dot, underscore, slash, or hyphen.');
+            return;
+        }
+
+        this.tabbyModelConfigSaving = true;
+        try {
+            const win: any = window as any;
+            const fs = win?.require?.('fs');
+            const path = win?.require?.('path');
+            const os = win?.require?.('os');
+            if (!fs || !path || !os) {
+                throw new Error('File system access is unavailable in this environment.');
+            }
+
+            const configPath = path.join(os.homedir(), '.tabby', 'config.toml');
+            this.tabbyModelConfigPath = configPath;
+            fs.mkdirSync(path.dirname(configPath), { recursive: true });
+
+            const existingContent = fs.existsSync(configPath)
+                ? String(fs.readFileSync(configPath, 'utf8') || '')
+                : '';
+
+            const preservedContent = this.removeTabbyModelSections(existingContent).trim();
+            const modelBlock = this.renderTabbyModelSections({
+                completion,
+                chat,
+                embedding
+            });
+            const output = preservedContent
+                ? `${preservedContent}\n\n${modelBlock}\n`
+                : `${modelBlock}\n`;
+
+            fs.writeFileSync(configPath, output, 'utf8');
+
+            this.tabbyActiveModels = { completion, chat, embedding };
+            if (this.configs['tabby']) {
+                this.configs['tabby'].model = chat;
+            }
+
+            this.toast.success('Updated ~/.tabby/config.toml model sections.');
+            this.toast.info('Click Restart Tabby to apply the new models.');
+            this.logger.info('Tabby model config updated via Tlink UI', {
+                completion,
+                chat,
+                embedding
+            });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.toast.error(`Failed to apply Tabby model config: ${message.substring(0, 200)}`);
+            this.logger.error('Failed to apply Tabby model config', { error: message });
+        } finally {
+            this.tabbyModelConfigSaving = false;
+        }
+    }
+
+    private parseTabbyModelConfigToml(content: string): Partial<TabbyModelConfigSelection> {
+        const parsed: Partial<TabbyModelConfigSelection> = {};
+        if (!content) {
+            return parsed;
+        }
+
+        let currentSection = '';
+        const lines = content.split(/\r?\n/);
+        lines.forEach(line => {
+            const sectionMatch = line.match(/^\s*\[([^\]]+)\]\s*$/);
+            if (sectionMatch) {
+                currentSection = sectionMatch[1].trim();
+                return;
+            }
+
+            const modelIdMatch = line.match(/^\s*model_id\s*=\s*"([^"]+)"\s*$/);
+            if (!modelIdMatch) {
+                return;
+            }
+
+            const modelId = modelIdMatch[1].trim();
+            if (!modelId) {
+                return;
+            }
+
+            if (currentSection === 'model.completion.local') {
+                parsed.completion = modelId;
+            } else if (currentSection === 'model.chat.local') {
+                parsed.chat = modelId;
+            } else if (currentSection === 'model.embedding.local') {
+                parsed.embedding = modelId;
+            }
+        });
+
+        return parsed;
+    }
+
+    private removeTabbyModelSections(content: string): string {
+        let output = String(content || '');
+        const sections = [
+            'model.completion.local',
+            'model.chat.local',
+            'model.embedding.local'
+        ];
+
+        sections.forEach(section => {
+            const escaped = section.replace(/\./g, '\\.');
+            const blockRegex = new RegExp(`\\[${escaped}\\][\\s\\S]*?(?=\\r?\\n\\[[^\\]]+\\]|$)`, 'g');
+            output = output.replace(blockRegex, '');
+        });
+
+        return output
+            .replace(/\n{3,}/g, '\n\n')
+            .replace(/[ \t]+\n/g, '\n')
+            .trim();
+    }
+
+    private renderTabbyModelSections(models: TabbyModelConfigSelection): string {
+        return [
+            '[model.completion.local]',
+            `model_id = "${this.escapeTomlString(models.completion)}"`,
+            '',
+            '[model.chat.local]',
+            `model_id = "${this.escapeTomlString(models.chat)}"`,
+            '',
+            '[model.embedding.local]',
+            `model_id = "${this.escapeTomlString(models.embedding)}"`
+        ].join('\n');
+    }
+
+    private escapeTomlString(raw: string): string {
+        return String(raw || '')
+            .replace(/\\/g, '\\\\')
+            .replace(/"/g, '\\"');
+    }
+
+    private getDefaultTabbyModelForKind(kind: TabbyModelKind): string {
+        if (kind === 'completion') {
+            const installedCompletion = this.tabbyInstalledModels.find(m => this.getTabbyModelKind(m.id) === 'completion')?.id;
+            if (installedCompletion) {
+                return installedCompletion;
+            }
+            return 'StarCoder-1B';
+        }
+
+        if (kind === 'chat') {
+            const providerChat = String(this.configs['tabby']?.model || '').trim();
+            if (providerChat) {
+                return providerChat;
+            }
+            const installedChat = this.tabbyInstalledModels.find(m => this.getTabbyModelKind(m.id) === 'chat')?.id;
+            if (installedChat) {
+                return installedChat;
+            }
+            return 'Qwen2-1.5B-Instruct';
+        }
+
+        const installedEmbedding = this.tabbyInstalledModels.find(m => this.getTabbyModelKind(m.id) === 'embedding')?.id;
+        if (installedEmbedding) {
+            return installedEmbedding;
+        }
+        return 'Nomic-Embed-Text';
+    }
+
+    private getTabbyModelKind(modelId: string): TabbyModelKind {
+        const value = String(modelId || '').trim();
+        const normalized = value.toLowerCase();
+        const fromCatalog = this.tabbyCatalogModels.find(m => m.id.toLowerCase() === normalized);
+        if (fromCatalog) {
+            return fromCatalog.kind;
+        }
+
+        if (
+            normalized.includes('embed') ||
+            normalized.includes('embedding') ||
+            normalized.includes('nomic') ||
+            normalized.includes('jina')
+        ) {
+            return 'embedding';
+        }
+
+        if (normalized.includes('chat') || normalized.includes('instruct')) {
+            return 'chat';
+        }
+
+        return 'completion';
+    }
+
+    /**
+     * Discover installed Tabby models by scanning ~/.tabby/models/<vendor>/<model>.
+     */
+    async refreshInstalledTabbyModels(event?: Event, silent = false): Promise<void> {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        if (this.tabbyInstalledModelsLoading) {
+            if (!silent) {
+                this.toast.info('Installed Tabby model refresh is already in progress.');
+            }
+            return;
+        }
+
+        this.tabbyInstalledModelsLoading = true;
+
+        try {
+            const win: any = window as any;
+            const fs = win?.require?.('fs');
+            const path = win?.require?.('path');
+            const os = win?.require?.('os');
+
+            if (!fs || !path || !os) {
+                throw new Error('File system access is unavailable in this environment.');
+            }
+
+            const modelsRoot = path.join(os.homedir(), '.tabby', 'models');
+            const discovered: TabbyInstalledModel[] = [];
+
+            if (fs.existsSync(modelsRoot)) {
+                const vendors = fs.readdirSync(modelsRoot, { withFileTypes: true })
+                    .filter((entry: any) => entry?.isDirectory?.());
+
+                vendors.forEach((vendorEntry: any) => {
+                    const vendor = vendorEntry.name;
+                    const vendorPath = path.join(modelsRoot, vendor);
+                    const modelDirs = fs.readdirSync(vendorPath, { withFileTypes: true })
+                        .filter((entry: any) => entry?.isDirectory?.());
+
+                    modelDirs.forEach((modelEntry: any) => {
+                        const id = modelEntry.name;
+                        const modelPath = path.join(vendorPath, id);
+                        const hasGgml = fs.existsSync(path.join(modelPath, 'ggml'));
+                        discovered.push({
+                            id,
+                            vendor,
+                            path: modelPath,
+                            hasGgml
+                        });
+                    });
+                });
+            }
+
+            discovered.sort((a, b) => {
+                const byId = a.id.localeCompare(b.id);
+                if (byId !== 0) return byId;
+                return a.vendor.localeCompare(b.vendor);
+            });
+            this.tabbyInstalledModels = discovered;
+
+            const available = this.getFilteredTabbyCatalogModels();
+            if (!available.some(m => m.id === this.tabbySelectedCatalogModel) && available.length > 0) {
+                this.tabbySelectedCatalogModel = available[0].id;
+            }
+
+            if (!silent) {
+                this.toast.success(`Loaded ${discovered.length} installed Tabby models.`);
+            }
+            this.logger.info('Tabby installed models refreshed', { count: discovered.length });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (!silent) {
+                this.toast.error(`Failed to load installed Tabby models: ${message.substring(0, 200)}`);
+            }
+            this.logger.error('Failed to refresh installed Tabby models', { error: message });
+        } finally {
+            this.tabbyInstalledModelsLoading = false;
+        }
+    }
+
+    /**
+     * Install selected Tabby model via: tabby download --model <id>
+     */
+    async installTabbyModel(event?: Event): Promise<void> {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        if (this.tabbyModelInstallInProgress) {
+            this.toast.info('Tabby model install is already in progress.');
+            return;
+        }
+        if (this.tabbyInstallInProgress || this.tabbyStartInProgress || this.tabbyRestartInProgress || this.tabbyStopInProgress) {
+            this.toast.info('Tabby server action is in progress. Try model install after it completes.');
+            return;
+        }
+
+        const modelId = String(this.tabbyCustomModelId || this.tabbySelectedCatalogModel || '').trim();
+        if (!modelId) {
+            this.toast.error('Select a model (or enter custom model id) first.');
+            return;
+        }
+        if (!this.isValidTabbyModelId(modelId)) {
+            this.toast.error('Invalid model id format. Use letters, numbers, dot, underscore, slash, or hyphen.');
+            return;
+        }
+
+        const installed = await this.installTabbyModelById(modelId, true);
+        if (installed) {
+            this.tabbyCustomModelId = '';
+        }
+    }
+
+    async installActiveTabbyModel(kind: TabbyModelKind, event?: Event): Promise<void> {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        if (this.tabbyModelInstallInProgress) {
+            this.toast.info('Tabby model install is already in progress.');
+            return;
+        }
+        if (this.tabbyInstallInProgress || this.tabbyStartInProgress || this.tabbyRestartInProgress || this.tabbyStopInProgress) {
+            this.toast.info('Tabby server action is in progress. Try model install after it completes.');
+            return;
+        }
+
+        const modelId = String(this.tabbyActiveModels[kind] || '').trim();
+        if (!modelId) {
+            this.toast.error(`Select a ${kind} model first.`);
+            return;
+        }
+        if (!this.isValidTabbyModelId(modelId)) {
+            this.toast.error('Invalid model id format. Use letters, numbers, dot, underscore, slash, or hyphen.');
+            return;
+        }
+        if (this.isTabbyInstalledModel(modelId)) {
+            this.toast.info(`Model already installed: ${modelId}`);
+            return;
+        }
+
+        await this.installTabbyModelById(modelId, false);
+    }
+
+    private isValidTabbyModelId(modelId: string): boolean {
+        return /^[A-Za-z0-9._/-]+$/.test(String(modelId || '').trim());
+    }
+
+    private async installTabbyModelById(modelId: string, showPostInstallHint: boolean): Promise<boolean> {
+        this.tabbyModelInstallInProgress = true;
+        this.toast.info(`Installing Tabby model: ${modelId} ...`, 5000);
+
+        try {
+            const command = this.getTabbyDownloadCommandForCurrentPlatform(modelId);
+            const result = await this.executeShellCommand(command);
+            if (result.code !== 0) {
+                const shortOutput = this.getTailOutput(result.output, 12);
+                const detail = shortOutput ? `\n\n${this.makeToastSafe(shortOutput)}` : '';
+                this.toast.error(`Tabby model install failed for ${modelId}.${detail}`, 10000);
+                this.logger.error('Tabby model download command failed', {
+                    modelId,
+                    code: result.code,
+                    output: shortOutput
+                });
+                return false;
+            }
+
+            if (!this.tabbyModels.some(m => m.id === modelId)) {
+                this.tabbyModels = [...this.tabbyModels, { id: modelId, ownedBy: 'tabby-local' }]
+                    .sort((a, b) => a.id.localeCompare(b.id));
+            }
+            await this.refreshInstalledTabbyModels(undefined, true);
+
+            this.toast.success(`Tabby model installed: ${modelId}`);
+            if (showPostInstallHint) {
+                this.toast.info('Use Active server models below to update ~/.tabby/config.toml, then click Restart Tabby.');
+            }
+            return true;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.toast.error(`Failed to install Tabby model: ${message.substring(0, 200)}`);
+            this.logger.error('Failed to install Tabby model', { error: message, modelId });
+            return false;
+        } finally {
+            this.tabbyModelInstallInProgress = false;
+        }
+    }
+
+    /**
      * Check if a proxy model id is already in the fetched list.
      */
     isProxyModelKnown(modelId: string | undefined): boolean {
@@ -1313,6 +2884,195 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
         } finally {
             this.proxyModelsLoading = false;
         }
+    }
+
+    /**
+     * Refresh Tabby models from OpenAI-compatible /models endpoint.
+     * Tries /v1beta/models first (Tabby >=0.32), then /v1/models and /models.
+     */
+    async refreshTabbyModels(silent: boolean = false, allowAutoStart = true): Promise<void> {
+        const providerConfig = this.configs['tabby'];
+        if (!providerConfig || !providerConfig.baseURL) {
+            if (!silent) {
+                this.toast.error('Please set Tabby Base URL first');
+            }
+            return;
+        }
+
+        const baseURL = String(providerConfig.baseURL).replace(/\/+$/, '');
+        const rootBase = baseURL.replace(/\/(v1beta|v1)$/, '');
+        const endpointCandidates = [
+            `${rootBase}/v1beta/models`,
+            `${rootBase}/v1/models`,
+            `${rootBase}/models`
+        ];
+        const endpoints = Array.from(new Set(endpointCandidates));
+        this.tabbyModelsLoading = true;
+        this.logger.info('Refreshing Tabby models...', { baseURL, endpoints, silent });
+
+        try {
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json'
+            };
+            if (providerConfig.apiKey) {
+                headers['Authorization'] = `Bearer ${providerConfig.apiKey}`;
+            }
+
+            let lastStatus: number | undefined;
+            let lastBody = '';
+            let data: any;
+            let sawModelEndpointNotFound = false;
+            let sawHtmlNotFound = false;
+
+            for (const endpoint of endpoints) {
+                try {
+                    const resp = await fetch(endpoint, {
+                        method: 'GET',
+                        headers
+                    });
+                    if (resp.ok) {
+                        data = await resp.json();
+                        break;
+                    }
+                    lastStatus = resp.status;
+                    lastBody = await resp.text();
+                    if (resp.status === 404) {
+                        sawModelEndpointNotFound = true;
+                        const contentType = (resp.headers.get('content-type') || '').toLowerCase();
+                        if (contentType.includes('text/html') || /<!doctype html|<html/i.test(lastBody)) {
+                            sawHtmlNotFound = true;
+                        }
+                    }
+                } catch (err) {
+                    lastBody = err instanceof Error ? err.message : String(err);
+                }
+            }
+
+            if (!data) {
+                if (!lastStatus && allowAutoStart) {
+                    const started = await this.startTabbyServer(undefined, true);
+                    if (started) {
+                        if (!silent) {
+                            this.toast.info('Tabby was not running. Started local Tabby server, retrying model refresh...');
+                        }
+                        await this.refreshTabbyModels(silent, false);
+                        return;
+                    }
+                }
+
+                if (lastStatus === 401 || lastStatus === 403) {
+                    throw new Error('Unauthorized. Set a valid Tabby auth token (API Key) and retry.');
+                }
+
+                // Some Tabby deployments expose chat/completions but do not expose model listing.
+                // In that case, keep manual model entry and guide the user instead of failing hard.
+                if (sawModelEndpointNotFound && await this.checkTabbyReachability(true)) {
+                    const currentModel = String(this.configs['tabby']?.model || '').trim();
+                    if (!currentModel) {
+                        this.configs['tabby'].model = 'default';
+                    }
+                    this.tabbyModels = [];
+                    this.logger.warn('Tabby model listing endpoint not available; using manual model entry', {
+                        baseURL,
+                        endpoints,
+                        sawHtmlNotFound,
+                        status: lastStatus
+                    });
+                    if (!silent) {
+                        this.toast.info('Tabby server is reachable, but this instance does not expose model listing. Use the Model field manually (for example: default).', 9000);
+                    }
+                    return;
+                }
+
+                const detail = lastStatus
+                    ? `Status ${lastStatus}: ${lastBody.substring(0, 200)}`
+                    : `Cannot reach Tabby at ${baseURL}. Start Tabby server and retry. ${lastBody.substring(0, 120)}`;
+                throw new Error(detail || `Cannot reach Tabby at ${baseURL}`);
+            }
+
+            const models: { id: string; ownedBy?: string }[] = [];
+            const pushModel = (id: unknown, ownedBy: string = 'tabby') => {
+                if (typeof id !== 'string') return;
+                const trimmed = id.trim();
+                if (!trimmed) return;
+                models.push({ id: trimmed, ownedBy });
+            };
+
+            // OpenAI-compatible shape: { data: [{ id, owned_by }] }
+            const openAiModels = Array.isArray(data?.data) ? data.data : [];
+            openAiModels.forEach((m: any) => {
+                pushModel(m?.id, m?.owned_by || 'tabby');
+            });
+
+            // Tabby-native shape
+            pushModel(data?.chat?.local?.model_id);
+            pushModel(data?.completion?.local?.model_id);
+            pushModel(data?.embedding?.local?.model_id, 'tabby-embedding');
+
+            // Fallback: infer from health endpoint when /models is sparse.
+            if (models.length === 0) {
+                try {
+                    const healthURL = `${baseURL.replace(/\/(v1beta|v1)$/, '')}/v1/health`;
+                    const healthResp = await fetch(healthURL, { method: 'GET', headers });
+                    if (healthResp.ok) {
+                        const health = await healthResp.json();
+                        pushModel(health?.chat_model);
+                        pushModel(health?.model);
+                        pushModel(health?.models?.chat?.local?.model_id);
+                        pushModel(health?.models?.completion?.local?.model_id);
+                        pushModel(health?.models?.embedding?.local?.model_id, 'tabby-embedding');
+                    }
+                } catch {
+                    // best-effort fallback only
+                }
+            }
+
+            const seen = new Set<string>();
+            const uniqueModels: { id: string; ownedBy?: string }[] = [];
+            models.forEach(m => {
+                if (!seen.has(m.id)) {
+                    seen.add(m.id);
+                    uniqueModels.push(m);
+                }
+            });
+            uniqueModels.sort((a, b) => a.id.localeCompare(b.id));
+            this.tabbyModels = uniqueModels;
+
+            if (!providerConfig.model && uniqueModels.length > 0) {
+                this.configs['tabby'].model = uniqueModels[0].id;
+            }
+
+            this.logger.info('Tabby models list', { models: uniqueModels });
+
+            if (!silent) {
+                this.toast.success(`Loaded ${uniqueModels.length} Tabby models`);
+            }
+            this.logger.info('Tabby models refreshed', { count: uniqueModels.length, silent });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (!silent) {
+                this.toast.error(`Failed to refresh Tabby models: ${message.substring(0, 200)}`);
+            }
+            this.logger.error('Tabby models refresh failed', { error: message });
+        } finally {
+            this.tabbyModelsLoading = false;
+        }
+    }
+
+    /**
+     * Preload Tabby models on init if a base URL is configured.
+     */
+    private preloadTabbyModels(): void {
+        if (this.tabbyModels.length > 0) {
+            return;
+        }
+        const providerConfig = this.configs['tabby'];
+        if (!providerConfig?.baseURL || !providerConfig?.apiKey) {
+            return;
+        }
+        this.refreshTabbyModels(true).catch(err => {
+            this.logger.warn('Tabby models preload failed', { error: err?.message || err });
+        });
     }
 
     /**

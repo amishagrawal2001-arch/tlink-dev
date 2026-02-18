@@ -334,6 +334,14 @@
         font-size: 11px;
     }
 
+    .form-text.text-success {
+        color: #1f7a4c;
+    }
+
+    .form-text.text-danger {
+        color: var(--chat-error-fg);
+    }
+
     .form-check {
         display: flex;
         align-items: center;
@@ -919,7 +927,38 @@
         .suggestion-meta {
             grid-column: 1 / -1;
             font-size: 11px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--chat-muted);
+            flex-wrap: wrap;
+        }
+
+        .suggestion-risk-badge {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            border-radius: 999px;
+            border: 1px solid var(--chat-border);
+            padding: 2px 8px;
+        }
+
+        .suggestion-risk-badge.low {
+            color: #1f7a4c;
+            border-color: rgba(31, 122, 76, 0.4);
+            background: rgba(31, 122, 76, 0.12);
+        }
+
+        .suggestion-risk-badge.medium {
+            color: #9a6500;
+            border-color: rgba(154, 101, 0, 0.4);
+            background: rgba(154, 101, 0, 0.14);
+        }
+
+        .suggestion-risk-badge.high {
             color: var(--chat-error-fg);
+            border-color: rgba(187, 42, 42, 0.45);
+            background: rgba(187, 42, 42, 0.14);
         }
 
         .suggestion-actions {

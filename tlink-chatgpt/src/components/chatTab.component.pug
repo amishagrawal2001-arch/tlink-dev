@@ -7,8 +7,10 @@
         span Model: {{ effectiveModel }}
         span Base: {{ effectiveBaseUrl }}
         span(*ngIf='systemPromptSet') System prompt set
+        span(*ngIf='agentModeActive') Agent mode on
         span(*ngIf='networkForm.enabled && !networkForm.includeLastOutput') Raw output off
         span(*ngIf='networkForm.enabled && networkForm.redactSensitiveData') Redaction on
+        span.warning(*ngIf='agentForm.enabled && !agentModeSupported') Agent unsupported for provider
         span.warning(*ngIf='missingApiKey') API key missing
     .actions
         .terminal-picker
@@ -90,9 +92,58 @@
                 .field.full
                     label.form-label System prompt
                     textarea.form-control(rows='3', [(ngModel)]='profileForm.systemPrompt', [placeholder]='envSystemPromptPlaceholder')
+                .field
+                    label.form-label Agent mode
+                    .form-check
+                        input.form-check-input(type='checkbox', [(ngModel)]='agentForm.enabled', (change)='onAgentSettingsChange()')
+                        label.form-check-label Enable agent loop (tools)
+                    .form-text Uses local tool calls for terminal and connection tasks.
+                .field
+                    label.form-label Agent max rounds
+                    input.form-control(
+                        type='number',
+                        min='1',
+                        max='12',
+                        [(ngModel)]='agentForm.maxRounds',
+                        (change)='onAgentSettingsChange()',
+                        [disabled]='!agentForm.enabled'
+                    )
+                .field
+                    label.form-label Agent intent
+                    select.form-control(
+                        [(ngModel)]='agentForm.intent',
+                        (change)='onAgentSettingsChange()',
+                        [disabled]='!agentForm.enabled'
+                    )
+                        option(*ngFor='let option of agentIntentOptions', [value]='option.id') {{ option.label }}
+                    .form-text(*ngIf='profileForm.provider === "tlink-agentic"') Sent as routing hint to Tlink Agentic.
+                    .form-text.text-danger(*ngIf='agentForm.enabled && !agentModeSupported') Current provider does not support agent tools. Use OpenAI-compatible providers.
+                .field
+                    label.form-label Auto-run safe commands
+                    .form-check
+                        input.form-check-input(
+                            type='checkbox',
+                            [(ngModel)]='agentForm.autoRunSafeCommands',
+                            (change)='onAgentSettingsChange()',
+                            [disabled]='!agentForm.enabled'
+                        )
+                        label.form-check-label Run allowlisted commands without prompt
+                    .form-text Leave off to require confirmation for each command.
             .settings-actions
                 button.btn.btn-primary(type='button', (click)='saveSettings()') Save profile
+                button.btn.btn-outline-secondary(
+                    type='button',
+                    (click)='testProviderConnection()',
+                    [disabled]='providerDiagnosticsRunning'
+                )
+                    i.fas.fa-spinner.fa-spin(aria-hidden='true', *ngIf='providerDiagnosticsRunning')
+                    |  {{ providerDiagnosticsRunning ? 'Testing...' : 'Test provider' }}
                 button.btn.btn-outline-danger(type='button', (click)='clearApiKey()', [disabled]='!profileForm.apiKey.trim().length') Clear API key
+            .form-text(
+                *ngIf='providerDiagnosticsMessage',
+                [class.text-success]='providerDiagnosticsStatus === "success"',
+                [class.text-danger]='providerDiagnosticsStatus === "error"'
+            ) {{ providerDiagnosticsMessage }}
         .settings-card
             .section-heading
                 span Network assistant
@@ -134,6 +185,12 @@
                     .form-check
                         input.form-check-input(type='checkbox', [(ngModel)]='networkForm.allowCommandRun')
                         label.form-check-label Require confirmation before running
+                .field
+                    label.form-label Dry-run mode
+                    .form-check
+                        input.form-check-input(type='checkbox', [(ngModel)]='networkForm.dryRunCommandMode')
+                        label.form-check-label Copy command only, do not run
+                    .form-text Useful for reviewing suggested commands safely.
                 .field
                     label.form-label Auto-troubleshoot after command
                     .form-check
@@ -235,12 +292,18 @@
     .suggestion-list(*ngIf='!suggestedCommandsCollapsed')
         .suggestion(*ngFor='let suggestion of suggestedCommands')
             code {{ suggestion.command }}
-            .suggestion-meta(*ngIf='!suggestion.safe') {{ suggestion.reason || 'Blocked by safety check' }}
+            .suggestion-meta
+                span.suggestion-risk-badge(
+                    [class.low]='suggestion.risk === "low"',
+                    [class.medium]='suggestion.risk === "medium"',
+                    [class.high]='suggestion.risk === "high"'
+                ) {{ suggestion.risk | uppercase }}
+                span {{ suggestion.reason || (suggestion.safe ? 'Allowed by safety check' : 'Blocked by safety check') }}
             .suggestion-actions
                 button.btn.btn-outline-secondary.btn-sm(type='button', (click)='copyCommand(suggestion.command)') Copy
                 button.btn.btn-outline-primary.btn-sm(
                     type='button',
-                    (click)='runSuggestedCommand(suggestion.command, suggestion.safe)',
+                    (click)='runSuggestedCommand(suggestion.command, suggestion.safe, undefined, suggestion.risk, suggestion.reason)',
                     [disabled]='!networkForm.allowCommandRun || !suggestion.safe || !terminalTargets.length'
                 ) Run
 
@@ -292,6 +355,13 @@
         .input-actions
             .hint Shift+Enter for newline
             .input-buttons
+                button.btn.btn-outline-secondary(
+                    type='button',
+                    (click)='cancelActiveRequest()',
+                    [disabled]='!sending',
+                    aria-label='Cancel request'
+                )
+                    i.fas.fa-stop-circle(aria-hidden='true')
                 button.btn.btn-primary(
                     type='button',
                     (click)='send()',

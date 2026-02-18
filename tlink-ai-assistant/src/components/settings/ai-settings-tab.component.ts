@@ -208,7 +208,7 @@ export class AiSettingsTabComponent implements OnInit, OnDestroy {
             'glm': 'GLM (ChatGLM)',
             'openai-compatible': 'OpenAI Compatible',
             'tlink-agentic': 'Tlink Agentic',
-            'tlink-agent': 'Tlink Agent',
+            'tlink-agent': 'Tlink Agentic',
             'tlink-proxy': 'Tlink Agentic',
             'ollama': 'Ollama (Local)',
             'ollama-cloud': 'Ollama Cloud',

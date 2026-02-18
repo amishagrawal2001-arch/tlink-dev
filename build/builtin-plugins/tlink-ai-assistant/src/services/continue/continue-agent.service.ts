@@ -97,6 +97,7 @@ export class ContinueAgentService {
                 queue: null,
                 history: null
             };
+            let idleWithoutResponseSince: number | null = null;
 
             const start = async (): Promise<void> => {
                 try {
@@ -196,6 +197,7 @@ export class ContinueAgentService {
                         const queueLength = snapshot.messageQueueLength || 0;
                         const isProcessing = !!snapshot.isProcessing;
                         const historyLength = history.length;
+                        const hasAssistantMessage = this.hasAssistantMessageSince(history, minHistoryIndex);
                         if (
                             lastSnapshotInfo.isProcessing !== isProcessing ||
                             lastSnapshotInfo.queue !== queueLength ||
@@ -207,7 +209,8 @@ export class ContinueAgentService {
                                 messageQueueLength: queueLength,
                                 historyLength,
                                 lastAssistantIndex,
-                                minHistoryIndex
+                                minHistoryIndex,
+                                hasAssistantMessage
                             });
                             lastSnapshotInfo = { isProcessing, queue: queueLength, history: historyLength };
                         }
@@ -218,7 +221,8 @@ export class ContinueAgentService {
                                 messageQueueLength: queueLength,
                                 historyLength,
                                 lastAssistantIndex,
-                                minHistoryIndex
+                                minHistoryIndex,
+                                hasAssistantMessage
                             });
                         }
 
@@ -236,7 +240,7 @@ export class ContinueAgentService {
                         const isProcessingActive = isProcessing || queueLength > 0;
                         const hasActiveTools = Array.from(toolStateById.values()).some((state) => !this.isToolTerminalState(state.status));
 
-                        if (!isProcessingActive && !hasActiveTools && hasActivity) {
+                        if (!isProcessingActive && !hasActiveTools && (hasActivity || hasAssistantMessage)) {
                             const reason: TerminationReason = toolStateById.size > 0 ? 'tool_success' : 'no_tools';
                             subscriber.next({
                                 type: 'agent_complete',
@@ -246,6 +250,33 @@ export class ContinueAgentService {
                             });
                             subscriber.complete();
                             return false;
+                        }
+
+                        if (!isProcessingActive && !hasActiveTools && !hasActivity && !hasAssistantMessage) {
+                            if (idleWithoutResponseSince == null) {
+                                idleWithoutResponseSince = Date.now();
+                            }
+                            const idleMs = Date.now() - idleWithoutResponseSince;
+                            if (idleMs >= 8000) {
+                                const message = 'Continue agent produced no response. Check base URL/auth and ensure the selected chat model supports tool calling.';
+                                this.logger.warn('Continue agent stalled with no response', {
+                                    idleMs,
+                                    historyLength,
+                                    minHistoryIndex,
+                                    lastAssistantIndex
+                                });
+                                subscriber.next({ type: 'error', error: message });
+                                subscriber.next({
+                                    type: 'agent_complete',
+                                    reason: 'no_progress',
+                                    totalRounds: round,
+                                    terminationMessage: message
+                                });
+                                subscriber.complete();
+                                return false;
+                            }
+                        } else {
+                            idleWithoutResponseSince = null;
                         }
                         return true;
                     });
@@ -511,6 +542,16 @@ export class ContinueAgentService {
 
     private isToolTerminalState(status: string): boolean {
         return status === 'done' || status === 'errored' || status === 'canceled';
+    }
+
+    private hasAssistantMessageSince(history: ContinueHistoryItem[], startIndex: number): boolean {
+        const historyStart = Math.max(0, startIndex);
+        for (let i = historyStart; i < history.length; i++) {
+            if (history[i]?.message?.role === 'assistant') {
+                return true;
+            }
+        }
+        return false;
     }
 
     private formatToolOutput(output?: Array<{ content: string }>): string {
@@ -840,7 +881,7 @@ export class ContinueAgentService {
         }
 
         if (providerConfig.baseURL) {
-            modelConfig.apiBase = this.normalizeApiBase(continueProvider, providerConfig.baseURL);
+            modelConfig.apiBase = this.normalizeApiBase(continueProvider, providerConfig.baseURL, providerName);
         }
 
         const completionOptions: Record<string, any> = {};
@@ -929,15 +970,28 @@ export class ContinueAgentService {
         }
     }
 
-    private normalizeApiBase(provider: string, baseUrl: string): string {
+    private normalizeApiBase(provider: string, baseUrl: string, originalProvider?: string): string {
         if (!baseUrl) {
             return baseUrl;
         }
         const trimmed = baseUrl.replace(/\/+$/, '');
-        if (provider === 'anthropic' && !trimmed.endsWith('/v1')) {
+        const normalizedOriginal = (originalProvider || '').toLowerCase();
+
+        if (normalizedOriginal === 'tabby') {
+            if (trimmed.endsWith('/v1beta')) {
+                return trimmed;
+            }
+            if (trimmed.endsWith('/v1')) {
+                return `${trimmed.slice(0, -3)}/v1beta`;
+            }
+            return `${trimmed}/v1beta`;
+        }
+
+        const requiresV1 = provider === 'anthropic' || provider === 'openai';
+        if (requiresV1 && !trimmed.endsWith('/v1')) {
             return `${trimmed}/v1`;
         }
-        return baseUrl;
+        return trimmed;
     }
 
     private writeContinueConfigFile(contents: string): string {

@@ -1,6 +1,6 @@
 import { Injectable, Optional, Inject } from '@angular/core'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
-import { BaseTabComponent as CoreBaseTabComponent, TabContextMenuItemProvider as CoreTabContextMenuItemProvider, NotificationsService, MenuItemOptions, TranslateService, SplitTabComponent, PromptModalComponent, ConfigService, PartialProfile, Profile, HostAppService, Platform, PlatformService, SessionSharingService, ShareSessionModalComponent, LogService, Logger, SelectorService, SelectorOption } from 'tlink-core'
+import { AppService, BaseTabComponent as CoreBaseTabComponent, TabContextMenuItemProvider as CoreTabContextMenuItemProvider, NotificationsService, MenuItemOptions, TranslateService, SplitTabComponent, PromptModalComponent, ConfigService, PartialProfile, Profile, HostAppService, Platform, PlatformService, SessionSharingService, ShareSessionModalComponent, LogService, Logger, SelectorService, SelectorOption } from 'tlink-core'
 import { BaseTerminalTabComponent } from './api/baseTerminalTab.component'
 import { TerminalContextMenuItemProvider } from './api/contextMenuProvider'
 import { MultifocusService } from './services/multifocus.service'
@@ -301,6 +301,7 @@ export class SessionSharingContextMenu extends TabContextMenuItemProviderRuntime
 @Injectable()
 export class SaveAsProfileContextMenu extends TabContextMenuItemProviderRuntime {
     constructor (
+        private app: AppService,
         private config: ConfigService,
         private ngbModal: NgbModal,
         private notifications: NotificationsService,
@@ -309,6 +310,9 @@ export class SaveAsProfileContextMenu extends TabContextMenuItemProviderRuntime 
         private platform: PlatformService,
     ) {
         super()
+        this.hostApp.sessionLogFileRequest$.subscribe(() => {
+            void this.openSessionLogSettingsForActiveTab()
+        })
     }
 
     async getItems (tab: CoreBaseTabComponent): Promise<MenuItemOptions[]> {
@@ -319,34 +323,7 @@ export class SaveAsProfileContextMenu extends TabContextMenuItemProviderRuntime 
             if (canPickDirectory) {
                 items.push({
                     label: this.translate.instant('Set session log file'),
-                    click: async () => {
-                        const modal = this.ngbModal.open(SessionLogSettingsModalComponent, { backdrop: 'static' })
-                        modal.componentInstance.directory = storedProfile?.sessionLog?.directory ?? tab.profile.sessionLog?.directory ?? ''
-                        modal.componentInstance.filenameTemplate = storedProfile?.sessionLog?.filenameTemplate ?? tab.profile.sessionLog?.filenameTemplate ?? ''
-                        modal.componentInstance.append = storedProfile?.sessionLog?.append ?? tab.profile.sessionLog?.append ?? false
-                        modal.componentInstance.canPickDirectory = canPickDirectory
-
-                        const result = await modal.result.catch(() => null)
-                        if (!result) {
-                            return
-                        }
-
-                        const directory = (result.directory ?? '').trim()
-                        const filenameTemplate = (result.filenameTemplate ?? '').trim()
-                        const nextSettings = {
-                            enabled: true,
-                            append: result.append ?? false,
-                            directory: directory || undefined,
-                            filenameTemplate: filenameTemplate || undefined,
-                        }
-
-                        tab.profile.sessionLog = nextSettings
-                        if (storedProfile) {
-                            storedProfile.sessionLog = nextSettings
-                            await this.config.save()
-                        }
-                        this.notifications.info(this.translate.instant('Session log settings updated'))
-                    },
+                    click: () => this.openSessionLogSettings(tab),
                 })
             }
             if (storedProfile && canPickDirectory) {
@@ -461,5 +438,68 @@ export class SaveAsProfileContextMenu extends TabContextMenuItemProviderRuntime 
         }
 
         return []
+    }
+
+    private async openSessionLogSettingsForActiveTab (): Promise<void> {
+        const tab = this.getActiveTerminalTab()
+        if (!tab) {
+            this.notifications.error(this.translate.instant('Open a terminal tab to set session log file'))
+            return
+        }
+        await this.openSessionLogSettings(tab)
+    }
+
+    private getActiveTerminalTab (): BaseTerminalTabComponent<any>|null {
+        const activeTab = this.app.activeTab
+        if (!activeTab) {
+            return null
+        }
+        if (activeTab instanceof BaseTerminalTabComponent) {
+            return activeTab
+        }
+        if (activeTab instanceof SplitTabComponent) {
+            const focusedTab = activeTab.getFocusedTab()
+            if (focusedTab instanceof BaseTerminalTabComponent) {
+                return focusedTab
+            }
+        }
+        return null
+    }
+
+    private async openSessionLogSettings (tab: BaseTerminalTabComponent<any>): Promise<void> {
+        const canPickDirectory = this.hostApp.platform !== Platform.Web
+        if (!canPickDirectory) {
+            this.notifications.error(this.translate.instant('Directory selection is not supported on this platform'))
+            return
+        }
+
+        const storedProfile = this.config.store.profiles?.find(p => p.id === tab.profile.id)
+        const modal = this.ngbModal.open(SessionLogSettingsModalComponent, { backdrop: 'static' })
+        modal.componentInstance.enabled = storedProfile?.sessionLog?.enabled ?? tab.profile.sessionLog?.enabled ?? false
+        modal.componentInstance.directory = storedProfile?.sessionLog?.directory ?? tab.profile.sessionLog?.directory ?? ''
+        modal.componentInstance.filenameTemplate = storedProfile?.sessionLog?.filenameTemplate ?? tab.profile.sessionLog?.filenameTemplate ?? ''
+        modal.componentInstance.append = storedProfile?.sessionLog?.append ?? tab.profile.sessionLog?.append ?? false
+        modal.componentInstance.canPickDirectory = canPickDirectory
+
+        const result = await modal.result.catch(() => null)
+        if (!result) {
+            return
+        }
+
+        const directory = (result.directory ?? '').trim()
+        const filenameTemplate = (result.filenameTemplate ?? '').trim()
+        const nextSettings = {
+            enabled: result.enabled ?? false,
+            append: result.append ?? false,
+            directory: directory || undefined,
+            filenameTemplate: filenameTemplate || undefined,
+        }
+
+        tab.profile.sessionLog = nextSettings
+        if (storedProfile) {
+            storedProfile.sessionLog = nextSettings
+            await this.config.save()
+        }
+        this.notifications.info(this.translate.instant('Session log settings updated'))
     }
 }

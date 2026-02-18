@@ -12,7 +12,6 @@ import { IncomingMessage, ServerResponse } from 'http';
 import { ConfigService } from 'tabby-core';
 import * as http from 'http';
 import { McpLoggerService } from './mcpLogger.service';
-import { log } from 'console';
 
 /**
  * The main MCP server service for Tabby
@@ -118,6 +117,17 @@ export class McpService {
    */
   private configureToolEndpoints(): void {
     console.log('Configuring tool endpoints...');
+    this.app.get('/api/tools', (_req: Request, res: Response) => {
+      const tools = this.toolCategories.flatMap(category =>
+        category.mcpTools.map(tool => ({
+          name: tool.name,
+          description: tool.description,
+          input_schema: this.convertSchemaToJsonSchema(tool.schema),
+        }))
+      );
+      res.json({ tools });
+    });
+
     // Add API endpoints for each tool for direct HTTP access
     this.toolCategories.forEach(category => {
       category.mcpTools.forEach(tool => {
@@ -136,6 +146,74 @@ export class McpService {
         });
       });
     });
+  }
+
+  private convertSchemaToJsonSchema(schema: Record<string, z.ZodType<any>> | undefined): {
+    type: 'object';
+    properties: Record<string, any>;
+    required: string[];
+  } {
+    if (!schema) {
+      return { type: 'object', properties: {}, required: [] };
+    }
+
+    const properties: Record<string, any> = {};
+    const required: string[] = [];
+
+    Object.entries(schema).forEach(([key, rawType]) => {
+      const { jsonType, optional } = this.convertZodType(rawType);
+      properties[key] = jsonType;
+      if (!optional) {
+        required.push(key);
+      }
+    });
+
+    return {
+      type: 'object',
+      properties,
+      required,
+    };
+  }
+
+  private convertZodType(zodType: any): { jsonType: Record<string, any>; optional: boolean } {
+    let current = zodType;
+    let optional = false;
+
+    while (current?._def?.typeName === 'ZodOptional' || current?._def?.typeName === 'ZodDefault') {
+      optional = true;
+      current = current._def.innerType;
+    }
+
+    const typeName = current?._def?.typeName;
+    const description = current?.description || current?._def?.description;
+    const jsonType: Record<string, any> = {};
+
+    switch (typeName) {
+      case 'ZodString':
+        jsonType.type = 'string';
+        break;
+      case 'ZodNumber':
+        jsonType.type = 'number';
+        break;
+      case 'ZodBoolean':
+        jsonType.type = 'boolean';
+        break;
+      case 'ZodArray':
+        jsonType.type = 'array';
+        break;
+      case 'ZodObject':
+        jsonType.type = 'object';
+        break;
+      default:
+        jsonType.type = 'string';
+        break;
+    }
+
+    if (description) {
+      jsonType.description = description;
+    }
+
+    return { jsonType, optional };
   }
 
   /**

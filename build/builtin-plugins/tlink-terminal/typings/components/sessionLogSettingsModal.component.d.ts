@@ -6,6 +6,7 @@ export declare class SessionLogSettingsModalComponent {
     private platform;
     private notifications;
     private translate;
+    enabled: boolean;
     directory: string;
     filenameTemplate: string;
     append: boolean;

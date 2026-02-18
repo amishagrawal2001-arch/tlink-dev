@@ -30,6 +30,8 @@ export declare class McpService {
      * Configure API endpoints for tool access via HTTP
      */
     private configureToolEndpoints;
+    private convertSchemaToJsonSchema;
+    private convertZodType;
     /**
      * Initialize the MCP service
      */

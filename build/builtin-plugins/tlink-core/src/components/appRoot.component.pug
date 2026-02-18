@@ -11,7 +11,7 @@ title-bar(
     [class.tabs-on-left]='hasVerticalTabs() && config.store.appearance.tabsLocation == "left"',
     [class.tabs-titlebar-enabled]='isTitleBarNeeded()',
     [class.tabs-on-right]='hasVerticalTabs() && config.store.appearance.tabsLocation == "right"',
-    [class.has-right-dock]='rightDockPanels.length'
+    [class.has-right-dock]='rightDockPanels?.length'
 )
     .left-dock
         .left-dock-section(
@@ -20,16 +20,7 @@ title-bar(
             cdkDropListOrientation='vertical',
             (cdkDropListDropped)='onLeftDockReordered($event)'
         )
-            button.left-dock-button(
-                *ngFor='let item of leftDockVisibleOrder; trackBy: trackByLeftDockItem',
-                type='button',
-                cdkDrag,
-                [cdkDragData]='item',
-                (click)='onLeftDockItemClick(item)',
-                [class.active]='isLeftDockItemActive(item)',
-                [class.disabled]='isLeftDockItemDisabled(item)',
-                [ngbTooltip]='getLeftDockTooltip(item)'
-            )
+            ng-template(#leftDockIcon let-item='item')
                 ng-container([ngSwitch]='item')
                     ng-container(*ngSwitchCase='"profiles"') !{require('../icons/profiles.svg')}
                     ng-container(*ngSwitchCase='"sftp"')
@@ -49,6 +40,8 @@ title-bar(
                         svg(xmlns="http://www.w3.org/2000/svg", width="16", height="16", fill="currentColor", viewBox="0 0 16 16")
                             path(d="M6 12.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5ZM3 8.062C3 6.76 4.235 5.765 5.53 5.886a26.58 26.58 0 0 0 4.94 0C11.765 5.765 13 6.76 13 8.062v1.157a.933.933 0 0 1-.765.935c-.845.147-2.34.346-4.235.346-1.895 0-3.39-.2-4.235-.346A.933.933 0 0 1 3 9.219V8.062Zm4.542-.827a.25.25 0 0 0-.217.068l-.92.9a24.767 24.767 0 0 1-1.871-.183.25.25 0 0 0-.068.495c.55.076 1.232.149 2.02.193a.25.25 0 0 0 .189-.071l.754-.736.847 1.71a.25.25 0 0 0 .404.062l.932-.97a25.286 25.286 0 0 0 1.922-.188.25.25 0 0 0-.068-.495c-.538.074-1.207.145-1.98.189a.25.25 0 0 0-.166.076l-.754.785-.842-1.7a.25.25 0 0 0-.182-.135Z")
                             path(d="M8.5 1.866a1 1 0 1 0-1 0V3h-2A4.5 4.5 0 0 0 1 7.5V8a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1v1a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1v-.5A4.5 4.5 0 0 0 10.5 3h-2V1.866ZM14 7.5V13a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7.5A3.5 3.5 0 0 1 5.5 4h5A3.5 3.5 0 0 1 14 7.5Z")
+                    ng-container(*ngSwitchCase='"tabby-url"')
+                        i.fas.fa-external-link-alt
                     ng-container(*ngSwitchCase='"copilot-chat"')
                         i.fas.fa-comment-dots
                     ng-container(*ngSwitchCase='"websocket"')
@@ -58,6 +51,48 @@ title-bar(
                             [class.fa-spinner]='websocketServerStarting',
                             [class.fa-spin]='websocketServerStarting'
                         )
+
+            ng-container(*ngFor='let chunk of leftDockChunks; trackBy: trackByLeftDockChunk')
+                .left-dock-group(
+                    *ngIf='chunk.grouped',
+                    [attr.data-left-dock-group]='chunk.items.join("|")'
+                )
+                    button.left-dock-button.left-dock-group-button(
+                        *ngFor='let item of chunk.items; trackBy: trackByLeftDockItem',
+                        type='button',
+                        cdkDrag,
+                        [cdkDragData]='item',
+                        (cdkDragStarted)='onLeftDockItemDragStarted(item)',
+                        (cdkDragMoved)='onLeftDockItemDragMoved(item, $event)',
+                        (cdkDragEnded)='onLeftDockItemDragEnded()',
+                        [attr.data-left-dock-item]='item',
+                        (click)='onLeftDockItemClick(item)',
+                        (contextmenu)='openLeftDockItemMenu($event, item)',
+                        [class.active]='isLeftDockItemActive(item)',
+                        [class.disabled]='isLeftDockItemDisabled(item)',
+                        [class.grouped]='true',
+                        [class.group-drop-target]='leftDockDropPreviewItem === item',
+                        [ngbTooltip]='getLeftDockTooltip(item)'
+                    )
+                        ng-container(*ngTemplateOutlet='leftDockIcon; context: { item: item }')
+
+                button.left-dock-button(
+                    *ngIf='!chunk.grouped',
+                    type='button',
+                    cdkDrag,
+                    [cdkDragData]='chunk.items[0]',
+                    (cdkDragStarted)='onLeftDockItemDragStarted(chunk.items[0])',
+                    (cdkDragMoved)='onLeftDockItemDragMoved(chunk.items[0], $event)',
+                    (cdkDragEnded)='onLeftDockItemDragEnded()',
+                    [attr.data-left-dock-item]='chunk.items[0]',
+                    (click)='onLeftDockItemClick(chunk.items[0])',
+                    (contextmenu)='openLeftDockItemMenu($event, chunk.items[0])',
+                    [class.active]='isLeftDockItemActive(chunk.items[0])',
+                    [class.disabled]='isLeftDockItemDisabled(chunk.items[0])',
+                    [class.group-drop-target]='leftDockDropPreviewItem === chunk.items[0]',
+                    [ngbTooltip]='getLeftDockTooltip(chunk.items[0])'
+                )
+                    ng-container(*ngTemplateOutlet='leftDockIcon; context: { item: chunk.items[0] }')
         .left-dock-section.left-dock-bottom
             button.left-dock-button(
                 type='button',
@@ -65,7 +100,7 @@ title-bar(
                 ngbTooltip='Settings'
             )
                 i.fas.fa-cog
-    .right-dock(*ngIf='rightDockPanels.length')
+    .right-dock(*ngIf='rightDockPanels?.length')
         .side-panel-tabs(
             cdkDropList,
             [cdkDropListData]='rightDockPanels',
@@ -150,22 +185,6 @@ title-bar(
             && ((config.store.appearance.tabsLocation !== "left" && config.store.appearance.tabsLocation !== "right") || hostApp.platform !== Platform.macOS)'
         )
 
-        .btn-group.background
-            .d-flex(
-                *ngFor='let button of rightToolbarButtons'
-            )
-                button.btn.btn-secondary.btn-tab-bar(
-                    [ngbTooltip]='button.label',
-                    (click)='button.run && button.run()',
-                    [fastHtmlBind]='button.icon'
-                )
-
-            button.btn.btn-secondary.btn-tab-bar.btn-update(
-                *ngIf='updatesAvailable',
-                [ngbTooltip]='"Update available - Click to install"|translate',
-                (click)='updater.update()'
-            ) !{require('../icons/gift.svg')}
-
         window-controls.background(
             *ngIf='config.store.appearance.frame == "thin" \
             && config.store.appearance.tabsLocation !== "left" \
@@ -176,7 +195,7 @@ title-bar(
         div.window-controls-spacer(
             *ngIf='config.store.appearance.frame == "thin" && (hostApp.platform == Platform.Windows) && (config.store.appearance.tabsLocation == "top")',
         )
-    .content-body([class.has-side-panel-tabs]='rightDockPanels.length')
+    .content-body([class.has-side-panel-tabs]='rightDockPanels?.length')
         .workspace-stack
             .workspace
                 .workspace-main
@@ -225,4 +244,19 @@ title-bar(
                         rect(x='1.5', y='2.5', width='13', height='11', rx='1.5', ry='1.5', fill='none', stroke='currentColor', stroke-width='1.2')
                         polyline(points='4,5.5 6.5,8 4,10.5', fill='none', stroke='currentColor', stroke-width='1.2', stroke-linecap='round', stroke-linejoin='round')
                         line(x1='7.5', y1='10.5', x2='12', y2='10.5', stroke='currentColor', stroke-width='1.2', stroke-linecap='round')
+            .shortcut-spacer
+            .shortcut-toolbar(*ngIf='rightToolbarButtons?.length || updatesAvailable')
+                button.btn.btn-sm.btn-icon.shortcut-icon-button.toolbar-icon-button(
+                    *ngFor='let button of rightToolbarButtons',
+                    type='button',
+                    [ngbTooltip]='button.label',
+                    (click)='button.run && button.run()',
+                    [fastHtmlBind]='button.icon'
+                )
+                button.btn.btn-sm.btn-icon.shortcut-icon-button.toolbar-icon-button.btn-update(
+                    *ngIf='updatesAvailable',
+                    type='button',
+                    [ngbTooltip]='"Update available - Click to install"|translate',
+                    (click)='updater.update()'
+                ) !{require('../icons/gift.svg')}
 ng-template(ngbModalContainer)

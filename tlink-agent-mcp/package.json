@@ -1,0 +1,12 @@
+{
+  "name": "tlink-agent-mcp",
+  "version": "1.0.0",
+  "description": "MCP agent plugin wrapper for terminal/SSH execution tools.",
+  "main": "../builtin-plugins/tabby-vscode-agent/build/index.js",
+  "private": true,
+  "keywords": [
+    "tlink-plugin",
+    "tlink-builtin-plugin",
+    "tabby-plugin"
+  ]
+}

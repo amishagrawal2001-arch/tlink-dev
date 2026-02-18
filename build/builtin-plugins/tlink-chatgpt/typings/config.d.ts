@@ -9,9 +9,16 @@ export declare class ChatGPTConfigProvider extends ConfigProvider {
             systemPrompt: string;
             temperature: number;
             maxTokens: number;
+            agent: {
+                enabled: boolean;
+                maxRounds: number;
+                intent: string;
+                autoRunSafeCommands: boolean;
+            };
             profiles: never[];
             activeProfileId: string;
             activityFiltersByProfile: {};
+            chatHistoryByProfile: {};
             quickQuestions: never[];
             networkAssistant: {
                 enabled: boolean;
@@ -23,6 +30,7 @@ export declare class ChatGPTConfigProvider extends ConfigProvider {
                 role: string;
                 includeLastOutput: boolean;
                 allowCommandRun: boolean;
+                dryRunCommandMode: boolean;
                 autoTroubleshootAfterCommand: boolean;
                 allowlistByVariant: {};
                 redactSensitiveData: boolean;

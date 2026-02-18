@@ -30,5 +30,7 @@ export declare class McpHotkeyService {
      */
     openCopilot(): void;
     private openCopilotViaTCP;
-    private openCopilotWithPowerShell;
+    private openCopilotWithShellFallback;
+    private getCopilotOpenCommands;
+    private tryOpenCopilotCommand;
 }

@@ -17,7 +17,6 @@ import { AgentApprovalService } from './agent-approval.service';
 // Use lazy injection to get AiSidebarService to break circular dependency
 import type { AiSidebarService } from '../chat/ai-sidebar.service';
 import { LoggerService } from './logger.service';
-import { ContinueAgentService } from '../continue/continue-agent.service';
 import { BaseAiProvider, ProviderConfigUtils } from '../../types/provider.types';
 import { StateGraph, START, END } from '@langchain/langgraph';
 
@@ -48,7 +47,6 @@ export class AiAssistantService {
         private terminalManager: TerminalManagerService,
         private securityValidator: SecurityValidatorService,
         private agentApproval: AgentApprovalService,
-        private continueAgent: ContinueAgentService,
         private injector: Injector,
         private logger: LoggerService,
         // Inject all provider services
@@ -134,7 +132,9 @@ export class AiAssistantService {
         // Get default provider BEFORE registering (to prevent auto-selection)
         // Normalize legacy default provider id
         const defaultProviderRaw = this.config.getDefaultProvider();
-        const defaultProvider = (defaultProviderRaw === 'tlink-proxy') ? 'tlink-agentic' : defaultProviderRaw;
+        const defaultProvider = (defaultProviderRaw === 'tlink-proxy' || defaultProviderRaw === 'tlink-agent')
+            ? 'tlink-agentic'
+            : defaultProviderRaw;
         this.logger.info('Default provider from config', { defaultProvider });
 
         // Register and configure all providers (don't auto-set first provider as active)
@@ -218,9 +218,17 @@ export class AiAssistantService {
 
         const allConfigs = this.config.getAllProviderConfigs();
         let registeredCount = 0;
+        const seenProviders = new Set<string>();
 
         for (const [nameRaw, providerConfig] of Object.entries(allConfigs)) {
-            const name = (nameRaw === 'tlink-proxy') ? 'tlink-agentic' : nameRaw;
+            const name = (nameRaw === 'tlink-proxy' || nameRaw === 'tlink-agent') ? 'tlink-agentic' : nameRaw;
+            if (seenProviders.has(name)) {
+                this.logger.debug('Skipping duplicate provider alias during registration', {
+                    provider: nameRaw,
+                    canonicalProvider: name
+                });
+                continue;
+            }
             const provider = this.providerMapping[name];
             if (provider) {
                 try {
@@ -266,6 +274,7 @@ export class AiAssistantService {
                     } else {
                         this.providerManager.registerProvider(provider, false);
                     }
+                    seenProviders.add(name);
                     registeredCount++;
                     this.logger.info(`Provider registered: ${name}`);
                 } catch (error) {
@@ -1299,12 +1308,13 @@ export class AiAssistantService {
         request: ChatRequest,
         config: AgentLoopConfig = {}
     ): Observable<AgentStreamEvent> {
-        const engine = (this.config.get<string>('agentEngine', 'continue') || 'continue').toLowerCase();
+        const configuredEngine = (this.config.get<string>('agentEngine', 'langgraph') || 'langgraph').toLowerCase();
+        const engine = configuredEngine === 'continue' ? 'langgraph' : configuredEngine;
+        if (configuredEngine === 'continue') {
+            this.logger.warn('Continue agent engine was removed. Falling back to LangGraph.');
+        }
         if (engine === 'legacy') {
             return this.chatStreamWithLegacyAgentLoop(request, config);
-        }
-        if (engine === 'continue') {
-            return this.continueAgent.chatStreamWithContinueAgentLoop(request, config);
         }
         return this.chatStreamWithLangGraphLoop(request, config);
     }

@@ -87,6 +87,7 @@ import { SecuritySettingsComponent } from './components/settings/security-settin
 import { GeneralSettingsComponent } from './components/settings/general-settings.component';
 import { ContextSettingsComponent } from './components/settings/context-settings.component';
 import { DataSettingsComponent } from './components/settings/data-settings.component';
+import { TabbyServerSettingsTabComponent } from './components/settings/tabby-server-settings-tab.component';
 
 import { RiskConfirmDialogComponent } from './components/security/risk-confirm-dialog.component';
 import { PasswordPromptComponent } from './components/security/password-prompt.component';
@@ -101,7 +102,9 @@ import { ErrorMessageComponent } from './components/common/error-message.compone
 
 // Tlink Integration Providers (enabled for proper integration)
 import { AiToolbarButtonProvider } from './providers/tlink/ai-toolbar-button.provider';
+import { TabbyToolbarButtonProvider } from './providers/tlink/tabby-toolbar-button.provider';
 import { AiSettingsTabProvider } from './providers/tlink/ai-settings-tab.provider';
+import { TabbyServerSettingsTabProvider } from './providers/tlink/tabby-server-settings-tab.provider';
 import { AiConfigProvider } from './providers/tlink/ai-config.provider';
 import { AiHotkeyProvider } from './providers/tlink/ai-hotkey.provider';
 import { AiAssistantCLIHandler } from './cli';
@@ -181,7 +184,9 @@ import { AiAssistantCLIHandler } from './cli';
         // Tlink Integration Providers
         // Note: AI Assistant button moved to left dock, but provider still enabled to provide command
         { provide: ToolbarButtonProvider, useClass: AiToolbarButtonProvider, multi: true },
+        { provide: ToolbarButtonProvider, useClass: TabbyToolbarButtonProvider, multi: true },
         { provide: SettingsTabProvider, useClass: AiSettingsTabProvider, multi: true },
+        { provide: SettingsTabProvider, useClass: TabbyServerSettingsTabProvider, multi: true },
         { provide: ConfigProvider, useClass: AiConfigProvider, multi: true },
         { provide: HotkeyProvider, useClass: AiHotkeyProvider, multi: true },
         { provide: CLIHandler, useClass: AiAssistantCLIHandler, multi: true },
@@ -201,6 +206,7 @@ import { AiAssistantCLIHandler } from './cli';
         GeneralSettingsComponent,
         ContextSettingsComponent,
         DataSettingsComponent,
+        TabbyServerSettingsTabComponent,
 
         // Security Components
         RiskConfirmDialogComponent,
