@@ -57,6 +57,13 @@ async function bootstrap (bootstrapData: BootstrapData, plugins: PluginInfo[], s
 ipcRenderer.once('start', async (_$event, bootstrapData: BootstrapData) => {
     console.log('Window bootstrap data:', bootstrapData)
 
+    if (bootstrapData.windowRole === 'code-editor') {
+        ;(window as any).__codeEditorFullWindowMode = true
+    }
+    if (bootstrapData.windowRole === 'ai-assistant') {
+        ;(window as any).__aiAssistantFullWindowMode = true
+    }
+
     initModuleLookup(bootstrapData.userPluginsPath)
 
     let plugins = await findPlugins()

@@ -27,6 +27,7 @@ export abstract class HostAppService {
     protected workspaceExportRequest = new Subject<void>()
     protected workspaceImportRequest = new Subject<void>()
     protected aiAssistantRequest = new Subject<void>()
+    protected openCodeEditorRequest = new Subject<void>()
     protected configChangeBroadcast = new Subject<void>()
     protected logger: Logger
 
@@ -51,6 +52,10 @@ export abstract class HostAppService {
      * Fired when AI Assistant window should be opened
      */
     get aiAssistantRequest$ (): Observable<void> { return this.aiAssistantRequest }
+    /**
+     * Fired when Code Editor should be opened in this window
+     */
+    get openCodeEditorRequest$ (): Observable<void> { return this.openCodeEditorRequest }
     /**
      * Fired when Button Bar is selected from the menu
      */
@@ -92,6 +97,14 @@ export abstract class HostAppService {
     }
 
     abstract newWindow (): void
+
+    /**
+     * Open/focus a dedicated Code Editor window.
+     * Returns true when handled by host implementation.
+     */
+    openCodeEditorWindow (): boolean {
+        return false
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     emitReady (): void { }

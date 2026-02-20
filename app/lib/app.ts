@@ -26,6 +26,7 @@ export class Application {
     private sessionSharingServer = getSessionSharingServer()
     private windows: Window[] = []
     private aiAssistantWindow: Window | null = null
+    private codeEditorWindow: Window | null = null
     private globalHotkey$ = new Subject<void>()
     private quitRequested = false
     userPluginsPath: string
@@ -588,6 +589,9 @@ export class Application {
             if (this.aiAssistantWindow === window) {
                 this.aiAssistantWindow = null
             }
+            if (this.codeEditorWindow === window) {
+                this.codeEditorWindow = null
+            }
             if (!this.windows.some(x => x.isMainWindow)) {
                 this.windows[0]?.makeMain()
                 this.windows[0]?.present()
@@ -615,6 +619,7 @@ export class Application {
         const window = await this.newWindow({
             width: 800,
             height: 700,
+            windowRole: 'ai-assistant',
         })
         this.aiAssistantWindow = window
 
@@ -631,6 +636,25 @@ export class Application {
         window.ready.then(() => {
             // Send flag indicating this is an AI Assistant window (full-window mode)
             window.send('host:open-ai-assistant', true)
+        })
+    }
+
+    async openCodeEditorWindow (): Promise<void> {
+        if (this.codeEditorWindow && !this.codeEditorWindow.isDestroyed()) {
+            this.codeEditorWindow.present()
+            this.codeEditorWindow.focus()
+            this.codeEditorWindow.send('host:open-code-editor', true)
+            return
+        }
+
+        const window = await this.newWindow({
+            width: 1200,
+            height: 800,
+            windowRole: 'code-editor',
+        })
+        this.codeEditorWindow = window
+        window.ready.then(() => {
+            window.send('host:open-code-editor', true)
         })
     }
 

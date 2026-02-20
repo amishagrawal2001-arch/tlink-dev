@@ -167,6 +167,23 @@ export abstract class PlatformService {
             return Promise.resolve(result)
         }
 
+        // Electron drag/drop exposes absolute paths on dataTransfer.files, which we
+        // need later for file operations (rename/delete on disk).
+        const directFiles = Array.from(event.dataTransfer.files ?? [])
+        if (directFiles.length) {
+            for (const file of directFiles) {
+                const transfer = new HTMLFileUpload(file)
+                this.fileTransferStarted.next(transfer)
+                result.pushChildren(transfer)
+                if (!multiple) {
+                    break
+                }
+            }
+            if (result.getChildrens().length) {
+                return result
+            }
+        }
+
         const traverseFileTree = (item: any, root: DirectoryUpload = result): Promise<void> => {
             return new Promise((resolve) => {
                 if (item.isFile) {
@@ -274,9 +291,12 @@ export abstract class PlatformService {
 export class HTMLFileUpload extends FileUpload {
     private stream: ReadableStream
     private reader: ReadableStreamDefaultReader
+    readonly filePath: string|null
 
     constructor (private file: File) {
         super()
+        const rawPath = (this.file as any)?.path
+        this.filePath = typeof rawPath === 'string' && rawPath ? rawPath : null
         this.stream = this.file.stream()
         this.reader = this.stream.getReader()
     }

@@ -40,6 +40,10 @@ export class ElectronHostAppService extends HostAppService {
             ;(this as any)._aiAssistantFullWindowMode = fullWindowMode
             this.aiAssistantRequest.next()
         }))
+        electron.ipcRenderer.on('host:open-code-editor', (_$event, fullWindowMode?: boolean) => this.zone.run(() => {
+            ;(window as any).__codeEditorFullWindowMode = !!fullWindowMode
+            this.openCodeEditorRequest.next()
+        }))
 
         electron.ipcRenderer.on('cli', (_$event, argv: any, cwd: string, secondInstance: boolean) => this.zone.run(async () => {
             const event = { argv, cwd, secondInstance }
@@ -71,6 +75,11 @@ export class ElectronHostAppService extends HostAppService {
 
     newWindow (): void {
         this.electron.ipcRenderer.send('app:new-window')
+    }
+
+    openCodeEditorWindow (): boolean {
+        this.electron.ipcRenderer.send('app:open-code-editor-window')
+        return true
     }
 
     async saveConfig (data: string): Promise<void> {

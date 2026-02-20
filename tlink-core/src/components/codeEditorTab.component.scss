@@ -20,6 +20,19 @@
     border-bottom: 1px solid var(--theme-bg-less);
     background: var(--theme-bg-more-2);
     flex-wrap: wrap;
+    -webkit-app-region: drag;
+
+    button,
+    select,
+    input,
+    label,
+    .menu-container,
+    .dropdown-menu,
+    .btn,
+    .form-control,
+    .form-select {
+        -webkit-app-region: no-drag;
+    }
 
     .toolbar-left,
     .toolbar-right {
@@ -63,12 +76,6 @@
         opacity: 1;
         color: var(--theme-fg);
         font-weight: 700;
-    }
-
-    .run-args {
-        width: 180px;
-        min-width: 140px;
-        max-width: 240px;
     }
 
     .form-select-sm {
@@ -125,6 +132,16 @@
         }
     }
 
+    .theme-mode-select {
+        width: 170px;
+        min-width: 170px;
+    }
+
+    .theme-preset-select {
+        width: 150px;
+        min-width: 150px;
+    }
+
     .status-text {
         margin-left: 8px;
         color: var(--theme-fg-less);
@@ -136,6 +153,11 @@
         color: #fff;
         border-color: var(--theme-accent);
     }
+}
+
+/* Keep custom menu buttons clear of macOS native traffic-light controls */
+:host.platform-darwin .code-editor-toolbar .toolbar-left {
+    padding-left: 74px;
 }
 
 .editor-shell {
@@ -353,6 +375,13 @@
         }
     }
 
+    &.selected-file:not(.active-doc) {
+        background: linear-gradient(to right, var(--theme-bg-more-2), var(--theme-bg-more));
+        border-color: var(--theme-bg-less);
+        border-left: 2px solid var(--theme-fg-less);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    }
+
     &.folder {
         font-weight: 500;
         font-size: 13px;
@@ -533,44 +562,6 @@
     min-height: 0;
 }
 
-.breadcrumbs-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 4px 10px;
-    font-size: 12px;
-    color: var(--theme-fg-less);
-    background: var(--theme-bg-more-2);
-
-    .breadcrumbs-left {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        flex-wrap: wrap;
-    }
-
-    .breadcrumbs-actions {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-    }
-}
-
-.breadcrumb {
-    display: inline-flex;
-    align-items: center;
-
-    &.last {
-        color: var(--theme-fg);
-        font-weight: 600;
-    }
-
-    .separator {
-        margin-left: 4px;
-    }
-}
-
 .split-controls {
     display: flex;
     align-items: center;
@@ -613,6 +604,60 @@
     inset: 0;
 }
 
+/*
+ * Monaco sometimes keeps theme-provided selection colors from prior state.
+ * Force a stable non-red selection color in all editor panes.
+ */
+:host ::ng-deep .monaco-editor,
+:host ::ng-deep .monaco-diff-editor .monaco-editor {
+    --vscode-editor-selectionHighlightBackground: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.06) !important;
+    --vscode-editor-selectionHighlightBorder: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.14) !important;
+    --vscode-editor-wordHighlightBackground: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.06) !important;
+    --vscode-editor-wordHighlightBorder: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.12) !important;
+    --vscode-editor-wordHighlightStrongBackground: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.1) !important;
+    --vscode-editor-wordHighlightStrongBorder: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.18) !important;
+    --vscode-editor-wordHighlightTextBackground: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.07) !important;
+    --vscode-editor-wordHighlightTextBorder: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.15) !important;
+    --vscode-editor-findMatchBackground: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.18) !important;
+    --vscode-editor-findMatchBorder: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.42) !important;
+    --vscode-editor-findMatchHighlightBackground: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.1) !important;
+    --vscode-editor-findMatchHighlightBorder: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.22) !important;
+}
+
+:host ::ng-deep .monaco-editor .view-overlays .selected-text {
+    background-color: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.34) !important;
+}
+
+:host ::ng-deep .monaco-editor .focused .view-overlays .selected-text {
+    background-color: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.44) !important;
+}
+
+/* Keep word/find highlights aligned with non-red selection styling */
+:host ::ng-deep .monaco-editor .findMatch,
+:host ::ng-deep .monaco-editor .currentFindMatch {
+    background-color: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.18) !important;
+    border-color: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.42) !important;
+}
+
+:host ::ng-deep .monaco-editor .wordHighlight,
+:host ::ng-deep .monaco-editor .wordHighlightStrong {
+    background-color: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.08) !important;
+    border-color: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.16) !important;
+}
+
+:host ::ng-deep .monaco-editor .focused .selectionHighlight,
+:host ::ng-deep .monaco-editor .selectionHighlight,
+:host ::ng-deep .monaco-editor .wordHighlightText {
+    background-color: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.06) !important;
+    border-color: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.14) !important;
+}
+
+:host ::ng-deep .monaco-editor .view-overlays [class*="selectionHighlight"],
+:host ::ng-deep .monaco-editor .view-overlays [class*="wordHighlight"] {
+    background-color: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.06) !important;
+    border-color: rgba(var(--tlink-editor-selection-rgb, 79, 156, 255), 0.14) !important;
+}
+
 .editor-pane {
     flex: 1 1 100%;
     position: relative;
@@ -627,23 +672,63 @@
 }
 
 .code-editor-status {
-    display: flex;
-    gap: 12px;
-    padding: 8px 12px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 6px;
+    padding: 3px 8px;
     border-top: 1px solid var(--theme-bg-less);
     background: var(--theme-bg);
     color: var(--theme-fg-less);
-    font-size: 12px;
-    flex-wrap: nowrap;
+    font-size: 11px;
+    line-height: 1.1;
     align-items: center;
 
+    .status-left {
+        min-width: 0;
+        justify-self: start;
+    }
+
     .status-message {
-        flex: 1 1 auto;
+        display: inline-block;
+        max-width: 100%;
         color: var(--theme-fg);
         white-space: nowrap;
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
+    }
+
+    .status-center {
+        justify-self: center;
+        width: min(62vw, 980px);
+        color: var(--theme-fg-less);
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .status-right {
+        min-width: 0;
+        justify-self: end;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+
+        .status-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .btn-icon {
+            min-width: 22px;
+            height: 18px;
+            padding: 0 4px;
+            font-size: 11px;
+            line-height: 1;
+        }
     }
 }
 

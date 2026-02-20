@@ -22,6 +22,7 @@ export interface WindowOptions {
     hidden?: boolean
     width?: number
     height?: number
+    windowRole?: 'default'|'code-editor'|'ai-assistant'
 }
 
 abstract class GlasstronWindow extends BrowserWindow {
@@ -44,6 +45,7 @@ export class Window {
     private windowBounds?: Rectangle
     private closing = false
     private hasCustomSize = false // Track if window was created with custom size (e.g., AI Assistant)
+    private windowRole: 'default'|'code-editor'|'ai-assistant' = 'default'
     private lastVibrancy: { enabled: boolean, type?: string } | null = null
     private disableVibrancyWhileDragging = false
     private touchBarControl: any
@@ -56,6 +58,7 @@ export class Window {
     // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
     constructor (private application: Application, private configStore: any, options?: WindowOptions) {
         options = options ?? {}
+        this.windowRole = options.windowRole ?? 'default'
 
         this.windowConfig = new ElectronConfig({ name: 'window' })
         this.windowBounds = this.windowConfig.get('windowBoundaries')
@@ -418,6 +421,7 @@ export class Window {
                 executable: app.getPath('exe'),
                 windowID: this.window.id,
                 isMainWindow: this.isMainWindow,
+                windowRole: this.windowRole,
                 userPluginsPath: this.application.userPluginsPath,
             })
         })

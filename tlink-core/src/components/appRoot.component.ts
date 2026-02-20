@@ -241,6 +241,14 @@ export class AppRootComponent implements OnInit {
         this.hostApp.workspaceImportRequest$.subscribe(() => {
             void this.importWorkspaceFromMenu()
         })
+        this.hostApp.openCodeEditorRequest$.subscribe(() => {
+            const existing = this.app.tabs.find(tab => tab instanceof CodeEditorTabComponent)
+            if (existing) {
+                this.app.selectTab(existing)
+                return
+            }
+            this.app.openNewTab({ type: CodeEditorTabComponent })
+        })
 
         if (window['safeModeReason']) {
             this.ngbModal.open(SafeModeModalComponent)
@@ -367,6 +375,9 @@ export class AppRootComponent implements OnInit {
     }
 
     get shouldShowBottomPanel (): boolean {
+        if (this.isCodeEditorOnlyWindow) {
+            return false
+        }
         if (!this.bottomPanelVisible || !this.bottomPanelComponent) {
             return false
         }
@@ -374,6 +385,10 @@ export class AppRootComponent implements OnInit {
             return false
         }
         return true
+    }
+
+    get isCodeEditorOnlyWindow (): boolean {
+        return !!(window as any).__codeEditorFullWindowMode
     }
 
     toggleCommandWindowBottom (): void {
@@ -1240,7 +1255,7 @@ export class AppRootComponent implements OnInit {
         case 'ssh':
             return this.sshSidePanel?.label || this.sshSidebarCommand?.label || 'SSH sidebar'
         case 'code-editor':
-            return 'Code editor'
+            return 'Tlink Studio'
         case 'intellij-editor':
             return this.intellijEditorCommand?.label || 'Open IntelliJ editor'
         case 'ai-chat':
@@ -1724,6 +1739,14 @@ export class AppRootComponent implements OnInit {
     }
 
     openCodeEditor (): void {
+        if (this.hostApp.openCodeEditorWindow()) {
+            return
+        }
+        const existing = this.app.tabs.find(tab => tab instanceof CodeEditorTabComponent)
+        if (existing) {
+            this.app.selectTab(existing)
+            return
+        }
         this.app.openNewTab({ type: CodeEditorTabComponent })
     }
 

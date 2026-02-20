@@ -144,6 +144,10 @@ ipcMain.on('app:new-window', () => {
     application.newWindow()
 })
 
+ipcMain.on('app:open-code-editor-window', () => {
+    void application.openCodeEditorWindow()
+})
+
 ipcMain.on('app:open-ai-assistant-window', () => {
     application.openAIAssistantWindow()
 })
