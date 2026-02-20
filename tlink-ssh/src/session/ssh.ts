@@ -132,6 +132,7 @@ export class SSHSession {
     private prePromptedPassword: string|null = null
     private shouldRememberProfile = false
     private authAborted = false
+    private passwordPromptDismissed = false
     private activePasswordModal: any|null = null
 
     constructor (
@@ -347,6 +348,7 @@ export class SSHSession {
                 // If user cancelled (res is null), mark as aborted to prevent retries
                 if (!res) {
                     this.authAborted = true
+                    this.passwordPromptDismissed = true
                 }
                 const enteredUsername = typeof res?.secondaryValue === 'string' ? res.secondaryValue.trim() : ''
                 if (enteredUsername) {
@@ -368,6 +370,7 @@ export class SSHSession {
             .catch(() => {
                 // User dismissed the modal - abort authentication
                 this.authAborted = true
+                this.passwordPromptDismissed = true
                 return null
             })
             .finally(() => {
@@ -644,7 +647,7 @@ export class SSHSession {
             this.ssh = authenticatedClient
         } else {
             this.ssh.disconnect()
-            this.passwordStorage.deletePassword(this.profile, this.authUsername ?? undefined)
+            await this.passwordStorage.deletePassword(this.profile, this.authUsername ?? undefined)
             // eslint-disable-next-line @typescript-eslint/no-base-to-string
             throw new Error('Authentication rejected')
         }
@@ -652,7 +655,11 @@ export class SSHSession {
         // auth success
 
         if (this.savedPassword) {
-            this.passwordStorage.savePassword(this.profile, this.savedPassword, this.authUsername ?? undefined)
+            try {
+                await this.passwordStorage.savePassword(this.profile, this.savedPassword, this.authUsername ?? undefined)
+            } catch (error) {
+                this.logger.warn('Failed to persist remembered SSH password', error)
+            }
         }
         await this.saveEphemeralProfileIfNeeded()
 
@@ -1205,5 +1212,9 @@ export class SSHSession {
         if (this.refCount === 0) {
             this.destroy()
         }
+    }
+
+    wasPasswordPromptDismissed (): boolean {
+        return this.passwordPromptDismissed
     }
 }

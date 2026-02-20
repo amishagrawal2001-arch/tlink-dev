@@ -139,6 +139,70 @@ try {
 process.mainModule = module
 
 const application = new Application(configStore)
+const pendingProtocolUrls: string[] = []
+const queuedProtocolUrls = new Set<string>()
+const recentlyHandledProtocolUrls = new Map<string, number>()
+const protocolUrlDedupeWindowMs = 3000
+
+const isShareProtocolUrl = (value: string | undefined | null): boolean => {
+    return typeof value === 'string' && value.startsWith('tlink://share/')
+}
+
+const isIgnorableSecondInstanceArg = (value: string | undefined | null): boolean => {
+    if (typeof value !== 'string') {
+        return true
+    }
+    const arg = value.trim()
+    if (!arg) {
+        return true
+    }
+    return process.platform === 'darwin' && arg.startsWith('-psn_')
+}
+
+const pruneRecentlyHandledProtocolUrls = (): void => {
+    const cutoff = Date.now() - protocolUrlDedupeWindowMs
+    for (const [url, timestamp] of recentlyHandledProtocolUrls) {
+        if (timestamp < cutoff) {
+            recentlyHandledProtocolUrls.delete(url)
+        }
+    }
+}
+
+const queueProtocolUrl = (url: string): void => {
+    const normalizedUrl = String(url ?? '').trim()
+    if (!normalizedUrl) {
+        return
+    }
+    if (!isShareProtocolUrl(normalizedUrl)) {
+        return
+    }
+    pruneRecentlyHandledProtocolUrls()
+    if (queuedProtocolUrls.has(normalizedUrl)) {
+        return
+    }
+    const lastHandled = recentlyHandledProtocolUrls.get(normalizedUrl)
+    if (lastHandled && Date.now() - lastHandled < protocolUrlDedupeWindowMs) {
+        return
+    }
+    recentlyHandledProtocolUrls.set(normalizedUrl, Date.now())
+    queuedProtocolUrls.add(normalizedUrl)
+    pendingProtocolUrls.push(normalizedUrl)
+    if (app.isReady()) {
+        void flushProtocolUrls()
+    }
+}
+
+const flushProtocolUrls = async (): Promise<void> => {
+    while (pendingProtocolUrls.length) {
+        const url = pendingProtocolUrls.shift()
+        if (!url) {
+            continue
+        }
+        queuedProtocolUrls.delete(url)
+        await application.send('host:open-shared-session-url', url)
+        application.focus()
+    }
+}
 
 ipcMain.on('app:new-window', () => {
     application.newWindow()
@@ -174,7 +238,19 @@ app.on('activate', async () => {
 })
 
 app.on('second-instance', async (_event, newArgv, cwd) => {
-    application.handleSecondInstance(newArgv, cwd)
+    const shareUrls = newArgv.filter((arg: string) => isShareProtocolUrl(arg))
+    shareUrls.forEach((url: string) => queueProtocolUrl(url))
+
+    const filteredArgv = newArgv.filter((arg: string) => !isShareProtocolUrl(arg))
+    const hasMeaningfulArgs = filteredArgv.slice(1).some((arg: string) => !isIgnorableSecondInstanceArg(arg))
+    if (hasMeaningfulArgs || shareUrls.length === 0) {
+        application.handleSecondInstance(filteredArgv, cwd)
+    }
+})
+
+app.on('open-url', (event, url) => {
+    event.preventDefault()
+    queueProtocolUrl(url)
 })
 
 const isProcessAlive = (pid: number): boolean => {
@@ -240,6 +316,14 @@ if (!hasSingleInstanceLock) {
 app.on('ready', async () => {
     ensureBundledOllama()
 
+    try {
+        if (!app.isDefaultProtocolClient('tlink')) {
+            app.setAsDefaultProtocolClient('tlink')
+        }
+    } catch (error) {
+        console.warn('Could not register tlink:// protocol handler:', error)
+    }
+
     if (process.platform === 'darwin') {
         const dockIconPath = path.join(app.getAppPath(), '..', 'build', 'icons', 'Tlink-logo.png')
         const dockIcon = nativeImage.createFromPath(dockIconPath)
@@ -260,6 +344,10 @@ app.on('ready', async () => {
 
     const window = await application.newWindow({ hidden: argv.hidden })
     await window.ready
-    window.passCliArguments(process.argv, process.cwd(), false)
+    const startupShareUrls = process.argv.filter(arg => isShareProtocolUrl(arg))
+    startupShareUrls.forEach(url => queueProtocolUrl(url))
+    const startupArgv = process.argv.filter(arg => !isShareProtocolUrl(arg))
+    window.passCliArguments(startupArgv, process.cwd(), false)
+    await flushProtocolUrls()
     window.focus()
 })

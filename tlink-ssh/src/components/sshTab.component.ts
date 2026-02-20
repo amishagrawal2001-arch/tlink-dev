@@ -244,7 +244,9 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
                 }
             }
 
-            this.sshMultiplexer.addSession(session)
+            if (session.open) {
+                this.sshMultiplexer.addSession(session)
+            }
         }
 
         // Successful start – clear any previous reconnect throttle
@@ -260,8 +262,14 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
             return
         }
 
+        const passwordPromptDismissed = this.sshSession?.wasPasswordPromptDismissed() ?? false
+        if (passwordPromptDismissed) {
+            this.suppressAutoReconnect = true
+        }
+
         const shouldAutoReconnect = !this.isDisconnectedByHand &&
             !this.isSessionExplicitlyTerminated() &&
+            !passwordPromptDismissed &&
             (this.profile.behaviorOnSessionEnd === 'auto' || this.profile.behaviorOnSessionEnd === 'reconnect')
 
         if (this.frontendIsReady) {
@@ -295,6 +303,9 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
 
     private async initializeSessionMaybeMultiplex (multiplex = true): Promise<void> {
         this.sshSession = await this.setupOneSession(this.injector, this.profile, multiplex)
+        if (this.sshSession.wasPasswordPromptDismissed()) {
+            return
+        }
         const session = new SSHShellSession(this.injector, this.sshSession, this.profile)
 
         this.setSession(session)
@@ -317,6 +328,9 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
 
     private async initializeSftpOnlySession (multiplex = true): Promise<void> {
         this.sshSession = await this.setupOneSession(this.injector, this.profile, multiplex)
+        if (this.sshSession.wasPasswordPromptDismissed()) {
+            return
+        }
         this.sftpAutostarted = true
         await this.openSFTP()
     }
@@ -334,6 +348,9 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
                 try {
                     await this.initializeSftpOnlySession(true)
                 } catch {
+                    if (this.sshSession?.wasPasswordPromptDismissed()) {
+                        return
+                    }
                     try {
                         await this.initializeSftpOnlySession(false)
                     } catch (e) {
@@ -345,6 +362,9 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
             try {
                 await this.initializeSessionMaybeMultiplex(true)
             } catch {
+                if (this.sshSession?.wasPasswordPromptDismissed()) {
+                    return
+                }
                 try {
                     await this.initializeSessionMaybeMultiplex(false)
                 } catch (e) {

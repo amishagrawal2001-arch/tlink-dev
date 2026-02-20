@@ -1,4 +1,5 @@
 import { createServer, type Server } from 'http'
+import * as os from 'os'
 import { WebSocketServer, WebSocket } from 'ws'
 
 interface SharedSession {
@@ -61,8 +62,13 @@ export class SessionSharingServer {
                     console.log(`Session sharing WebSocket server started on ${bindAddress}:${this.port}`)
                     console.log(`Local URL: ws://127.0.0.1:${this.port}/session`)
                     if (this.host === '0.0.0.0') {
-                        console.log(`Network URL: ws://<your-ip>:${this.port}/session (accessible on local network)`)
-                        console.log(`Note: For internet access, configure port forwarding or use a tunneling service`)
+                        const networkUrl = this.getNetworkUrl()
+                        if (networkUrl) {
+                            console.log(`Network URL: ${networkUrl} (accessible on local network)`)
+                        } else {
+                            console.log(`Network URL: ws://<your-ip>:${this.port}/session (accessible on local network)`)
+                        }
+                        console.log('Note: For internet access, configure port forwarding or use a tunneling service')
                     }
 
                     resolve(this.port)
@@ -222,7 +228,17 @@ export class SessionSharingServer {
      * This requires the user to know their IP address
      */
     getNetworkUrl (): string {
-        return `ws://<your-ip>:${this.port}/session`
+        if (!this.port) {
+            return ''
+        }
+        if (this.host !== '0.0.0.0') {
+            return `ws://${this.host}:${this.port}/session`
+        }
+        const localIp = this.getLocalNetworkIP()
+        if (!localIp) {
+            return ''
+        }
+        return `ws://${localIp}:${this.port}/session`
     }
 
     /**
@@ -337,7 +353,10 @@ export class SessionSharingServer {
         }
 
         // Verify token
-        if (session.token !== token) {
+        const incomingToken = String(token ?? '')
+        const exactTokenMatch = session.token === incomingToken
+        const legacyPrefixMatch = incomingToken.length === 8 && session.token.startsWith(incomingToken)
+        if (!exactTokenMatch && !legacyPrefixMatch) {
             ws.send(JSON.stringify({ type: 'error', message: 'Invalid token' }))
             ws.close(1008, 'Invalid token')
             return
@@ -439,6 +458,18 @@ export class SessionSharingServer {
                 this.unregisterSession(sessionId)
             }
         }
+    }
+
+    private getLocalNetworkIP (): string | null {
+        const interfaces = os.networkInterfaces()
+        for (const entries of Object.values(interfaces)) {
+            for (const entry of entries ?? []) {
+                if (entry && entry.family === 'IPv4' && !entry.internal) {
+                    return entry.address
+                }
+            }
+        }
+        return null
     }
 }
 

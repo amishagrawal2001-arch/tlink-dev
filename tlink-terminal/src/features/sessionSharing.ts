@@ -21,14 +21,21 @@ export class SessionSharingDecorator extends TerminalDecorator {
     }
 
     attach (terminal: BaseTerminalTabComponent<any>): void {
+        this.subscribeUntilDetached(terminal, this.sessionSharing.sharingStateChanged$.subscribe(change => {
+            if (change.terminal !== terminal) {
+                return
+            }
+            if (change.shared) {
+                this.attachToSharedSession(terminal)
+            } else {
+                this.detachFromSharedSession(terminal)
+            }
+        }))
+
         // Check if terminal is already shared
         if (this.sessionSharing.isSessionShared(terminal)) {
             this.attachToSharedSession(terminal)
         }
-
-        // Note: When shareSession is called on the service, we need to manually attach
-        // For now, the decorator will attach when checking. In the future, we could use
-        // an observable to detect when sharing starts.
     }
 
     detach (terminal: BaseTerminalTabComponent<any>): void {
@@ -52,14 +59,6 @@ export class SessionSharingDecorator extends TerminalDecorator {
         this.subscribeUntilDetached(terminal, terminal.session.binaryOutput$.subscribe(data => {
             this.sessionSharing.broadcastOutput(sharedSession.id, data)
         }))
-
-        // Subscribe to terminal input for interactive mode
-        // Note: Input forwarding would need to be implemented via the frontend
-        if (sharedSession.mode === 'interactive') {
-            // For now, input forwarding is not implemented
-            // Would need to intercept frontend input events
-            this.logger.debug('Interactive mode enabled, but input forwarding not yet implemented')
-        }
 
         // Subscribe to session close/destroy to stop sharing
         this.subscribeUntilDetached(terminal, terminal.session.closed$.subscribe(() => {

@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core'
+import { Observable, Subject } from 'rxjs'
 import { v4 as uuidv4 } from 'uuid'
 import { Logger, LogService } from './log.service'
 import { PlatformService } from '../api/platform'
@@ -20,6 +21,26 @@ export interface SessionSharingOptions {
     password?: string
 }
 
+export interface ParsedShareSessionLink {
+    shareUrl: string
+    wsUrl: string
+    sessionId: string
+    token: string
+    transport: 'ws'|'wss'
+    tokenIsLegacyPrefix: boolean
+}
+
+interface ShareBaseInfo {
+    baseUrl: string
+    transport: 'ws' | 'wss'
+}
+
+interface SessionSharingStateChange {
+    terminal: any
+    sessionId: string
+    shared: boolean
+}
+
 @Injectable({ providedIn: 'root' })
 export class SessionSharingService {
     private logger: Logger
@@ -28,12 +49,19 @@ export class SessionSharingService {
     private sessionIdToTerminal = new Map<string, any>() // Maps session ID to terminal tab reference
     private ws: WebSocket | null = null
     private wsUrl = 'ws://localhost:8080' // Default WebSocket server URL
+    private ipcListenersAttached = false
+    private sharingStateChanged = new Subject<SessionSharingStateChange>()
+
+    get sharingStateChanged$ (): Observable<SessionSharingStateChange> {
+        return this.sharingStateChanged
+    }
 
     constructor (
         log: LogService,
         private platform: PlatformService,
     ) {
         this.logger = log.create('sessionSharing')
+        this.attachIPCListeners()
     }
 
     /**
@@ -63,6 +91,10 @@ export class SessionSharingService {
         terminal: any,
         options: SessionSharingOptions,
     ): Promise<string | null> {
+        if (this.isSessionShared(terminal)) {
+            await this.stopSharing(terminal)
+        }
+
         // Check if WebSocket server is running
         const ipcRenderer = this.getIpcRenderer()
         if (ipcRenderer) {
@@ -108,6 +140,11 @@ export class SessionSharingService {
             this.sharedSessions.set(sessionId, sharedSession)
             this.terminalToSessionId.set(terminal, sessionId)
             this.sessionIdToTerminal.set(sessionId, terminal)
+            this.sharingStateChanged.next({
+                terminal,
+                sessionId,
+                shared: true,
+            })
 
             // Register session with embedded WebSocket server via IPC (if in Electron)
             try {
@@ -133,8 +170,8 @@ export class SessionSharingService {
                 this.logger.debug('Session sharing server not available, session can still be shared via URL:', error)
             }
 
-            const baseUrl = await this.getBaseUrl()
-            const shareUrl = `${baseUrl}/session/${sessionId}${token.substring(0, 8)}`
+            const { baseUrl, transport } = await this.getShareBaseInfo()
+            const shareUrl = this.buildShareUrl(baseUrl, sessionId, token, transport)
 
             this.logger.info('Session shared:', sessionId, shareUrl)
             
@@ -180,6 +217,11 @@ export class SessionSharingService {
                 this.sharedSessions.delete(sessionId)
                 this.terminalToSessionId.delete(terminal)
                 this.sessionIdToTerminal.delete(sessionId)
+                this.sharingStateChanged.next({
+                    terminal,
+                    sessionId,
+                    shared: false,
+                })
             }
 
             this.logger.info('Session sharing stopped:', sessionId)
@@ -207,16 +249,26 @@ export class SessionSharingService {
     }
 
     /**
+     * Get shareable link for an already-shared terminal
+     */
+    async getShareableLink (terminal: any): Promise<string | null> {
+        const sharedSession = this.getSharedSession(terminal)
+        if (!sharedSession) {
+            return null
+        }
+
+        const { baseUrl, transport } = await this.getShareBaseInfo()
+        return this.buildShareUrl(baseUrl, sharedSession.id, sharedSession.token, transport)
+    }
+
+    /**
      * Copy shareable link to clipboard
      */
     async copyShareableLink (terminal: any): Promise<boolean> {
-        const sharedSession = this.getSharedSession(terminal)
-        if (!sharedSession) {
+        const shareUrl = await this.getShareableLink(terminal)
+        if (!shareUrl) {
             return false
         }
-
-        const baseUrl = await this.getBaseUrl()
-        const shareUrl = `${baseUrl}/session/${sharedSession.id}${sharedSession.token.substring(0, 8)}`
 
         try {
             this.platform.setClipboard({ text: shareUrl })
@@ -249,6 +301,69 @@ export class SessionSharingService {
         } catch (error) {
             this.logger.error('Failed to join session:', error)
             return false
+        }
+    }
+
+    /**
+     * Parse tlink session-sharing URL into connection details
+     */
+    parseShareUrl (rawUrl: string): ParsedShareSessionLink | null {
+        const shareUrl = (rawUrl ?? '').trim()
+        if (!shareUrl.startsWith('tlink://share/')) {
+            return null
+        }
+
+        const stripped = shareUrl.slice('tlink://share/'.length)
+        const marker = '/session/'
+        const markerIndex = stripped.indexOf(marker)
+
+        let rawEndpoint = ''
+        let afterSession = ''
+
+        if (markerIndex >= 0) {
+            rawEndpoint = decodeURIComponent(stripped.slice(0, markerIndex))
+            afterSession = stripped.slice(markerIndex + marker.length)
+        } else if (stripped.startsWith('session/')) {
+            rawEndpoint = ''
+            afterSession = stripped.slice('session/'.length)
+        } else {
+            return null
+        }
+
+        const normalizedEndpoint = this.normalizeEndpoint(rawEndpoint) || '127.0.0.1:8080'
+
+        const [rawSessionSegment = '', rawQuery = ''] = afterSession.split('?', 2)
+        const sessionSegment = decodeURIComponent(rawSessionSegment).split('/')[0]?.trim() ?? ''
+        const query = new URLSearchParams(rawQuery)
+        const transport = (query.get('transport') ?? 'ws').toLowerCase() === 'wss' ? 'wss' : 'ws'
+        const explicitToken = query.get('token') ?? ''
+
+        let sessionId = ''
+        let token = explicitToken
+        let tokenIsLegacyPrefix = false
+
+        if (this.isUUID(sessionSegment)) {
+            sessionId = sessionSegment
+        } else if (sessionSegment.length > 36 && this.isUUID(sessionSegment.slice(0, 36))) {
+            // Legacy format: <sessionId><tokenPrefix>
+            sessionId = sessionSegment.slice(0, 36)
+            if (!token) {
+                token = sessionSegment.slice(36)
+                tokenIsLegacyPrefix = token.length > 0
+            }
+        }
+
+        if (!sessionId || !token) {
+            return null
+        }
+
+        return {
+            shareUrl,
+            wsUrl: `${transport}://${normalizedEndpoint}/session`,
+            sessionId,
+            token,
+            transport,
+            tokenIsLegacyPrefix,
         }
     }
 
@@ -391,7 +506,7 @@ export class SessionSharingService {
     /**
      * Get base URL for shareable links
      */
-    private async getBaseUrl (): Promise<string> {
+    private async getShareBaseInfo (): Promise<ShareBaseInfo> {
         // Try to get WebSocket server URL from embedded server (if in Electron)
         try {
             const ipcRenderer = this.getIpcRenderer()
@@ -399,18 +514,36 @@ export class SessionSharingService {
                 // Try to get public URL first (if tunnel is active)
                 const publicUrl = await ipcRenderer.invoke('session-sharing:get-public-url')
                 if (publicUrl) {
-                    return publicUrl.replace('ws://', 'tlink://share/').replace('/session', '')
+                    return {
+                        baseUrl: this.convertWebSocketUrlToShareBaseUrl(publicUrl),
+                        transport: this.getTransportFromWebSocketUrl(publicUrl),
+                    }
                 }
-                
+
+                // Prefer network URL for sharing with other users
+                const networkUrl = await ipcRenderer.invoke('session-sharing:get-network-url')
+                if (networkUrl && !String(networkUrl).includes('<your-ip>')) {
+                    return {
+                        baseUrl: this.convertWebSocketUrlToShareBaseUrl(networkUrl),
+                        transport: this.getTransportFromWebSocketUrl(networkUrl),
+                    }
+                }
+
                 // Fallback to local URL
                 const localUrl = await ipcRenderer.invoke('session-sharing:get-server-url', false)
-                return localUrl.replace('ws://', 'tlink://share/').replace('/session', '')
+                return {
+                    baseUrl: this.convertWebSocketUrlToShareBaseUrl(localUrl),
+                    transport: this.getTransportFromWebSocketUrl(localUrl),
+                }
             }
         } catch (error) {
             // Fallback to placeholder
             this.logger.debug('Could not get server URL from IPC:', error)
         }
-        return 'tlink://share'
+        return {
+            baseUrl: 'tlink://share',
+            transport: 'ws',
+        }
     }
 
     /**
@@ -422,22 +555,23 @@ export class SessionSharingService {
             return null
         }
 
-        const baseUrl = await this.getBaseUrl()
-        const shareUrl = `${baseUrl}/session/${sharedSession.id}${sharedSession.token.substring(0, 8)}`
+        const { baseUrl, transport } = await this.getShareBaseInfo()
+        const shareUrl = this.buildShareUrl(baseUrl, sharedSession.id, sharedSession.token, transport)
         
         const result: { url: string, networkUrl?: string, publicUrl?: string } = { url: shareUrl }
 
         try {
             const ipcRenderer = this.getIpcRenderer()
             if (ipcRenderer) {
-                // Get network URL template
-                const networkUrlTemplate = await ipcRenderer.invoke('session-sharing:get-network-url')
-                result.networkUrl = networkUrlTemplate
+                const networkUrl = await ipcRenderer.invoke('session-sharing:get-network-url')
+                if (networkUrl) {
+                    result.networkUrl = this.convertWebSocketUrlToShareBaseUrl(networkUrl)
+                }
 
                 // Get public URL if available
                 const publicUrl = await ipcRenderer.invoke('session-sharing:get-public-url')
                 if (publicUrl) {
-                    result.publicUrl = publicUrl.replace('ws://', 'tlink://share/').replace('/session', '')
+                    result.publicUrl = this.convertWebSocketUrlToShareBaseUrl(publicUrl)
                 }
             }
         } catch (error) {
@@ -445,6 +579,121 @@ export class SessionSharingService {
         }
 
         return result
+    }
+
+    private buildShareUrl (baseUrl: string, sessionId: string, token: string, transport: 'ws' | 'wss'): string {
+        const separator = baseUrl.includes('?') ? '&' : '?'
+        return `${baseUrl}/session/${sessionId}${separator}token=${encodeURIComponent(token)}&transport=${transport}`
+    }
+
+    private convertWebSocketUrlToShareBaseUrl (url: string): string {
+        try {
+            const parsed = new URL(url)
+            return `tlink://share/${parsed.host}`
+        } catch {
+            return String(url)
+                .replace(/^wss?:\/\//, 'tlink://share/')
+                .replace(/\/session\/?$/i, '')
+        }
+    }
+
+    private getTransportFromWebSocketUrl (url: string): 'ws' | 'wss' {
+        try {
+            return new URL(url).protocol === 'wss:' ? 'wss' : 'ws'
+        } catch {
+            return String(url).startsWith('wss://') ? 'wss' : 'ws'
+        }
+    }
+
+    private normalizeEndpoint (endpoint: string): string | null {
+        let result = (endpoint ?? '').trim()
+        if (!result) {
+            return null
+        }
+        result = result.replace(/^wss?:\/\//i, '')
+        result = result.replace(/\/session\/?$/i, '')
+        result = result.replace(/^\/+|\/+$/g, '')
+        return result || null
+    }
+
+    private isUUID (value: string): boolean {
+        return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+    }
+
+    private attachIPCListeners (): void {
+        if (this.ipcListenersAttached) {
+            return
+        }
+        const ipcRenderer = this.getIpcRenderer()
+        if (!ipcRenderer || !ipcRenderer.on) {
+            return
+        }
+        this.ipcListenersAttached = true
+
+        ipcRenderer.on('session-sharing:viewer-count-changed', (_event: any, sessionId: string, count: number) => {
+            const sharedSession = this.sharedSessions.get(sessionId)
+            if (sharedSession) {
+                sharedSession.viewers = Math.max(0, Number(count) || 0)
+            }
+        })
+
+        ipcRenderer.on('session-sharing:terminal-input', (_event: any, sessionId: string, data: any) => {
+            this.handleIncomingViewerInput(sessionId, data)
+        })
+    }
+
+    private handleIncomingViewerInput (sessionId: string, data: any): void {
+        const sharedSession = this.sharedSessions.get(sessionId)
+        if (!sharedSession || sharedSession.mode !== 'interactive') {
+            return
+        }
+
+        const terminal = this.sessionIdToTerminal.get(sessionId)
+        if (!terminal) {
+            return
+        }
+
+        const payload = this.normalizeIncomingBuffer(data)
+        if (!payload.length) {
+            return
+        }
+
+        try {
+            if (typeof terminal.sendInput === 'function') {
+                terminal.sendInput(payload)
+                return
+            }
+            if (terminal.session && typeof terminal.session.feedFromTerminal === 'function') {
+                terminal.session.feedFromTerminal(payload)
+            }
+        } catch (error) {
+            this.logger.debug('Failed to route viewer input to terminal:', error)
+        }
+    }
+
+    private normalizeIncomingBuffer (data: any): Buffer {
+        if (!data) {
+            return Buffer.from('')
+        }
+        if (Buffer.isBuffer(data)) {
+            return data
+        }
+        if (data instanceof ArrayBuffer) {
+            return Buffer.from(data)
+        }
+        if (ArrayBuffer.isView(data)) {
+            return Buffer.from(data.buffer, data.byteOffset, data.byteLength)
+        }
+        if (Array.isArray(data)) {
+            return Buffer.from(data)
+        }
+        if (typeof data === 'string') {
+            return Buffer.from(data, 'utf-8')
+        }
+        if (typeof data === 'object' && Array.isArray(data.data)) {
+            return Buffer.from(data.data)
+        }
+        return Buffer.from('')
     }
 
     /**

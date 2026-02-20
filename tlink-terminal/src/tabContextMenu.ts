@@ -199,7 +199,7 @@ export class SessionSharingContextMenu extends TabContextMenuItemProviderRuntime
                 items.push({
                     label: this.translate.instant('View sharing details'),
                     click: async () => {
-                        const shareUrl = await this.sessionSharing.shareSession(tab, { mode: sharedSession.mode })
+                        const shareUrl = await this.sessionSharing.getShareableLink(tab)
                         if (shareUrl) {
                             const modal = this.ngbModal.open(ShareSessionModalComponent, {
                                 backdrop: 'static',
