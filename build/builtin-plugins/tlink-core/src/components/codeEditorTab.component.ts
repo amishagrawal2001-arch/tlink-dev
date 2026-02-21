@@ -5,7 +5,7 @@ import * as path from 'path'
 import * as os from 'os'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
 
-import { BaseTabComponent, GetRecoveryTokenOptions, PlatformService, RecoveryToken } from '../api'
+import { BaseTabComponent, DirectoryUpload, FileUpload, GetRecoveryTokenOptions, PlatformService, RecoveryToken, SelectorOption } from '../api'
 import { AppService } from '../services/app.service'
 import { TabsService } from '../services/tabs.service'
 import { ProfilesService } from '../services/profiles.service'
@@ -41,6 +41,7 @@ interface EditorDocument extends EditorDocumentSnapshot {
 }
 
 type ViewMode = 'editor'|'diff'
+type EditorThemeMode = 'auto'|'light'|'dark'|'hc'|'solarized-light'|'solarized-dark'|'dracula'|'monokai'|'nord'
 interface TreeNode {
     name: string
     path: string
@@ -54,6 +55,17 @@ interface CodeFolder {
     path: string
 }
 
+interface TreeBuildResult {
+    roots: TreeNode[]
+    truncated: boolean
+}
+
+interface QuickOpenSelection {
+    kind: 'doc'|'file'
+    docId?: string
+    filePath?: string
+}
+
 @Component({
     selector: 'code-editor-tab',
     templateUrl: './codeEditorTab.component.pug',
@@ -61,6 +73,15 @@ interface CodeFolder {
 })
 export class CodeEditorTabComponent extends BaseTabComponent implements AfterViewInit {
     @HostBinding('class.code-editor-tab') hostClass = true
+    @HostBinding('class.platform-darwin') platformClassMacOS = process.platform === 'darwin'
+    @HostBinding('style.--tlink-editor-selection-rgb')
+    get editorSelectionRgb (): string {
+        const rgb = this.hexToRgb(this.editorThemeColor)
+        if (!rgb) {
+            return '79, 156, 255'
+        }
+        return `${rgb.r}, ${rgb.g}, ${rgb.b}`
+    }
     @ViewChild('primaryHost', { static: true }) primaryHost?: ElementRef<HTMLDivElement>
     @ViewChild('splitHost', { static: true }) splitHost?: ElementRef<HTMLDivElement>
     @ViewChild('diffHost', { static: true }) diffHost?: ElementRef<HTMLDivElement>
@@ -76,7 +97,38 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     editingDocName = ''
     wordWrapEnabled = false
     minimapEnabled = false
-    themeMode: 'auto'|'light'|'dark'|'hc' = 'auto'
+    themeMode: EditorThemeMode = 'auto'
+    editorThemeColor = '#4f9cff'
+    private readonly supportedThemeModes: EditorThemeMode[] = [
+        'auto',
+        'light',
+        'dark',
+        'hc',
+        'solarized-light',
+        'solarized-dark',
+        'dracula',
+        'monokai',
+        'nord',
+    ]
+    readonly editorThemePresets: Array<{ name: string, color: string }> = [
+        { name: 'Blue', color: '#4f9cff' },
+        { name: 'Sky', color: '#38bdf8' },
+        { name: 'Cyan', color: '#06b6d4' },
+        { name: 'Teal', color: '#14b8a6' },
+        { name: 'Emerald', color: '#22c55e' },
+        { name: 'Lime', color: '#84cc16' },
+        { name: 'Amber', color: '#f59e0b' },
+        { name: 'Gold', color: '#eab308' },
+        { name: 'Rose', color: '#f43f5e' },
+        { name: 'Red', color: '#ef4444' },
+        { name: 'Pink', color: '#ec4899' },
+        { name: 'Fuchsia', color: '#d946ef' },
+        { name: 'Violet', color: '#8b5cf6' },
+        { name: 'Indigo', color: '#6366f1' },
+        { name: 'Purple', color: '#a855f7' },
+        { name: 'Orange', color: '#f97316' },
+        { name: 'Slate', color: '#64748b' },
+    ]
     fontSize = 14
     lineHeight = 22
     autosaveEnabled = true
@@ -84,7 +136,6 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     viewMode: ViewMode = 'editor'
     breadcrumbs: string[] = []
     statusMessage = ''
-    runArgs = ''
     sidebarWidth = 240
     private runTerminalTab: BaseTerminalTabComponentType | null = null
     pendingDiffDocId: string|null = null
@@ -102,8 +153,11 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     folderContextMenuY = 0
     fileContextMenuOpen = false
     fileContextMenuPath: string|null = null
+    fileContextMenuPaths: string[] = []
     fileContextMenuX = 0
     fileContextMenuY = 0
+    selectedFilePathKeys = new Set<string>()
+    private fileSelectionAnchorKey: string|null = null
     private draggingDocId: string|null = null
     private draggingPath: string|null = null
     private draggingIsFolder = false
@@ -112,6 +166,14 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
 
     get hasRunTerminal (): boolean {
         return !!this.runTerminalTab
+    }
+
+    get fileContextDeleteLabel (): string {
+        const count = this.fileContextMenuPaths.length
+        if (count > 1) {
+            return `Delete ${count} files (disk)`
+        }
+        return 'Delete (disk)'
     }
 
     statusLineCol = ''
@@ -133,23 +195,52 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     private autosaveTimer?: number
     private externalOpenHandler?: (e: Event) => void
     private tempSaveTimers = new Map<string, number>()
+    private persistStateTimer?: number
+    private treeRefreshTimer?: number
+    private treeBuildNonce = 0
+    private deletingPathKeys = new Set<string>()
     private focusedEditor: 'primary'|'split' = 'primary'
     private pendingSplitDocId: string|null = null
     private resizingSidebar = false
     private resizeStartX = 0
     private resizeStartWidth = 0
+    private readonly treeNodeBudget = 4000
+    private readonly quickOpenBudget = 3000
+    private readonly skippedFolders = new Set(['.git', 'node_modules', '.svn', '.hg', '.idea', '.vscode', 'dist', 'build'])
+    private readonly studioTitle = 'Tlink Studio'
+
+    private resolveStudioDir (preferredName: string, legacyName?: string): string {
+        const home = process.env.TLINK_CONFIG_DIR || process.env.HOME || os.homedir()
+        const baseDir = path.join(home || os.tmpdir(), '.tlink')
+        const preferredDir = path.join(baseDir, preferredName)
+        const legacyDir = legacyName ? path.join(baseDir, legacyName) : null
+        if (fsSync.existsSync(preferredDir)) {
+            return preferredDir
+        }
+        try {
+            if (legacyDir && fsSync.existsSync(legacyDir)) {
+                fsSync.renameSync(legacyDir, preferredDir)
+                return preferredDir
+            }
+            fsSync.mkdirSync(preferredDir, { recursive: true })
+            return preferredDir
+        } catch {
+            if (legacyDir && fsSync.existsSync(legacyDir)) {
+                return legacyDir
+            }
+            return os.tmpdir()
+        }
+    }
 
     private getFolderRoot (): string {
-        const home = process.env.TLINK_CONFIG_DIR || process.env.HOME || os.homedir()
-        const dir = path.join(home || os.tmpdir(), '.tlink', 'code-editor')
-        if (!fsSync.existsSync(dir)) {
-            try {
-                fsSync.mkdirSync(dir, { recursive: true })
-            } catch {
-                return os.tmpdir()
-            }
+        return this.resolveStudioDir('tlink-studio', 'code-editor')
+    }
+
+    private getFolderDisplayName (folderPath: string): string {
+        if (this.isSameFsPath(folderPath, this.folderRoot)) {
+            return this.studioTitle
         }
-        return dir
+        return path.basename(folderPath) || folderPath || 'Folder'
     }
 
     private loadFoldersFromState (): void {
@@ -174,7 +265,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                 unique.push(p)
             }
         }
-        this.folders = unique.map(p => ({ path: p, name: path.basename(p) || 'Folder' }))
+        this.folders = unique.map(p => ({ path: p, name: this.getFolderDisplayName(p) }))
         const savedSelected = typeof localStorage !== 'undefined' ? localStorage.getItem('codeEditor.selectedFolder') : null
         this.selectedFolderPath = savedSelected && unique.includes(savedSelected) ? savedSelected : null
         if (typeof localStorage !== 'undefined') {
@@ -232,25 +323,217 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         return null
     }
 
-    private buildTree (): TreeNode[] {
+    private normalizeFsPath (filePath: string|null): string|null {
+        if (!filePath) {
+            return null
+        }
+        let normalized = path.resolve(filePath)
+        try {
+            if ((fsSync.realpathSync as any).native) {
+                normalized = (fsSync.realpathSync as any).native(normalized)
+            } else {
+                normalized = fsSync.realpathSync(normalized)
+            }
+        } catch {
+            // Use the resolved path when realpath is unavailable.
+        }
+        if (process.platform === 'win32') {
+            normalized = normalized.toLowerCase()
+        }
+        return normalized
+    }
+
+    private isSameFsPath (a: string|null|undefined, b: string|null|undefined): boolean {
+        const left = this.normalizeFsPath(a ?? null)
+        const right = this.normalizeFsPath(b ?? null)
+        return !!left && !!right && left === right
+    }
+
+    private getFsPathKey (filePath: string|null|undefined): string|null {
+        const normalized = this.normalizeFsPath(filePath ?? null)
+        if (normalized) {
+            return normalized
+        }
+        if (!filePath) {
+            return null
+        }
+        let fallback = path.resolve(filePath)
+        if (process.platform === 'win32') {
+            fallback = fallback.toLowerCase()
+        }
+        return fallback
+    }
+
+    isTreeFileSelected (filePath: string|null|undefined): boolean {
+        const key = this.getFsPathKey(filePath)
+        return !!key && this.selectedFilePathKeys.has(key)
+    }
+
+    private getVisibleTreeFilePaths (): string[] {
+        const result: string[] = []
+        for (const item of this._treeItems) {
+            if (item.node.isFolder || !item.node.path) {
+                continue
+            }
+            result.push(item.node.path)
+        }
+        return result
+    }
+
+    private getSelectedFilePathsFromTree (): string[] {
+        const result: string[] = []
+        for (const filePath of this.getVisibleTreeFilePaths()) {
+            if (this.isTreeFileSelected(filePath)) {
+                result.push(filePath)
+            }
+        }
+        return result
+    }
+
+    private setFileSelection (filePaths: string[]): void {
+        const next = new Set<string>()
+        let lastKey: string|null = null
+        for (const filePath of filePaths) {
+            const key = this.getFsPathKey(filePath)
+            if (!key) {
+                continue
+            }
+            next.add(key)
+            lastKey = key
+        }
+        this.selectedFilePathKeys = next
+        this.fileSelectionAnchorKey = lastKey
+        this.cdr.markForCheck()
+    }
+
+    private toggleFileSelection (filePath: string): void {
+        const key = this.getFsPathKey(filePath)
+        if (!key) {
+            return
+        }
+        const next = new Set(this.selectedFilePathKeys)
+        if (next.has(key)) {
+            next.delete(key)
+        } else {
+            next.add(key)
+        }
+        this.selectedFilePathKeys = next
+        this.fileSelectionAnchorKey = key
+        this.cdr.markForCheck()
+    }
+
+    private extendFileSelection (filePath: string): void {
+        const targetKey = this.getFsPathKey(filePath)
+        if (!targetKey) {
+            return
+        }
+        const visible = this.getVisibleTreeFilePaths()
+        if (!visible.length) {
+            return
+        }
+        const targetIndex = visible.findIndex(p => this.isSameFsPath(p, filePath))
+        if (targetIndex < 0) {
+            this.setFileSelection([filePath])
+            return
+        }
+        let anchorIndex = -1
+        if (this.fileSelectionAnchorKey) {
+            anchorIndex = visible.findIndex(p => this.getFsPathKey(p) === this.fileSelectionAnchorKey)
+        }
+        if (anchorIndex < 0) {
+            anchorIndex = targetIndex
+        }
+        const start = Math.min(anchorIndex, targetIndex)
+        const end = Math.max(anchorIndex, targetIndex)
+        const next = new Set<string>()
+        for (const p of visible.slice(start, end + 1)) {
+            const key = this.getFsPathKey(p)
+            if (key) {
+                next.add(key)
+            }
+        }
+        this.selectedFilePathKeys = next
+        if (!this.fileSelectionAnchorKey) {
+            this.fileSelectionAnchorKey = targetKey
+        }
+        this.cdr.markForCheck()
+    }
+
+    private pruneFileSelectionToVisibleTree (): void {
+        const allowedKeys = new Set<string>()
+        for (const filePath of this.getVisibleTreeFilePaths()) {
+            const key = this.getFsPathKey(filePath)
+            if (key) {
+                allowedKeys.add(key)
+            }
+        }
+        if (!allowedKeys.size) {
+            this.selectedFilePathKeys = new Set()
+            this.fileSelectionAnchorKey = null
+            return
+        }
+        const next = new Set<string>()
+        for (const key of this.selectedFilePathKeys) {
+            if (allowedKeys.has(key)) {
+                next.add(key)
+            }
+        }
+        this.selectedFilePathKeys = next
+        if (this.fileSelectionAnchorKey && !allowedKeys.has(this.fileSelectionAnchorKey)) {
+            this.fileSelectionAnchorKey = null
+        }
+    }
+
+    private selectFilesForContextMenu (filePath: string): void {
+        if (!this.isTreeFileSelected(filePath)) {
+            this.setFileSelection([filePath])
+        }
+        const selectedPaths = this.getSelectedFilePathsFromTree()
+        if (!selectedPaths.length) {
+            this.fileContextMenuPaths = [filePath]
+            return
+        }
+        this.fileContextMenuPaths = selectedPaths
+    }
+
+    private async buildTree (buildNonce: number): Promise<TreeBuildResult> {
+        const isStale = (): boolean => buildNonce !== this.treeBuildNonce
         const docsByPath = new Map<string, EditorDocument>()
         for (const doc of this.documents) {
-            if (doc.path) {
-                docsByPath.set(path.resolve(doc.path), doc)
+            const docPathKey = this.normalizeFsPath(doc.path)
+            if (docPathKey) {
+                docsByPath.set(docPathKey, doc)
             }
         }
 
-        const readDir = (dir: string): TreeNode[] => {
+        let remainingBudget = this.treeNodeBudget
+        let truncated = false
+
+        const readDir = async (dir: string): Promise<TreeNode[]> => {
+            if (isStale()) {
+                return []
+            }
             try {
-                const entries = fsSync.readdirSync(dir, { withFileTypes: true }) as any[]
+                const entries = await fs.readdir(dir, { withFileTypes: true }) as any[]
                 const nodes: TreeNode[] = []
                 for (const entry of entries) {
+                    if (isStale()) {
+                        return []
+                    }
+                    if (remainingBudget <= 0) {
+                        truncated = true
+                        break
+                    }
                     const name = entry?.name
                     if (!name || name === '.' || name === '..') {
                         continue
                     }
-                    const fullPath = path.join(dir, name)
                     const isDir = typeof entry.isDirectory === 'function' ? entry.isDirectory() : false
+                    if (isDir && this.skippedFolders.has(name)) {
+                        continue
+                    }
+                    remainingBudget--
+                    const fullPath = path.join(dir, name)
                     if (isDir) {
                         nodes.push({
                             name,
@@ -260,7 +543,8 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                             folderPath: fullPath,
                         })
                     } else {
-                        const doc = docsByPath.get(path.resolve(fullPath)) ?? null
+                        const docPathKey = this.normalizeFsPath(fullPath)
+                        const doc = (docPathKey ? docsByPath.get(docPathKey) : null) ?? null
                         nodes.push({
                             name,
                             path: fullPath,
@@ -283,8 +567,8 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             }
         }
 
-        const populate = (node: TreeNode): void => {
-            if (!node.isFolder) {
+        const populate = async (node: TreeNode): Promise<void> => {
+            if (!node.isFolder || isStale() || truncated) {
                 return
             }
             const key = node.path || ''
@@ -292,17 +576,22 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                 node.children = []
                 return
             }
-            node.children = readDir(node.path)
+            node.children = await readDir(node.path)
             for (const child of node.children) {
                 if (child.isFolder) {
-                    populate(child)
+                    await populate(child)
+                }
+                if (isStale() || truncated) {
+                    return
                 }
             }
         }
 
         const roots: TreeNode[] = []
-
         for (const folder of this.folders) {
+            if (isStale()) {
+                return { roots: [], truncated: false }
+            }
             const root: TreeNode = {
                 name: folder.name,
                 path: folder.path,
@@ -310,11 +599,14 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                 children: [],
                 folderPath: folder.path,
             }
-            populate(root)
+            await populate(root)
             roots.push(root)
+            if (truncated) {
+                break
+            }
         }
 
-        return roots
+        return { roots, truncated }
     }
 
     async addFolder (): Promise<void> {
@@ -360,7 +652,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             return
         }
         if (!this.folders.find(f => f.path === folderPath)) {
-            this.folders.push({ name: path.basename(folderPath) || folderPath, path: folderPath })
+            this.folders.push({ name: this.getFolderDisplayName(folderPath), path: folderPath })
         }
         this.selectFolder(folderPath)
         this.persistFolders()
@@ -455,6 +747,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         }
         event.preventDefault()
         event.stopPropagation()
+        this.fileContextMenuPaths = []
         this.folderContextMenuOpen = true
         this.folderContextMenuPath = folderPath
         const menuWidth = 220
@@ -471,8 +764,11 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         event.stopPropagation()
         this.fileContextMenuOpen = true
         this.fileContextMenuPath = filePath
+        if (!this.fileContextMenuPaths.length) {
+            this.fileContextMenuPaths = [filePath]
+        }
         const menuWidth = 220
-        const menuHeight = 140
+        const menuHeight = 170
         const padding = 8
         const maxX = Math.max(padding, (window.innerWidth || 0) - menuWidth - padding)
         const maxY = Math.max(padding, (window.innerHeight || 0) - menuHeight - padding)
@@ -514,8 +810,12 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
 
     async handleFileContextAction (action: string): Promise<void> {
         const filePath = this.fileContextMenuPath
+        const filePaths = this.fileContextMenuPaths.length
+            ? [...this.fileContextMenuPaths]
+            : (filePath ? [filePath] : [])
         this.fileContextMenuOpen = false
         this.fileContextMenuPath = null
+        this.fileContextMenuPaths = []
         if (!filePath) {
             return
         }
@@ -528,7 +828,11 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                 this.platform.showItemInFolder(filePath)
             } catch {}
         } else if (action === 'delete') {
-            await this.deleteFileOnDisk(filePath)
+            if (filePaths.length > 1) {
+                await this.deleteFilesOnDisk(filePaths)
+            } else {
+                await this.deleteFileOnDisk(filePath)
+            }
         }
     }
 
@@ -645,25 +949,120 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         }
     }
 
-    private async deleteFileOnDisk (filePath: string): Promise<void> {
-        const doc = this.documents.find(d => d.path === filePath) ?? null
-        if (doc) {
-            if (!(await this.confirmDiscard(doc))) {
+    private async deleteFilesOnDisk (filePaths: string[]): Promise<void> {
+        const uniqueByKey = new Map<string, string>()
+        for (const filePath of filePaths) {
+            const key = this.getFsPathKey(filePath)
+            if (!key) {
+                continue
+            }
+            if (!uniqueByKey.has(key)) {
+                uniqueByKey.set(key, filePath)
+            }
+        }
+        const targets = Array.from(uniqueByKey.values()).filter(filePath => {
+            try {
+                return fsSync.existsSync(filePath) && fsSync.statSync(filePath).isFile()
+            } catch {
+                return false
+            }
+        })
+        if (!targets.length) {
+            return
+        }
+        const detail = targets.length === 1
+            ? 'This action cannot be undone.'
+            : 'This action cannot be undone and will remove all selected files.'
+        if (!(await this.confirmAction(
+            `Delete ${targets.length} file${targets.length === 1 ? '' : 's'}?`,
+            detail,
+            'Delete',
+        ))) {
+            return
+        }
+        let deletedCount = 0
+        for (const filePath of targets) {
+            const existedBefore = fsSync.existsSync(filePath)
+            await this.deleteFileOnDisk(filePath, true)
+            if (existedBefore && !fsSync.existsSync(filePath)) {
+                deletedCount++
+            }
+        }
+        if (deletedCount > 1) {
+            this.statusMessage = `Deleted ${deletedCount} files`
+            this.updateStatus()
+        }
+    }
+
+    private async deleteFileOnDisk (filePath: string, skipConfirm = false): Promise<void> {
+        const relatedDocs = this.documents.filter(doc =>
+            this.isSameFsPath(doc.path, filePath) || this.isSameFsPath(doc.tempPath ?? null, filePath),
+        )
+        for (const doc of relatedDocs) {
+            if (doc.isDirty && !(await this.confirmDiscard(doc))) {
                 return
             }
-            await this.closeDocument(doc.id)
         }
-        if (!confirm(`Delete ${path.basename(filePath)}?`)) {
-            return
+        if (!skipConfirm) {
+            if (!(await this.confirmAction(
+                `Delete ${path.basename(filePath)}?`,
+                'This action cannot be undone.',
+                'Delete',
+            ))) {
+                return
+            }
+        }
+        const filePathKey = this.getFsPathKey(filePath)
+        if (filePathKey) {
+            this.deletingPathKeys.add(filePathKey)
+        }
+        for (const doc of relatedDocs) {
+            // Prevent autosave from writing this file while delete is in progress.
+            doc.isDirty = false
+            doc.lastSavedValue = doc.model.getValue()
         }
         try {
             await fs.unlink(filePath)
+            for (const doc of relatedDocs) {
+                // Avoid a second discard prompt while closing after successful deletion.
+                doc.isDirty = false
+                doc.lastSavedValue = doc.model.getValue()
+                await this.closeDocument(doc.id)
+            }
+            if (filePathKey) {
+                this.selectedFilePathKeys.delete(filePathKey)
+                if (this.fileSelectionAnchorKey === filePathKey) {
+                    this.fileSelectionAnchorKey = null
+                }
+            }
             this.persistState()
             this.updateTreeItems()
+            this.statusMessage = `Deleted: ${path.basename(filePath)}`
+            this.updateStatus()
+            // Detect fast re-creation from another process (or a missed save race).
+            window.setTimeout(() => {
+                if (fsSync.existsSync(filePath)) {
+                    this.setError(`File was recreated after delete: ${filePath}`)
+                    this.updateTreeItems()
+                }
+            }, 300)
             window.setTimeout(() => this.cdr.markForCheck(), 0)
         } catch (err: any) {
             this.setError(`Failed to delete file: ${err?.message ?? err}`)
+        } finally {
+            if (filePathKey) {
+                this.deletingPathKeys.delete(filePathKey)
+            }
         }
+    }
+
+    private async deleteActiveFileOnDisk (): Promise<void> {
+        const doc = this.getActiveDoc()
+        if (!doc?.path) {
+            this.setError('Active document is not backed by a file on disk.')
+            return
+        }
+        await this.deleteFileOnDisk(doc.path)
     }
 
     private async deleteFolderOnDisk (folderPath: string): Promise<void> {
@@ -679,7 +1078,11 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             await this.closeDocument(doc.id)
         }
 
-        if (!confirm(`Delete folder ${path.basename(folderPath) || folderPath} and all its contents?`)) {
+        if (!(await this.confirmAction(
+            `Delete folder ${path.basename(folderPath) || folderPath}?`,
+            'All files and subfolders will be permanently removed.',
+            'Delete folder',
+        ))) {
             return
         }
         try {
@@ -764,7 +1167,6 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     }
 
     async onTreeDrop (event: DragEvent, folderPath: string|null): Promise<void> {
-        console.log('[CodeEditor] onTreeDrop:', folderPath, 'draggingDocId:', this.draggingDocId, 'draggingPath:', this.draggingPath)
         if (!this.draggingDocId && !this.draggingPath) {
             return
         }
@@ -841,7 +1243,6 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         try {
             const nowExpanded = !wasExpanded
             this.statusMessage = `${nowExpanded ? 'Expanded' : 'Collapsed'}: ${node.name}`
-            console.log('[CodeEditor] toggleFolder:', node.name, 'wasExpanded:', wasExpanded, 'nowExpanded:', nowExpanded)
             window.setTimeout(() => {
                 if (this.statusMessage === `${nowExpanded ? 'Expanded' : 'Collapsed'}: ${node.name}`) {
                     this.statusMessage = ''
@@ -855,23 +1256,25 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     async onTreeClick (event: MouseEvent, node: TreeNode): Promise<void> {
         event.preventDefault()
         event.stopPropagation()
-        console.log('[CodeEditor] onTreeClick:', node.name, 'isFolder:', node.isFolder, 'target:', (event?.target as any)?.className)
         // Don't toggle if clicking on chevron (chevron has its own handler)
         if ((event?.target as any)?.classList?.contains('chevron')) {
             return
         }
         if (node.isFolder) {
+            this.selectedFilePathKeys = new Set()
+            this.fileSelectionAnchorKey = null
             this.selectFolder(node.path || null)
             this.toggleFolder(event, node)
-            return
-        }
-        if (node.docId) {
-            this.activateDoc(node.docId)
             return
         }
 
         const filePath = node.path
         if (!filePath) {
+            this.selectedFilePathKeys = new Set()
+            this.fileSelectionAnchorKey = null
+            if (node.docId) {
+                this.activateDoc(node.docId)
+            }
             return
         }
         try {
@@ -882,6 +1285,16 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         } catch {
             return
         }
+
+        if (event.shiftKey) {
+            this.extendFileSelection(filePath)
+            return
+        }
+        if (event.metaKey || event.ctrlKey) {
+            this.toggleFileSelection(filePath)
+            return
+        }
+        this.setFileSelection([filePath])
         await this.openFileFromDiskPath(filePath)
     }
 
@@ -899,12 +1312,12 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     onTreeContextMenu (event: MouseEvent, node: TreeNode): void {
         event.preventDefault()
         event.stopPropagation()
-        console.log('[CodeEditor] onTreeContextMenu:', node.name, 'isFolder:', node.isFolder, 'hasPath:', !!node.path, 'hasDocId:', !!node.docId)
         if (node.isFolder) {
             this.openFolderContextMenu(event, node.path)
         } else if (node.path) {
             // Always use file context menu for files (even if they're open documents)
             // This ensures delete option is always available
+            this.selectFilesForContextMenu(node.path)
             this.openFileContextMenu(event, node.path)
         } else if (node.docId) {
             // Fallback to doc context menu only if no path (unsaved temp files)
@@ -989,7 +1402,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         private cdr: ChangeDetectorRef,
     ) {
         super(injector)
-        this.setTitle('Code Editor')
+        this.setTitle(this.studioTitle)
     }
 
     get visibleDocuments (): EditorDocument[] {
@@ -1003,8 +1416,47 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         return this._treeItems
     }
 
+    get diffCandidates (): EditorDocument[] {
+        return this.documents.filter(doc => doc.id !== this.activeDocId)
+    }
+
+    get editorThemePresetValue (): string {
+        return this.editorThemePresets.some(x => x.color === this.editorThemeColor) ? this.editorThemeColor : 'custom'
+    }
+
+    getDiffOptionLabel (doc: EditorDocument): string {
+        const sameNameDocs = this.documents.filter(d => d.name === doc.name)
+        if (!doc.path) {
+            const suffix = doc.isDirty ? 'unsaved' : 'buffer'
+            return sameNameDocs.length > 1 ? `${doc.name} (${suffix})` : `${doc.name} (unsaved)`
+        }
+        if (sameNameDocs.length <= 1) {
+            return doc.name
+        }
+        const hasUnsavedWithSameName = sameNameDocs.some(d => d.id !== doc.id && !d.path)
+        if (hasUnsavedWithSameName) {
+            return `${doc.name} (disk)`
+        }
+        const parentName = path.basename(path.dirname(doc.path)) || 'disk'
+        return `${doc.name} (${parentName})`
+    }
+
     private updateTreeItems (): void {
-        const roots = this.buildTree()
+        const buildNonce = ++this.treeBuildNonce
+        if (this.treeRefreshTimer) {
+            clearTimeout(this.treeRefreshTimer)
+        }
+        this.treeRefreshTimer = window.setTimeout(() => {
+            this.treeRefreshTimer = undefined
+            void this.rebuildTreeItems(buildNonce)
+        }, 20)
+    }
+
+    private async rebuildTreeItems (buildNonce: number): Promise<void> {
+        const { roots, truncated } = await this.buildTree(buildNonce)
+        if (buildNonce !== this.treeBuildNonce) {
+            return
+        }
         const flat: Array<{ node: TreeNode, depth: number }> = []
         const visit = (node: TreeNode, depth: number) => {
             flat.push({ node, depth })
@@ -1020,8 +1472,17 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         for (const root of roots) {
             visit(root, 0)
         }
-        // Always assign new array reference to trigger change detection
         this._treeItems = [...flat]
+        this.pruneFileSelectionToVisibleTree()
+        if (truncated) {
+            this.statusMessage = `Explorer truncated to ${this.treeNodeBudget} entries`
+            window.setTimeout(() => {
+                if (this.statusMessage === `Explorer truncated to ${this.treeNodeBudget} entries`) {
+                    this.statusMessage = ''
+                }
+            }, 2200)
+        }
+        this.cdr.markForCheck()
     }
 
     private resolveTerminalService (): TerminalServiceType|null {
@@ -1093,6 +1554,12 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         if (this.autosaveTimer) {
             clearInterval(this.autosaveTimer)
         }
+        if (this.persistStateTimer) {
+            clearTimeout(this.persistStateTimer)
+        }
+        if (this.treeRefreshTimer) {
+            clearTimeout(this.treeRefreshTimer)
+        }
         this.disposeEditors()
         this.disposeModels()
         if (this.externalOpenHandler) {
@@ -1136,13 +1603,101 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         try {
             const data = await upload.readAll()
             const content = new TextDecoder().decode(data)
-            const filePath = (upload as any).filePath ?? null
-            this.openDocumentFromContent(upload.getName(), filePath, content)
+            const filePath = this.resolveUploadFilePath(upload)
+            const name = this.resolveUploadDisplayName(upload, filePath)
+            this.openDocumentFromContent(name, filePath, content)
         } catch (err: any) {
             this.setError(`Failed to open file: ${err?.message ?? err}`)
         } finally {
             (upload as any).close?.()
         }
+    }
+
+    async onExternalTransfer (root: DirectoryUpload): Promise<void> {
+        if (!(await this.ensureEditor())) {
+            return
+        }
+        const uploads = this.collectDroppedFileUploads(root)
+        if (!uploads.length) {
+            this.statusMessage = 'No files found in drop'
+            this.updateStatus()
+            return
+        }
+
+        let opened = 0
+        for (const upload of uploads) {
+            try {
+                const data = await upload.readAll()
+                const content = new TextDecoder().decode(data)
+                const filePath = this.resolveUploadFilePath(upload)
+                const name = this.resolveUploadDisplayName(upload, filePath)
+                this.openDocumentFromContent(name, filePath, content)
+                opened++
+            } catch (err: any) {
+                this.setError(`Failed to open dropped file: ${err?.message ?? err}`)
+            } finally {
+                ;(upload as any).close?.()
+            }
+        }
+
+        if (opened) {
+            this.statusMessage = opened === 1 ? 'Opened 1 dropped file' : `Opened ${opened} dropped files`
+            this.updateStatus()
+            this.updateTreeItems()
+            window.setTimeout(() => this.cdr.markForCheck(), 0)
+        }
+    }
+
+    private collectDroppedFileUploads (root: DirectoryUpload): FileUpload[] {
+        const uploads: FileUpload[] = []
+        const walk = (dir: DirectoryUpload): void => {
+            for (const child of dir.getChildrens()) {
+                if (this.isDirectoryUploadNode(child)) {
+                    walk(child)
+                } else {
+                    uploads.push(child as FileUpload)
+                }
+            }
+        }
+        walk(root)
+        return uploads
+    }
+
+    private isDirectoryUploadNode (entry: DirectoryUpload|FileUpload): entry is DirectoryUpload {
+        return typeof (entry as any)?.getChildrens === 'function'
+    }
+
+    private resolveUploadFilePath (upload: FileUpload): string|null {
+        const anyUpload = upload as any
+        const candidates = [
+            anyUpload?.filePath,
+            anyUpload?.path,
+            anyUpload?.file?.path,
+        ]
+        for (const candidate of candidates) {
+            if (typeof candidate !== 'string') {
+                continue
+            }
+            const trimmed = candidate.trim()
+            if (!trimmed) {
+                continue
+            }
+            if (path.isAbsolute(trimmed)) {
+                return path.resolve(trimmed)
+            }
+        }
+        return null
+    }
+
+    private resolveUploadDisplayName (upload: FileUpload, filePath: string|null): string {
+        const uploadName = (upload.getName?.() ?? '').trim()
+        if (uploadName) {
+            return uploadName
+        }
+        if (filePath) {
+            return path.basename(filePath)
+        }
+        return 'untitled.txt'
     }
 
     async openRecent (filePath: string): Promise<void> {
@@ -1155,6 +1710,223 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         } catch (err: any) {
             this.setError(`Failed to open ${filePath}: ${err?.message ?? err}`)
         }
+    }
+
+    async openQuickOpen (): Promise<void> {
+        if (!(await this.ensureEditor())) {
+            return
+        }
+
+        const options: SelectorOption<QuickOpenSelection>[] = []
+        const seenFiles = new Set<string>()
+        options.push({
+            name: 'Open file by path',
+            description: 'Type an absolute path, ~/ path, or path relative to current directory',
+            group: 'Path',
+            freeInputPattern: 'Open "%s"',
+            callback: query => {
+                void this.openFileByUserPath(query ?? '')
+            },
+            weight: -30,
+        })
+
+        const docs = [...this.documents].sort((a, b) => {
+            if (a.id === this.activeDocId) return -1
+            if (b.id === this.activeDocId) return 1
+            return a.name.localeCompare(b.name)
+        })
+        for (const doc of docs) {
+            if (doc.path) {
+                seenFiles.add(path.resolve(doc.path))
+            }
+            options.push({
+                name: doc.isDirty ? `${doc.name} •` : doc.name,
+                description: doc.path ?? 'Unsaved buffer',
+                group: 'Open documents',
+                result: { kind: 'doc', docId: doc.id },
+                weight: doc.id === this.activeDocId ? -20 : -10,
+            })
+        }
+
+        for (const recent of this.recentFiles) {
+            const filePath = (recent ?? '').trim()
+            if (!filePath) {
+                continue
+            }
+            const resolved = path.resolve(filePath)
+            if (seenFiles.has(resolved) || !fsSync.existsSync(resolved)) {
+                continue
+            }
+            seenFiles.add(resolved)
+            options.push({
+                name: this.quickOpenDisplayName(resolved),
+                description: resolved,
+                group: 'Recent files',
+                result: { kind: 'file', filePath: resolved },
+                weight: 0,
+            })
+        }
+
+        const workspaceFiles = await this.collectWorkspaceFiles()
+        for (const filePath of workspaceFiles) {
+            const resolved = path.resolve(filePath)
+            if (seenFiles.has(resolved)) {
+                continue
+            }
+            seenFiles.add(resolved)
+            options.push({
+                name: this.quickOpenDisplayName(resolved),
+                description: resolved,
+                group: 'Workspace files',
+                result: { kind: 'file', filePath: resolved },
+                weight: 10,
+            })
+        }
+
+        if (!options.length) {
+            this.setError('No files available to open')
+            return
+        }
+
+        const picked = await this.app.showSelector<QuickOpenSelection>('Quick Open', options).catch(() => null)
+        if (!picked) {
+            return
+        }
+        if (picked.kind === 'doc' && picked.docId) {
+            this.activateDoc(picked.docId)
+            return
+        }
+        if (picked.kind === 'file' && picked.filePath) {
+            await this.openFileFromDiskPath(picked.filePath)
+        }
+    }
+
+    async openFileByPathPrompt (): Promise<void> {
+        const input = await this.promptForName('Open file path', '')
+        if (input == null) {
+            return
+        }
+        await this.openFileByUserPath(input)
+    }
+
+    private resolveUserPathInput (input: string): string|null {
+        let raw = (input ?? '').trim()
+        if (!raw) {
+            return null
+        }
+        if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith('\'') && raw.endsWith('\''))) {
+            raw = raw.slice(1, -1).trim()
+        }
+        if (!raw) {
+            return null
+        }
+
+        let expanded = raw
+        if (expanded.startsWith('~')) {
+            const home = process.env.HOME || os.homedir()
+            expanded = path.join(home, expanded.slice(1).replace(/^[/\\]+/, ''))
+        }
+
+        if (!path.isAbsolute(expanded)) {
+            const cwd = (typeof process !== 'undefined' && (process as any).cwd)
+                ? (process as any).cwd()
+                : this.folderRoot
+            expanded = path.resolve(cwd, expanded)
+        } else {
+            expanded = path.resolve(expanded)
+        }
+
+        return expanded
+    }
+
+    private async openFileByUserPath (input: string): Promise<void> {
+        const resolved = this.resolveUserPathInput(input)
+        if (!resolved) {
+            return
+        }
+        try {
+            const stat = await fs.stat(resolved)
+            if (stat.isDirectory()) {
+                this.setError('Path is a directory. Use "Open existing folder" for folders.')
+                return
+            }
+            if (!stat.isFile()) {
+                this.setError('Path is not a regular file.')
+                return
+            }
+        } catch (err: any) {
+            this.setError(`Cannot open ${resolved}: ${err?.message ?? err}`)
+            return
+        }
+        await this.openFileFromDiskPath(resolved)
+    }
+
+    private quickOpenDisplayName (filePath: string): string {
+        const resolved = path.resolve(filePath)
+        for (const folder of this.folders) {
+            const root = path.resolve(folder.path)
+            if (resolved === root || resolved.startsWith(root + path.sep)) {
+                const rel = path.relative(root, resolved)
+                return rel || path.basename(resolved)
+            }
+        }
+        return path.basename(resolved)
+    }
+
+    private async collectWorkspaceFiles (): Promise<string[]> {
+        const files: string[] = []
+        const queue = this.folders
+            .map(f => f.path)
+            .filter(p => {
+                if (!p) {
+                    return false
+                }
+                try {
+                    return fsSync.existsSync(p) && fsSync.statSync(p).isDirectory()
+                } catch {
+                    return false
+                }
+            })
+            .map(p => path.resolve(p))
+        const visited = new Set<string>()
+
+        while (queue.length && files.length < this.quickOpenBudget) {
+            const dir = queue.shift()!
+            if (visited.has(dir)) {
+                continue
+            }
+            visited.add(dir)
+            let entries: any[] = []
+            try {
+                entries = await fs.readdir(dir, { withFileTypes: true }) as any[]
+            } catch {
+                continue
+            }
+            for (const entry of entries) {
+                const name = entry?.name
+                if (!name || name === '.' || name === '..') {
+                    continue
+                }
+                const fullPath = path.join(dir, name)
+                const isSymLink = typeof entry.isSymbolicLink === 'function' ? entry.isSymbolicLink() : false
+                if (isSymLink) {
+                    continue
+                }
+                const isDir = typeof entry.isDirectory === 'function' ? entry.isDirectory() : false
+                if (isDir) {
+                    if (!this.skippedFolders.has(name)) {
+                        queue.push(fullPath)
+                    }
+                    continue
+                }
+                files.push(fullPath)
+                if (files.length >= this.quickOpenBudget) {
+                    break
+                }
+            }
+        }
+
+        return files
     }
 
     async saveFile (): Promise<void> {
@@ -1226,6 +1998,11 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         if (!(await this.confirmDiscard(doc))) {
             return
         }
+        const pendingTempSave = this.tempSaveTimers.get(doc.id)
+        if (pendingTempSave) {
+            clearTimeout(pendingTempSave)
+            this.tempSaveTimers.delete(doc.id)
+        }
         this.closedDocuments.push(this.snapshotDocument(doc))
         doc.model?.dispose?.()
         if (!doc.path && doc.tempPath) {
@@ -1287,13 +2064,26 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                 const res = await modal.result.catch(() => null)
                 return res?.value ?? null
             } catch {
-                // fall back to window prompt
+                return null
             }
         }
-        if (typeof prompt === 'function') {
-            return prompt(title, value)
-        }
         return null
+    }
+
+    private async confirmAction (message: string, detail?: string, okLabel = 'OK'): Promise<boolean> {
+        try {
+            const result = await this.platform.showMessageBox({
+                type: 'warning',
+                message,
+                detail,
+                buttons: ['Cancel', okLabel],
+                defaultId: 1,
+                cancelId: 0,
+            })
+            return result.response === 1
+        } catch {
+            return false
+        }
     }
 
     private async renameDocumentWithName (docId: string, nextNameRaw: string): Promise<void> {
@@ -1447,7 +2237,10 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             return
         }
         const text = model.getValueInRange(selection)
-        this.platform.setClipboard(text)
+        if (!text) {
+            return
+        }
+        await this.writeTextToClipboard(text)
     }
 
     async pasteClipboard (): Promise<void> {
@@ -1459,8 +2252,8 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         if (!editor || !model) {
             return
         }
-        const text = this.platform.readClipboard()
-        if (text == null) {
+        const text = await this.readTextFromClipboard()
+        if (!text) {
             return
         }
         const selection = editor.getSelection?.()
@@ -1478,6 +2271,39 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         }
     }
 
+    private async readTextFromClipboard (): Promise<string> {
+        let text = ''
+        try {
+            text = this.platform.readClipboard() ?? ''
+        } catch {
+            text = ''
+        }
+        if (!text && typeof navigator !== 'undefined' && navigator.clipboard?.readText) {
+            try {
+                text = await navigator.clipboard.readText()
+            } catch {
+                // ignore and return best-effort value
+            }
+        }
+        return text ?? ''
+    }
+
+    private async writeTextToClipboard (text: string): Promise<void> {
+        try {
+            this.platform.setClipboard({ text })
+            return
+        } catch {
+            // fall through to web clipboard fallback
+        }
+        if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+            try {
+                await navigator.clipboard.writeText(text)
+            } catch {
+                // ignore best-effort clipboard fallback
+            }
+        }
+    }
+
     toggleWordWrap (): void {
         if (!this.monaco) {
             return
@@ -1486,12 +2312,14 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         this.primaryEditor?.updateOptions({ wordWrap: this.wordWrapEnabled ? 'on' : 'off' })
         this.splitEditor?.updateOptions({ wordWrap: this.wordWrapEnabled ? 'on' : 'off' })
         this.updateStatus()
+        this.persistState()
     }
 
     toggleMinimap (): void {
         this.minimapEnabled = !this.minimapEnabled
         this.primaryEditor?.updateOptions({ minimap: { enabled: this.minimapEnabled } })
         this.splitEditor?.updateOptions({ minimap: { enabled: this.minimapEnabled } })
+        this.persistState()
     }
 
     toggleTheme (event?: MouseEvent): void {
@@ -1511,11 +2339,274 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             return
         }
 
-        const order = ['auto', 'light', 'dark', 'hc'] as const
+        const order = this.supportedThemeModes
         const idx = order.indexOf(this.themeMode)
         this.themeMode = order[(idx + 1) % order.length]
         this.applyTheme()
         this.persistState()
+    }
+
+    setThemeMode (mode: string): void {
+        const next = (mode ?? '').trim() as EditorThemeMode
+        if (!this.supportedThemeModes.includes(next)) {
+            return
+        }
+        if (this.themeMode === next) {
+            return
+        }
+        this.themeMode = next
+        this.applyTheme()
+        this.persistState()
+    }
+
+    onEditorThemePresetChange (color: string): void {
+        if (!color || color === 'custom') {
+            return
+        }
+        this.setEditorThemeColor(color)
+    }
+
+    setEditorThemeColor (color: string): void {
+        const normalized = this.normalizeHexColor(color, this.editorThemeColor)
+        if (!normalized || normalized === this.editorThemeColor) {
+            return
+        }
+        this.editorThemeColor = normalized
+        this.applyTheme()
+        this.persistState()
+    }
+
+    private normalizeHexColor (color: string, fallback: string): string {
+        const value = (color ?? '').trim()
+        if (!value) {
+            return fallback
+        }
+        const noHash = value.startsWith('#') ? value.slice(1) : value
+        if (/^[0-9a-fA-F]{3}$/.test(noHash)) {
+            const expanded = noHash.split('').map(ch => ch + ch).join('')
+            return `#${expanded.toLowerCase()}`
+        }
+        if (/^[0-9a-fA-F]{6}$/.test(noHash)) {
+            return `#${noHash.toLowerCase()}`
+        }
+        return fallback
+    }
+
+    private hexToRgb (color: string): { r: number, g: number, b: number }|null {
+        const normalized = this.normalizeHexColor(color, '')
+        if (!normalized || normalized.length !== 7) {
+            return null
+        }
+        const value = normalized.slice(1)
+        const r = parseInt(value.slice(0, 2), 16)
+        const g = parseInt(value.slice(2, 4), 16)
+        const b = parseInt(value.slice(4, 6), 16)
+        if ([r, g, b].some(x => Number.isNaN(x))) {
+            return null
+        }
+        return { r, g, b }
+    }
+
+    private toRgba (color: string, alpha: number): string {
+        const rgb = this.hexToRgb(color)
+        if (!rgb) {
+            return `rgba(79, 156, 255, ${alpha})`
+        }
+        const safeAlpha = Math.max(0, Math.min(1, alpha))
+        return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${safeAlpha})`
+    }
+
+    private defineEditorThemes (): void {
+        if (!this.monaco?.editor?.defineTheme) {
+            return
+        }
+        const accent = this.normalizeHexColor(this.editorThemeColor, '#4f9cff')
+        const selectionAccent = accent
+        const highlightAccent = selectionAccent
+        const editor = this.monaco.editor
+        editor.defineTheme('tlink-vs', {
+            base: 'vs',
+            inherit: true,
+            rules: [],
+            colors: {
+                'focusBorder': accent,
+                'editorCursor.foreground': accent,
+                'editorLineNumber.activeForeground': accent,
+                'editor.selectionBackground': this.toRgba(selectionAccent, 0.28),
+                'editor.inactiveSelectionBackground': this.toRgba(selectionAccent, 0.16),
+                'editor.selectionHighlightBackground': this.toRgba(selectionAccent, 0.22),
+                'editor.wordHighlightBackground': this.toRgba(highlightAccent, 0.14),
+                'editor.wordHighlightStrongBackground': this.toRgba(highlightAccent, 0.24),
+                'editor.findMatchBackground': this.toRgba(highlightAccent, 0.38),
+                'editor.findMatchHighlightBackground': this.toRgba(highlightAccent, 0.25),
+                'editorBracketMatch.border': this.toRgba(highlightAccent, 0.6),
+                'editorWidget.border': this.toRgba(highlightAccent, 0.65),
+                'editorSuggestWidget.highlightForeground': accent,
+                'editorLink.activeForeground': accent,
+            },
+        })
+        editor.defineTheme('tlink-vs-dark', {
+            base: 'vs-dark',
+            inherit: true,
+            rules: [],
+            colors: {
+                'focusBorder': accent,
+                'editorCursor.foreground': accent,
+                'editorLineNumber.activeForeground': accent,
+                'editor.selectionBackground': this.toRgba(selectionAccent, 0.35),
+                'editor.inactiveSelectionBackground': this.toRgba(selectionAccent, 0.2),
+                'editor.selectionHighlightBackground': this.toRgba(selectionAccent, 0.28),
+                'editor.wordHighlightBackground': this.toRgba(highlightAccent, 0.2),
+                'editor.wordHighlightStrongBackground': this.toRgba(highlightAccent, 0.34),
+                'editor.findMatchBackground': this.toRgba(highlightAccent, 0.42),
+                'editor.findMatchHighlightBackground': this.toRgba(highlightAccent, 0.3),
+                'editorBracketMatch.border': this.toRgba(highlightAccent, 0.68),
+                'editorWidget.border': this.toRgba(highlightAccent, 0.72),
+                'editorSuggestWidget.highlightForeground': accent,
+                'editorLink.activeForeground': accent,
+            },
+        })
+        editor.defineTheme('tlink-hc', {
+            base: 'hc-black',
+            inherit: true,
+            rules: [],
+            colors: {
+                'focusBorder': accent,
+                'editorCursor.foreground': accent,
+                'editorLineNumber.activeForeground': accent,
+                'editor.selectionBackground': this.toRgba(selectionAccent, 0.45),
+                'editor.inactiveSelectionBackground': this.toRgba(selectionAccent, 0.3),
+                'editor.selectionHighlightBackground': this.toRgba(selectionAccent, 0.36),
+                'editor.wordHighlightBackground': this.toRgba(highlightAccent, 0.32),
+                'editor.wordHighlightStrongBackground': this.toRgba(highlightAccent, 0.48),
+                'editor.findMatchBackground': this.toRgba(highlightAccent, 0.55),
+                'editor.findMatchHighlightBackground': this.toRgba(highlightAccent, 0.42),
+                'editorBracketMatch.border': highlightAccent,
+                'editorWidget.border': highlightAccent,
+                'editorSuggestWidget.highlightForeground': accent,
+                'editorLink.activeForeground': accent,
+            },
+        })
+        editor.defineTheme('tlink-solarized-light', {
+            base: 'vs',
+            inherit: true,
+            rules: [],
+            colors: {
+                'focusBorder': accent,
+                'editor.background': '#fdf6e3',
+                'editor.foreground': '#657b83',
+                'editorLineNumber.foreground': '#93a1a1',
+                'editorLineNumber.activeForeground': accent,
+                'editorCursor.foreground': accent,
+                'editor.selectionBackground': this.toRgba(selectionAccent, 0.26),
+                'editor.inactiveSelectionBackground': this.toRgba(selectionAccent, 0.16),
+                'editor.selectionHighlightBackground': this.toRgba(selectionAccent, 0.2),
+                'editor.wordHighlightBackground': this.toRgba(highlightAccent, 0.12),
+                'editor.wordHighlightStrongBackground': this.toRgba(highlightAccent, 0.2),
+                'editor.findMatchBackground': this.toRgba(highlightAccent, 0.36),
+                'editor.findMatchHighlightBackground': this.toRgba(highlightAccent, 0.22),
+                'editorBracketMatch.border': this.toRgba(highlightAccent, 0.6),
+                'editorWidget.border': this.toRgba(highlightAccent, 0.62),
+                'editorSuggestWidget.highlightForeground': accent,
+                'editorLink.activeForeground': accent,
+            },
+        })
+        editor.defineTheme('tlink-solarized-dark', {
+            base: 'vs-dark',
+            inherit: true,
+            rules: [],
+            colors: {
+                'focusBorder': accent,
+                'editor.background': '#002b36',
+                'editor.foreground': '#93a1a1',
+                'editorLineNumber.foreground': '#586e75',
+                'editorLineNumber.activeForeground': accent,
+                'editorCursor.foreground': accent,
+                'editor.selectionBackground': this.toRgba(selectionAccent, 0.36),
+                'editor.inactiveSelectionBackground': this.toRgba(selectionAccent, 0.2),
+                'editor.selectionHighlightBackground': this.toRgba(selectionAccent, 0.28),
+                'editor.wordHighlightBackground': this.toRgba(highlightAccent, 0.2),
+                'editor.wordHighlightStrongBackground': this.toRgba(highlightAccent, 0.3),
+                'editor.findMatchBackground': this.toRgba(highlightAccent, 0.42),
+                'editor.findMatchHighlightBackground': this.toRgba(highlightAccent, 0.28),
+                'editorBracketMatch.border': this.toRgba(highlightAccent, 0.7),
+                'editorWidget.border': this.toRgba(highlightAccent, 0.74),
+                'editorSuggestWidget.highlightForeground': accent,
+                'editorLink.activeForeground': accent,
+            },
+        })
+        editor.defineTheme('tlink-dracula', {
+            base: 'vs-dark',
+            inherit: true,
+            rules: [],
+            colors: {
+                'focusBorder': accent,
+                'editor.background': '#282a36',
+                'editor.foreground': '#f8f8f2',
+                'editorLineNumber.foreground': '#6272a4',
+                'editorLineNumber.activeForeground': accent,
+                'editorCursor.foreground': accent,
+                'editor.selectionBackground': this.toRgba(selectionAccent, 0.34),
+                'editor.inactiveSelectionBackground': this.toRgba(selectionAccent, 0.2),
+                'editor.selectionHighlightBackground': this.toRgba(selectionAccent, 0.28),
+                'editor.wordHighlightBackground': this.toRgba(highlightAccent, 0.2),
+                'editor.wordHighlightStrongBackground': this.toRgba(highlightAccent, 0.32),
+                'editor.findMatchBackground': this.toRgba(highlightAccent, 0.44),
+                'editor.findMatchHighlightBackground': this.toRgba(highlightAccent, 0.3),
+                'editorBracketMatch.border': this.toRgba(highlightAccent, 0.74),
+                'editorWidget.border': this.toRgba(highlightAccent, 0.78),
+                'editorSuggestWidget.highlightForeground': accent,
+                'editorLink.activeForeground': accent,
+            },
+        })
+        editor.defineTheme('tlink-monokai', {
+            base: 'vs-dark',
+            inherit: true,
+            rules: [],
+            colors: {
+                'focusBorder': accent,
+                'editor.background': '#272822',
+                'editor.foreground': '#f8f8f2',
+                'editorLineNumber.foreground': '#75715e',
+                'editorLineNumber.activeForeground': accent,
+                'editorCursor.foreground': accent,
+                'editor.selectionBackground': this.toRgba(selectionAccent, 0.34),
+                'editor.inactiveSelectionBackground': this.toRgba(selectionAccent, 0.2),
+                'editor.selectionHighlightBackground': this.toRgba(selectionAccent, 0.26),
+                'editor.wordHighlightBackground': this.toRgba(highlightAccent, 0.2),
+                'editor.wordHighlightStrongBackground': this.toRgba(highlightAccent, 0.32),
+                'editor.findMatchBackground': this.toRgba(highlightAccent, 0.44),
+                'editor.findMatchHighlightBackground': this.toRgba(highlightAccent, 0.3),
+                'editorBracketMatch.border': this.toRgba(highlightAccent, 0.74),
+                'editorWidget.border': this.toRgba(highlightAccent, 0.78),
+                'editorSuggestWidget.highlightForeground': accent,
+                'editorLink.activeForeground': accent,
+            },
+        })
+        editor.defineTheme('tlink-nord', {
+            base: 'vs-dark',
+            inherit: true,
+            rules: [],
+            colors: {
+                'focusBorder': accent,
+                'editor.background': '#2e3440',
+                'editor.foreground': '#d8dee9',
+                'editorLineNumber.foreground': '#4c566a',
+                'editorLineNumber.activeForeground': accent,
+                'editorCursor.foreground': accent,
+                'editor.selectionBackground': this.toRgba(selectionAccent, 0.34),
+                'editor.inactiveSelectionBackground': this.toRgba(selectionAccent, 0.2),
+                'editor.selectionHighlightBackground': this.toRgba(selectionAccent, 0.26),
+                'editor.wordHighlightBackground': this.toRgba(highlightAccent, 0.2),
+                'editor.wordHighlightStrongBackground': this.toRgba(highlightAccent, 0.32),
+                'editor.findMatchBackground': this.toRgba(highlightAccent, 0.44),
+                'editor.findMatchHighlightBackground': this.toRgba(highlightAccent, 0.3),
+                'editorBracketMatch.border': this.toRgba(highlightAccent, 0.74),
+                'editorWidget.border': this.toRgba(highlightAccent, 0.78),
+                'editorSuggestWidget.highlightForeground': accent,
+                'editorLink.activeForeground': accent,
+            },
+        })
     }
 
     private cloneColorScheme (scheme: any): any {
@@ -1603,6 +2694,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         this.fontSize = Math.max(10, Math.min(28, value))
         this.primaryEditor?.updateOptions({ fontSize: this.fontSize, lineHeight: this.lineHeight })
         this.splitEditor?.updateOptions({ fontSize: this.fontSize, lineHeight: this.lineHeight })
+        this.persistState()
     }
 
     setLineHeight (value: number): void {
@@ -1612,20 +2704,27 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         this.lineHeight = Math.max(14, Math.min(40, value))
         this.primaryEditor?.updateOptions({ lineHeight: this.lineHeight, fontSize: this.fontSize })
         this.splitEditor?.updateOptions({ lineHeight: this.lineHeight, fontSize: this.fontSize })
+        this.persistState()
     }
 
     toggleAutosave (): void {
         this.autosaveEnabled = !this.autosaveEnabled
         this.startAutosave()
+        this.persistState()
     }
 
     async goToLine (): Promise<void> {
         if (!(await this.ensureEditor())) {
             return
         }
-        const input = prompt('Go to line number')
-        const line = input ? parseInt(input, 10) : NaN
-        if (!line) {
+        const currentLine = this.getActiveEditor()?.getPosition?.()?.lineNumber ?? 1
+        const input = await this.promptForName('Go to line number', String(currentLine))
+        if (input == null) {
+            return
+        }
+        const line = parseInt(input.trim(), 10)
+        if (!line || !isFinite(line) || line < 1) {
+            this.setError('Enter a valid line number')
             return
         }
         this.getActiveEditor()?.revealLine(line)
@@ -1692,6 +2791,9 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
 
     async handleEditAction (action: string): Promise<void> {
         switch (action) {
+        case 'quickOpen':
+            await this.openQuickOpen()
+            break
         case 'find':
             await this.runFind()
             break
@@ -1762,11 +2864,26 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         case 'open':
             await this.openFile()
             break
+        case 'openPath':
+            await this.openFileByPathPrompt()
+            break
         case 'save':
             await this.saveFile()
             break
         case 'saveAs':
             await this.saveFileAs()
+            break
+        case 'delete':
+            {
+                const selectedFiles = this.getSelectedFilePathsFromTree()
+                if (selectedFiles.length > 1) {
+                    await this.deleteFilesOnDisk(selectedFiles)
+                } else if (selectedFiles.length === 1) {
+                    await this.deleteFileOnDisk(selectedFiles[0])
+                } else {
+                    await this.deleteActiveFileOnDisk()
+                }
+            }
             break
         case 'reopen':
             await this.reopenClosed()
@@ -1908,6 +3025,9 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             return
         }
         this.activeDocId = docId
+        if (this.pendingDiffDocId === docId) {
+            this.pendingDiffDocId = null
+        }
         this.primaryEditor?.setModel(doc.model)
         if (!this.splitDocId) {
             this.splitEditor?.setModel(doc.model)
@@ -1932,7 +3052,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             return
         }
         const text = model.getValueInRange(selection)
-        this.platform.setClipboard(text)
+        await this.writeTextToClipboard(text)
         window.dispatchEvent(new CustomEvent('tlink-send-to-terminal', { detail: { text } }))
     }
 
@@ -1940,7 +3060,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         if (!(await this.ensureEditor())) {
             return
         }
-        const text = this.platform.readClipboard()
+        const text = await this.readTextFromClipboard()
         if (!text) {
             return
         }
@@ -1970,6 +3090,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         // Don't call updateTreeItems here - it will be called in ngAfterViewInit
         // to avoid ExpressionChangedAfterItHasBeenCheckedError
             const monaco = await this.loadMonaco()
+            this.defineEditorThemes()
         if (!this.primaryHost) {
             throw new Error('Editor host unavailable')
         }
@@ -2046,8 +3167,13 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             minimap: { enabled: this.minimapEnabled },
             theme: this.currentThemeId(),
             wordWrap: this.wordWrapEnabled ? 'on' : 'off',
+            lineNumbersMinChars: 2,
+            lineDecorationsWidth: 8,
+            glyphMargin: false,
             fontSize: this.fontSize,
             lineHeight: this.lineHeight,
+            columnSelection: true,
+            multiCursorModifier: 'alt',
             // Enable code completion features
             quickSuggestions: {
                 other: true,
@@ -2095,7 +3221,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             }
             this.updateTitle(doc)
             this.updateStatus()
-            this.persistState()
+            this.queuePersistState()
             this.queueSaveTemp(doc)
         })
         model.onDidChangeOptions(() => {
@@ -2103,7 +3229,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             doc.tabSize = opts.tabSize
             doc.insertSpaces = opts.insertSpaces
             this.updateStatus()
-            this.persistState()
+            this.queuePersistState()
         })
         // Auto-detect language when no extension (untitled)
         if (!snapshot.languageId || snapshot.languageId === 'plaintext') {
@@ -2117,7 +3243,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     }
 
     private openDocumentFromContent (name: string, filePath: string|null, content: string): void {
-        const existing = this.documents.find(d => d.path && filePath && d.path === filePath)
+        const existing = this.documents.find(d => this.isSameFsPath(d.path, filePath))
         if (existing) {
             existing.model.setValue(content)
             existing.lastSavedValue = content
@@ -2214,9 +3340,21 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         const content = doc.model.getValue()
         const data = new TextEncoder().encode(content)
 
-        if (doc.path) {
+        const initialPath = doc.path
+        if (initialPath) {
+            const initialKey = this.getFsPathKey(initialPath)
+            if (initialKey && this.deletingPathKeys.has(initialKey)) {
+                return false
+            }
             try {
-                await fs.mkdir(path.dirname(doc.path), { recursive: true })
+                await fs.mkdir(path.dirname(initialPath), { recursive: true })
+                if (!doc.path || !this.isSameFsPath(doc.path, initialPath)) {
+                    return false
+                }
+                const currentKey = this.getFsPathKey(doc.path)
+                if (currentKey && this.deletingPathKeys.has(currentKey)) {
+                    return false
+                }
                 await fs.writeFile(doc.path, data)
                 doc.isDirty = false
                 doc.lastSavedValue = content
@@ -2283,12 +3421,17 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         if (!doc.isDirty) {
             return true
         }
-        return confirm(`Close ${doc.name} without saving?`)
+        return this.confirmAction(
+            `Close ${doc.name} without saving?`,
+            'Unsaved changes will be lost.',
+            'Discard',
+        )
     }
 
     private updateStatus (): void {
         const doc = this.getActiveDoc()
-        if (!this.primaryEditor || !this.monaco || !doc) {
+        const editor = this.getActiveEditor()
+        if (!editor || !this.monaco || !doc) {
             this.statusLineCol = ''
             this.statusLanguage = ''
             this.statusEOL = ''
@@ -2297,7 +3440,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             this.breadcrumbs = []
             return
         }
-        const pos = this.primaryEditor.getPosition()
+        const pos = editor.getPosition?.() ?? editor.getModifiedEditor?.()?.getPosition?.()
         this.statusLineCol = pos ? `Ln ${pos.lineNumber}, Col ${pos.column}` : ''
         const lang = this.monaco.editor.getModelLanguageId?.(doc.model) ?? ''
         this.statusLanguage = lang || ''
@@ -2480,6 +3623,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         if (!this.monaco) {
             return
         }
+        this.defineEditorThemes()
         this.monaco.editor.setTheme(this.currentThemeId())
     }
 
@@ -2522,10 +3666,20 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
 
     private allocateTempPathForSnippet (baseName: string): string {
         // Keep extension so buildRunCommand can pick the right runner (python/node/bash/etc.)
-        const ext = path.extname(baseName || '') || '.txt'
-        const safeBase = (path.basename(baseName || 'snippet') || 'snippet').replace(/[\\/]/g, '_')
-        const unique = `${Date.now()}-${Math.random().toString(16).slice(2)}-${safeBase}`
-        return path.join(this.getTempDir(), `${unique}${ext}`)
+        const compactName = this.toCompactAutoFileName(baseName || 'snippet.txt')
+        const ext = path.extname(compactName) || '.txt'
+        const stem = path.basename(compactName, ext) || 'snippet'
+        const tempDir = this.getTempDir()
+        let candidate = path.join(tempDir, `${stem}${ext}`)
+        let index = 1
+        while (fsSync.existsSync(candidate) && index < 1000) {
+            candidate = path.join(tempDir, `${stem}-${index}${ext}`)
+            index++
+        }
+        if (fsSync.existsSync(candidate)) {
+            candidate = path.join(tempDir, `${stem}-${Date.now().toString(36)}${ext}`)
+        }
+        return candidate
     }
 
     private async ensureSnippetOnDisk (doc: EditorDocument, snippet: string): Promise<string|null> {
@@ -2539,22 +3693,21 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         }
     }
 
-    private buildRunCommand (doc: EditorDocument, filePath: string, args: string): string {
+    private buildRunCommand (doc: EditorDocument, filePath: string): string {
         const ext = (path.extname(doc.name || '') || '').toLowerCase()
         switch (ext) {
         case '.py':
-            return `python3 "${filePath}"${args ? ` ${args}` : ''}`
+            return `python3 "${filePath}"`
         case '.js':
         case '.mjs':
         case '.cjs':
-            return `node "${filePath}"${args ? ` ${args}` : ''}`
+            return `node "${filePath}"`
         case '.ts':
             return `ts-node "${filePath}"`
-                + (args ? ` ${args}` : '')
         case '.sh':
-            return `bash "${filePath}"${args ? ` ${args}` : ''}`
+            return `bash "${filePath}"`
         default:
-            return `bash "${filePath}"${args ? ` ${args}` : ''}`
+            return `bash "${filePath}"`
         }
     }
 
@@ -2574,8 +3727,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             this.setError('Save the file before running.')
             return
         }
-        const argString = (this.runArgs ?? '').trim()
-        const cmd = this.buildRunCommand(doc, filePath, argString)
+        const cmd = this.buildRunCommand(doc, filePath)
         const terminal = await this.ensureRunTerminal(path.dirname(filePath))
         if (!terminal) {
             this.setError('Unable to open run terminal')
@@ -2648,15 +3800,30 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
 
     private currentThemeId (): string {
         if (this.themeMode === 'light') {
-            return 'vs'
+            return 'tlink-vs'
         }
         if (this.themeMode === 'dark') {
-            return 'vs-dark'
+            return 'tlink-vs-dark'
         }
         if (this.themeMode === 'hc') {
-            return 'hc-black'
+            return 'tlink-hc'
         }
-        return this.platform.getTheme() === 'dark' ? 'vs-dark' : 'vs'
+        if (this.themeMode === 'solarized-light') {
+            return 'tlink-solarized-light'
+        }
+        if (this.themeMode === 'solarized-dark') {
+            return 'tlink-solarized-dark'
+        }
+        if (this.themeMode === 'dracula') {
+            return 'tlink-dracula'
+        }
+        if (this.themeMode === 'monokai') {
+            return 'tlink-monokai'
+        }
+        if (this.themeMode === 'nord') {
+            return 'tlink-nord'
+        }
+        return this.platform.getTheme() === 'dark' ? 'tlink-vs-dark' : 'tlink-vs'
     }
 
     private restoreSplitView (): void {
@@ -2706,6 +3873,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         editor.addCommand(KeyMod.CtrlCmd | KeyCode.KeyV, () => this.pasteClipboard())
         editor.addCommand(KeyMod.CtrlCmd | KeyCode.KeyS, () => this.saveFile())
         editor.addCommand(KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyS, () => this.saveFileAs())
+        editor.addCommand(KeyMod.CtrlCmd | KeyCode.KeyP, () => this.openQuickOpen())
         editor.addCommand(KeyMod.CtrlCmd | KeyCode.KeyO, () => this.openFile())
         editor.addCommand(KeyMod.CtrlCmd | KeyCode.KeyN, () => this.newFile())
         editor.addCommand(KeyMod.CtrlCmd | KeyCode.KeyF, () => this.runFind())
@@ -2743,6 +3911,16 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         }
     }
 
+    private queuePersistState (): void {
+        if (this.persistStateTimer) {
+            clearTimeout(this.persistStateTimer)
+        }
+        this.persistStateTimer = window.setTimeout(() => {
+            this.persistStateTimer = undefined
+            this.persistState()
+        }, 250)
+    }
+
     private persistState (): void {
         this.persistFolders()
         const docState = this.documents.map(doc => this.snapshotDocument(doc))
@@ -2752,10 +3930,15 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             localStorage.setItem('codeEditor.docs', JSON.stringify(docState))
             localStorage.setItem('codeEditor.active', active ?? '')
             localStorage.setItem('codeEditor.themeMode', this.themeMode)
+            localStorage.setItem('codeEditor.themeColor', this.editorThemeColor)
             localStorage.setItem('codeEditor.split', this.splitEditor ? '1' : '')
             localStorage.setItem('codeEditor.splitDoc', this.splitDocId ?? '')
-            localStorage.setItem('codeEditor.runArgs', this.runArgs ?? '')
             localStorage.setItem('codeEditor.sidebarWidth', String(this.sidebarWidth))
+            localStorage.setItem('codeEditor.wordWrap', this.wordWrapEnabled ? '1' : '')
+            localStorage.setItem('codeEditor.minimap', this.minimapEnabled ? '1' : '')
+            localStorage.setItem('codeEditor.fontSize', String(this.fontSize))
+            localStorage.setItem('codeEditor.lineHeight', String(this.lineHeight))
+            localStorage.setItem('codeEditor.autosave', this.autosaveEnabled ? '1' : '')
         }
         // best-effort temp save for untitled docs
         for (const doc of this.documents) {
@@ -2768,22 +3951,45 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
 
     private allocateTempPath (name: string, folderPath?: string|null): string {
         const base = folderPath ?? this.getTempDir()
-        const safeName = name.replace(/[\\/]/g, '_')
-        const unique = `${Date.now()}-${Math.random().toString(16).slice(2)}-${safeName}`
-        return path.join(base, unique)
+        const compactName = this.toCompactAutoFileName(name || 'untitled.txt')
+        const ext = path.extname(compactName)
+        const stem = path.basename(compactName, ext) || 'untitled'
+        let candidate = path.join(base, compactName)
+        let index = 1
+        while (fsSync.existsSync(candidate) && index < 1000) {
+            candidate = path.join(base, `${stem}-${index}${ext}`)
+            index++
+        }
+        if (fsSync.existsSync(candidate)) {
+            candidate = path.join(base, `${stem}-${Date.now().toString(36)}${ext}`)
+        }
+        return candidate
+    }
+
+    private toCompactAutoFileName (rawName: string): string {
+        const baseNameRaw = path.basename((rawName ?? '').trim() || 'untitled.txt')
+        const cleaned = baseNameRaw
+            .replace(/[\\/\u0000-\u001f]/g, '_')
+            .replace(/^\.+$/, 'untitled')
+            .trim() || 'untitled.txt'
+        // Strip previous auto-generated prefix like "<timestamp>-<token>-"
+        const withoutGeneratedPrefix = cleaned.replace(/^\d{10,}-[a-f0-9]{6,}-/i, '')
+        const ext = path.extname(withoutGeneratedPrefix).slice(0, 20)
+        let stem = path.basename(withoutGeneratedPrefix, ext)
+        if (!stem) {
+            stem = 'untitled'
+        }
+        const maxStem = 48
+        if (stem.length > maxStem) {
+            const head = stem.slice(0, 28)
+            const tail = stem.slice(-12)
+            stem = `${head}~${tail}`
+        }
+        return `${stem}${ext}`
     }
 
     private getTempDir (): string {
-        const home = process.env.TLINK_CONFIG_DIR || process.env.HOME || os.tmpdir()
-        const dir = path.join(home, '.tlink', 'code-editor-temp')
-        if (!fsSync.existsSync(dir)) {
-            try {
-                fsSync.mkdirSync(dir, { recursive: true })
-            } catch {
-                return os.tmpdir()
-            }
-        }
-        return dir
+        return this.resolveStudioDir('tlink-studio-temp', 'code-editor-temp')
     }
 
     private queueSaveTemp (doc: EditorDocument): void {
@@ -2795,8 +4001,11 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             clearTimeout(existing)
         }
         const timer = window.setTimeout(() => {
-            this.saveTemp(doc).catch(() => null)
             this.tempSaveTimers.delete(doc.id)
+            if (!this.documents.some(d => d.id === doc.id)) {
+                return
+            }
+            this.saveTemp(doc).catch(() => null)
         }, 500)
         this.tempSaveTimers.set(doc.id, timer)
     }
@@ -2805,9 +4014,20 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         if (!doc.tempPath) {
             return
         }
+        const tempPath = doc.tempPath
+        let existedBefore = false
         try {
-            await fs.mkdir(path.dirname(doc.tempPath), { recursive: true })
-            await fs.writeFile(doc.tempPath, doc.model.getValue(), 'utf8')
+            existedBefore = fsSync.existsSync(tempPath)
+        } catch {
+            existedBefore = false
+        }
+        try {
+            await fs.mkdir(path.dirname(tempPath), { recursive: true })
+            await fs.writeFile(tempPath, doc.model.getValue(), 'utf8')
+            if (!existedBefore) {
+                this.updateTreeItems()
+                window.setTimeout(() => this.cdr.markForCheck(), 0)
+            }
         } catch {
             // best-effort temp save
         }
@@ -2826,13 +4046,13 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         if (typeof localStorage === 'undefined') {
             return
         }
-        const savedTheme = localStorage.getItem('codeEditor.themeMode') as ('auto'|'light'|'dark'|'hc'|null)
-        if (savedTheme && ['auto', 'light', 'dark', 'hc'].includes(savedTheme)) {
+        const savedTheme = localStorage.getItem('codeEditor.themeMode') as (EditorThemeMode|null)
+        if (savedTheme && this.supportedThemeModes.includes(savedTheme)) {
             this.themeMode = savedTheme
         }
-        const savedRunArgs = localStorage.getItem('codeEditor.runArgs')
-        if (savedRunArgs !== null) {
-            this.runArgs = savedRunArgs
+        const savedThemeColor = localStorage.getItem('codeEditor.themeColor')
+        if (savedThemeColor) {
+            this.editorThemeColor = this.normalizeHexColor(savedThemeColor, this.editorThemeColor)
         }
         const savedSidebar = localStorage.getItem('codeEditor.sidebarWidth')
         if (savedSidebar) {
@@ -2841,6 +4061,44 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                 this.sidebarWidth = parsed
             }
         }
+        const savedWordWrap = localStorage.getItem('codeEditor.wordWrap')
+        if (savedWordWrap !== null) {
+            this.wordWrapEnabled = savedWordWrap === '1'
+        }
+        const savedMinimap = localStorage.getItem('codeEditor.minimap')
+        if (savedMinimap !== null) {
+            this.minimapEnabled = savedMinimap === '1'
+        }
+        const savedFontSize = localStorage.getItem('codeEditor.fontSize')
+        if (savedFontSize) {
+            const parsed = parseInt(savedFontSize, 10)
+            if (!isNaN(parsed) && parsed >= 10 && parsed <= 28) {
+                this.fontSize = parsed
+            }
+        }
+        const savedLineHeight = localStorage.getItem('codeEditor.lineHeight')
+        if (savedLineHeight) {
+            const parsed = parseInt(savedLineHeight, 10)
+            if (!isNaN(parsed) && parsed >= 14 && parsed <= 40) {
+                this.lineHeight = parsed
+            }
+        }
+        const savedAutosave = localStorage.getItem('codeEditor.autosave')
+        if (savedAutosave !== null) {
+            this.autosaveEnabled = savedAutosave === '1'
+        }
+        this.primaryEditor?.updateOptions({
+            wordWrap: this.wordWrapEnabled ? 'on' : 'off',
+            minimap: { enabled: this.minimapEnabled },
+            fontSize: this.fontSize,
+            lineHeight: this.lineHeight,
+        })
+        this.splitEditor?.updateOptions({
+            wordWrap: this.wordWrapEnabled ? 'on' : 'off',
+            minimap: { enabled: this.minimapEnabled },
+            fontSize: this.fontSize,
+            lineHeight: this.lineHeight,
+        })
         const splitEnabled = localStorage.getItem('codeEditor.split') === '1'
         const savedSplitDoc = localStorage.getItem('codeEditor.splitDoc') || null
         const raw = localStorage.getItem('codeEditor.docs')
@@ -2991,6 +4249,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         this.docContextMenuDocId = null
         this.folderContextMenuPath = null
         this.fileContextMenuPath = null
+        this.fileContextMenuPaths = []
     }
 
     @HostListener('document:contextmenu', ['$event'])
@@ -3007,6 +4266,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         this.docContextMenuDocId = null
         this.folderContextMenuPath = null
         this.fileContextMenuPath = null
+        this.fileContextMenuPaths = []
     }
 
     @HostListener('document:mousemove', ['$event'])
@@ -3067,6 +4327,11 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                 if (code === 4) underline = true
                 if (code === 22) bold = false
                 if (code === 24) underline = false
+                if (code === 49) {
+                    pushSegment(clean.length)
+                    bg = null
+                    continue
+                }
                 if ((code >= 30 && code <= 37) || (code >= 90 && code <= 97)) {
                     const map: Record<number, string> = {
                         30: 'black', 31: 'red', 32: 'green', 33: 'yellow', 34: 'blue', 35: 'magenta', 36: 'cyan', 37: 'white',
@@ -3076,12 +4341,11 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                     fg = map[code] ?? fg
                 }
                 if ((code >= 40 && code <= 47) || (code >= 100 && code <= 107)) {
-                    const map: Record<number, string> = {
-                        40: 'black', 41: 'red', 42: 'green', 43: 'yellow', 44: 'blue', 45: 'magenta', 46: 'cyan', 47: 'white',
-                        100: 'brblack', 101: 'brred', 102: 'brgreen', 103: 'bryellow', 104: 'brblue', 105: 'brmagenta', 106: 'brcyan', 107: 'brwhite',
-                    }
-                    pushSegment(clean.length)
-                    bg = map[code] ?? bg
+                    /*
+                     * Ignore ANSI background colors in the editor to keep selection
+                     * and search highlights readable and consistent across themes.
+                     */
+                    continue
                 }
             }
         }
@@ -3222,10 +4486,50 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     }
 
     private sendToTerminal (term: BaseTerminalTabComponentType, text: string): void {
-        try {
-            term.session?.write(Buffer.from(text))
-        } catch {
-            window.dispatchEvent(new CustomEvent('tlink-send-to-terminal', { detail: { text } }))
+        const terminal = term as any
+        const payload = Buffer.from(text)
+
+        const sendNow = (): boolean => {
+            try {
+                if (terminal?.session?.open && typeof terminal.sendInput === 'function') {
+                    terminal.sendInput(text)
+                    return true
+                }
+                if (terminal?.session?.open && typeof terminal.session?.write === 'function') {
+                    terminal.session.write(payload)
+                    return true
+                }
+            } catch {
+                // Retry through sessionChanged$ fallback below.
+            }
+            return false
         }
+
+        if (sendNow()) {
+            return
+        }
+
+        const sessionChanged$ = terminal?.sessionChanged$
+        if (sessionChanged$?.subscribe) {
+            const subscription = sessionChanged$.subscribe((session: any) => {
+                if (!session?.open) {
+                    return
+                }
+                try {
+                    if (typeof terminal.sendInput === 'function') {
+                        terminal.sendInput(text)
+                    } else if (typeof session?.write === 'function') {
+                        session.write(payload)
+                    }
+                } finally {
+                    subscription.unsubscribe()
+                }
+            })
+            // Avoid leaking subscription if the session never comes up.
+            window.setTimeout(() => subscription.unsubscribe(), 5000)
+            return
+        }
+
+        window.dispatchEvent(new CustomEvent('tlink-send-to-terminal', { detail: { text } }))
     }
 }

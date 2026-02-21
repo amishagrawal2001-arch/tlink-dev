@@ -5,6 +5,7 @@ import {
     CLIEvent,
     AppService,
     HostWindowService,
+    ParsedShareSessionBundleLink,
     ParsedShareSessionLink,
     SessionSharingService,
     SplitTabComponent,
@@ -85,34 +86,61 @@ export class TerminalCLIHandler extends CLIHandlerRuntime {
 
     private handleJoinSharedSession (shareUrl: string): boolean {
         const normalizedShareUrl = String(shareUrl ?? '').trim()
+        const parsedBundle = this.sessionSharing.parseShareBundleUrl(normalizedShareUrl)
+        if (parsedBundle) {
+            return this.handleJoinSharedSessionBundle(parsedBundle)
+        }
+
         const parsedLink = this.sessionSharing.parseShareUrl(normalizedShareUrl)
         if (!parsedLink) {
             return false
         }
+        return this.openSharedSessionTab(normalizedShareUrl, parsedLink, true)
+    }
 
+    private handleJoinSharedSessionBundle (bundle: ParsedShareSessionBundleLink): boolean {
+        let handled = false
+        for (const session of bundle.sessions) {
+            if (this.openSharedSessionTab(session.shareUrl, session, false)) {
+                handled = true
+            }
+        }
+        if (handled) {
+            this.hostWindow.bringToFront()
+        }
+        return handled
+    }
+
+    private openSharedSessionTab (shareUrl: string, parsedLink: ParsedShareSessionLink, focusWindow: boolean): boolean {
         const existing = this.findOpenSharedSessionTab(parsedLink)
         if (existing) {
             this.app.selectTab(existing)
-            this.hostWindow.bringToFront()
+            if (focusWindow) {
+                this.hostWindow.bringToFront()
+            }
             return true
         }
 
         const dedupeKey = this.getShareDedupeKey(parsedLink)
         if (this.wasShareRecentlyOpened(dedupeKey)) {
-            this.hostWindow.bringToFront()
+            if (focusWindow) {
+                this.hostWindow.bringToFront()
+            }
             return true
         }
         this.markShareOpened(dedupeKey)
 
-        const tab = this.app.openNewTab({
+        const tab = this.app.openNewTabRaw({
             type: SharedSessionTabComponent,
             inputs: {
-                shareUrl: normalizedShareUrl,
+                shareUrl,
                 parsedLink,
             },
         })
         this.app.selectTab(tab)
-        this.hostWindow.bringToFront()
+        if (focusWindow) {
+            this.hostWindow.bringToFront()
+        }
         return true
     }
 

@@ -45,6 +45,8 @@ title-bar(
                         i.fas.fa-external-link-alt
                     ng-container(*ngSwitchCase='"copilot-chat"')
                         i.fas.fa-comment-dots
+                    ng-container(*ngSwitchCase='"share-all-sessions"')
+                        i.fas.fa-share-nodes
                     ng-container(*ngSwitchCase='"websocket"')
                         i.fas(
                             [class.fa-plug]='!websocketServerRunning && !websocketServerStarting',
@@ -52,6 +54,8 @@ title-bar(
                             [class.fa-spinner]='websocketServerStarting',
                             [class.fa-spin]='websocketServerStarting'
                         )
+                    ng-container(*ngSwitchCase='"open-shared-session-link"')
+                        i.fas.fa-link
 
             ng-container(*ngFor='let chunk of leftDockChunks; trackBy: trackByLeftDockChunk')
                 .left-dock-group(

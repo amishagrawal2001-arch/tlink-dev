@@ -113,13 +113,64 @@ export class SSHProfilesService extends QuickConnectProfileProvider<SSHProfile> 
     }
 
     async duplicateProfile (source: SSHProfile, target: SSHProfile): Promise<void> {
-        const sourceUser = source.options.user
-        const targetUser = target.options.user ?? sourceUser
+        const sourceCandidates = this.getUsernameCandidates(source.options.user, target.options.user)
+        let credential: { password: string, username?: string }|null = null
 
-        const password = await this.passwordStorage.loadPassword(source, sourceUser)
-        if (password) {
-            await this.passwordStorage.savePassword(target, password, targetUser)
+        for (const username of sourceCandidates) {
+            const password = await this.passwordStorage.loadPassword(source, username)
+            if (password) {
+                credential = { password, username }
+                break
+            }
         }
+
+        if (!credential) {
+            credential = await this.passwordStorage.loadAnyPassword(source)
+        }
+        if (!credential) {
+            return
+        }
+
+        const targetUser = this.resolveUsername(target.options.user ?? source.options.user)
+        const usernames = this.getUsernameCandidates(targetUser, credential.username)
+        if (!usernames.length) {
+            await this.passwordStorage.savePassword(target, credential.password)
+            return
+        }
+
+        for (const username of usernames) {
+            await this.passwordStorage.savePassword(target, credential.password, username)
+        }
+    }
+
+    private getUsernameCandidates (...values: Array<string|undefined|null>): string[] {
+        const result: string[] = []
+        const seen = new Set<string>()
+        for (const value of values) {
+            const resolved = this.resolveUsername(value)
+            if (!resolved || seen.has(resolved)) {
+                continue
+            }
+            seen.add(resolved)
+            result.push(resolved)
+        }
+        return result
+    }
+
+    private resolveUsername (value?: string|null): string|undefined {
+        const normalized = value?.trim()
+        if (!normalized) {
+            return undefined
+        }
+        if (normalized.startsWith('$')) {
+            try {
+                const resolved = process.env[normalized.slice(1)]?.trim()
+                if (resolved) {
+                    return resolved
+                }
+            } catch { }
+        }
+        return normalized
     }
 
     quickConnect (query: string): PartialProfile<SSHProfile> {

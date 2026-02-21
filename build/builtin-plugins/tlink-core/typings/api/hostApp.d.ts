@@ -24,6 +24,7 @@ export declare abstract class HostAppService {
     protected workspaceExportRequest: Subject<void>;
     protected workspaceImportRequest: Subject<void>;
     protected aiAssistantRequest: Subject<void>;
+    protected openCodeEditorRequest: Subject<void>;
     protected configChangeBroadcast: Subject<void>;
     protected logger: Logger;
     /**
@@ -43,6 +44,10 @@ export declare abstract class HostAppService {
      * Fired when AI Assistant window should be opened
      */
     get aiAssistantRequest$(): Observable<void>;
+    /**
+     * Fired when Code Editor should be opened in this window
+     */
+    get openCodeEditorRequest$(): Observable<void>;
     /**
      * Fired when Button Bar is selected from the menu
      */
@@ -77,6 +82,11 @@ export declare abstract class HostAppService {
     get configChangeBroadcast$(): Observable<void>;
     constructor(injector: Injector);
     abstract newWindow(): void;
+    /**
+     * Open/focus a dedicated Code Editor window.
+     * Returns true when handled by host implementation.
+     */
+    openCodeEditorWindow(): boolean;
     emitReady(): void;
     abstract relaunch(): void;
     abstract quit(): void;

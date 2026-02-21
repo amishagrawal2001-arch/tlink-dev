@@ -122,7 +122,9 @@ export class BaseTerminalTabComponent<P extends BaseTerminalProfile> extends Bas
      * Used by the terminal content itself (top-right) for special panes like the code-editor run terminal.
      */
     get showInPaneClose (): boolean {
-        return !!(this as any).__tlinkRunTerminal
+        // Avoid duplicate close buttons: if the split-pane toolbar already shows a close action,
+        // hide the in-pane close for run terminals.
+        return !!(this as any).__tlinkRunTerminal && !this.showPaneClose
     }
 
     frontend?: Frontend

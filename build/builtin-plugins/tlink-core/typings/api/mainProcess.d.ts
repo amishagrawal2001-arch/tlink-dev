@@ -16,6 +16,7 @@ export interface BootstrapData {
     executable: string;
     isMainWindow: boolean;
     windowID: number;
+    windowRole?: 'default' | 'code-editor' | 'ai-assistant';
     installedPlugins: PluginInfo[];
     userPluginsPath: string;
 }

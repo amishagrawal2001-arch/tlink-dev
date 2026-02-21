@@ -50,9 +50,17 @@ export class CoreCommandProvider extends CommandProvider {
             {
                 id: 'core:new-code-editor',
                 locations: [CommandLocation.StartPage], // Removed RightToolbar - button only in left dock now
-                label: this.translate.instant('Code editor'),
+                label: this.translate.instant('Tlink Studio'),
                 icon: require('./icons/code.svg'),
                 run: async () => {
+                    if (this.hostApp.openCodeEditorWindow()) {
+                        return
+                    }
+                    const existing = this.app.tabs.find(tab => tab instanceof CodeEditorTabComponent)
+                    if (existing) {
+                        this.app.selectTab(existing)
+                        return
+                    }
                     this.app.openNewTab({ type: CodeEditorTabComponent })
                 },
             },

@@ -27,6 +27,7 @@ import { SessionManagerTabComponent } from './components/sessionManagerTab.compo
 import { ProfileCreateModalComponent } from './components/profileCreateModal.component'
 import { ColorTemplatesPanelComponent } from './components/colorTemplatesPanel.component'
 import { SessionLogSettingsModalComponent } from './components/sessionLogSettingsModal.component'
+import { SharedSessionTabComponent } from './components/sharedSessionTab.component'
 
 import { TerminalDecorator } from './api/decorator'
 import { TerminalContextMenuItemProvider } from './api/contextMenuProvider'
@@ -105,6 +106,7 @@ import { SessionManagerCommandProvider } from './sessionManagerProvider'
         ProfileCreateModalComponent,
         ColorTemplatesPanelComponent,
         SessionLogSettingsModalComponent,
+        SharedSessionTabComponent,
     ],
     exports: [
         ColorPickerComponent,

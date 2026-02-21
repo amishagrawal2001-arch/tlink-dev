@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/explicit-module-boundary-types */
-import { Component, Input, HostListener, HostBinding, ViewChildren, ViewChild, Type, OnInit } from '@angular/core'
+import { Component, Input, HostListener, HostBinding, ViewChildren, ViewChild, Type, OnInit, Inject, Optional } from '@angular/core'
 import { trigger, style, animate, transition, state } from '@angular/animations'
 import { NgbDropdown, NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import { CdkDragDrop, CdkDragMove, moveItemInArray } from '@angular/cdk/drag-drop'
@@ -18,10 +18,12 @@ import { BackupService } from '../services/backup.service'
 import { BaseTabComponent } from './baseTab.component'
 import { SafeModeModalComponent } from './safeModeModal.component'
 import { ColorPickerModalComponent } from './colorPickerModal.component'
+import { ShareSessionModalComponent } from './shareSessionModal.component'
 import { TabBodyComponent } from './tabBody.component'
 import { SplitTabComponent } from './splitTab.component'
-import { AppService, BottomPanelRegistration, BottomPanelService, Command, CommandContext, CommandLocation, FileTransfer, HostWindowService, PlatformService, SidePanelRegistration, SidePanelService, ProfilesService, SelectorService, SelectorOption, PartialProfile, Profile, MenuItemOptions, WorkspaceService, Workspace, NotificationsService, PromptModalComponent } from '../api'
+import { AppService, BottomPanelRegistration, BottomPanelService, Command, CommandContext, CommandLocation, FileTransfer, HostWindowService, PlatformService, SidePanelRegistration, SidePanelService, ProfilesService, SelectorService, SelectorOption, PartialProfile, Profile, MenuItemOptions, WorkspaceService, Workspace, NotificationsService, PromptModalComponent, CLIHandler } from '../api'
 import { TabsService } from '../services/tabs.service'
+import { SessionSharingService } from '../services/sessionSharing.service'
 import { CodeEditorTabComponent } from './codeEditorTab.component'
 
 type SplitDirection = 'r' | 'l' | 't' | 'b'
@@ -141,7 +143,9 @@ export class AppRootComponent implements OnInit {
         'ai-assistant',
         'tabby-url',
         'copilot-chat',
+        'share-all-sessions',
         'websocket',
+        'open-shared-session-link',
     ]
     private readonly defaultLeftDockGroup = [
         'profiles',
@@ -166,6 +170,8 @@ export class AppRootComponent implements OnInit {
         private selector: SelectorService,
         private workspaceService: WorkspaceService,
         private notifications: NotificationsService,
+        private sessionSharing: SessionSharingService,
+        @Inject(CLIHandler) @Optional() private cliHandlers: CLIHandler[] = [],
         log: LogService,
         private ngbModal: NgbModal,
         _themes: ThemesService,
@@ -777,6 +783,13 @@ export class AppRootComponent implements OnInit {
         const cleaned = saved.filter(id => known.has(id))
         for (const id of this.defaultLeftDockOrder) {
             if (!cleaned.includes(id)) {
+                if (id === 'open-shared-session-link') {
+                    const websocketIndex = cleaned.indexOf('websocket')
+                    if (websocketIndex >= 0) {
+                        cleaned.splice(websocketIndex + 1, 0, id)
+                        continue
+                    }
+                }
                 cleaned.push(id)
             }
         }
@@ -1239,6 +1252,12 @@ export class AppRootComponent implements OnInit {
         if (item === 'websocket') {
             return this.websocketServerStarting
         }
+        if (item === 'share-all-sessions') {
+            return this.shareAllSessionsInProgress
+        }
+        if (item === 'open-shared-session-link') {
+            return this.openSharedLinkInProgress
+        }
         return false
     }
 
@@ -1266,10 +1285,18 @@ export class AppRootComponent implements OnInit {
             return this.tabbyUrlCommand?.label || 'Open Tabby URL'
         case 'copilot-chat':
             return 'Open Copilot Chat'
+        case 'share-all-sessions':
+            return this.shareAllSessionsInProgress
+                ? 'Sharing open sessions...'
+                : 'Share all open sessions'
         case 'websocket':
             return this.websocketServerRunning
                 ? `Session sharing server running on port ${this.websocketServerPort} (click to stop)`
                 : 'Start session sharing server'
+        case 'open-shared-session-link':
+            return this.openSharedLinkInProgress
+                ? 'Opening shared session...'
+                : 'Open shared session link'
         default:
             return ''
         }
@@ -1314,12 +1341,185 @@ export class AppRootComponent implements OnInit {
         case 'copilot-chat':
             this.openCopilotChat()
             break
+        case 'share-all-sessions':
+            void this.shareAllOpenSessionsFromDock()
+            break
         case 'websocket':
             void this.toggleWebSocketServer()
+            break
+        case 'open-shared-session-link':
+            void this.openSharedSessionLinkFromDock()
             break
         default:
             break
         }
+    }
+
+    private async shareAllOpenSessionsFromDock (): Promise<void> {
+        if (this.shareAllSessionsInProgress) {
+            return
+        }
+
+        const sessions = this.getShareableSessionTabs().filter(tab => tab.session)
+        if (!sessions.length) {
+            this.notifications.error(this.translate.instant('No active terminal sessions to share'))
+            return
+        }
+
+        const selectedMode = await this.promptSharingMode()
+        if (!selectedMode) {
+            return
+        }
+
+        this.shareAllSessionsInProgress = true
+        try {
+            const shareUrl = await this.sessionSharing.shareSessionBundle(sessions, { mode: selectedMode })
+            if (!shareUrl) {
+                this.notifications.error(this.translate.instant('Failed to share open sessions. Please check console for details.'))
+                return
+            }
+
+            let copied = false
+            try {
+                this.platform.setClipboard({ text: shareUrl })
+                copied = true
+            } catch {
+                // Clipboard access can fail on some environments; the modal still shows the URL.
+            }
+
+            const modal = this.ngbModal.open(ShareSessionModalComponent, {
+                backdrop: 'static',
+            })
+            modal.componentInstance.shareUrl = shareUrl
+            modal.componentInstance.mode = selectedMode
+            modal.componentInstance.viewers = 0
+
+            if (copied) {
+                this.notifications.notice(this.translate.instant('All open sessions shared! Share URL copied to clipboard.'))
+            } else {
+                this.notifications.notice(this.translate.instant('All open sessions shared!'))
+            }
+        } catch (error: any) {
+            this.logger.error('Failed to share open sessions:', error)
+            this.notifications.error(this.translate.instant('Failed to share open sessions: {error}', { error: error?.message || error }))
+        } finally {
+            this.shareAllSessionsInProgress = false
+        }
+    }
+
+    private async promptSharingMode (): Promise<'read-only' | 'interactive' | null> {
+        if (this.selector.active) {
+            return null
+        }
+
+        const modeOptions: SelectorOption<'read-only' | 'interactive'>[] = [
+            {
+                name: this.translate.instant('Read-only'),
+                description: this.translate.instant('Viewers can only see the terminal output'),
+                icon: 'fas fa-eye',
+                result: 'read-only',
+            },
+            {
+                name: this.translate.instant('Interactive'),
+                description: this.translate.instant('Viewers can also send input to the terminal'),
+                icon: 'fas fa-keyboard',
+                result: 'interactive',
+            },
+        ]
+
+        return this.selector.show<'read-only' | 'interactive'>(
+            this.translate.instant('Select sharing mode'),
+            modeOptions,
+        ).catch(() => null)
+    }
+
+    private getShareableSessionTabs (): Array<BaseTabComponent & { session?: any, profile?: { type?: string } }> {
+        const tabs: Array<BaseTabComponent & { session?: any, profile?: { type?: string } }> = []
+        const seen = new Set<BaseTabComponent>()
+
+        for (const topLevel of this.app.tabs) {
+            const nestedTabs = topLevel instanceof SplitTabComponent ? topLevel.getAllTabs() : [topLevel]
+            for (const tab of nestedTabs) {
+                if (seen.has(tab)) {
+                    continue
+                }
+                seen.add(tab)
+                const profileType = (tab as any)?.profile?.type
+                if (profileType === 'shared-session') {
+                    continue
+                }
+                tabs.push(tab as BaseTabComponent & { session?: any, profile?: { type?: string } })
+            }
+        }
+
+        return tabs
+    }
+
+    private async openSharedSessionLinkFromDock (): Promise<void> {
+        if (this.openSharedLinkInProgress) {
+            return
+        }
+
+        const clipboardText = String(this.platform.readClipboard() ?? '').trim()
+        const modal = this.ngbModal.open(PromptModalComponent, {
+            backdrop: 'static',
+        })
+        modal.componentInstance.prompt = this.translate.instant('Paste shared session link')
+        modal.componentInstance.value = clipboardText.startsWith('tlink://share/')
+            ? clipboardText
+            : ''
+        modal.componentInstance.password = false
+
+        const result = await modal.result.catch(() => null)
+        const shareUrl = String(result?.value ?? '').trim()
+        if (!shareUrl) {
+            return
+        }
+        if (!shareUrl.startsWith('tlink://share/')) {
+            this.notifications.error(this.translate.instant('Invalid shared session link'))
+            return
+        }
+
+        this.openSharedLinkInProgress = true
+        try {
+            const handled = await this.dispatchShareLinkToCLIHandlers(shareUrl)
+            if (!handled) {
+                this.notifications.error(this.translate.instant('Could not open shared session link'))
+                return
+            }
+            this.notifications.notice(this.translate.instant('Opening shared session...'))
+        } catch (error: any) {
+            this.logger.error('Failed to open shared session link:', error)
+            this.notifications.error(this.translate.instant('Failed to open shared session: {error}', { error: error?.message || error }))
+        } finally {
+            this.openSharedLinkInProgress = false
+        }
+    }
+
+    private async dispatchShareLinkToCLIHandlers (shareUrl: string): Promise<boolean> {
+        const handlers = [...(this.cliHandlers ?? [])]
+            .sort((a, b) => (b?.priority ?? 0) - (a?.priority ?? 0))
+        const event = {
+            argv: { _: [shareUrl] },
+            cwd: process.cwd(),
+            secondInstance: false,
+        }
+
+        let handled = false
+        for (const handler of handlers) {
+            if (handled && handler.firstMatchOnly) {
+                continue
+            }
+            try {
+                if (await handler.handle(event)) {
+                    handled = true
+                }
+            } catch (error) {
+                this.logger.warn('CLI handler failed while opening shared link:', error)
+            }
+        }
+
+        return handled
     }
 
     private buildCommandContext (): CommandContext {
@@ -1645,6 +1845,8 @@ export class AppRootComponent implements OnInit {
     websocketServerRunning = false
     websocketServerStarting = false
     websocketServerPort = 0
+    shareAllSessionsInProgress = false
+    openSharedLinkInProgress = false
 
     private isElectron (): boolean {
         return typeof window !== 'undefined' && (window as any).require && typeof process !== 'undefined' && (process as any).type === 'renderer'

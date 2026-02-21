@@ -59,6 +59,7 @@ export declare class SSHSession {
     private prePromptedPassword;
     private shouldRememberProfile;
     private authAborted;
+    private passwordPromptDismissed;
     private activePasswordModal;
     constructor(injector: Injector, profile: SSHProfile);
     private addPublicKeyAuthMethod;
@@ -86,4 +87,5 @@ export declare class SSHSession {
     loadPrivateKeyWithPassphraseMaybe(privateKey: string): Promise<russh.KeyPair>;
     ref(): void;
     unref(): void;
+    wasPasswordPromptDismissed(): boolean;
 }

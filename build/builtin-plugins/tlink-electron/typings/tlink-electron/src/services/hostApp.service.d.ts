@@ -8,8 +8,10 @@ export declare class ElectronHostAppService extends HostAppService {
     get configPlatform(): Platform;
     constructor(zone: NgZone, electron: ElectronService, injector: Injector);
     newWindow(): void;
+    openCodeEditorWindow(): boolean;
     saveConfig(data: string): Promise<void>;
     emitReady(): void;
     relaunch(): void;
     quit(): void;
+    private dispatchCLIEvent;
 }

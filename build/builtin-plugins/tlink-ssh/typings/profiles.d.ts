@@ -56,6 +56,8 @@ export declare class SSHProfilesService extends QuickConnectProfileProvider<SSHP
     getDescription(profile: PartialProfile<SSHProfile>): string;
     deleteProfile(profile: SSHProfile): void;
     duplicateProfile(source: SSHProfile, target: SSHProfile): Promise<void>;
+    private getUsernameCandidates;
+    private resolveUsername;
     quickConnect(query: string): PartialProfile<SSHProfile>;
     intoQuickConnectString(profile: SSHProfile): string | null;
 }

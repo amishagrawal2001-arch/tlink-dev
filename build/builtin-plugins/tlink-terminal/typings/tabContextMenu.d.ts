@@ -36,6 +36,8 @@ export declare class LegacyContextMenu extends TabContextMenuItemProviderRuntime
 }
 /** @hidden */
 export declare class SessionSharingContextMenu extends TabContextMenuItemProviderRuntime {
+    private app;
+    private platform;
     private sessionSharing;
     private ngbModal;
     private notifications;
@@ -43,9 +45,13 @@ export declare class SessionSharingContextMenu extends TabContextMenuItemProvide
     private selector;
     weight: number;
     private logger;
-    constructor(sessionSharing: SessionSharingService, ngbModal: NgbModal, notifications: NotificationsService, translate: TranslateService, selector: SelectorService, log: LogService);
+    constructor(app: AppService, platform: PlatformService, sessionSharing: SessionSharingService, ngbModal: NgbModal, notifications: NotificationsService, translate: TranslateService, selector: SelectorService, log: LogService);
     getItems(tab: CoreBaseTabComponent): Promise<MenuItemOptions[]>;
+    private promptSharingMode;
     private shareWithMode;
+    private shareAllOpenSessions;
+    private getShareableTerminalTabs;
+    private getAllOpenTabs;
 }
 /** @hidden */
 export declare class SaveAsProfileContextMenu extends TabContextMenuItemProviderRuntime {

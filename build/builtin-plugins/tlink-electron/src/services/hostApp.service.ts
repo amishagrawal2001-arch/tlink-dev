@@ -2,6 +2,11 @@ import { Injectable, NgZone, Injector } from '@angular/core'
 import { isWindowsBuild, WIN_BUILD_FLUENT_BG_SUPPORTED, HostAppService, Platform, CLIHandler } from 'tlink-core'
 import { ElectronService } from '../services/electron.service'
 
+interface HostCLIEvent {
+    argv: any
+    cwd: string
+    secondInstance: boolean
+}
 
 @Injectable({ providedIn: 'root' })
 export class ElectronHostAppService extends HostAppService {
@@ -40,24 +45,25 @@ export class ElectronHostAppService extends HostAppService {
             ;(this as any)._aiAssistantFullWindowMode = fullWindowMode
             this.aiAssistantRequest.next()
         }))
+        electron.ipcRenderer.on('host:open-code-editor', (_$event, fullWindowMode?: boolean) => this.zone.run(() => {
+            ;(window as any).__codeEditorFullWindowMode = !!fullWindowMode
+            this.openCodeEditorRequest.next()
+        }))
 
         electron.ipcRenderer.on('cli', (_$event, argv: any, cwd: string, secondInstance: boolean) => this.zone.run(async () => {
-            const event = { argv, cwd, secondInstance }
-            this.logger.info('CLI arguments received:', event)
+            await this.dispatchCLIEvent(injector, { argv, cwd, secondInstance }, 'CLI arguments received')
+        }))
 
-            const cliHandlers = injector.get(CLIHandler) as unknown as CLIHandler[]
-            cliHandlers.sort((a, b) => b.priority - a.priority)
-
-            let handled = false
-            for (const handler of cliHandlers) {
-                if (handled && handler.firstMatchOnly) {
-                    continue
-                }
-                if (await handler.handle(event)) {
-                    this.logger.info('CLI handler matched:', handler.constructor.name)
-                    handled = true
-                }
+        electron.ipcRenderer.on('host:open-shared-session-url', (_$event, url: string) => this.zone.run(async () => {
+            const link = String(url ?? '').trim()
+            if (!link) {
+                return
             }
+            await this.dispatchCLIEvent(injector, {
+                argv: { _: [link] },
+                cwd: process.cwd(),
+                secondInstance: true,
+            }, 'Protocol URL received')
         }))
 
         electron.ipcRenderer.on('host:config-change', () => this.zone.run(() => {
@@ -71,6 +77,11 @@ export class ElectronHostAppService extends HostAppService {
 
     newWindow (): void {
         this.electron.ipcRenderer.send('app:new-window')
+    }
+
+    openCodeEditorWindow (): boolean {
+        this.electron.ipcRenderer.send('app:open-code-editor-window')
+        return true
     }
 
     async saveConfig (data: string): Promise<void> {
@@ -98,5 +109,23 @@ export class ElectronHostAppService extends HostAppService {
     quit (): void {
         this.logger.info('Quitting')
         this.electron.app.quit()
+    }
+
+    private async dispatchCLIEvent (injector: Injector, event: HostCLIEvent, logPrefix: string): Promise<void> {
+        this.logger.info(`${logPrefix}:`, event)
+
+        const cliHandlers = injector.get(CLIHandler) as unknown as CLIHandler[]
+        cliHandlers.sort((a, b) => b.priority - a.priority)
+
+        let handled = false
+        for (const handler of cliHandlers) {
+            if (handled && handler.firstMatchOnly) {
+                continue
+            }
+            if (await handler.handle(event)) {
+                this.logger.info('CLI handler matched:', handler.constructor.name)
+                handled = true
+            }
+        }
     }
 }

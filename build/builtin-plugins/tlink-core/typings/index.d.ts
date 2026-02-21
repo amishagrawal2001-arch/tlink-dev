@@ -29,7 +29,7 @@ export { AppHotkeyProvider };
 export { ColorPickerModalComponent } from './components/colorPickerModal.component';
 export { ShareSessionModalComponent } from './components/shareSessionModal.component';
 export { WorkspaceService } from './services/workspace.service';
-export { SessionSharingService } from './services/sessionSharing.service';
+export { SessionSharingService, ParsedShareSessionLink, ParsedShareSessionBundleLink } from './services/sessionSharing.service';
 export { BackupService, Backup, BackupConfig } from './services/backup.service';
 export { TerminalContextService } from './services/terminalContext.service';
 export { TerminalOutputAnalyzerService } from './services/terminalOutputAnalyzer.service';

@@ -8,6 +8,7 @@ import { ConnectableTerminalTabComponent } from './api/connectableTerminalTab.co
 import { v4 as uuidv4 } from 'uuid'
 import slugify from 'slugify'
 import { SessionLogSettingsModalComponent } from './components/sessionLogSettingsModal.component'
+import { SharedSessionTabComponent } from './components/sharedSessionTab.component'
 
 // Fallback base classes to avoid runtime crashes if core exports are undefined
 const TabContextMenuItemProviderRuntime = (CoreTabContextMenuItemProvider ?? class {}) as typeof CoreTabContextMenuItemProvider
@@ -166,6 +167,8 @@ export class SessionSharingContextMenu extends TabContextMenuItemProviderRuntime
     private logger: Logger
 
     constructor (
+        private app: AppService,
+        private platform: PlatformService,
         private sessionSharing: SessionSharingService,
         private ngbModal: NgbModal,
         private notifications: NotificationsService,
@@ -181,6 +184,8 @@ export class SessionSharingContextMenu extends TabContextMenuItemProviderRuntime
         if (tab instanceof BaseTerminalTabComponent) {
             const isShared = this.sessionSharing.isSessionShared(tab)
             const sharedSession = this.sessionSharing.getSharedSession(tab)
+            const shareableTabs = this.getShareableTerminalTabs()
+            const activeShareableTabs = shareableTabs.filter(candidate => !!candidate.session)
 
             const items: MenuItemOptions[] = []
 
@@ -199,7 +204,7 @@ export class SessionSharingContextMenu extends TabContextMenuItemProviderRuntime
                 items.push({
                     label: this.translate.instant('View sharing details'),
                     click: async () => {
-                        const shareUrl = await this.sessionSharing.shareSession(tab, { mode: sharedSession.mode })
+                        const shareUrl = await this.sessionSharing.getShareableLink(tab)
                         if (shareUrl) {
                             const modal = this.ngbModal.open(ShareSessionModalComponent, {
                                 backdrop: 'static',
@@ -228,34 +233,7 @@ export class SessionSharingContextMenu extends TabContextMenuItemProviderRuntime
                     label: this.translate.instant('Share session'),
                     click: async () => {
                         try {
-                            // Show mode selector
-                            if (this.selector.active) {
-                                return
-                            }
-
-                            const modeOptions: SelectorOption<'read-only' | 'interactive'>[] = [
-                                {
-                                    name: this.translate.instant('Read-only'),
-                                    description: this.translate.instant('Viewers can only see the terminal output'),
-                                    icon: 'fas fa-eye',
-                                    result: 'read-only' as 'read-only',
-                                },
-                                {
-                                    name: this.translate.instant('Interactive'),
-                                    description: this.translate.instant('Viewers can also send input to the terminal'),
-                                    icon: 'fas fa-keyboard',
-                                    result: 'interactive' as 'interactive',
-                                },
-                            ]
-
-                            const selectedMode = await this.selector.show<'read-only' | 'interactive'>(
-                                this.translate.instant('Select sharing mode'),
-                                modeOptions,
-                            ).catch(() => {
-                                // User cancelled
-                                return null
-                            })
-
+                            const selectedMode = await this.promptSharingMode()
                             if (selectedMode) {
                                 await this.shareWithMode(tab, selectedMode)
                             }
@@ -267,9 +245,43 @@ export class SessionSharingContextMenu extends TabContextMenuItemProviderRuntime
                 })
             }
 
+            items.push({
+                label: this.translate.instant('Share all open sessions'),
+                enabled: activeShareableTabs.length > 0,
+                click: async () => {
+                    await this.shareAllOpenSessions(activeShareableTabs)
+                },
+            })
+
             return items
         }
         return []
+    }
+
+    private async promptSharingMode (): Promise<'read-only' | 'interactive' | null> {
+        if (this.selector.active) {
+            return null
+        }
+
+        const modeOptions: SelectorOption<'read-only' | 'interactive'>[] = [
+            {
+                name: this.translate.instant('Read-only'),
+                description: this.translate.instant('Viewers can only see the terminal output'),
+                icon: 'fas fa-eye',
+                result: 'read-only',
+            },
+            {
+                name: this.translate.instant('Interactive'),
+                description: this.translate.instant('Viewers can also send input to the terminal'),
+                icon: 'fas fa-keyboard',
+                result: 'interactive',
+            },
+        ]
+
+        return this.selector.show<'read-only' | 'interactive'>(
+            this.translate.instant('Select sharing mode'),
+            modeOptions,
+        ).catch(() => null)
     }
 
     private async shareWithMode (tab: BaseTerminalTabComponent<any>, mode: 'read-only' | 'interactive'): Promise<void> {
@@ -294,6 +306,84 @@ export class SessionSharingContextMenu extends TabContextMenuItemProviderRuntime
             this.logger.error('Failed to share session:', error)
             this.notifications.error(this.translate.instant('Failed to share session: {error}', { error: error.message || error }))
         }
+    }
+
+    private async shareAllOpenSessions (tabs: BaseTerminalTabComponent<any>[]): Promise<void> {
+        const sessions = tabs.filter(tab => tab.session)
+        if (!sessions.length) {
+            this.notifications.error(this.translate.instant('No active terminal sessions to share'))
+            return
+        }
+
+        const selectedMode = await this.promptSharingMode()
+        if (!selectedMode) {
+            return
+        }
+
+        try {
+            const shareUrl = await this.sessionSharing.shareSessionBundle(sessions, { mode: selectedMode })
+            if (!shareUrl) {
+                this.notifications.error(this.translate.instant('Failed to share open sessions. Please check console for details.'))
+                return
+            }
+
+            let copied = false
+            try {
+                this.platform.setClipboard({ text: shareUrl })
+                copied = true
+            } catch {
+                // Clipboard can fail on some platforms; modal still exposes the URL.
+            }
+
+            const modal = this.ngbModal.open(ShareSessionModalComponent, {
+                backdrop: 'static',
+            })
+            modal.componentInstance.shareUrl = shareUrl
+            modal.componentInstance.mode = selectedMode
+            modal.componentInstance.viewers = 0
+
+            if (copied) {
+                this.notifications.notice(this.translate.instant('All open sessions shared! Share URL copied to clipboard.'))
+            } else {
+                this.notifications.notice(this.translate.instant('All open sessions shared!'))
+            }
+        } catch (error: any) {
+            this.logger.error('Failed to share open sessions:', error)
+            this.notifications.error(this.translate.instant('Failed to share open sessions: {error}', { error: error?.message || error }))
+        }
+    }
+
+    private getShareableTerminalTabs (): BaseTerminalTabComponent<any>[] {
+        const tabs: BaseTerminalTabComponent<any>[] = []
+        const seen = new Set<BaseTerminalTabComponent<any>>()
+
+        for (const tab of this.getAllOpenTabs()) {
+            if (!(tab instanceof BaseTerminalTabComponent)) {
+                continue
+            }
+            if (tab instanceof SharedSessionTabComponent) {
+                continue
+            }
+            if (seen.has(tab)) {
+                continue
+            }
+            seen.add(tab)
+            tabs.push(tab)
+        }
+
+        return tabs
+    }
+
+    private getAllOpenTabs (): CoreBaseTabComponent[] {
+        const result: CoreBaseTabComponent[] = []
+        for (const topLevel of this.app.tabs) {
+            if (topLevel instanceof SplitTabComponent) {
+                result.push(...topLevel.getAllTabs())
+            } else {
+                result.push(topLevel)
+            }
+        }
+        return result
     }
 }
 

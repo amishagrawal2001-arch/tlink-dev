@@ -106,6 +106,7 @@ export declare class HTMLFileUpload extends FileUpload {
     private file;
     private stream;
     private reader;
+    readonly filePath: string | null;
     constructor(file: File);
     getName(): string;
     getMode(): number;

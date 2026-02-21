@@ -182,7 +182,9 @@ export class AppService {
      * @param inputs  Properties to be assigned on the new tab component instance
      */
     openNewTab <T extends BaseTabComponent> (params: NewTabParameters<T>, direction: SplitDirection = 'r'): T {
-        if (params.type as any === SplitTabComponent) {
+        const type = params.type as any
+        // Shared session viewer tabs should always be top-level tabs.
+        if (type === SplitTabComponent || type?.name === 'SharedSessionTabComponent') {
             return this.openNewTabRaw(params)
         }
         const tab = this.tabsService.create(params)

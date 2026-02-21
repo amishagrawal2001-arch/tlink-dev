@@ -12,8 +12,9 @@ import { CommandService } from '../services/commands.service';
 import { BackupService } from '../services/backup.service';
 import { BaseTabComponent } from './baseTab.component';
 import { TabBodyComponent } from './tabBody.component';
-import { AppService, BottomPanelRegistration, BottomPanelService, Command, FileTransfer, HostWindowService, PlatformService, SidePanelRegistration, SidePanelService, ProfilesService, SelectorService, WorkspaceService, NotificationsService } from '../api';
+import { AppService, BottomPanelRegistration, BottomPanelService, Command, FileTransfer, HostWindowService, PlatformService, SidePanelRegistration, SidePanelService, ProfilesService, SelectorService, WorkspaceService, NotificationsService, CLIHandler } from '../api';
 import { TabsService } from '../services/tabs.service';
+import { SessionSharingService } from '../services/sessionSharing.service';
 type SplitDirection = 'r' | 'l' | 't' | 'b';
 type LeftDockChunk = {
     id: string;
@@ -38,6 +39,8 @@ export declare class AppRootComponent implements OnInit {
     private selector;
     private workspaceService;
     private notifications;
+    private sessionSharing;
+    private cliHandlers;
     private ngbModal;
     Platform: typeof Platform;
     ready: boolean;
@@ -86,7 +89,7 @@ export declare class AppRootComponent implements OnInit {
     private logger;
     private readonly defaultLeftDockOrder;
     private readonly defaultLeftDockGroup;
-    constructor(hotkeys: HotkeysService, commands: CommandService, updater: UpdaterService, hostWindow: HostWindowService, hostApp: HostAppService, config: ConfigService, app: AppService, translate: TranslateService, tabsService: TabsService, sidePanel: SidePanelService, bottomPanel: BottomPanelService, platform: PlatformService, profiles: ProfilesService, selector: SelectorService, workspaceService: WorkspaceService, notifications: NotificationsService, log: LogService, ngbModal: NgbModal, _themes: ThemesService, _backup: BackupService);
+    constructor(hotkeys: HotkeysService, commands: CommandService, updater: UpdaterService, hostWindow: HostWindowService, hostApp: HostAppService, config: ConfigService, app: AppService, translate: TranslateService, tabsService: TabsService, sidePanel: SidePanelService, bottomPanel: BottomPanelService, platform: PlatformService, profiles: ProfilesService, selector: SelectorService, workspaceService: WorkspaceService, notifications: NotificationsService, sessionSharing: SessionSharingService, cliHandlers: CLIHandler[], log: LogService, ngbModal: NgbModal, _themes: ThemesService, _backup: BackupService);
     get canSplitShortcut(): boolean;
     get canOpenCommandWindow(): boolean;
     get isCommandWindowOpen(): boolean;
@@ -95,6 +98,7 @@ export declare class AppRootComponent implements OnInit {
     cycleColorSchemeFromDock(): void;
     openSSHSidePanel(): void;
     get shouldShowBottomPanel(): boolean;
+    get isCodeEditorOnlyWindow(): boolean;
     toggleCommandWindowBottom(): void;
     get isChatTabActive(): boolean;
     splitActiveTabShortcut(direction?: SplitDirection): Promise<void>;
@@ -154,6 +158,11 @@ export declare class AppRootComponent implements OnInit {
     isLeftDockItemDisabled(item: string): boolean;
     getLeftDockTooltip(item: string): string;
     onLeftDockItemClick(item: string): void;
+    private shareAllOpenSessionsFromDock;
+    private promptSharingMode;
+    private getShareableSessionTabs;
+    private openSharedSessionLinkFromDock;
+    private dispatchShareLinkToCLIHandlers;
     private buildCommandContext;
     private orderSidePanels;
     toggleMaximize(): void;
@@ -174,6 +183,8 @@ export declare class AppRootComponent implements OnInit {
     websocketServerRunning: boolean;
     websocketServerStarting: boolean;
     websocketServerPort: number;
+    shareAllSessionsInProgress: boolean;
+    openSharedLinkInProgress: boolean;
     private isElectron;
     private getIpcRenderer;
     checkWebSocketServerStatus(): Promise<void>;
