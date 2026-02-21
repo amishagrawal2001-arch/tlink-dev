@@ -19,13 +19,17 @@ export declare class SharedSessionTabComponent extends BaseTerminalTabComponent<
     session: SharedSessionViewerSession | null;
     private connecting;
     private passwordPromptCancelled;
+    private reconnecting;
+    private tabDestroyed;
     constructor(injector: Injector, ngbModal: NgbModal, sessionSharing: SessionSharingService);
     ngOnInit(): void;
     protected onFrontendReady(): void;
+    reconnectSharedSession(): Promise<void>;
     ngOnDestroy(): void;
     private buildProfile;
     private resolveParsedLink;
     private connect;
     private promptPasswordAndReconnect;
+    private handleSessionDisconnected;
 }
 export {};

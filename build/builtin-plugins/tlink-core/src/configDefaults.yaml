@@ -31,9 +31,15 @@ appearance:
   leftDockOrder: []
   leftDockGroups: []
   leftDockGroup:
+    - websocket
+    - share-all-sessions
+    - open-shared-session-link
     - profiles
-    - ai-assistant
-    - tabby-url
+    - session-manager
+    - code-editor
+    - remote-desktop
+    - sftp
+    - ssh
   sidePanelColors:
     __nonStructural: true
 terminal:

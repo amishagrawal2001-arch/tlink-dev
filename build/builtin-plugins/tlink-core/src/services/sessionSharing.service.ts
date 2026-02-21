@@ -121,29 +121,9 @@ export class SessionSharingService {
             await this.stopSharing(terminal)
         }
 
-        // Check if WebSocket server is running
-        const ipcRenderer = this.getIpcRenderer()
-        if (ipcRenderer) {
-            try {
-                const isRunning = await ipcRenderer.invoke('session-sharing:is-server-running')
-                if (!isRunning) {
-                    // Prompt user to start server
-                    const shouldStart = await this.promptToStartServer()
-                    if (shouldStart) {
-                        const result = await ipcRenderer.invoke('session-sharing:start-server')
-                        if (!result.success) {
-                            this.logger.error('Failed to start WebSocket server:', result.error)
-                            return null
-                        }
-                        this.logger.info('WebSocket server started, continuing with session share')
-                    } else {
-                        this.logger.info('Session sharing cancelled - server not running')
-                        return null
-                    }
-                }
-            } catch (error) {
-                this.logger.debug('Could not check server status, continuing anyway:', error)
-            }
+        const serverReady = await this.ensureServerRunningForSharing()
+        if (!serverReady) {
+            return null
         }
 
         try {
@@ -226,6 +206,11 @@ export class SessionSharingService {
             return null
         }
 
+        const serverReady = await this.ensureServerRunningForSharing()
+        if (!serverReady) {
+            return null
+        }
+
         const bundleEntries: ShareBundleEntry[] = []
         const seenSessionIds = new Set<string>()
 
@@ -236,6 +221,14 @@ export class SessionSharingService {
             }
 
             let sharedSession = this.getSharedSession(terminal)
+            if (sharedSession) {
+                const registered = await this.ensureSessionRegisteredWithServer(sharedSession)
+                if (!registered) {
+                    await this.stopSharing(terminal)
+                    sharedSession = null
+                }
+            }
+
             if (!sharedSession) {
                 const shared = await this.shareSession(terminal, options)
                 if (!shared) {
@@ -823,6 +816,82 @@ export class SessionSharingService {
         } catch {
             return value
         }
+    }
+
+    private async ensureServerRunningForSharing (): Promise<boolean> {
+        const ipcRenderer = this.getIpcRenderer()
+        if (!ipcRenderer) {
+            return true
+        }
+
+        try {
+            const isRunning = await ipcRenderer.invoke('session-sharing:is-server-running')
+            if (isRunning) {
+                return true
+            }
+
+            const shouldStart = await this.promptToStartServer()
+            if (!shouldStart) {
+                this.logger.info('Session sharing cancelled - server not running')
+                return false
+            }
+
+            const result = await ipcRenderer.invoke('session-sharing:start-server')
+            if (!result?.success) {
+                this.logger.error('Failed to start WebSocket server:', result?.error)
+                return false
+            }
+
+            this.logger.info('WebSocket server started, continuing with session share')
+            return true
+        } catch (error) {
+            this.logger.debug('Could not check server status, continuing anyway:', error)
+            return true
+        }
+    }
+
+    private async ensureSessionRegisteredWithServer (sharedSession: SharedSession): Promise<boolean> {
+        const ipcRenderer = this.getIpcRenderer()
+        if (!ipcRenderer) {
+            return true
+        }
+
+        try {
+            const isRegistered = await ipcRenderer.invoke('session-sharing:is-registered', sharedSession.id)
+            if (isRegistered) {
+                return true
+            }
+
+            const expiresIn = this.getRemainingExpiryMinutes(sharedSession.expiresAt)
+            if (expiresIn !== undefined && expiresIn <= 0) {
+                return false
+            }
+
+            await ipcRenderer.invoke(
+                'session-sharing:register',
+                sharedSession.id,
+                sharedSession.token,
+                sharedSession.mode,
+                sharedSession.password,
+                expiresIn,
+            )
+            this.logger.info('Re-registered shared session with embedded server via IPC:', sharedSession.id)
+            return true
+        } catch (error) {
+            this.logger.error('Failed to ensure shared session registration:', error)
+            return false
+        }
+    }
+
+    private getRemainingExpiryMinutes (expiresAt?: Date): number | undefined {
+        if (!expiresAt) {
+            return undefined
+        }
+        const remainingMs = expiresAt.getTime() - Date.now()
+        if (remainingMs <= 0) {
+            return 0
+        }
+        return Math.ceil(remainingMs / 60000)
     }
 
     private extractBundleEntryTitle (terminal: any): string | undefined {

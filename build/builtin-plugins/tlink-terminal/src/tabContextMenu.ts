@@ -106,6 +106,20 @@ export class ReconnectContextMenu extends TabContextMenuItemProviderRuntime {
     ) { super() }
 
     async getItems (tab: CoreBaseTabComponent): Promise<MenuItemOptions[]> {
+        if (tab instanceof SharedSessionTabComponent) {
+            return [
+                {
+                    label: this.translate.instant('Reconnect shared session'),
+                    click: (): void => {
+                        setTimeout(() => {
+                            void tab.reconnectSharedSession()
+                            this.notifications.notice(this.translate.instant('Reconnecting shared session'))
+                        })
+                    },
+                },
+            ]
+        }
+
         if (tab instanceof ConnectableTerminalTabComponent) {
             return [
                 {

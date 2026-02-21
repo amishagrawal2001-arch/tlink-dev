@@ -133,6 +133,9 @@ export declare class SessionSharingService {
     private isUUID;
     private parseBundlePayload;
     private safeDecodeURIComponent;
+    private ensureServerRunningForSharing;
+    private ensureSessionRegisteredWithServer;
+    private getRemainingExpiryMinutes;
     private extractBundleEntryTitle;
     private attachIPCListeners;
     private handleIncomingViewerInput;

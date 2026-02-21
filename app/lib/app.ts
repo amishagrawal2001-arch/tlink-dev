@@ -299,6 +299,11 @@ export class Application {
             return this.sessionSharingServer.getViewerCount(sessionId)
         })
 
+        // IPC handler: Check whether a shared session is registered
+        ipcMain.handle('session-sharing:is-registered', async (_event, sessionId: string) => {
+            return this.sessionSharingServer.isSessionRegistered(sessionId)
+        })
+
         // IPC handler: Get server status
         ipcMain.handle('session-sharing:get-server-status', async () => {
             return {

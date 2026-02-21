@@ -132,6 +132,22 @@ export class AppRootComponent implements OnInit {
     leftDockDropPreviewItem: string | null = null
     private logger: Logger
     private readonly defaultLeftDockOrder = [
+        'websocket',
+        'share-all-sessions',
+        'open-shared-session-link',
+        'profiles',
+        'session-manager',
+        'code-editor',
+        'remote-desktop',
+        'sftp',
+        'ssh',
+        'ai-chat',
+        'copilot-chat',
+        'intellij-editor',
+        'ai-assistant',
+        'tabby-url',
+    ]
+    private readonly legacyDefaultLeftDockOrder = [
         'profiles',
         'sftp',
         'session-manager',
@@ -148,6 +164,17 @@ export class AppRootComponent implements OnInit {
         'open-shared-session-link',
     ]
     private readonly defaultLeftDockGroup = [
+        'websocket',
+        'share-all-sessions',
+        'open-shared-session-link',
+        'profiles',
+        'session-manager',
+        'code-editor',
+        'remote-desktop',
+        'sftp',
+        'ssh',
+    ]
+    private readonly legacyDefaultLeftDockGroup = [
         'profiles',
         'ai-assistant',
         'tabby-url',
@@ -781,9 +808,17 @@ export class AppRootComponent implements OnInit {
         const saved = (this.config.store?.appearance?.leftDockOrder as string[] | undefined) ?? []
         const known = new Set(this.defaultLeftDockOrder)
         const cleaned = saved.filter(id => known.has(id))
+        if (this.isLegacyDefaultOrder(cleaned)) {
+            cleaned.splice(0, cleaned.length, ...this.defaultLeftDockOrder)
+        }
         for (const id of this.defaultLeftDockOrder) {
             if (!cleaned.includes(id)) {
                 if (id === 'open-shared-session-link') {
+                    const shareAllIndex = cleaned.indexOf('share-all-sessions')
+                    if (shareAllIndex >= 0) {
+                        cleaned.splice(shareAllIndex + 1, 0, id)
+                        continue
+                    }
                     const websocketIndex = cleaned.indexOf('websocket')
                     if (websocketIndex >= 0) {
                         cleaned.splice(websocketIndex + 1, 0, id)
@@ -938,7 +973,28 @@ export class AppRootComponent implements OnInit {
         } else {
             rawGroups = [this.defaultLeftDockGroup]
         }
+        if (this.isLegacyDefaultGroups(rawGroups)) {
+            rawGroups = [this.defaultLeftDockGroup]
+        }
         return this.normalizeLeftDockGroups(rawGroups)
+    }
+
+    private isLegacyDefaultOrder (order: string[]): boolean {
+        if (order.length !== this.legacyDefaultLeftDockOrder.length) {
+            return false
+        }
+        return order.every((item, index) => item === this.legacyDefaultLeftDockOrder[index])
+    }
+
+    private isLegacyDefaultGroups (groups: string[][]): boolean {
+        if (groups.length !== 1) {
+            return false
+        }
+        const [group] = groups
+        if (!Array.isArray(group) || group.length !== this.legacyDefaultLeftDockGroup.length) {
+            return false
+        }
+        return group.every((item, index) => item === this.legacyDefaultLeftDockGroup[index])
     }
 
     private flattenLeftDockGroups (groups: string[][]): string[] {

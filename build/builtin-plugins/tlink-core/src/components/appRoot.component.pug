@@ -32,7 +32,8 @@ title-bar(
                         i.fas.fa-desktop
                     ng-container(*ngSwitchCase='"ssh"')
                         i.fas.fa-terminal
-                    ng-container(*ngSwitchCase='"code-editor"') !{require('../icons/code.svg')}
+                    ng-container(*ngSwitchCase='"code-editor"')
+                        i.fas.fa-file-code
                     ng-container(*ngSwitchCase='"intellij-editor"')
                         i.fas.fa-laptop-code
                     ng-container(*ngSwitchCase='"ai-chat"')

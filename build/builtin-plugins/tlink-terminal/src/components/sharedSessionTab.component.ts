@@ -1,6 +1,7 @@
 import { Component, Injector, Input } from '@angular/core'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import { ParsedShareSessionLink, PromptModalComponent, SessionSharingService } from 'tlink-core'
+import { first } from 'rxjs'
 import { BaseTerminalProfile } from '../api/interfaces'
 import { BaseTerminalTabComponent } from '../api/baseTerminalTab.component'
 import { SharedSessionJoinError, SharedSessionViewerSession } from '../sharedSessionViewer.session'
@@ -27,6 +28,8 @@ export class SharedSessionTabComponent extends BaseTerminalTabComponent<SharedSe
 
     private connecting = false
     private passwordPromptCancelled = false
+    private reconnecting = false
+    private tabDestroyed = false
 
     constructor (
         injector: Injector,
@@ -52,7 +55,31 @@ export class SharedSessionTabComponent extends BaseTerminalTabComponent<SharedSe
         super.onFrontendReady()
     }
 
+    async reconnectSharedSession (): Promise<void> {
+        if (this.connecting || this.reconnecting || this.tabDestroyed) {
+            return
+        }
+        this.reconnecting = true
+
+        try {
+            this.passwordPromptCancelled = false
+            await this.write('\r\n[Info] Reconnecting shared session...\r\n')
+
+            const currentSession = this.session
+            if (currentSession) {
+                this.setSession(null)
+                this.session = null
+                await currentSession.destroy()
+            }
+
+            await this.connect()
+        } finally {
+            this.reconnecting = false
+        }
+    }
+
     ngOnDestroy (): void {
+        this.tabDestroyed = true
         super.ngOnDestroy()
         void this.session?.destroy()
     }
@@ -110,6 +137,9 @@ export class SharedSessionTabComponent extends BaseTerminalTabComponent<SharedSe
             this.passwordPromptCancelled = false
             this.setSession(session)
             this.session = session
+            session.closed$.pipe(first()).subscribe(() => {
+                void this.handleSessionDisconnected(session)
+            })
 
             const modeLabel = session.sharingMode === 'interactive' ? 'Interactive' : 'Read-only'
             this.setTitle(`Shared ${link.sessionId.slice(0, 8)} (${modeLabel})`)
@@ -157,5 +187,19 @@ export class SharedSessionTabComponent extends BaseTerminalTabComponent<SharedSe
 
         this.passwordPromptCancelled = false
         await this.connect(password)
+    }
+
+    private async handleSessionDisconnected (session: SharedSessionViewerSession): Promise<void> {
+        if (this.tabDestroyed || this.reconnecting || this.connecting) {
+            return
+        }
+        if (this.session !== session) {
+            return
+        }
+
+        this.setSession(null)
+        this.session = null
+        await this.write('\r\n[Disconnected] Shared session disconnected. Right-click tab and select "Reconnect shared session".\r\n')
+        this.notifications.notice('Shared session disconnected. Reconnect from tab menu or reopen the same share link.')
     }
 }

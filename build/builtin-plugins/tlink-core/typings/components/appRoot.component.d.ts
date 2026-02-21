@@ -88,7 +88,9 @@ export declare class AppRootComponent implements OnInit {
     leftDockDropPreviewItem: string | null;
     private logger;
     private readonly defaultLeftDockOrder;
+    private readonly legacyDefaultLeftDockOrder;
     private readonly defaultLeftDockGroup;
+    private readonly legacyDefaultLeftDockGroup;
     constructor(hotkeys: HotkeysService, commands: CommandService, updater: UpdaterService, hostWindow: HostWindowService, hostApp: HostAppService, config: ConfigService, app: AppService, translate: TranslateService, tabsService: TabsService, sidePanel: SidePanelService, bottomPanel: BottomPanelService, platform: PlatformService, profiles: ProfilesService, selector: SelectorService, workspaceService: WorkspaceService, notifications: NotificationsService, sessionSharing: SessionSharingService, cliHandlers: CLIHandler[], log: LogService, ngbModal: NgbModal, _themes: ThemesService, _backup: BackupService);
     get canSplitShortcut(): boolean;
     get canOpenCommandWindow(): boolean;
@@ -144,6 +146,8 @@ export declare class AppRootComponent implements OnInit {
     openLeftDockItemMenu(event: MouseEvent, item: string): void;
     private removeLeftDockItemFromGroup;
     private buildLeftDockGroups;
+    private isLegacyDefaultOrder;
+    private isLegacyDefaultGroups;
     private flattenLeftDockGroups;
     private normalizeLeftDockGroups;
     private setLeftDockGroups;

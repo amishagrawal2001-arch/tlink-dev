@@ -115,6 +115,9 @@ export class TerminalCLIHandler extends CLIHandlerRuntime {
         const existing = this.findOpenSharedSessionTab(parsedLink)
         if (existing) {
             this.app.selectTab(existing)
+            if (!existing.session?.open) {
+                void existing.reconnectSharedSession()
+            }
             if (focusWindow) {
                 this.hostWindow.bringToFront()
             }

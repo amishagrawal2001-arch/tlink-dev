@@ -298,6 +298,21 @@ export class SessionSharingServer {
     }
 
     /**
+     * Check whether a session is currently registered and not expired.
+     */
+    isSessionRegistered (sessionId: string): boolean {
+        const session = this.sessions.get(sessionId)
+        if (!session) {
+            return false
+        }
+        if (session.expiresAt && new Date() > session.expiresAt) {
+            this.unregisterSession(sessionId)
+            return false
+        }
+        return true
+    }
+
+    /**
      * Handle new WebSocket connection
      */
     private handleConnection (ws: WebSocket, _req: any): void {
