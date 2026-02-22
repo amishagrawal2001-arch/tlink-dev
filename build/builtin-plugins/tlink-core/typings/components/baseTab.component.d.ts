@@ -61,7 +61,7 @@ export declare abstract class BaseTabComponent extends BaseComponent {
     private focused;
     private blurred;
     protected visibility: BehaviorSubject<boolean>;
-    protected progress: BehaviorSubject<number | null>;
+    protected progress: BehaviorSubject<number>;
     protected activity: BehaviorSubject<boolean>;
     private destroyed;
     private _destroyCalled;

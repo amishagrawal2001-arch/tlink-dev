@@ -306,7 +306,7 @@ export class AppRootComponent implements OnInit {
 
         platform.fileTransferStarted$.subscribe(transfer => {
             this.activeTransfers.push(transfer)
-            this.activeTransfersDropdown.open()
+            this.activeTransfersDropdown?.open()
         })
 
         this.sidePanel.state$.subscribe(state => {
@@ -765,14 +765,14 @@ export class AppRootComponent implements OnInit {
 
     onTransfersChange () {
         if (this.activeTransfers.length === 0) {
-            this.activeTransfersDropdown.close()
+            this.activeTransfersDropdown?.close()
         }
     }
 
     onTransfersFloatingChange (floating: boolean): void {
         this.transfersFloating = floating
         if (this.activeTransfers.length) {
-            setTimeout(() => this.activeTransfersDropdown.open())
+            setTimeout(() => this.activeTransfersDropdown?.open())
         }
     }
 

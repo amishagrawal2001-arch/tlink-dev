@@ -17,7 +17,7 @@ export declare class ResettableTimeout {
 }
 export declare const TAB_COLORS: ({
     name: "No color";
-    value: null;
+    value: any;
 } | {
     name: "Blue";
     value: string;
