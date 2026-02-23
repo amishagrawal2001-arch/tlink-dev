@@ -38,10 +38,14 @@ interface EditorDocument extends EditorDocumentSnapshot {
     isDirty: boolean
     lastSavedValue: string
     ansiDecorationIds: string[]
+    diskMtimeMs?: number|null
+    diskSize?: number|null
+    externalConflict?: ExternalConflictState|null
 }
 
 type ViewMode = 'editor'|'diff'
 type EditorThemeMode = 'auto'|'light'|'dark'|'hc'|'solarized-light'|'solarized-dark'|'dracula'|'monokai'|'nord'
+type FolderTreeMode = 'full'|'opened'
 interface TreeNode {
     name: string
     path: string
@@ -64,6 +68,12 @@ interface QuickOpenSelection {
     kind: 'doc'|'file'
     docId?: string
     filePath?: string
+}
+
+interface ExternalConflictState {
+    diskContent: string
+    diskMtimeMs: number
+    diskSize: number
 }
 
 @Component({
@@ -150,6 +160,8 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     folderContextMenuOpen = false
     folderContextMenuPath: string|null = null
     folderContextMenuPaths: string[] = []
+    folderContextScopeRoot: string|null = null
+    folderContextScopeMode: FolderTreeMode = 'full'
     folderContextMenuX = 0
     folderContextMenuY = 0
     fileContextMenuOpen = false
@@ -167,7 +179,9 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     expandedFolders = new Set<string>()
     private hiddenTreePathKeys = new Set<string>()
     private externalFileScopedRoots = new Map<string, Set<string>>()
+    private folderTreeModes = new Map<string, FolderTreeMode>()
     private _treeItems: Array<{ node: TreeNode, depth: number }> = []
+    private treeKeyboardActive = false
 
     get hasRunTerminal (): boolean {
         return !!this.runTerminalTab
@@ -196,6 +210,17 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         return this.formatSelectionActionLabel('Duplicate', 'Duplicate', this.fileContextMenuPaths.length, this.folderContextMenuPaths.length)
     }
 
+    get selectionContextMoveLabel (): string {
+        return this.formatSelectionActionLabel('Move…', 'Move', this.fileContextMenuPaths.length, this.folderContextMenuPaths.length)
+    }
+
+    get folderScopeToggleLabel (): string {
+        if (!this.folderContextScopeRoot) {
+            return 'Opened files only'
+        }
+        return this.folderContextScopeMode === 'opened' ? 'Show full folder' : 'Opened files only'
+    }
+
     get canDeleteOnDisk (): boolean {
         if (this.getSelectedFilePathsFromTree().length > 0) {
             return true
@@ -211,6 +236,21 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             return true
         }
         return !!this.getActiveDoc()?.path
+    }
+
+    get canMoveOnDisk (): boolean {
+        if (this.getSelectedFilePathsFromTree().length > 0 || this.getSelectedFolderPathsFromTree().length > 0) {
+            return true
+        }
+        return !!this.getActiveDoc()?.path
+    }
+
+    get activeExternalConflictDoc (): EditorDocument|null {
+        const active = this.getActiveDoc()
+        if (!active?.externalConflict) {
+            return null
+        }
+        return active
     }
 
     statusLineCol = ''
@@ -234,6 +274,8 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     private tempSaveTimers = new Map<string, number>()
     private persistStateTimer?: number
     private treeRefreshTimer?: number
+    private externalWatchTimer?: number
+    private externalWatchBusy = false
     private fileMenuHoverCloseTimer?: number
     private editMenuHoverCloseTimer?: number
     private readonly menuHoverCloseDelayMs = 140
@@ -246,6 +288,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     private resizeStartWidth = 0
     private readonly treeNodeBudget = 4000
     private readonly quickOpenBudget = 3000
+    private readonly externalWatchIntervalMs = 1800
     private readonly skippedFolders = new Set(['.git', 'node_modules', '.svn', '.hg', '.idea', '.vscode', 'dist', 'build'])
     private readonly studioTitle = 'Tlink Studio'
 
@@ -307,6 +350,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         }
         this.folders = unique.map(p => ({ path: p, name: this.getFolderDisplayName(p) }))
         this.loadScopedExternalFilesFromState(unique)
+        this.loadFolderTreeModesFromState(unique)
         const savedSelected = typeof localStorage !== 'undefined' ? localStorage.getItem('codeEditor.selectedFolder') : null
         this.selectedFolderPath = savedSelected && unique.includes(savedSelected) ? savedSelected : null
         if (typeof localStorage !== 'undefined') {
@@ -345,6 +389,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         localStorage.setItem('codeEditor.selectedFolder', this.selectedFolderPath ?? '')
         localStorage.setItem('codeEditor.expandedFolders', JSON.stringify(Array.from(this.expandedFolders)))
         localStorage.setItem('codeEditor.hiddenTreePaths', JSON.stringify(Array.from(this.hiddenTreePathKeys)))
+        this.persistFolderTreeModes()
         this.persistScopedExternalFiles()
     }
 
@@ -442,24 +487,158 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             return null
         }
         const normalized = path.resolve(filePath)
+        let bestMatch: string|null = null
+        let bestLength = -1
         for (const folder of this.folders) {
             const folderResolved = path.resolve(folder.path)
             if (normalized === folderResolved || normalized.startsWith(folderResolved + path.sep)) {
-                return folder.path
+                if (folderResolved.length > bestLength) {
+                    bestMatch = folder.path
+                    bestLength = folderResolved.length
+                }
             }
         }
-        return null
+        return bestMatch
     }
 
-    private addScopedExternalFile (rootPath: string, filePath: string): void {
+    private getWorkspaceRootForPath (targetPath: string|null|undefined): string|null {
+        if (!targetPath) {
+            return null
+        }
+        return this.getFolderForPath(targetPath)
+    }
+
+    private getFolderTreeMode (rootPath: string|null|undefined): FolderTreeMode {
         const rootKey = this.getFsPathKey(rootPath)
-        const fileKey = this.getFsPathKey(filePath)
-        if (!rootKey || !fileKey) {
+        if (!rootKey) {
+            return 'full'
+        }
+        return this.folderTreeModes.get(rootKey) === 'opened' ? 'opened' : 'full'
+    }
+
+    private setFolderTreeMode (rootPath: string|null|undefined, mode: FolderTreeMode): void {
+        const rootKey = this.getFsPathKey(rootPath)
+        if (!rootKey) {
             return
         }
-        const scoped = this.externalFileScopedRoots.get(rootKey) ?? new Set<string>()
-        scoped.add(fileKey)
+        if (mode === 'opened') {
+            this.folderTreeModes.set(rootKey, 'opened')
+        } else {
+            this.folderTreeModes.delete(rootKey)
+        }
+    }
+
+    private isSameStringSet (left: Set<string>, right: Set<string>): boolean {
+        if (left.size !== right.size) {
+            return false
+        }
+        for (const value of left) {
+            if (!right.has(value)) {
+                return false
+            }
+        }
+        return true
+    }
+
+    private getOpenFileKeysForRoot (rootPath: string): Set<string> {
+        const rootKey = this.getFsPathKey(rootPath)
+        const keys = new Set<string>()
+        if (!rootKey) {
+            return keys
+        }
+        for (const doc of this.documents) {
+            const docPath = doc.path ?? doc.tempPath ?? null
+            const docKey = this.getFsPathKey(docPath)
+            if (!docKey) {
+                continue
+            }
+            if (docKey === rootKey || docKey.startsWith(rootKey + path.sep)) {
+                keys.add(docKey)
+            }
+        }
+        return keys
+    }
+
+    private syncOpenedFileScopeForRoot (rootPath: string): boolean {
+        const rootKey = this.getFsPathKey(rootPath)
+        if (!rootKey) {
+            return false
+        }
+        if (this.getFolderTreeMode(rootPath) !== 'opened') {
+            if (this.externalFileScopedRoots.has(rootKey)) {
+                this.externalFileScopedRoots.delete(rootKey)
+                return true
+            }
+            return false
+        }
+
+        const next = this.getOpenFileKeysForRoot(rootPath)
+        const previous = this.externalFileScopedRoots.get(rootKey) ?? new Set<string>()
+        if (this.isSameStringSet(previous, next)) {
+            return false
+        }
+        this.externalFileScopedRoots.set(rootKey, next)
+        for (const fileKey of next) {
+            this.expandPathWithinRoot(rootPath, fileKey)
+        }
+        return true
+    }
+
+    private syncOpenedFileScopes (): boolean {
+        let changed = false
+        const openedRootKeys = new Set<string>()
+        for (const folder of this.folders) {
+            const rootKey = this.getFsPathKey(folder.path)
+            if (!rootKey) {
+                continue
+            }
+            if (this.getFolderTreeMode(folder.path) === 'opened') {
+                openedRootKeys.add(rootKey)
+            }
+            if (this.syncOpenedFileScopeForRoot(folder.path)) {
+                changed = true
+            }
+        }
+        for (const rootKey of Array.from(this.externalFileScopedRoots.keys())) {
+            if (!openedRootKeys.has(rootKey)) {
+                this.externalFileScopedRoots.delete(rootKey)
+                changed = true
+            }
+        }
+        return changed
+    }
+
+    private setRootModeToOpenedFiles (rootPath: string, includePath?: string|null): void {
+        const rootKey = this.getFsPathKey(rootPath)
+        if (!rootKey) {
+            return
+        }
+        this.setFolderTreeMode(rootPath, 'opened')
+        const scoped = this.getOpenFileKeysForRoot(rootPath)
+        const activePath = this.getActiveDoc()?.path ?? null
+        const activeKey = this.getFsPathKey(activePath)
+        if (activeKey && (activeKey === rootKey || activeKey.startsWith(rootKey + path.sep))) {
+            scoped.add(activeKey)
+        }
+        for (const filePath of this.getSelectedFilePathsFromTree()) {
+            const selectedKey = this.getFsPathKey(filePath)
+            if (selectedKey && (selectedKey === rootKey || selectedKey.startsWith(rootKey + path.sep))) {
+                scoped.add(selectedKey)
+            }
+        }
+        if (includePath) {
+            const fileKey = this.getFsPathKey(includePath)
+            if (fileKey && (fileKey === rootKey || fileKey.startsWith(rootKey + path.sep))) {
+                scoped.add(fileKey)
+                this.expandPathWithinRoot(rootPath, includePath)
+            }
+        }
         this.externalFileScopedRoots.set(rootKey, scoped)
+    }
+
+    private setRootModeToFullFolder (rootPath: string): void {
+        this.setFolderTreeMode(rootPath, 'full')
+        this.clearScopedExternalFiles(rootPath)
     }
 
     private clearScopedExternalFiles (rootPath: string): void {
@@ -476,6 +655,65 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             return null
         }
         return this.externalFileScopedRoots.get(rootKey) ?? null
+    }
+
+    private loadFolderTreeModesFromState (existingFolderPaths: string[]): void {
+        this.folderTreeModes = new Map<string, FolderTreeMode>()
+        const existingRootKeys = new Set<string>()
+        for (const folderPath of existingFolderPaths) {
+            const rootKey = this.getFsPathKey(folderPath)
+            if (rootKey) {
+                existingRootKeys.add(rootKey)
+            }
+        }
+        if (typeof localStorage !== 'undefined') {
+            const stored = localStorage.getItem('codeEditor.folderTreeModes')
+            if (stored) {
+                try {
+                    const parsed = JSON.parse(stored) as Record<string, unknown>
+                    for (const [rawRoot, rawMode] of Object.entries(parsed ?? {})) {
+                        if (rawMode !== 'opened') {
+                            continue
+                        }
+                        const rootKey = this.getFsPathKey(rawRoot) ?? rawRoot
+                        if (!rootKey || !existingRootKeys.has(rootKey)) {
+                            continue
+                        }
+                        this.folderTreeModes.set(rootKey, 'opened')
+                    }
+                } catch {
+                    this.folderTreeModes = new Map<string, FolderTreeMode>()
+                }
+            }
+        }
+        // Migration for older builds that persisted scoped roots without an explicit mode map.
+        for (const rootKey of this.externalFileScopedRoots.keys()) {
+            if (!existingRootKeys.has(rootKey)) {
+                continue
+            }
+            this.folderTreeModes.set(rootKey, 'opened')
+        }
+    }
+
+    private persistFolderTreeModes (): void {
+        if (typeof localStorage === 'undefined') {
+            return
+        }
+        const existingRootKeys = new Set<string>()
+        for (const folder of this.folders) {
+            const rootKey = this.getFsPathKey(folder.path)
+            if (rootKey) {
+                existingRootKeys.add(rootKey)
+            }
+        }
+        const payload: Record<string, FolderTreeMode> = {}
+        for (const [rootKey, mode] of this.folderTreeModes) {
+            if (mode !== 'opened' || !existingRootKeys.has(rootKey)) {
+                continue
+            }
+            payload[rootKey] = mode
+        }
+        localStorage.setItem('codeEditor.folderTreeModes', JSON.stringify(payload))
     }
 
     private loadScopedExternalFilesFromState (existingFolderPaths: string[]): void {
@@ -503,13 +741,9 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                 existingRootKeys.add(key)
             }
         }
-        const localRootKey = this.getFsPathKey(this.folderRoot)
         for (const [rawRoot, rawFiles] of Object.entries(parsed as Record<string, unknown>)) {
             const rootKey = this.getFsPathKey(rawRoot) ?? rawRoot
             if (!rootKey || !existingRootKeys.has(rootKey)) {
-                continue
-            }
-            if (localRootKey && rootKey === localRootKey) {
                 continue
             }
             const scopedFiles = new Set<string>()
@@ -537,7 +771,6 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             return
         }
         const payload: Record<string, string[]> = {}
-        const localRootKey = this.getFsPathKey(this.folderRoot)
         const existingRootKeys = new Set<string>()
         for (const folder of this.folders) {
             const key = this.getFsPathKey(folder.path)
@@ -547,9 +780,6 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         }
         for (const [rootKey, scopedFiles] of this.externalFileScopedRoots) {
             if (!rootKey || !existingRootKeys.has(rootKey)) {
-                continue
-            }
-            if (localRootKey && rootKey === localRootKey) {
                 continue
             }
             const sanitized = Array.from(scopedFiles).filter(fileKey => !!fileKey && (fileKey === rootKey || fileKey.startsWith(rootKey + path.sep)))
@@ -562,37 +792,32 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     }
 
     private hydrateScopedRootsFromOpenDocuments (): boolean {
-        const localRootKey = this.getFsPathKey(this.folderRoot)
         let changed = false
         for (const folder of this.folders) {
             const rootKey = this.getFsPathKey(folder.path)
             if (!rootKey) {
                 continue
             }
-            if (localRootKey && rootKey === localRootKey) {
+            if (this.getFolderTreeMode(folder.path) !== 'opened') {
                 continue
             }
-            if (this.externalFileScopedRoots.has(rootKey)) {
-                continue
-            }
-            const scopedByKey = new Map<string, string>()
+            const scopedByKey = new Set<string>()
             for (const doc of this.documents) {
-                if (!doc.path) {
-                    continue
-                }
-                const docKey = this.getFsPathKey(doc.path)
+                const docPath = doc.path ?? doc.tempPath ?? null
+                const docKey = this.getFsPathKey(docPath)
                 if (!docKey) {
                     continue
                 }
                 if (docKey === rootKey || docKey.startsWith(rootKey + path.sep)) {
-                    scopedByKey.set(docKey, path.resolve(doc.path))
+                    scopedByKey.add(docKey)
                 }
             }
-            if (!scopedByKey.size) {
+            const previous = this.externalFileScopedRoots.get(rootKey) ?? new Set<string>()
+            if (this.isSameStringSet(previous, scopedByKey)) {
                 continue
             }
-            this.externalFileScopedRoots.set(rootKey, new Set(scopedByKey.keys()))
-            for (const resolvedPath of scopedByKey.values()) {
+            this.externalFileScopedRoots.set(rootKey, scopedByKey)
+            for (const resolvedPath of scopedByKey) {
                 this.expandPathWithinRoot(folder.path, resolvedPath)
             }
             changed = true
@@ -600,9 +825,12 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         return changed
     }
 
-    private shouldIncludeScopedTreeEntry (scopedFiles: Set<string>|null, entryPath: string, isDirectory: boolean): boolean {
-        if (!scopedFiles || !scopedFiles.size) {
+    private shouldIncludeScopedTreeEntry (scopedFiles: Set<string>|null, mode: FolderTreeMode, entryPath: string, isDirectory: boolean): boolean {
+        if (mode !== 'opened') {
             return true
+        }
+        if (!scopedFiles || !scopedFiles.size) {
+            return false
         }
         const entryKey = this.getFsPathKey(entryPath)
         if (!entryKey) {
@@ -641,11 +869,10 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         const existingRoot = this.getFolderForPath(resolved)
         if (existingRoot) {
             if (scopeToOpenedFileOnly) {
-                const existingRootKey = this.getFsPathKey(existingRoot)
-                const rootAlreadyScoped = !!existingRootKey && this.externalFileScopedRoots.has(existingRootKey)
-                const canScopeExistingRoot = rootAlreadyScoped || !this.isSameFsPath(existingRoot, this.folderRoot)
-                if (canScopeExistingRoot) {
-                    this.addScopedExternalFile(existingRoot, resolved)
+                const alreadyOpenedOnly = this.getFolderTreeMode(existingRoot) === 'opened'
+                const canAutoScope = alreadyOpenedOnly || !this.isSameFsPath(existingRoot, this.folderRoot)
+                if (canAutoScope) {
+                    this.setRootModeToOpenedFiles(existingRoot, resolved)
                     this.expandPathWithinRoot(existingRoot, resolved)
                 }
             }
@@ -877,6 +1104,33 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         this.cdr.markForCheck()
     }
 
+    private remapFileSelectionPath (
+        oldPath: string|null|undefined,
+        newPath: string|null|undefined,
+        oldKeyOverride: string|null = null,
+    ): void {
+        const oldKey = oldKeyOverride || this.getFsPathKey(oldPath)
+        const newKey = this.getFsPathKey(newPath)
+        if (!oldKey || !newKey || oldKey === newKey) {
+            return
+        }
+        let changed = false
+        if (this.selectedFilePathKeys.has(oldKey)) {
+            const next = new Set(this.selectedFilePathKeys)
+            next.delete(oldKey)
+            next.add(newKey)
+            this.selectedFilePathKeys = next
+            changed = true
+        }
+        if (this.fileSelectionAnchorKey === oldKey) {
+            this.fileSelectionAnchorKey = newKey
+            changed = true
+        }
+        if (changed) {
+            this.cdr.markForCheck()
+        }
+    }
+
     private extendFileSelection (filePath: string): void {
         const targetKey = this.getFsPathKey(filePath)
         if (!targetKey) {
@@ -1082,6 +1336,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                 const entries = await fs.readdir(dir, { withFileTypes: true }) as any[]
                 const nodes: TreeNode[] = []
                 const scopedFiles = this.getScopedExternalFiles(rootPath)
+                const treeMode = this.getFolderTreeMode(rootPath)
                 for (const entry of entries) {
                     if (isStale()) {
                         return []
@@ -1103,7 +1358,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                     if (this.hiddenTreePathKeys.has(this.toTreePathKey(fullPath) ?? '')) {
                         continue
                     }
-                    if (!this.shouldIncludeScopedTreeEntry(scopedFiles, fullPath, isDir)) {
+                    if (!this.shouldIncludeScopedTreeEntry(scopedFiles, treeMode, fullPath, isDir)) {
                         continue
                     }
                     if (isDir) {
@@ -1206,6 +1461,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         if (!this.folders.find(f => f.path === target)) {
             this.folders.push({ name, path: target })
         }
+        this.setRootModeToFullFolder(target)
         this.selectFolder(target)
         this.persistFolders()
         this.expandedFolders.add(target)
@@ -1236,9 +1492,11 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             this.folders.push({ name: this.getFolderDisplayName(resolved), path: resolved })
         }
         if (scopeToFilePath) {
-            this.addScopedExternalFile(resolved, scopeToFilePath)
+            this.setRootModeToOpenedFiles(resolved, scopeToFilePath)
+        } else if (this.getFolderTreeMode(resolved) === 'opened') {
+            this.syncOpenedFileScopeForRoot(resolved)
         } else {
-            this.clearScopedExternalFiles(resolved)
+            this.setRootModeToFullFolder(resolved)
         }
         this.revealTreePath(resolved, true)
         if (selectFolder) {
@@ -1329,6 +1587,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         try {
             await fs.rename(folder.path, newPath)
             this.updatePathsForFolderRename(folder.path, newPath)
+            this.migrateRootTreeStateOnRename(folder.path, newPath)
             folder.path = newPath
             folder.name = nextName
             if (this.selectedFolderPath === folderPath) {
@@ -1378,13 +1637,27 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         }
     }
 
+    private migrateRootTreeStateOnRename (oldPath: string, newPath: string): void {
+        const oldKey = this.getFsPathKey(oldPath)
+        const wasOpenedMode = this.getFolderTreeMode(oldPath) === 'opened'
+        this.setFolderTreeMode(oldPath, 'full')
+        if (oldKey) {
+            this.externalFileScopedRoots.delete(oldKey)
+        }
+        if (!wasOpenedMode) {
+            return
+        }
+        this.setFolderTreeMode(newPath, 'opened')
+        this.syncOpenedFileScopeForRoot(newPath)
+    }
+
     removeFolder (folderPath: string): void {
         this.folders = this.folders.filter(f => f.path !== folderPath)
         if (this.selectedFolderPath === folderPath) {
             this.selectedFolderPath = null
         }
         this.expandedFolders.delete(folderPath)
-        this.clearScopedExternalFiles(folderPath)
+        this.setRootModeToFullFolder(folderPath)
         const folderKey = this.toTreePathKey(folderPath)
         if (folderKey && this.hiddenTreePathKeys.has(folderKey)) {
             this.hiddenTreePathKeys.delete(folderKey)
@@ -1407,8 +1680,10 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         this.fileContextMenuPaths = this.getSelectedFilePathsFromTree()
         this.folderContextMenuOpen = true
         this.folderContextMenuPath = folderPath
+        this.folderContextScopeRoot = this.getWorkspaceRootForPath(folderPath)
+        this.folderContextScopeMode = this.getFolderTreeMode(this.folderContextScopeRoot)
         const menuWidth = 220
-        const menuHeight = 170
+        const menuHeight = 220
         const padding = 8
         const maxX = Math.max(padding, (window.innerWidth || 0) - menuWidth - padding)
         const maxY = Math.max(padding, (window.innerHeight || 0) - menuHeight - padding)
@@ -1426,7 +1701,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         }
         this.folderContextMenuPaths = this.getSelectedFolderPathsFromTree()
         const menuWidth = 220
-        const menuHeight = 190
+        const menuHeight = 220
         const padding = 8
         const maxX = Math.max(padding, (window.innerWidth || 0) - menuWidth - padding)
         const maxY = Math.max(padding, (window.innerHeight || 0) - menuHeight - padding)
@@ -1437,9 +1712,12 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     async handleFolderContextAction (action: string): Promise<void> {
         const selected = this.getSelectedActionTargets(this.fileContextMenuPaths, this.folderContextMenuPaths)
         const folderPath = this.folderContextMenuPath
+        const scopeRoot = this.folderContextScopeRoot
         this.folderContextMenuOpen = false
         this.folderContextMenuPath = null
         this.folderContextMenuPaths = []
+        this.folderContextScopeRoot = null
+        this.folderContextScopeMode = 'full'
         if (!folderPath) {
             return
         }
@@ -1463,8 +1741,14 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             } catch {
                 // ignore
             }
+        } else if (action === 'scopeToggle') {
+            if (scopeRoot) {
+                this.toggleRootScopeMode(scopeRoot)
+            }
         } else if (action === 'duplicate') {
             await this.duplicateSelectionOnDisk(selected.fileTargets, selected.folderTargets)
+        } else if (action === 'move') {
+            await this.moveSelectionToFolderPrompt(selected.fileTargets, selected.folderTargets)
         } else if (action === 'delete') {
             await this.deleteSelectionOnDisk(selected.fileTargets, selected.folderTargets)
         }
@@ -1495,6 +1779,8 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             } catch {}
         } else if (action === 'duplicate') {
             await this.duplicateSelectionOnDisk(selected.fileTargets, selected.folderTargets)
+        } else if (action === 'move') {
+            await this.moveSelectionToFolderPrompt(selected.fileTargets, selected.folderTargets)
         } else if (action === 'delete') {
             await this.deleteSelectionOnDisk(selected.fileTargets, selected.folderTargets)
         }
@@ -1584,6 +1870,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                 this.expandedFolders.add(newPath)
             }
             this.updatePathsForFolderRename(folderPath, newPath)
+            this.syncOpenedFileScopes()
             this.persistFolders()
             this.updateTreeItems()
             window.setTimeout(() => this.cdr.markForCheck(), 0)
@@ -1607,9 +1894,14 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             this.setError('A file with that name already exists')
             return
         }
+        const oldKeyBeforeRename = this.getFsPathKey(filePath)
         try {
             await fs.rename(filePath, newPath)
             this.updateOpenDocsForFsMove(filePath, newPath, false)
+            this.remapFileSelectionPath(filePath, newPath, oldKeyBeforeRename)
+            this.revealTreePath(newPath)
+            this.updateTreeItems()
+            window.setTimeout(() => this.cdr.markForCheck(), 0)
             this.persistState()
         } catch (err: any) {
             this.setError(`Failed to rename file: ${err?.message ?? err}`)
@@ -1905,6 +2197,93 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         }
     }
 
+    private toggleRootScopeMode (rootPath: string): void {
+        const currentMode = this.getFolderTreeMode(rootPath)
+        if (currentMode === 'opened') {
+            this.setRootModeToFullFolder(rootPath)
+            this.statusMessage = `Explorer mode: Full folder (${this.getFolderDisplayName(rootPath)})`
+        } else {
+            this.setRootModeToOpenedFiles(rootPath)
+            const scopedCount = this.getScopedExternalFiles(rootPath)?.size ?? 0
+            this.statusMessage = scopedCount > 0
+                ? `Explorer mode: Opened files only (${this.getFolderDisplayName(rootPath)})`
+                : `Explorer mode: Opened files only (${this.getFolderDisplayName(rootPath)}) - no open files`
+        }
+        this.persistFolders()
+        this.updateTreeItems()
+        this.updateStatus()
+        window.setTimeout(() => this.cdr.markForCheck(), 0)
+    }
+
+    private async moveSelectionOnDisk (filePaths: string[], folderPaths: string[], targetDir: string): Promise<number> {
+        const folderTargets = this.getNormalizedFolderTargets(folderPaths)
+        const fileTargets = this.getNormalizedFileTargets(filePaths, folderTargets)
+        if (!folderTargets.length && !fileTargets.length) {
+            return 0
+        }
+        const targetResolved = path.resolve(targetDir)
+        let moved = 0
+        for (const folderPath of folderTargets) {
+            const source = path.resolve(folderPath)
+            if (this.isSameFsPath(source, targetResolved)) {
+                continue
+            }
+            if (targetResolved.startsWith(source + path.sep)) {
+                this.setError(`Cannot move ${path.basename(source)} into itself`)
+                continue
+            }
+            const destination = await this.ensureUniquePath(targetResolved, path.basename(source))
+            await fs.rename(source, destination)
+            this.updateOpenDocsForFsMove(source, destination, true)
+            moved++
+        }
+        for (const filePath of fileTargets) {
+            const source = path.resolve(filePath)
+            if (this.isSameFsPath(path.dirname(source), targetResolved)) {
+                continue
+            }
+            const destination = await this.ensureUniquePath(targetResolved, path.basename(source))
+            await fs.rename(source, destination)
+            this.updateOpenDocsForFsMove(source, destination, false)
+            moved++
+        }
+        if (moved > 0) {
+            this.syncOpenedFileScopes()
+            this.persistState()
+            this.updateTreeItems()
+            window.setTimeout(() => this.cdr.markForCheck(), 0)
+            this.statusMessage = moved === 1 ? 'Moved 1 item' : `Moved ${moved} items`
+            this.updateStatus()
+        }
+        return moved
+    }
+
+    private async moveSelectionToFolderPrompt (filePaths: string[], folderPaths: string[]): Promise<void> {
+        const folderTargets = this.getNormalizedFolderTargets(folderPaths)
+        const fileTargets = this.getNormalizedFileTargets(filePaths, folderTargets)
+        if (!folderTargets.length && !fileTargets.length) {
+            return
+        }
+        const firstTarget = folderTargets[0] ?? fileTargets[0] ?? this.selectedFolderPath ?? this.folderRoot
+        const defaultDir = fsSync.existsSync(firstTarget) && fsSync.statSync(firstTarget).isDirectory()
+            ? firstTarget
+            : path.dirname(firstTarget)
+        const input = await this.promptForName('Move selected items to folder', defaultDir)
+        const targetDir = (input ?? '').trim()
+        if (!targetDir) {
+            return
+        }
+        if (!fsSync.existsSync(targetDir) || !fsSync.statSync(targetDir).isDirectory()) {
+            this.setError('Target folder does not exist')
+            return
+        }
+        try {
+            await this.moveSelectionOnDisk(fileTargets, folderTargets, targetDir)
+        } catch (err: any) {
+            this.setError(`Move failed: ${err?.message ?? err}`)
+        }
+    }
+
     private updateOpenDocsForFsMove (oldPath: string, newPath: string, isDir: boolean): void {
         const oldResolved = path.resolve(oldPath)
         const newResolved = path.resolve(newPath)
@@ -1918,12 +2297,14 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                         doc.name = path.basename(doc.path)
                         doc.folderPath = null
                         this.setModelLanguage(doc)
+                        this.refreshDocDiskSnapshot(doc, doc.model.getValue())
                     }
                 } else if (docResolved === oldResolved) {
                     doc.path = newResolved
                     doc.name = path.basename(doc.path)
                     doc.folderPath = null
                     this.setModelLanguage(doc)
+                    this.refreshDocDiskSnapshot(doc, doc.model.getValue())
                 }
             } else if (doc.tempPath) {
                 const tempResolved = path.resolve(doc.tempPath)
@@ -1945,6 +2326,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         }
         // Update recents list
         this.recentFiles = this.recentFiles.map(p => p === oldPath ? newPath : p).filter(Boolean)
+        this.syncOpenedFileScopes()
         if (typeof localStorage !== 'undefined') {
             localStorage.setItem('codeEditor.recent', JSON.stringify(this.recentFiles.slice(0, 10)))
         }
@@ -2060,6 +2442,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             if (!moved) {
                 return
             }
+            this.syncOpenedFileScopes()
             this.updateTreeItems()
             window.setTimeout(() => this.cdr.markForCheck(), 0)
             this.persistState()
@@ -2109,6 +2492,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     async onTreeClick (event: MouseEvent, node: TreeNode): Promise<void> {
         event.preventDefault()
         event.stopPropagation()
+        this.treeKeyboardActive = true
         const isMultiSelect = event.metaKey || event.ctrlKey
         // Don't toggle if clicking on chevron (chevron has its own handler)
         if ((event?.target as any)?.classList?.contains('chevron')) {
@@ -2198,6 +2582,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     onTreeContextMenu (event: MouseEvent, node: TreeNode): void {
         event.preventDefault()
         event.stopPropagation()
+        this.treeKeyboardActive = true
         if (node.isFolder) {
             this.selectFoldersForContextMenu(node.path)
             this.openFolderContextMenu(event, node.path)
@@ -2279,6 +2664,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                 }
             }
         }
+        this.syncOpenedFileScopes()
         this.updateTreeItems()
         window.setTimeout(() => this.cdr.markForCheck(), 0)
         this.persistState()
@@ -2526,6 +2912,10 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         }
         if (this.treeRefreshTimer) {
             clearTimeout(this.treeRefreshTimer)
+        }
+        if (this.externalWatchTimer) {
+            clearInterval(this.externalWatchTimer)
+            this.externalWatchTimer = undefined
         }
         this.disposeEditors()
         this.disposeModels()
@@ -3077,12 +3467,14 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                 doc.folderPath = this.getFolderForPath(newPath) ?? doc.folderPath
                 this.rememberRecent(newPath)
                 this.setModelLanguage(doc)
+                this.refreshDocDiskSnapshot(doc, content)
             }
             if (doc.tempPath) {
                 await this.deleteTemp(doc.tempPath)
                 doc.tempPath = null
             }
             this.updateTitle(doc)
+            this.syncOpenedFileScopes()
             this.updateTreeItems()
             this.persistState()
         } catch (err: any) {
@@ -3101,7 +3493,9 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         const doc = this.createDocument(snapshot)
         doc.isDirty = !!snapshot.isDirty
         doc.lastSavedValue = snapshot.lastSavedValue ?? snapshot.content
+        this.refreshDocDiskSnapshot(doc, snapshot.content)
         this.documents.push(doc)
+        this.syncOpenedFileScopes()
         this.activateDoc(doc.id)
         if ((snapshot.content ?? '').includes('\u001b[')) {
             this.applyAnsiDecorations(doc, snapshot.content ?? '')
@@ -3137,6 +3531,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             void this.deleteTemp(doc.tempPath)
         }
         this.documents = this.documents.filter(d => d.id !== docId)
+        this.syncOpenedFileScopes()
         this.updateTreeItems()
         window.setTimeout(() => this.cdr.markForCheck(), 0)
         if (this.activeDocId === docId) {
@@ -3240,6 +3635,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         if (doc.path) {
             const dir = path.dirname(doc.path)
             const oldPath = doc.path
+            const oldKeyBeforeRename = this.getFsPathKey(oldPath)
             const newPath = path.join(dir, nextName)
             if (newPath === oldPath) {
                 return
@@ -3252,11 +3648,17 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                 await fs.rename(oldPath, newPath)
                 doc.path = newPath
                 doc.name = path.basename(newPath)
+                this.refreshDocDiskSnapshot(doc, doc.model.getValue())
                 // update recent list (replace old path + ensure new is at top)
                 this.recentFiles = this.recentFiles.map(p => p === oldPath ? newPath : p).filter(Boolean)
                 this.rememberRecent(newPath)
                 this.setModelLanguage(doc)
                 this.updateTitle(doc)
+                this.syncOpenedFileScopes()
+                this.remapFileSelectionPath(oldPath, newPath, oldKeyBeforeRename)
+                this.revealTreePath(newPath)
+                this.updateTreeItems()
+                window.setTimeout(() => this.cdr.markForCheck(), 0)
                 this.persistState()
             } catch (err: any) {
                 this.setError(`Failed to rename: ${err?.message ?? err}`)
@@ -3265,6 +3667,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         }
 
         const oldTemp = doc.tempPath
+        const oldTempKeyBeforeRename = this.getFsPathKey(oldTemp)
         doc.name = nextName
         doc.tempPath = this.allocateTempPath(nextName, doc.folderPath ?? this.selectedFolderPath)
         // Best-effort: if temp file exists, rename it to match new extension/name
@@ -3278,6 +3681,9 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         }
         this.setModelLanguage(doc)
         this.updateTitle(doc)
+        this.remapFileSelectionPath(oldTemp, doc.tempPath, oldTempKeyBeforeRename)
+        this.updateTreeItems()
+        window.setTimeout(() => this.cdr.markForCheck(), 0)
         this.persistState()
     }
 
@@ -4241,6 +4647,21 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                 }
             }
             break
+        case 'move':
+            {
+                const selected = this.getSelectedActionTargets()
+                if (selected.fileTargets.length || selected.folderTargets.length) {
+                    await this.moveSelectionToFolderPrompt(selected.fileTargets, selected.folderTargets)
+                } else {
+                    const activePath = this.getActiveDoc()?.path
+                    if (!activePath) {
+                        this.setError('Select at least one file or folder to move.')
+                        break
+                    }
+                    await this.moveSelectionToFolderPrompt([activePath], [])
+                }
+            }
+            break
         case 'delete':
             {
                 const selected = this.getSelectedActionTargets()
@@ -4493,6 +4914,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             this.applyTheme()
             this.layoutEditors()
             this.startAutosave()
+            this.startExternalChangeWatcher()
             this.registerExternalHooks()
         } catch (err: any) {
             this.setError(`Failed to load editor: ${err?.message ?? err}`)
@@ -4579,6 +5001,9 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             isDirty: snapshot.isDirty ?? false,
             lastSavedValue: snapshot.lastSavedValue ?? snapshot.content,
             ansiDecorationIds: [],
+            diskMtimeMs: null,
+            diskSize: null,
+            externalConflict: null,
         }
         model.onDidChangeContent(() => {
             doc.isDirty = doc.model.getValue() !== doc.lastSavedValue
@@ -4624,6 +5049,10 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                 existing.isDirty = false
                 this.updateTitle(existing)
             }
+            if (filePath) {
+                this.refreshDocDiskSnapshot(existing, content)
+            }
+            this.syncOpenedFileScopes()
             this.activateDoc(existing.id)
             this.updateTreeItems()
             window.setTimeout(() => this.cdr.markForCheck(), 0)
@@ -4641,7 +5070,9 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             insertSpaces: true,
         })
         doc.lastSavedValue = content
+        this.refreshDocDiskSnapshot(doc, content)
         this.documents.push(doc)
+        this.syncOpenedFileScopes()
         this.activateDoc(doc.id)
         if (content.includes('\u001b[')) {
             this.applyAnsiDecorations(doc, content)
@@ -4738,6 +5169,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                 await fs.writeFile(doc.path, data)
                 doc.isDirty = false
                 doc.lastSavedValue = content
+                this.refreshDocDiskSnapshot(doc, content)
                 this.updateTitle(doc)
                 this.rememberRecent(doc.path)
                 if (doc.tempPath) {
@@ -4769,12 +5201,14 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                 doc.folderPath = this.getFolderForPath(newPath) ?? doc.folderPath
                 this.rememberRecent(newPath)
                 this.setModelLanguage(doc)
+                this.refreshDocDiskSnapshot(doc, content)
             }
             if (doc.tempPath) {
                 await this.deleteTemp(doc.tempPath)
                 doc.tempPath = null
             }
             this.updateTitle(doc)
+            this.syncOpenedFileScopes()
             this.persistState()
             return true
         } catch (err: any) {
@@ -4923,6 +5357,10 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             return found
         }
 
+        if (resourcesPath) {
+            return path.join(resourcesPath, 'assets', 'monaco').replace(/\\/g, '/')
+        }
+
         return 'assets/monaco'
     }
 
@@ -5037,9 +5475,51 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
 
     @HostListener('document:keydown', ['$event'])
     onKeydown (event: KeyboardEvent): void {
-        if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-            // optional: do nothing special; placeholder to keep tree navigation extensible
+        if (!this.treeKeyboardActive || event.defaultPrevented) {
+            return
         }
+        const target = event.target as HTMLElement|null
+        if (this.isTextInputLikeTarget(target) || this.getActiveEditor()?.hasTextFocus?.()) {
+            return
+        }
+        const selection = this.getSelectedActionTargets()
+        if (!selection.fileTargets.length && !selection.folderTargets.length) {
+            return
+        }
+
+        const ctrlOrMeta = event.ctrlKey || event.metaKey
+        const key = (event.key ?? '').toLowerCase()
+
+        if (event.key === 'Delete' || event.key === 'Backspace') {
+            event.preventDefault()
+            void this.deleteSelectionOnDisk(selection.fileTargets, selection.folderTargets)
+            return
+        }
+
+        if (ctrlOrMeta && event.shiftKey && key === 'd') {
+            event.preventDefault()
+            void this.duplicateSelectionOnDisk(selection.fileTargets, selection.folderTargets)
+            return
+        }
+
+        if (ctrlOrMeta && event.shiftKey && key === 'm') {
+            event.preventDefault()
+            void this.moveSelectionToFolderPrompt(selection.fileTargets, selection.folderTargets)
+        }
+    }
+
+    private isTextInputLikeTarget (target: HTMLElement|null): boolean {
+        if (!target) {
+            return false
+        }
+        const tag = (target.tagName || '').toLowerCase()
+        if (tag === 'input' || tag === 'textarea' || tag === 'select' || tag === 'button') {
+            return true
+        }
+        if (target.getAttribute?.('contenteditable') === 'true') {
+            return true
+        }
+        return !!target.closest?.('input, textarea, select, [contenteditable="true"], .rename-input')
     }
 
     private configureLanguageDefaults (): void {
@@ -5056,12 +5536,53 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         })
     }
 
+    private isCancellationErrorLike (error: unknown, depth = 0): boolean {
+        if (!error || depth > 4) {
+            return false
+        }
+        if (typeof error === 'string') {
+            const message = error.trim().toLowerCase()
+            return message === 'canceled'
+                || message === 'cancelled'
+                || message === 'canceled: canceled'
+                || message === 'cancelled: cancelled'
+        }
+        if (typeof error !== 'object') {
+            return false
+        }
+        const err = error as any
+        const name = typeof err.name === 'string' ? err.name.trim().toLowerCase() : ''
+        const message = typeof err.message === 'string' ? err.message.trim().toLowerCase() : ''
+        if (
+            name === 'canceled'
+            || name === 'cancelled'
+            || name.includes('cancellation')
+            || message === 'canceled'
+            || message === 'cancelled'
+            || message === 'canceled: canceled'
+            || message === 'cancelled: cancelled'
+        ) {
+            return true
+        }
+        const nested = err.ngOriginalError ?? err.originalError ?? err.rejection ?? err.reason ?? err.error
+        if (!nested || nested === err) {
+            return false
+        }
+        return this.isCancellationErrorLike(nested, depth + 1)
+    }
+
     private applyTheme (): void {
         if (!this.monaco) {
             return
         }
-        this.defineEditorThemes()
-        this.monaco.editor.setTheme(this.currentThemeId())
+        try {
+            this.defineEditorThemes()
+            this.monaco.editor.setTheme(this.currentThemeId())
+        } catch (error) {
+            if (!this.isCancellationErrorLike(error)) {
+                console.error('Failed to apply editor theme:', error)
+            }
+        }
     }
 
     private async ensureDocumentOnDisk (doc: EditorDocument): Promise<string|null> {
@@ -5324,9 +5845,49 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         editor.addCommand(KeyMod.CtrlCmd | KeyCode.Enter, () => this.runActiveFile())
     }
 
-    private nextUntitledName (): string {
-        const count = this.documents.filter(d => d.path === null).length + 1
-        return `Untitled-${count}`
+    private nextUntitledName (folderPath?: string|null): string {
+        const targetFolder = folderPath ?? this.selectedFolderPath ?? this.folderRoot
+        let nextSeq = 1
+
+        const collect = (rawName: string|null|undefined): void => {
+            if (!rawName) {
+                return
+            }
+            const match = /^Untitled-(\d+)$/i.exec(path.basename(rawName.trim()))
+            if (!match) {
+                return
+            }
+            const seq = Number.parseInt(match[1], 10)
+            if (!Number.isNaN(seq) && seq >= nextSeq) {
+                nextSeq = seq + 1
+            }
+        }
+
+        for (const doc of this.documents) {
+            collect(doc.name)
+        }
+
+        try {
+            if (fsSync.existsSync(targetFolder) && fsSync.statSync(targetFolder).isDirectory()) {
+                for (const name of fsSync.readdirSync(targetFolder)) {
+                    collect(name)
+                }
+            }
+        } catch {
+            // ignore folder scan errors
+        }
+
+        while (nextSeq < 100000) {
+            const candidate = `Untitled-${nextSeq}`
+            const usedByDoc = this.documents.some(doc => doc.name === candidate)
+            const usedOnDisk = fsSync.existsSync(path.join(targetFolder, candidate))
+            if (!usedByDoc && !usedOnDisk) {
+                return candidate
+            }
+            nextSeq++
+        }
+
+        return `Untitled-${Date.now()}`
     }
 
     private layoutEditors (): void {
@@ -5366,7 +5927,166 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         }
     }
 
+    private refreshDocDiskSnapshot (doc: EditorDocument, knownContent?: string): void {
+        if (!doc.path) {
+            doc.diskMtimeMs = null
+            doc.diskSize = null
+            return
+        }
+        try {
+            const stat = fsSync.statSync(doc.path)
+            if (!stat.isFile()) {
+                return
+            }
+            doc.diskMtimeMs = stat.mtimeMs
+            doc.diskSize = stat.size
+            if (knownContent !== undefined) {
+                doc.lastSavedValue = knownContent
+            }
+            doc.externalConflict = null
+        } catch {
+            // Ignore missing files while editor state settles.
+        }
+    }
+
+    private startExternalChangeWatcher (): void {
+        if (this.externalWatchTimer) {
+            clearInterval(this.externalWatchTimer)
+        }
+        this.externalWatchTimer = window.setInterval(() => {
+            void this.checkExternalChangeTick()
+        }, this.externalWatchIntervalMs)
+    }
+
+    private async checkExternalChangeTick (): Promise<void> {
+        if (this.externalWatchBusy) {
+            return
+        }
+        this.externalWatchBusy = true
+        let changed = false
+        try {
+            for (const doc of this.documents) {
+                if (!doc.path) {
+                    continue
+                }
+                const pathKey = this.getFsPathKey(doc.path)
+                if (pathKey && this.deletingPathKeys.has(pathKey)) {
+                    continue
+                }
+                let stat: fsSync.Stats
+                try {
+                    stat = fsSync.statSync(doc.path)
+                    if (!stat.isFile()) {
+                        continue
+                    }
+                } catch {
+                    continue
+                }
+
+                const mtimeMs = stat.mtimeMs
+                const size = stat.size
+                if (doc.diskMtimeMs === mtimeMs && doc.diskSize === size) {
+                    continue
+                }
+
+                let diskContent = ''
+                try {
+                    diskContent = await fs.readFile(doc.path, 'utf8')
+                } catch {
+                    continue
+                }
+
+                const modelValue = doc.model.getValue()
+                if (diskContent === modelValue) {
+                    doc.isDirty = false
+                    doc.lastSavedValue = diskContent
+                    doc.externalConflict = null
+                    doc.diskMtimeMs = mtimeMs
+                    doc.diskSize = size
+                    this.updateTitle(doc)
+                    changed = true
+                    continue
+                }
+
+                if (doc.isDirty) {
+                    doc.externalConflict = {
+                        diskContent,
+                        diskMtimeMs: mtimeMs,
+                        diskSize: size,
+                    }
+                    doc.diskMtimeMs = mtimeMs
+                    doc.diskSize = size
+                    changed = true
+                    continue
+                }
+
+                doc.externalConflict = null
+                doc.lastSavedValue = diskContent
+                doc.diskMtimeMs = mtimeMs
+                doc.diskSize = size
+                doc.model.setValue(diskContent)
+                doc.isDirty = false
+                this.updateTitle(doc)
+                if (doc.id === this.activeDocId || doc.id === this.splitDocId) {
+                    this.statusMessage = `Reloaded ${doc.name} from disk`
+                    this.updateStatus()
+                }
+                changed = true
+            }
+        } finally {
+            this.externalWatchBusy = false
+        }
+        if (changed) {
+            this.cdr.markForCheck()
+        }
+    }
+
+    async reloadActiveDocFromConflict (): Promise<void> {
+        const doc = this.activeExternalConflictDoc
+        if (!doc?.externalConflict) {
+            return
+        }
+        const conflict = doc.externalConflict
+        doc.lastSavedValue = conflict.diskContent
+        doc.externalConflict = null
+        doc.diskMtimeMs = conflict.diskMtimeMs
+        doc.diskSize = conflict.diskSize
+        doc.model.setValue(conflict.diskContent)
+        doc.isDirty = false
+        this.updateTitle(doc)
+        this.statusMessage = `Reloaded ${doc.name} from disk`
+        this.updateStatus()
+        this.persistState()
+        this.cdr.markForCheck()
+    }
+
+    keepActiveDocLocalChanges (): void {
+        const doc = this.activeExternalConflictDoc
+        if (!doc?.externalConflict) {
+            return
+        }
+        doc.diskMtimeMs = doc.externalConflict.diskMtimeMs
+        doc.diskSize = doc.externalConflict.diskSize
+        doc.externalConflict = null
+        this.statusMessage = `Keeping local changes for ${doc.name}`
+        this.updateStatus()
+        this.persistState()
+        this.cdr.markForCheck()
+    }
+
+    compareActiveDocWithConflictDisk (): void {
+        const doc = this.activeExternalConflictDoc
+        if (!doc?.externalConflict) {
+            return
+        }
+        this.enterDiff(doc, doc.externalConflict.diskContent, `${doc.name} (disk changed)`)
+    }
+
     private getAutosaveTargetFolder (): string {
+        const selectedFile = this.getSelectedFilePathsFromTree()[0]
+        if (selectedFile) {
+            return path.dirname(selectedFile)
+        }
         return this.selectedFolderPath ?? this.folderRoot
     }
 
@@ -5374,8 +6094,8 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         if (!(await this.ensureEditor())) {
             return
         }
-        const name = this.nextUntitledName()
         const targetFolder = this.getAutosaveTargetFolder()
+        const name = this.nextUntitledName(targetFolder)
         const doc = this.createDocument({
             name,
             path: null,
@@ -5405,6 +6125,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     }
 
     private persistState (): void {
+        this.syncOpenedFileScopes()
         this.persistFolders()
         const docState = this.documents.map(doc => this.snapshotDocument(doc))
         const active = this.activeDocId
@@ -5601,8 +6322,10 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                 }
                 const doc = this.createDocument({ ...snap, content: snapContent })
                 doc.lastSavedValue = snap.lastSavedValue ?? snapContent
+                this.refreshDocDiskSnapshot(doc, snapContent)
                 this.documents.push(doc)
             }
+            let folderStateChanged = this.syncOpenedFileScopes()
             const activeId = localStorage.getItem('codeEditor.active')
             if (activeId) {
                 this.activateDoc(activeId)
@@ -5613,6 +6336,9 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                 this.pendingSplitDocId = savedSplitDoc || this.activeDocId || (this.documents[0]?.id ?? null)
             }
             if (this.hydrateScopedRootsFromOpenDocuments()) {
+                folderStateChanged = true
+            }
+            if (folderStateChanged) {
                 this.persistFolders()
             }
         } catch {
@@ -5719,6 +6445,9 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     @HostListener('document:click', ['$event'])
     closeEditMenu (event?: MouseEvent): void {
         const target = (event?.target ?? null) as any
+        if (!target?.closest?.('.tab-sidebar')) {
+            this.treeKeyboardActive = false
+        }
         // Don't close menus when clicking inside them.
         // Note: this also protects against capture-phase document listeners closing the menu
         // before the menu item's click handler runs.
@@ -5737,6 +6466,8 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         this.docContextMenuDocId = null
         this.folderContextMenuPath = null
         this.folderContextMenuPaths = []
+        this.folderContextScopeRoot = null
+        this.folderContextScopeMode = 'full'
         this.fileContextMenuPath = null
         this.fileContextMenuPaths = []
     }
@@ -5755,6 +6486,8 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         this.docContextMenuDocId = null
         this.folderContextMenuPath = null
         this.folderContextMenuPaths = []
+        this.folderContextScopeRoot = null
+        this.folderContextScopeMode = 'full'
         this.fileContextMenuPath = null
         this.fileContextMenuPaths = []
     }

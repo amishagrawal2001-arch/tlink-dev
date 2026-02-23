@@ -24,9 +24,13 @@ interface EditorDocument extends EditorDocumentSnapshot {
     isDirty: boolean;
     lastSavedValue: string;
     ansiDecorationIds: string[];
+    diskMtimeMs?: number | null;
+    diskSize?: number | null;
+    externalConflict?: ExternalConflictState | null;
 }
 type ViewMode = 'editor' | 'diff';
 type EditorThemeMode = 'auto' | 'light' | 'dark' | 'hc' | 'solarized-light' | 'solarized-dark' | 'dracula' | 'monokai' | 'nord';
+type FolderTreeMode = 'full' | 'opened';
 interface TreeNode {
     name: string;
     path: string;
@@ -38,6 +42,11 @@ interface TreeNode {
 interface CodeFolder {
     name: string;
     path: string;
+}
+interface ExternalConflictState {
+    diskContent: string;
+    diskMtimeMs: number;
+    diskSize: number;
 }
 export declare class CodeEditorTabComponent extends BaseTabComponent implements AfterViewInit {
     private injector;
@@ -91,6 +100,8 @@ export declare class CodeEditorTabComponent extends BaseTabComponent implements 
     folderContextMenuOpen: boolean;
     folderContextMenuPath: string | null;
     folderContextMenuPaths: string[];
+    folderContextScopeRoot: string | null;
+    folderContextScopeMode: FolderTreeMode;
     folderContextMenuX: number;
     folderContextMenuY: number;
     fileContextMenuOpen: boolean;
@@ -107,13 +118,20 @@ export declare class CodeEditorTabComponent extends BaseTabComponent implements 
     private draggingIsFolder;
     expandedFolders: Set<string>;
     private hiddenTreePathKeys;
+    private externalFileScopedRoots;
+    private folderTreeModes;
     private _treeItems;
+    private treeKeyboardActive;
     get hasRunTerminal(): boolean;
     private formatSelectionActionLabel;
     get selectionContextDeleteLabel(): string;
     get selectionContextDuplicateLabel(): string;
+    get selectionContextMoveLabel(): string;
+    get folderScopeToggleLabel(): string;
     get canDeleteOnDisk(): boolean;
     get canDuplicateOnDisk(): boolean;
+    get canMoveOnDisk(): boolean;
+    get activeExternalConflictDoc(): EditorDocument | null;
     statusLineCol: string;
     statusLanguage: string;
     statusEOL: string;
@@ -134,6 +152,8 @@ export declare class CodeEditorTabComponent extends BaseTabComponent implements 
     private tempSaveTimers;
     private persistStateTimer?;
     private treeRefreshTimer?;
+    private externalWatchTimer?;
+    private externalWatchBusy;
     private fileMenuHoverCloseTimer?;
     private editMenuHoverCloseTimer?;
     private readonly menuHoverCloseDelayMs;
@@ -146,6 +166,7 @@ export declare class CodeEditorTabComponent extends BaseTabComponent implements 
     private resizeStartWidth;
     private readonly treeNodeBudget;
     private readonly quickOpenBudget;
+    private readonly externalWatchIntervalMs;
     private readonly skippedFolders;
     private readonly studioTitle;
     private resolveStudioDir;
@@ -153,7 +174,7 @@ export declare class CodeEditorTabComponent extends BaseTabComponent implements 
     private getFolderDisplayName;
     private loadFoldersFromState;
     private persistFolders;
-    selectFolder(folderPath: string | null): void;
+    selectFolder(folderPath: string | null, syncTreeSelection?: boolean): void;
     private resolveDocFolder;
     getDocById(docId: string): EditorDocument | null;
     private isWorkspaceRootFolder;
@@ -161,6 +182,25 @@ export declare class CodeEditorTabComponent extends BaseTabComponent implements 
     getTreeCloseTitle(node: TreeNode): string;
     closeTreeNode(node: TreeNode): Promise<void>;
     private getFolderForPath;
+    private getWorkspaceRootForPath;
+    private getFolderTreeMode;
+    private setFolderTreeMode;
+    private isSameStringSet;
+    private getOpenFileKeysForRoot;
+    private syncOpenedFileScopeForRoot;
+    private syncOpenedFileScopes;
+    private setRootModeToOpenedFiles;
+    private setRootModeToFullFolder;
+    private clearScopedExternalFiles;
+    private getScopedExternalFiles;
+    private loadFolderTreeModesFromState;
+    private persistFolderTreeModes;
+    private loadScopedExternalFilesFromState;
+    private persistScopedExternalFiles;
+    private hydrateScopedRootsFromOpenDocuments;
+    private shouldIncludeScopedTreeEntry;
+    private expandPathWithinRoot;
+    private ensurePathVisibleInTree;
     private normalizeFsPath;
     private isSameFsPath;
     private getFsPathKey;
@@ -178,6 +218,7 @@ export declare class CodeEditorTabComponent extends BaseTabComponent implements 
     private setFolderSelection;
     private toggleFileSelection;
     private toggleFolderSelection;
+    private remapFileSelectionPath;
     private extendFileSelection;
     private pruneFileSelectionToVisibleTree;
     private selectFilesForContextMenu;
@@ -193,6 +234,7 @@ export declare class CodeEditorTabComponent extends BaseTabComponent implements 
     private revealLocalFolderPath;
     renameFolder(folderPath: string): Promise<void>;
     private updatePathsForFolderRename;
+    private migrateRootTreeStateOnRename;
     removeFolder(folderPath: string): void;
     openFolderContextMenu(event: MouseEvent, folderPath: string): void;
     openFileContextMenu(event: MouseEvent, filePath: string): void;
@@ -212,6 +254,9 @@ export declare class CodeEditorTabComponent extends BaseTabComponent implements 
     private duplicateFileOnDisk;
     private duplicateFolderOnDisk;
     private duplicateSelectionOnDisk;
+    private toggleRootScopeMode;
+    private moveSelectionOnDisk;
+    private moveSelectionToFolderPrompt;
     private updateOpenDocsForFsMove;
     onTreeDragStart(event: DragEvent, node: TreeNode): void;
     onTreeDragEnd(): void;
@@ -248,8 +293,6 @@ export declare class CodeEditorTabComponent extends BaseTabComponent implements 
     private isDirectoryUploadNode;
     private resolveUploadFilePath;
     private resolveUploadDisplayName;
-    private getImportTargetFolder;
-    private importContentIntoWorkspace;
     private resolveUploadOpenTarget;
     openRecent(filePath: string): Promise<void>;
     handleRecentSelection(event: any): Promise<void>;
@@ -356,6 +399,7 @@ export declare class CodeEditorTabComponent extends BaseTabComponent implements 
     private resolveMonacoBase;
     private loadMonaco;
     onKeydown(event: KeyboardEvent): void;
+    private isTextInputLikeTarget;
     private configureLanguageDefaults;
     private applyTheme;
     private ensureDocumentOnDisk;
@@ -374,6 +418,12 @@ export declare class CodeEditorTabComponent extends BaseTabComponent implements 
     private layoutEditors;
     private startAutosave;
     private autosaveTick;
+    private refreshDocDiskSnapshot;
+    private startExternalChangeWatcher;
+    private checkExternalChangeTick;
+    reloadActiveDocFromConflict(): Promise<void>;
+    keepActiveDocLocalChanges(): void;
+    compareActiveDocWithConflictDisk(): void;
     private getAutosaveTargetFolder;
     newFile(): Promise<void>;
     private queuePersistState;

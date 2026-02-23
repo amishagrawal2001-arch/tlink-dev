@@ -13,7 +13,7 @@ export declare class SplitLayoutProfilesService extends ProfileProvider<SplitLay
     name: "Saved layout";
     configDefaults: {
         options: {
-            recoveryToken: any;
+            recoveryToken: null;
         };
     };
     constructor(splitTabRecoveryProvider: SplitTabRecoveryProvider, config: ConfigService);

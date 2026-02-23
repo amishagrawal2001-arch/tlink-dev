@@ -33,6 +33,8 @@ files:
 extraResources:
 - from: build/builtin-plugins
   to: builtin-plugins
+- from: app/dist/assets/monaco
+  to: assets/monaco
 - extras
 - build/certs
 - from: app/node_modules

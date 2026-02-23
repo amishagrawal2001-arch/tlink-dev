@@ -26,10 +26,46 @@ async function isSignatureValid (appPath) {
     }
 }
 
+function assertFileExists (filePath, description) {
+    if (!fs.existsSync(filePath)) {
+        throw new Error(`${description} is missing: ${filePath}`)
+    }
+}
+
+function validateBundledStudioAssets (appPath) {
+    const resourcesPath = path.join(appPath, 'Contents', 'Resources')
+    const corePluginPath = path.join(resourcesPath, 'builtin-plugins', 'tlink-core')
+    const corePackagePath = path.join(corePluginPath, 'package.json')
+
+    assertFileExists(corePackagePath, 'Tlink Studio core plugin package')
+
+    let coreMainRelative = 'dist/index.js'
+    try {
+        const pkg = JSON.parse(fs.readFileSync(corePackagePath, 'utf8'))
+        if (typeof pkg?.main === 'string' && pkg.main.trim()) {
+            coreMainRelative = pkg.main
+        }
+    } catch {
+        // Keep default when package metadata cannot be parsed.
+    }
+    assertFileExists(path.join(corePluginPath, coreMainRelative), 'Tlink Studio core plugin entrypoint')
+
+    const monacoPath = path.join(resourcesPath, 'assets', 'monaco')
+    assertFileExists(path.join(monacoPath, 'vs', 'loader.js'), 'Monaco loader')
+    assertFileExists(path.join(monacoPath, 'vs', 'editor', 'editor.main.js'), 'Monaco editor bundle')
+}
+
 export default async function afterPack (context) {
     if (context.electronPlatformName !== 'darwin') {
         return
     }
+
+    const appPath = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`)
+    if (!fs.existsSync(appPath)) {
+        return
+    }
+
+    validateBundledStudioAssets(appPath)
 
     const identity = context.packager?.platformSpecificBuildOptions?.identity
     if (identity && await hasSigningIdentity(identity)) {
@@ -41,11 +77,6 @@ export default async function afterPack (context) {
     if (configuredFuses) {
         console.log('No valid signing identity found, disabling electronFuses for ad-hoc signing')
         packager.config.electronFuses = undefined
-    }
-
-    const appPath = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`)
-    if (!fs.existsSync(appPath)) {
-        return
     }
 
     if (configuredFuses) {

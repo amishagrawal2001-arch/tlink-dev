@@ -62,6 +62,55 @@ export function TranslateMessageFormatCompilerFactory (): TranslateMessageFormat
     return new TranslateMessageFormatCompiler()
 }
 
+function isCancellationErrorLike (error: unknown, depth = 0): boolean {
+    if (!error || depth > 4) {
+        return false
+    }
+    if (typeof error === 'string') {
+        const message = error.trim().toLowerCase()
+        return message === 'canceled'
+            || message === 'cancelled'
+            || message === 'canceled: canceled'
+            || message === 'cancelled: cancelled'
+    }
+    if (typeof error !== 'object') {
+        return false
+    }
+    const err = error as any
+    const name = typeof err.name === 'string' ? err.name.trim().toLowerCase() : ''
+    const message = typeof err.message === 'string' ? err.message.trim().toLowerCase() : ''
+    if (
+        name === 'canceled'
+        || name === 'cancelled'
+        || name.includes('cancellation')
+        || message === 'canceled'
+        || message === 'cancelled'
+        || message === 'canceled: canceled'
+        || message === 'cancelled: cancelled'
+    ) {
+        return true
+    }
+    const nested = err.ngOriginalError ?? err.originalError ?? err.rejection ?? err.reason ?? err.error
+    if (!nested || nested === err) {
+        return false
+    }
+    return isCancellationErrorLike(nested, depth + 1)
+}
+
+let cancellationRejectionHandlerInstalled = false
+
+function installCancellationRejectionHandler (): void {
+    if (cancellationRejectionHandlerInstalled || typeof window === 'undefined' || typeof window.addEventListener !== 'function') {
+        return
+    }
+    cancellationRejectionHandlerInstalled = true
+    window.addEventListener('unhandledrejection', event => {
+        if (isCancellationErrorLike(event.reason)) {
+            event.preventDefault()
+        }
+    })
+}
+
 const PROVIDERS = [
     { provide: HotkeyProvider, useClass: AppHotkeyProvider, multi: true },
     { provide: Theme, useClass: NewTheme, multi: true },
@@ -172,6 +221,8 @@ export default class AppModule { // eslint-disable-line @typescript-eslint/no-ex
         private profilesService: ProfilesService,
         private selector: SelectorService,
     ) {
+        installCancellationRejectionHandler()
+
         app.ready$.subscribe(() => {
             config.ready$.toPromise().then(() => {
                 if (config.store.enableWelcomeTab) {
@@ -181,6 +232,9 @@ export default class AppModule { // eslint-disable-line @typescript-eslint/no-ex
         })
 
         platform.setErrorHandler(err => {
+            if (isCancellationErrorLike(err)) {
+                return
+            }
             console.error('Unhandled exception:', err)
         })
 

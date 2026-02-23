@@ -12,6 +12,7 @@
                     button(type='button', (click)='handleFileAction("save")') Save
                     button(type='button', (click)='handleFileAction("saveAs")') Save as
                     button(type='button', (click)='handleFileAction("duplicate")', [disabled]='!canDuplicateOnDisk') Duplicate
+                    button(type='button', (click)='handleFileAction("move")', [disabled]='!canMoveOnDisk') Move…
                     button(type='button', (click)='handleFileAction("delete")', [disabled]='!canDeleteOnDisk') Delete (disk)
                     button(type='button', (click)='handleFileAction("reopen")') Reopen closed
             .menu-container.left-menu((mouseenter)='openEditMenuOnHover()', (mouseleave)='closeEditMenuOnLeave()')
@@ -81,10 +82,15 @@
     .editor-shell
         .tab-sidebar([style.width.px]='sidebarWidth')
             .sidebar-header
-                span Explorer
                 .folder-actions
-                    button.btn.btn-link.btn-sm(type='button', ngbTooltip='Add folder', (click)='addFolder()') +
-                    button.btn.btn-link.btn-sm(type='button', ngbTooltip='Open existing folder', (click)='openFolderFromDisk()') ⤓
+                    button.btn.btn-link.btn-sm(type='button', ngbTooltip='Add folder', (click)='addFolder()')
+                        i.fa.fa-folder-plus
+                    button.btn.btn-link.btn-sm(type='button', ngbTooltip='New file', (click)='newFile()')
+                        i.fa.fa-file
+                    button.btn.btn-link.btn-sm(type='button', ngbTooltip='Delete selected (disk)', (click)='handleFileAction("delete")', [disabled]='!canDeleteOnDisk')
+                        i.fa.fa-trash
+                    button.btn.btn-link.btn-sm(type='button', ngbTooltip='Open existing folder', (click)='openFolderFromDisk()')
+                        i.fa.fa-folder-open
             .tree-list
                 .tree-row(*ngFor='let item of treeItems', [style.paddingLeft.px]='item.depth*12', [style.--tree-depth]='item.depth', [class.folder]='item.node.isFolder', [class.root-node]='item.node.isFolder && item.depth===0', [class.active-folder]='item.node.isFolder && item.node.path===selectedFolderPath && selectedFilePathKeys.size===0', [class.active-doc]='item.node.docId===activeDocId', [class.selected-file]='!item.node.isFolder && isTreeFileSelected(item.node.path)', [class.selected-folder]='item.node.isFolder && isTreeFolderSelected(item.node.path) && selectedFilePathKeys.size===0', (click)='onTreeClick($event, item.node)', (dblclick)='onTreeDblClick($event, item.node)', (contextmenu)='onTreeContextMenu($event, item.node)', [draggable]='!!item.node.path', (dragstart)='item.node.path && onTreeDragStart($event, item.node)', (dragend)='item.node.path && onTreeDragEnd()', (dragover)='item.node.isFolder && onTreeDragOver($event)', (drop)='item.node.isFolder && onTreeDrop($event, item.node.path)')
                     span.chevron(*ngIf='item.node.isFolder && item.node.path && item.node.path !== ""', (click)='toggleFolder($event, item.node)') {{expandedFolders.has(item.node.path) ? "▾" : "▸"}}
@@ -99,13 +105,16 @@
                 button(type='button', (click)='handleFolderContextAction("rename")') Rename…
                 button(type='button', (click)='handleFolderContextAction("open")') Show in Finder/Explorer
                 button(type='button', (click)='handleFolderContextAction("remove")') Remove from list
+                button(type='button', (click)='handleFolderContextAction("scopeToggle")', [disabled]='!folderContextScopeRoot') {{folderScopeToggleLabel}}
                 button(type='button', (click)='handleFolderContextAction("duplicate")') {{selectionContextDuplicateLabel}}
+                button(type='button', (click)='handleFolderContextAction("move")') {{selectionContextMoveLabel}}
                 button(type='button', (click)='handleFolderContextAction("delete")') {{selectionContextDeleteLabel}}
             .dropdown-menu.doc-context-menu(*ngIf='fileContextMenuOpen', [style.left.px]='fileContextMenuX', [style.top.px]='fileContextMenuY', (click)='$event.stopPropagation()')
                 button(type='button', (click)='handleFileContextAction("open")') Open
                 button(type='button', (click)='handleFileContextAction("rename")') Rename…
                 button(type='button', (click)='handleFileContextAction("show")') Show in Finder/Explorer
                 button(type='button', (click)='handleFileContextAction("duplicate")') {{selectionContextDuplicateLabel}}
+                button(type='button', (click)='handleFileContextAction("move")') {{selectionContextMoveLabel}}
                 button(type='button', (click)='handleFileContextAction("delete")') {{selectionContextDeleteLabel}}
             .dropdown-menu.doc-context-menu(*ngIf='docContextMenuOpen', [style.left.px]='docContextMenuX', [style.top.px]='docContextMenuY', (click)='$event.stopPropagation()')
                 button(type='button', (click)='renameDocumentFromContextMenu()') Rename…
@@ -114,6 +123,12 @@
                 button(type='button', (click)='closeDocumentFromContextMenu()') Close
         .sidebar-resizer((mousedown)='beginSidebarResize($event)')
         .editor-main(dropZone, (transfer)='onExternalTransfer($event)')
+            .external-conflict-banner(*ngIf='activeExternalConflictDoc as conflictDoc')
+                span.banner-text External changes detected for {{conflictDoc.name}}. Choose how to continue.
+                .banner-actions
+                    button.btn.btn-sm.btn-outline-secondary(type='button', (click)='reloadActiveDocFromConflict()') Reload disk
+                    button.btn.btn-sm.btn-outline-secondary(type='button', (click)='keepActiveDocLocalChanges()') Keep mine
+                    button.btn.btn-sm.btn-outline-secondary(type='button', (click)='compareActiveDocWithConflictDisk()') Compare
             .split-controls(*ngIf='splitEditor && viewMode==="editor"')
                 span Split view document:
                 select((change)='selectSplitDoc($event.target.value)')
