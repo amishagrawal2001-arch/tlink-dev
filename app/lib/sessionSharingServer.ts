@@ -478,8 +478,11 @@ export class SessionSharingServer {
     private getLocalNetworkIP (): string | null {
         const interfaces = os.networkInterfaces()
         for (const entries of Object.values(interfaces)) {
-            for (const entry of entries ?? []) {
-                if (entry && entry.family === 'IPv4' && !entry.internal) {
+            if (!entries) {
+                continue
+            }
+            for (const entry of entries) {
+                if (entry.family === 'IPv4' && !entry.internal) {
                     return entry.address
                 }
             }
