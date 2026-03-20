@@ -137,7 +137,7 @@ try {
         }
         log.info('install', plugin)
         const destination = stagePlugin(plugin)
-        runYarn(['install', '--force', '--production'], destination)
+        runYarn(['install', '--force', '--production', '--ignore-scripts'], destination)
         ensureMainEntrypoint(plugin, destination)
 
         log.info('rebuild', 'native')
