@@ -2,526 +2,1091 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Tlink Agentic Admin</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tlink Proxy Admin</title>
   <style>
-    body { font-family: "Inter", system-ui, -apple-system, sans-serif; background: #0f1115; color: #e9ecf2; margin: 0; padding: 16px; }
-    h1 { margin-top: 0; }
-    .card { background: #181b22; border: 1px solid #2a2f3a; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; width: 100%; }
-    label { display: block; margin: 0 0 4px; font-size: 13px; color: #9aa4b5; }
-    input, select { background: #10131a; color: #e9ecf2; border: 1px solid #2a2f3a; border-radius: 6px; padding: 8px 10px; min-width: 200px; }
-    button { background: #2f80ed; color: white; border: none; border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 13px; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
-    th, td { border-bottom: 1px solid #2a2f3a; padding: 8px 6px; text-align: left; }
-    .row-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-    .row-actions button, .row-actions select { padding: 6px 9px; font-size: 12px; border-radius: 6px; border: 1px solid #2a2f3a; background: #10131a; color: #e9ecf2; min-width: 120px; }
-    .pill { padding: 2px 6px; border-radius: 999px; font-size: 12px; }
-    .pill.ok { background: #214c2f; color: #9ee6b0; }
-    .pill.warn { background: #4c3921; color: #f1c48b; }
-    .pill.bad { background: #4c2121; color: #f1a3a3; }
-    .flex { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
-    .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
-    .field { display: flex; flex-direction: column; gap: 4px; }
-    .field.sm input { min-width: 120px; max-width: 160px; }
-    .field.actions { flex: 1 1 auto; gap: 6px; flex-direction: row; align-items: center; }
-    .stack { display: flex; flex-direction: column; gap: 10px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
-    .advanced { border: 1px solid #2a2f3a; border-radius: 6px; padding: 8px 10px; background: #12151c; }
-    .advanced summary { cursor: pointer; color: #c7d2e0; }
-    .hint { font-size: 12px; color: #9aa4b5; display: block; margin-top: 2px; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace; }
-    .chip-row { display: flex; gap: 6px; align-items: center; }
-    .table-wrap { overflow-x: auto; }
-    .badge-inline { display: inline-flex; align-items: center; gap: 4px; background: #1f2430; border: 1px solid #2f3744; padding: 2px 6px; border-radius: 10px; font-size: 11px; margin-right: 4px; }
-    .badge-inline .dot { width: 6px; height: 6px; border-radius: 50%; background: #3ecf8e; }
-    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-    .modal-backdrop.hidden { display: none; }
-    .modal { background: #11151c; border: 1px solid #2a2f3a; border-radius: 10px; padding: 16px; width: min(900px, 90vw); box-shadow: 0 16px 40px rgba(0,0,0,0.45); }
-    .modal h3 { margin-top: 0; }
-    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 12px; }
-    .muted { color: #9aa4b5; }
-    .small { font-size: 12px; }
-    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-    .modal-backdrop.hidden { display: none; }
-    .modal { background: #11151c; border: 1px solid #2a2f3a; border-radius: 10px; padding: 16px; width: min(900px, 90vw); box-shadow: 0 16px 40px rgba(0,0,0,0.45); }
-    .modal h3 { margin-top: 0; }
-    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 12px; }
-    .muted { color: #9aa4b5; }
-    .small { font-size: 12px; }
-    .nowrap { white-space: nowrap; }
-    .inline-edit { display: inline-flex; align-items: center; gap: 6px; }
-    .inline-edit input { min-width: 160px; padding: 4px 6px; font-size: 12px; }
-    .inline-edit button { padding: 4px 6px; font-size: 12px; }
-    .icon-btn { background: #10131a; border: 1px solid #2a2f3a; color: #e9ecf2; padding: 4px; border-radius: 6px; min-width: 28px; }
-    .icon-btn:hover { border-color: #2f80ed; color: #2f80ed; }
+    :root {
+      --bg: #0b1220;
+      --bg-grad-start: #1a2a46;
+      --bg-grad-mid: #111f36;
+      --panel: #121d31;
+      --panel-2: #18253d;
+      --panel-soft: #1a2943;
+      --border: #2a3d61;
+      --border-strong: #3a5580;
+      --text: #e7eefc;
+      --muted: #9badd0;
+      --heading: #f2f6ff;
+      --ok: #1a9e68;
+      --warn: #b88424;
+      --bad: #c3435c;
+      --accent: #3f7bf2;
+      --accent-hover: #2f68db;
+      --link: #8db5ff;
+      --secondary-btn-bg: #223354;
+      --secondary-btn-border: #315084;
+      --ghost-btn-bg: #1a2740;
+      --ghost-btn-border: #2b4167;
+      --table-bg: #111c30;
+      --table-head-bg: #182844;
+      --table-head-text: #c9d9f7;
+      --row-border: rgba(255, 255, 255, 0.08);
+      --row-hover: rgba(94, 138, 224, 0.12);
+      --row-zebra: rgba(255, 255, 255, 0.025);
+      --status-success: #90e4bf;
+      --status-error: #ff9dad;
+      --shadow-lg: 0 16px 36px rgba(2, 8, 23, 0.35);
+      --shadow-sm: 0 6px 14px rgba(7, 15, 31, 0.2);
+      --focus-ring: 0 0 0 3px rgba(63, 123, 242, 0.24);
+      --pill-ok-fg: #bff1db;
+      --pill-ok-bg: rgba(31, 170, 114, 0.18);
+      --pill-ok-border: rgba(31, 170, 114, 0.55);
+      --pill-warn-fg: #ffe8b3;
+      --pill-warn-bg: rgba(211, 155, 40, 0.18);
+      --pill-warn-border: rgba(211, 155, 40, 0.55);
+      --pill-bad-fg: #ffd1da;
+      --pill-bad-bg: rgba(209, 77, 99, 0.18);
+      --pill-bad-border: rgba(209, 77, 99, 0.55);
+    }
+    :root[data-theme="light"] {
+      --bg: #eef3fb;
+      --bg-grad-start: #ffffff;
+      --bg-grad-mid: #e9f0fc;
+      --panel: #ffffff;
+      --panel-2: #f5f8ff;
+      --panel-soft: #edf3ff;
+      --border: #c9d7ee;
+      --border-strong: #a9bedf;
+      --text: #1c2d48;
+      --muted: #607595;
+      --heading: #1d3150;
+      --ok: #148554;
+      --warn: #8f661a;
+      --bad: #a9344d;
+      --accent: #2e65de;
+      --accent-hover: #2353bc;
+      --link: #1c56cd;
+      --secondary-btn-bg: #dce8ff;
+      --secondary-btn-border: #b5c9ef;
+      --ghost-btn-bg: #eff4ff;
+      --ghost-btn-border: #cddbf3;
+      --table-bg: #ffffff;
+      --table-head-bg: #edf3ff;
+      --table-head-text: #2a3b58;
+      --row-border: rgba(25, 48, 86, 0.14);
+      --row-hover: rgba(52, 109, 221, 0.11);
+      --row-zebra: rgba(30, 50, 90, 0.03);
+      --status-success: #0f7447;
+      --status-error: #b2183a;
+      --shadow-lg: 0 12px 28px rgba(30, 52, 90, 0.08);
+      --shadow-sm: 0 4px 10px rgba(26, 50, 94, 0.08);
+      --focus-ring: 0 0 0 3px rgba(46, 101, 222, 0.19);
+      --pill-ok-fg: #0b6140;
+      --pill-ok-bg: rgba(31, 170, 114, 0.14);
+      --pill-ok-border: rgba(31, 170, 114, 0.35);
+      --pill-warn-fg: #6f4d08;
+      --pill-warn-bg: rgba(211, 155, 40, 0.14);
+      --pill-warn-border: rgba(211, 155, 40, 0.35);
+      --pill-bad-fg: #7d1c30;
+      --pill-bad-bg: rgba(209, 77, 99, 0.14);
+      --pill-bad-border: rgba(209, 77, 99, 0.35);
+    }
+    * {
+      box-sizing: border-box;
+    }
+    html, body {
+      max-width: 100%;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "IBM Plex Sans", "Source Sans 3", "Avenir Next", "Segoe UI", sans-serif;
+      line-height: 1.45;
+      color: var(--text);
+      overflow-x: hidden;
+      background:
+        radial-gradient(circle at 0% 0%, var(--bg-grad-start) 0%, var(--bg-grad-mid) 34%, transparent 58%),
+        radial-gradient(circle at 100% 0%, rgba(71, 123, 216, 0.18) 0%, transparent 46%),
+        var(--bg);
+    }
+    .container {
+      width: 100%;
+      max-width: 1520px;
+      margin: 0 auto;
+      padding: 20px;
+      display: grid;
+      gap: 14px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      background: linear-gradient(160deg, var(--panel) 0%, var(--panel-soft) 100%);
+      border: 1px solid var(--border-strong);
+      border-radius: 14px;
+      padding: 14px 16px;
+      box-shadow: var(--shadow-lg);
+    }
+    .title {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      color: var(--heading);
+    }
+    .muted {
+      color: var(--muted);
+    }
+    .small {
+      font-size: 12px;
+    }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    a {
+      color: var(--link);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    a:hover {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .card {
+      background: linear-gradient(180deg, var(--panel) 0%, var(--panel-soft) 100%);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 15px 16px;
+      box-shadow: var(--shadow-sm);
+      min-width: 0;
+    }
+    .card h2 {
+      margin: 0 0 12px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--heading);
+    }
+
+    .row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: end;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 170px;
+      flex: 1 1 200px;
+    }
+    .field.small {
+      flex: 0 0 130px;
+      min-width: 130px;
+    }
+    label {
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    input, select, textarea {
+      width: 100%;
+      color: var(--text);
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 9px 11px;
+      font-size: 13px;
+      transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    }
+    input::placeholder, textarea::placeholder {
+      color: var(--muted);
+      opacity: 0.8;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: var(--focus-ring);
+      background: var(--panel-2);
+    }
+    textarea {
+      resize: vertical;
+      min-height: 94px;
+      line-height: 1.5;
+    }
+    input[type="checkbox"] {
+      width: 15px;
+      height: 15px;
+      margin-right: 6px;
+      accent-color: var(--accent);
+      transform: translateY(2px);
+    }
+    button {
+      border: 1px solid var(--accent);
+      border-radius: 10px;
+      padding: 9px 13px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 13px;
+      line-height: 1;
+      min-height: 36px;
+      transition: transform 120ms ease, filter 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+      box-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
+    }
+    button:hover {
+      filter: brightness(1.05);
+      transform: translateY(-1px);
+    }
+    button:active {
+      transform: translateY(0);
+    }
+    button.secondary {
+      background: var(--secondary-btn-bg);
+      border-color: var(--secondary-btn-border);
+      color: var(--text);
+      box-shadow: none;
+    }
+    button.ghost {
+      background: var(--ghost-btn-bg);
+      border-color: var(--ghost-btn-border);
+      color: var(--text);
+      box-shadow: none;
+    }
+    button.ok { background: #177951; }
+    button.warn { background: #8f6a1c; }
+    button.bad { background: #8a3340; }
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+    }
+    .stat {
+      background: linear-gradient(180deg, var(--panel-2) 0%, var(--panel) 100%);
+      border: 1px solid var(--border-strong);
+      border-radius: 12px;
+      padding: 11px 12px;
+      min-height: 78px;
+    }
+    .stat .label {
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .stat .value {
+      margin-top: 6px;
+      font-size: 23px;
+      font-weight: 700;
+      color: var(--heading);
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+      gap: 14px;
+    }
+    .split > * {
+      min-width: 0;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      max-width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--table-bg);
+      max-height: 380px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+      min-width: 780px;
+    }
+    th, td {
+      border-bottom: 1px solid var(--row-border);
+      text-align: left;
+      padding: 9px 10px;
+      vertical-align: middle;
+    }
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: var(--table-head-bg);
+      color: var(--table-head-text);
+      font-weight: 600;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    tbody tr:nth-child(even) {
+      background: var(--row-zebra);
+    }
+    tbody tr:hover {
+      background: var(--row-hover);
+    }
+    tbody tr.row-selected {
+      background: rgba(63, 123, 242, 0.22) !important;
+      box-shadow: inset 0 0 0 1px rgba(111, 156, 245, 0.8);
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid transparent;
+    }
+    .pill.ok { color: var(--pill-ok-fg); background: var(--pill-ok-bg); border-color: var(--pill-ok-border); }
+    .pill.warn { color: var(--pill-warn-fg); background: var(--pill-warn-bg); border-color: var(--pill-warn-border); }
+    .pill.bad { color: var(--pill-bad-fg); background: var(--pill-bad-bg); border-color: var(--pill-bad-border); }
+
+    .status {
+      font-size: 12px;
+      color: var(--muted);
+      min-height: 16px;
+      margin-top: 7px;
+      line-height: 1.35;
+    }
+    .test-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(7, 14, 26, 0.58);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      padding: 18px;
+      backdrop-filter: blur(2px);
+    }
+    .test-modal-backdrop.open {
+      display: flex;
+    }
+    .test-modal {
+      width: min(760px, 96vw);
+      max-height: min(84vh, 760px);
+      overflow: auto;
+      border-radius: 14px;
+      border: 1px solid var(--border-strong);
+      background: linear-gradient(180deg, var(--panel) 0%, var(--panel-soft) 100%);
+      box-shadow: var(--shadow-lg);
+      padding: 14px 16px 12px;
+    }
+    .test-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .test-modal-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .test-modal-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 78px;
+      height: 24px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      border: 1px solid transparent;
+    }
+    .test-modal-badge.ok {
+      color: var(--pill-ok-fg);
+      background: var(--pill-ok-bg);
+      border-color: var(--pill-ok-border);
+    }
+    .test-modal-badge.bad {
+      color: var(--pill-bad-fg);
+      background: var(--pill-bad-bg);
+      border-color: var(--pill-bad-border);
+    }
+    .test-modal-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--heading);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .test-modal-close {
+      width: 34px;
+      min-width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      font-size: 18px;
+      line-height: 1;
+      padding: 0;
+      background: var(--ghost-btn-bg);
+      border-color: var(--ghost-btn-border);
+      color: var(--text);
+      box-shadow: none;
+    }
+    .test-modal-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 8px 10px;
+      margin-bottom: 10px;
+    }
+    .test-modal-item {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel-2);
+      padding: 8px 9px;
+      min-height: 56px;
+    }
+    .test-modal-item-label {
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 600;
+      margin-bottom: 3px;
+    }
+    .test-modal-item-value {
+      font-size: 13px;
+      color: var(--heading);
+      font-weight: 600;
+      word-break: break-word;
+    }
+    .test-modal-item-value.mono {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+    }
+    .test-modal-attempts-label {
+      margin: 8px 0 6px;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .test-modal-attempts {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--table-bg);
+      overflow: hidden;
+    }
+    .test-modal-attempts table {
+      min-width: 100%;
+      font-size: 12px;
+    }
+    .test-modal-attempts th {
+      position: static;
+      font-size: 10px;
+      background: var(--table-head-bg);
+      color: var(--table-head-text);
+      letter-spacing: 0.03em;
+      padding-top: 7px;
+      padding-bottom: 7px;
+    }
+    .test-modal-attempts td {
+      padding-top: 7px;
+      padding-bottom: 7px;
+      border-bottom: 1px solid var(--row-border);
+    }
+    .test-modal-attempts tr:last-child td {
+      border-bottom: none;
+    }
+    .test-modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 12px;
+    }
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 11px 0;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      min-width: 0;
+    }
+    td.actions {
+      display: table-cell;
+      width: 160px;
+      white-space: nowrap;
+      vertical-align: middle;
+      align-items: initial;
+    }
+    .action-menu {
+      min-width: 132px;
+      max-width: 160px;
+      width: 100%;
+    }
+    .users-action-bar {
+      margin-top: 10px;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel-2);
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .users-action-selected {
+      min-width: 180px;
+      font-weight: 600;
+      color: var(--heading);
+    }
+    .users-verify-controls {
+      display: flex;
+      gap: 8px;
+      align-items: end;
+      flex: 1 1 320px;
+      min-width: 0;
+    }
+    .users-verify-controls .field {
+      margin: 0;
+      flex: 1 1 280px;
+      min-width: 0;
+    }
+    .users-test-controls {
+      display: flex;
+      gap: 8px;
+      align-items: end;
+      flex: 1 1 540px;
+      min-width: 0;
+    }
+    .users-test-controls .field {
+      margin: 0;
+      flex: 1 1 320px;
+      min-width: 0;
+    }
+    .users-test-controls .field.small {
+      flex: 0 0 170px;
+      min-width: 170px;
+    }
+    #serverAddress {
+      opacity: 0.88;
+      font-size: 12px;
+      letter-spacing: 0.02em;
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    #envFileContent {
+      min-height: 220px;
+      white-space: pre;
+    }
+
+    @media (max-width: 1100px) {
+      .split { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 760px) {
+      .container {
+        padding: 12px;
+        gap: 12px;
+      }
+      .header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .field.small {
+        flex: 1 1 160px;
+        min-width: 160px;
+      }
+      table {
+        min-width: 640px;
+      }
+    }
   </style>
 </head>
 <body>
-  <div class="flex" style="justify-content: space-between; align-items: center; margin-bottom: 8px;">
-    <h1 style="margin: 0;">Tlink Agentic Admin</h1>
-    <a href="/API-ADMIN.html" target="_blank" style="color:#2f80ed; text-decoration:none;">API Docs</a>
-  </div>
-  <div class="card stack">
-    <div class="row" id="quickStats">
-      <div class="field sm">
-        <label>Users</label>
-        <div id="statUsers" class="pill ok">-</div>
+  <div class="container">
+    <div class="header">
+      <div>
+        <div class="title">Tlink Proxy Admin</div>
+        <div class="muted small">Manage users, routing, usage, health and live proxy activity</div>
       </div>
-      <div class="field sm">
-        <label>Verified</label>
-        <div id="statVerified" class="pill ok">-</div>
-      </div>
-      <div class="field sm">
-        <label>Active</label>
-        <div id="statActive" class="pill ok">-</div>
-      </div>
-      <div class="field sm">
-        <label>Req (sum)</label>
-        <div id="statRequests" class="pill warn">-</div>
-      </div>
-      <div class="field sm">
-        <label>Prompt tokens</label>
-        <div id="statPrompt" class="pill warn">-</div>
-      </div>
-      <div class="field sm">
-        <label>Completion tokens</label>
-        <div id="statCompletion" class="pill warn">-</div>
+      <div class="actions">
+        <div class="field small" style="min-width: 140px; flex: 0 0 140px;">
+          <label for="themeSelect">Theme</label>
+          <select id="themeSelect">
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+        <a href="/API-ADMIN.html" target="_blank">API Docs</a>
+        <span class="mono" id="serverAddress"></span>
       </div>
     </div>
-  </div>
 
-  <div class="card stack">
-    <div class="row">
-      <div class="field">
-        <label for="adminToken">Admin token</label>
-        <input id="adminToken" type="password" placeholder="ADMIN_TOKEN">
-      </div>
-      <div class="field sm">
-        <label for="adminOtp">OTP</label>
-        <input id="adminOtp" type="text" placeholder="TOTP/OTP">
-      </div>
-      <div class="field">
-        <label for="baseUrl">Base URL</label>
-        <input id="baseUrl" type="text" value="">
-      </div>
-      <div class="field actions">
-        <button id="loadBtn">Load users</button>
-        <button id="copyAuthBtn" title="Copy Authorization header">Copy auth header</button>
-        <span id="status"></span>
-      </div>
-      <div class="field" style="flex:1 1 100%; margin-top:4px;">
-        <span class="hint">Routing is controlled by the server env <code>ROUTING_MODE</code> (default: <code>auto</code>; set to <code>off</code> to disable auto model selection).</span>
-      </div>
-    </div>
-  </div>
-
-  <div class="card stack">
-    <h3 class="mb-0">Routing</h3>
-    <div class="row">
-      <div class="field sm">
-        <label for="routingMode">Mode</label>
-        <select id="routingMode">
-          <option value="auto">auto</option>
-          <option value="off">off</option>
-        </select>
-      </div>
-      <div class="field" style="flex:1 1 auto;">
-        <label for="routingRules">Rules (JSON array, optional)</label>
-        <textarea id="routingRules" rows="3" placeholder='[{"intent":"code","provider":"openai","model":"gpt-4o"}]'></textarea>
-        <span class="hint">Rules are optional; current heuristics will still run. Mode overrides <code>ROUTING_MODE</code>.</span>
-      </div>
-      <div class="field actions">
-        <button id="routingLoadBtn">Load</button>
-        <button id="routingSaveBtn">Save</button>
-        <span id="routingStatus"></span>
-      </div>
-    </div>
-  </div>
-
-  <div class="card stack">
-    <div class="row">
-      <div class="field">
-        <label>Search users</label>
-        <input id="search" type="text" placeholder="Email/ID/Name">
-      </div>
-      <div class="field sm">
-        <label>Page</label>
-        <input id="userPage" type="number" min="1" value="1">
-      </div>
-      <div class="field sm">
-        <label>Page size</label>
-        <input id="userPageSize" type="number" min="5" max="500" value="50">
-      </div>
-      <div class="field">
-        <label>Filters</label>
-        <div class="chip-row">
-          <label class="nowrap"><input type="checkbox" id="filterVerified"> Verified</label>
-          <label class="nowrap"><input type="checkbox" id="filterActive"> Active</label>
-          <label class="nowrap"><input type="checkbox" id="filterHasLimits"> Has limits</label>
+    <div class="card">
+      <h2>Connection</h2>
+      <div class="row">
+        <div class="field">
+          <label for="baseUrl">Base URL</label>
+          <input id="baseUrl" type="text" placeholder="http://<server-ip>:3052">
+        </div>
+        <div class="field">
+          <label for="adminToken">Admin Token</label>
+          <input id="adminToken" type="password" placeholder="ADMIN_TOKEN">
+        </div>
+        <div class="field small">
+          <label for="adminOtp">OTP (optional)</label>
+          <input id="adminOtp" type="text" placeholder="123456">
+        </div>
+        <div class="field small">
+          <label>&nbsp;</label>
+          <button id="connectBtn">Connect</button>
+        </div>
+        <div class="field small">
+          <label>&nbsp;</label>
+          <button id="refreshAllBtn" class="secondary">Refresh all</button>
+        </div>
+        <div class="field small">
+          <label>&nbsp;</label>
+          <button id="copyAuthBtn" class="ghost">Copy auth header</button>
         </div>
       </div>
-      <div class="field actions">
-        <button id="searchBtn">Search</button>
-      </div>
+      <div class="status" id="connectionStatus"></div>
     </div>
-  </div>
 
-  <div class="card stack">
-    <h3 class="mb-0">Bulk limits / quotas</h3>
-    <div class="row">
-      <div class="field sm">
-        <label>Rate max</label>
-        <input id="bulkRateMax" type="number" placeholder="100">
-      </div>
-      <div class="field sm">
-        <label>Rate window (ms)</label>
-        <input id="bulkRateWindow" type="number" placeholder="900000">
-      </div>
-      <div class="field">
-        <label>Rate by provider (JSON)</label>
-        <input id="bulkRateByProvider" type="text" placeholder='{"openai":{"max":60,"windowMs":60000}}'>
-      </div>
-      <div class="field">
-        <label>Quota (req/ptok/ctok)</label>
-        <input id="bulkQuota" type="text" placeholder='{"maxRequests":10000,"maxPromptTokens":500000,"maxCompletionTokens":500000}'>
-      </div>
-      <div class="field actions">
-        <button id="bulkApplyBtn">Apply to filtered users</button>
-        <span class="hint" id="bulkStatus"></span>
-      </div>
-    </div>
-    <div class="row">
-      <div class="field" style="min-width: 300px;">
-        <label>Provider policy defaults (JSON)</label>
-        <input id="bulkProviderPolicies" type="text" placeholder='{"openai":{"allowed":["gpt-4o"],"denied":["o1"]},"groq":{"allowed":["llama-3.1-8b-instant"]}}'>
-      </div>
-      <div class="field actions">
-        <button id="bulkPolicyBtn">Apply policies to filtered users</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="card stack">
-    <h3 class="mb-0">Create user</h3>
-    <div class="row grid">
-      <div class="field">
-        <label>Email</label>
-        <input id="newEmail" type="text" placeholder="Email">
-      </div>
-      <div class="field">
-        <label>Name</label>
-        <input id="newName" type="text" placeholder="Name">
-      </div>
-      <div class="field">
-        <label>Allowed providers</label>
-        <input id="newProviders" type="text" placeholder="comma-separated">
-      </div>
-      <div class="field">
-        <label>Allowed models</label>
-        <input id="newModels" type="text" placeholder="comma-separated">
-      </div>
-      <div class="field">
-        <label>Denied models</label>
-        <input id="newDeniedModels" type="text" placeholder="comma-separated">
-      </div>
-      <div class="field">
-        <label>Preferred provider</label>
-        <input id="newPreferred" type="text" placeholder="e.g. groq">
-      </div>
-      <div class="field">
-        <label>Lock provider</label>
-        <input id="newLockedProvider" type="text" placeholder="optional">
-      </div>
-      <div class="field">
-        <label>Rate max</label>
-        <input id="newRateMax" type="number" min="0" placeholder="e.g. 100">
-      </div>
-      <div class="field">
-        <label>Rate window (ms)</label>
-        <input id="newRateWindow" type="number" min="1000" placeholder="e.g. 60000">
-      </div>
-    </div>
-    <details class="advanced">
-      <summary>Advanced JSON</summary>
-      <div class="row grid">
-        <div class="field full">
-          <label>Allow by provider (JSON)</label>
-          <input id="newModelsByProvider" type="text" class="mono" placeholder='{"groq":["llama-3.1-8b-instant"]}'>
+    <div class="card">
+      <h2>Provider Keys</h2>
+      <div class="row">
+        <div class="field">
+          <label for="providerGroqApiKey">GROQ_API_KEY</label>
+          <input id="providerGroqApiKey" type="password" placeholder="gsk_...">
         </div>
-        <div class="field full">
-          <label>Deny by provider (JSON)</label>
-          <input id="newDeniedByProvider" type="text" class="mono" placeholder='{"openai":["gpt-5"]}'>
+        <div class="field">
+          <label for="providerOpenaiApiKey">OPENAI_API_KEY</label>
+          <input id="providerOpenaiApiKey" type="password" placeholder="sk-...">
         </div>
-        <div class="field full">
-          <label>Rate by provider (JSON)</label>
-          <input id="newRateByProvider" type="text" class="mono" placeholder='{"groq":{"max":10,"windowMs":60000}}'>
+        <div class="field">
+          <label for="providerAnthropicApiKey">ANTHROPIC_API_KEY</label>
+          <input id="providerAnthropicApiKey" type="password" placeholder="sk-ant-...">
         </div>
       </div>
-    </details>
-    <div class="row">
-      <button id="createBtn">Create</button>
-      <span id="createStatus"></span>
-    </div>
-  </div>
-
-  <div class="card stack">
-    <div class="row">
-      <div class="field">
-        <label for="search">Search users</label>
-        <input id="search" type="text" placeholder="Email/ID/Name">
+      <div class="row">
+        <div class="field">
+          <label for="providerGroqModel">GROQ_DEFAULT_MODEL</label>
+          <input id="providerGroqModel" type="text" placeholder="llama-3.1-8b-instant">
+        </div>
+        <div class="field">
+          <label for="providerOpenaiModel">OPENAI_DEFAULT_MODEL</label>
+          <input id="providerOpenaiModel" type="text" placeholder="gpt-4o-mini">
+        </div>
+        <div class="field">
+          <label for="providerAnthropicModel">ANTHROPIC_DEFAULT_MODEL</label>
+          <input id="providerAnthropicModel" type="text" placeholder="claude-3-sonnet-20240229">
+        </div>
       </div>
-      <div class="field sm">
-        <label><input type="checkbox" id="filterVerified"> Verified only</label>
-      </div>
-      <div class="field sm">
-        <label><input type="checkbox" id="filterActive"> Active only</label>
-      </div>
-      <div class="field sm">
-        <label><input type="checkbox" id="filterHasLimits"> Has limits</label>
-      </div>
-      <div class="field actions">
-        <button id="searchBtn">Search</button>
-      </div>
-    </div>
-    <div class="table-wrap">
-      <table id="usersTable">
-        <thead>
-          <tr>
-            <th>Email</th>
-            <th>Name</th>
-            <th>Locked provider</th>
-            <th>Verified</th>
-            <th>Providers</th>
-            <th>Preferred</th>
-            <th>Last used</th>
-            <th>Last provider</th>
-            <th>Last model</th>
-            <th>Created</th>
-            <th>Tokens</th>
-            <th>Status</th>
-            <th>Limits</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="flex">
-      <strong>Tokens for:</strong> <span id="tokensUser">None</span>
-      <label for="tokenTtl">TTL (days)</label>
-      <input id="tokenTtl" type="number" min="1" style="width: 80px;" placeholder="90">
-      <button class="pill-btn" data-ttl="30">30d</button>
-      <button class="pill-btn" data-ttl="90">90d</button>
-      <button class="pill-btn" data-ttl="180">180d</button>
-      <button id="addTokenBtn">Add token</button>
-      <span id="tokenStatus"></span>
-    </div>
-    <div class="table-wrap">
-      <table id="tokensTable">
-        <thead>
-          <tr>
-            <th>Token</th>
-            <th>Created</th>
-            <th>Expires</th>
-            <th>Last used</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- Policies modal -->
-  <div id="policiesModal" class="modal-backdrop hidden">
-    <div class="modal">
-      <h3>Edit policies</h3>
-      <p id="policiesUserLabel" class="muted"></p>
-      <div class="grid cols-2 gap">
-        <label>Allowed models (comma)
-          <input id="polAllowedModels" placeholder="gpt-4o,gpt-4o-mini">
+      <div class="actions">
+        <label class="muted" for="providerPersistEnv">
+          <input id="providerPersistEnv" type="checkbox" checked>
+          Persist to .env
         </label>
-        <label>Denied models (comma)
-          <input id="polDeniedModels" placeholder="o1,o3-mini">
-        </label>
+        <button id="loadProviderConfigBtn" class="secondary">Load Key Status</button>
+        <button id="saveProviderConfigBtn">Save Provider Config</button>
       </div>
-      <div class="grid cols-2 gap">
-        <label>Allowed models by provider (JSON)
-          <textarea id="polAllowedByProvider" rows="4" placeholder='{"openai":["gpt-4o"],"groq":["llama-3.1-8b-instant"]}'></textarea>
-        </label>
-        <label>Denied models by provider (JSON)
-          <textarea id="polDeniedByProvider" rows="4" placeholder='{"openai":["o1"],"groq":["whisper-large-v3"]}'></textarea>
-        </label>
+      <div class="status" id="providerConfigSummary"></div>
+      <div class="status" id="providerConfigStatus"></div>
+    </div>
+
+    <div class="card">
+      <h2>Env File</h2>
+      <div class="actions">
+        <button id="loadEnvFileBtn" class="secondary">Load .env</button>
+        <button id="copyEnvFileBtn" class="ghost">Copy .env</button>
       </div>
-      <div class="grid cols-2 gap">
-        <label>Global rate limit (JSON)
-          <textarea id="polRateLimit" rows="3" placeholder='{"max":100,"windowMs":900000}'></textarea>
-        </label>
-        <label>Rate limit by provider (JSON)
-          <textarea id="polRateByProvider" rows="3" placeholder='{"openai":{"max":60,"windowMs":60000}}'></textarea>
-        </label>
+      <div class="status" id="envFileMeta"></div>
+      <textarea id="envFileContent" class="mono" placeholder=".env content appears here..." readonly style="min-height: 180px;"></textarea>
+      <div class="status" id="envFileStatus"></div>
+    </div>
+
+    <div class="card">
+      <h2>Overview</h2>
+      <div class="stats" id="overviewCards">
+        <div class="stat"><div class="label">Users</div><div class="value" id="statUsers">-</div></div>
+        <div class="stat"><div class="label">Verified</div><div class="value" id="statVerified">-</div></div>
+        <div class="stat"><div class="label">Active</div><div class="value" id="statActive">-</div></div>
+        <div class="stat"><div class="label">Requests</div><div class="value" id="statRequests">-</div></div>
+        <div class="stat"><div class="label">Prompt Tokens</div><div class="value" id="statPrompt">-</div></div>
+        <div class="stat"><div class="label">Completion Tokens</div><div class="value" id="statCompletion">-</div></div>
+        <div class="stat"><div class="label">Tracked Providers</div><div class="value" id="statProviders">-</div></div>
+        <div class="stat"><div class="label">Suppressed Providers</div><div class="value" id="statSuppressed">-</div></div>
       </div>
-      <div class="modal-actions">
-        <button id="polSaveBtn" class="primary">Save</button>
-        <button id="polCancelBtn" type="button">Cancel</button>
+      <div class="status" id="overviewStatus"></div>
+    </div>
+
+    <div class="split">
+      <div class="card">
+        <h2>Users</h2>
+        <div class="row">
+          <div class="field">
+            <label for="userSearch">Search</label>
+            <input id="userSearch" type="text" placeholder="email / id / name">
+          </div>
+          <div class="field small">
+            <label for="userFilterActive">Status</label>
+            <select id="userFilterActive">
+              <option value="all">All</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+          <div class="field small">
+            <label for="userFilterVerified">Verified</label>
+            <select id="userFilterVerified">
+              <option value="all">All</option>
+              <option value="yes">Verified</option>
+              <option value="no">Not verified</option>
+            </select>
+          </div>
+          <div class="field small">
+            <label>&nbsp;</label>
+            <button id="loadUsersBtn" class="secondary">Load users</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Email</th>
+                <th>Providers</th>
+                <th>Status</th>
+                <th>Verified</th>
+                <th>Requests</th>
+                <th>Last Used</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody"></tbody>
+          </table>
+        </div>
+        <div class="users-action-bar">
+          <span class="users-action-selected" id="usersSelectedLabel">Selected: none</span>
+          <div class="users-verify-controls">
+            <div class="field">
+              <label for="usersVerifyEmail">Verification email</label>
+              <input id="usersVerifyEmail" type="email" placeholder="user@example.com">
+            </div>
+          </div>
+          <div class="users-test-controls">
+            <div class="field small">
+              <label for="usersTestIntent">Test intent</label>
+              <select id="usersTestIntent">
+                <option value="default">default</option>
+                <option value="code">code</option>
+                <option value="long">long</option>
+                <option value="translate">translate</option>
+                <option value="summarize">summarize</option>
+                <option value="vision">vision</option>
+                <option value="audio">audio</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="usersTestPrompt">Test prompt (optional)</label>
+              <input id="usersTestPrompt" type="text" placeholder="Uses default prompt for selected intent">
+            </div>
+          </div>
+          <button id="usersActionTokensBtn" class="ghost">Tokens</button>
+          <button id="usersActionToggleActiveBtn" class="ghost">Deactivate</button>
+          <button id="usersActionResetUsageBtn" class="ghost">Reset Usage</button>
+          <button id="usersActionResendBtn" class="ghost">Send Verify Link</button>
+          <button id="usersActionTestBtn" class="ghost">Test</button>
+          <button id="usersActionDeleteBtn" class="bad">Delete</button>
+        </div>
+        <div class="status" id="usersStatus"></div>
       </div>
-      <div id="polStatus" class="muted small"></div>
+
+      <div class="card">
+        <h2>Create / Update User</h2>
+        <div class="row">
+          <div class="field">
+            <label for="newUserEmail">Email</label>
+            <input id="newUserEmail" type="email" placeholder="user@example.com">
+          </div>
+          <div class="field">
+            <label for="newUserName">Name</label>
+            <input id="newUserName" type="text" placeholder="Display name">
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="newUserId">ID (optional)</label>
+            <input id="newUserId" type="text" placeholder="unique-id">
+          </div>
+          <div class="field">
+            <label for="newAllowedProviders">Allowed providers (comma)</label>
+            <input id="newAllowedProviders" type="text" placeholder="openai,groq">
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="newPreferredProvider">Preferred provider</label>
+            <input id="newPreferredProvider" type="text" placeholder="openai">
+          </div>
+          <div class="field">
+            <label for="newLockedProvider">Locked provider</label>
+            <input id="newLockedProvider" type="text" placeholder="groq">
+          </div>
+        </div>
+        <div class="row">
+          <div class="field small">
+            <label for="newUserVerified">Verified</label>
+            <select id="newUserVerified"><option value="false">No</option><option value="true">Yes</option></select>
+          </div>
+          <div class="field small">
+            <label for="newUserActive">Active</label>
+            <select id="newUserActive"><option value="true">Yes</option><option value="false">No</option></select>
+          </div>
+          <div class="field small">
+            <label>&nbsp;</label>
+            <button id="createUserBtn">Create user</button>
+          </div>
+        </div>
+        <div class="status" id="createUserStatus"></div>
+
+        <div class="divider"></div>
+
+        <h2>Selected User Tokens</h2>
+        <div class="row">
+          <div class="field">
+            <label for="selectedUserId">Selected user id</label>
+            <input id="selectedUserId" type="text" readonly>
+          </div>
+          <div class="field small">
+            <label for="tokenTtlDays">TTL days</label>
+            <input id="tokenTtlDays" type="number" min="1" value="90">
+          </div>
+          <div class="field small">
+            <label>&nbsp;</label>
+            <button id="addTokenBtn" class="ok">Add token</button>
+          </div>
+          <div class="field small">
+            <label>&nbsp;</label>
+            <button id="reloadTokensBtn" class="ghost">Reload</button>
+          </div>
+        </div>
+        <div class="table-wrap" style="max-height: 220px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Token</th>
+                <th>Created</th>
+                <th>Expires</th>
+                <th>Last Used</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="tokensTableBody"></tbody>
+          </table>
+        </div>
+        <div class="status" id="tokensStatus"></div>
+      </div>
+    </div>
+
+    <div class="split">
+      <div class="card">
+        <h2>Routing</h2>
+        <div class="row">
+          <div class="field small">
+            <label for="routingMode">Mode</label>
+            <select id="routingMode">
+              <option value="auto">auto</option>
+              <option value="off">off</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="routingRules">Rules (JSON array)</label>
+            <textarea id="routingRules" class="mono" placeholder='[{"intent":"code","provider":"openai","model":"gpt-4o"}]'></textarea>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="loadRoutingBtn" class="secondary">Load routing</button>
+          <button id="sampleRoutingBtn" class="ghost">Sample routing</button>
+          <button id="saveRoutingBtn">Save routing</button>
+          <span class="status" id="routingStatus"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Self-Service</h2>
+        <div class="row">
+          <div class="field">
+            <label for="selfServiceEmail">Email</label>
+            <input id="selfServiceEmail" type="email" placeholder="user@example.com">
+          </div>
+          <div class="field small">
+            <label>&nbsp;</label>
+            <button id="sendSelfServiceBtn" class="warn">Send Link</button>
+          </div>
+        </div>
+        <div class="status" id="selfServiceStatus"></div>
+      </div>
+    </div>
+
+    <div class="split">
+      <div class="card">
+        <h2>Activity (Audit)</h2>
+        <div class="row">
+          <div class="field">
+            <label for="activitySearch">Search</label>
+            <input id="activitySearch" type="text" placeholder="user/provider/model/error">
+          </div>
+          <div class="field small">
+            <label for="activityProvider">Provider</label>
+            <input id="activityProvider" type="text" placeholder="groq">
+          </div>
+          <div class="field small">
+            <label for="activityStatusFilter">Status</label>
+            <input id="activityStatusFilter" type="text" placeholder="200">
+          </div>
+          <div class="field small">
+            <label for="activityAutoRefresh">Auto refresh</label>
+            <select id="activityAutoRefresh">
+              <option value="off">Off</option>
+              <option value="5">5s</option>
+              <option value="10" selected>10s</option>
+              <option value="30">30s</option>
+            </select>
+          </div>
+          <div class="field small">
+            <label>&nbsp;</label>
+            <button id="loadActivityBtn" class="secondary">Load</button>
+          </div>
+          <div class="field small">
+            <label>&nbsp;</label>
+            <button id="exportAuditBtn" class="ghost">Export CSV</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>User</th>
+                <th>Provider</th>
+                <th>Model</th>
+                <th>Status</th>
+                <th>Reason</th>
+                <th>Latency</th>
+                <th>Error</th>
+              </tr>
+            </thead>
+            <tbody id="activityTableBody"></tbody>
+          </table>
+        </div>
+        <div class="status" id="activityStatus"></div>
+      </div>
+
+      <div class="card">
+        <h2>Provider Health</h2>
+        <div class="actions">
+          <button id="loadHealthBtn" class="secondary">Load health</button>
+          <button id="unsuppressAllBtn" class="ghost">Unsuppress all</button>
+        </div>
+        <div class="table-wrap" style="max-height: 320px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Provider</th>
+                <th>Last Success</th>
+                <th>Last Error</th>
+                <th>Latency</th>
+                <th>Suppressed</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="healthTableBody"></tbody>
+          </table>
+        </div>
+        <div class="status" id="healthStatus"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Usage</h2>
+      <div class="actions">
+        <button id="loadUsageBtn" class="secondary">Load usage</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Email</th>
+              <th>Requests</th>
+              <th>Prompt Tokens</th>
+              <th>Completion Tokens</th>
+              <th>Last Provider</th>
+              <th>Last Model</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody id="usageTableBody"></tbody>
+        </table>
+      </div>
+      <div class="status" id="usageStatus"></div>
     </div>
   </div>
 
-  <div class="card">
-    <div class="flex">
-      <label for="auditSearch">Audit search</label>
-      <input id="auditSearch" type="text" placeholder="user/provider/model/status/error">
-      <label for="auditProvider">Provider</label>
-      <input id="auditProvider" type="text" placeholder="e.g. groq">
-      <label for="auditStatusFilter">Status</label>
-      <input id="auditStatusFilter" type="text" placeholder="e.g. 200 or error">
-      <label for="auditReasonFilter">Reason</label>
-      <input id="auditReasonFilter" type="text" placeholder="rate_limit/model_not_allowed/quota">
-      <label for="auditFrom">From</label>
-      <input id="auditFrom" type="date">
-      <label for="auditTo">To</label>
-      <input id="auditTo" type="date">
-      <button id="auditLoadBtn">Load audit</button>
-      <button id="auditCsvBtn">Export CSV</button>
-      <button id="auditFullBtn">Full export</button>
-      <span id="auditStatusMsg"></span>
-    </div>
-    <div class="flex mt-8">
-      <button class="pill-btn" id="auditPresetToday">Today</button>
-      <button class="pill-btn" id="auditPreset7d">Last 7d</button>
-      <button class="pill-btn" id="auditPresetAll">All time</button>
-    </div>
-    <div class="flex mt-8">
-      <label for="auditPage">Page</label>
-      <input id="auditPage" type="number" min="1" value="1" style="width: 70px;">
-      <label for="auditPageSize">Page size</label>
-      <input id="auditPageSize" type="number" min="10" max="500" value="200" style="width: 80px;">
-      <button id="healthLoadBtn">Load provider health</button>
-      <span id="healthStatus"></span>
-    </div>
-    <div class="table-wrap">
-      <table id="auditTable">
-        <thead>
-          <tr>
-            <th>Time</th>
-            <th>User</th>
-            <th>Provider</th>
-            <th>Model</th>
-            <th>Routed</th>
-            <th>Routing reason</th>
-            <th>Status</th>
-            <th>Reason</th>
-            <th>Attempts</th>
-            <th>Latency</th>
-            <th>Error</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="flex">
-      <strong>Usage / Billing</strong>
-      <button id="usageLoadBtn">Load usage</button>
-      <button id="usageCsvBtn">Export CSV</button>
-      <span id="usageStatus"></span>
-    </div>
-    <div class="flex mt-8">
-      <label for="usageFrom">From</label>
-      <input id="usageFrom" type="date">
-      <label for="usageTo">To</label>
-      <input id="usageTo" type="date">
-      <button class="pill-btn" id="usagePresetToday">Today</button>
-      <button class="pill-btn" id="usagePreset7d">Last 7d</button>
-      <button class="pill-btn" id="usagePresetAll">All time</button>
-      <label class="nowrap" for="usagePage">Page</label>
-      <input id="usagePage" type="number" min="1" value="1" style="width:70px">
-      <label class="nowrap" for="usagePageSize">Page size</label>
-      <input id="usagePageSize" type="number" min="5" max="500" value="50" style="width:80px">
-    </div>
-    <div class="table-wrap">
-      <table id="usageTable">
-        <thead>
-          <tr>
-            <th>User</th>
-            <th>Email</th>
-            <th>Requests</th>
-            <th>Prompt tokens</th>
-            <th>Completion tokens</th>
-            <th>Last provider</th>
-            <th>Last model</th>
-            <th>Updated</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="card">
-    <h3 class="mb-0">Provider health</h3>
-    <div class="flex">
-      <label for="healthFailThreshold">Fail count ≥</label>
-      <input id="healthFailThreshold" type="number" min="1" value="1" style="width:70px">
-      <label for="healthErrorMinutes">Last error within (min)</label>
-      <input id="healthErrorMinutes" type="number" min="1" value="60" style="width:70px">
-      <button id="healthSuppressFailing">Suppress failing</button>
-      <button id="healthUnsuppressAll">Unsuppress all</button>
-      <span class="hint" id="healthActionsStatus"></span>
-    </div>
-    <div class="flex mt-8">
-      <label class="nowrap" for="healthPage">Page</label>
-      <input id="healthPage" type="number" min="1" value="1" style="width:70px">
-      <label class="nowrap" for="healthPageSize">Page size</label>
-      <input id="healthPageSize" type="number" min="5" max="500" value="50" style="width:80px">
-    </div>
-    <div class="table-wrap">
-      <table id="healthTable">
-        <thead>
-          <tr>
-            <th>Provider</th>
-            <th>Last success</th>
-            <th>Last error</th>
-            <th>Rolling latency</th>
-            <th>Successes</th>
-            <th>Failures</th>
-            <th>Suppressed</th>
-            <th>Until</th>
-            <th>Reason</th>
-            <th>Last error msg</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="card stack">
-    <h3 class="mb-0">Self-service token</h3>
-    <div class="row">
-      <div class="field">
-        <label>Email</label>
-        <input id="selfEmail" type="email" placeholder="user@example.com">
+  <div id="testResultModal" class="test-modal-backdrop" aria-hidden="true">
+    <div class="test-modal" role="dialog" aria-modal="true" aria-labelledby="testResultTitle">
+      <div class="test-modal-header">
+        <div class="test-modal-title-wrap">
+          <span id="testResultBadge" class="test-modal-badge">Result</span>
+          <div id="testResultTitle" class="test-modal-title">Provider Test Result</div>
+        </div>
+        <button id="testResultCloseBtn" class="test-modal-close" type="button" aria-label="Close test result">×</button>
       </div>
-      <div class="field actions">
-        <button id="selfSendBtn">Send self-service link</button>
-        <span id="selfStatus" class="hint"></span>
+      <div id="testResultSummary" class="test-modal-grid"></div>
+      <div class="test-modal-attempts-label">Attempts</div>
+      <div class="test-modal-attempts">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Provider</th>
+              <th>Model</th>
+              <th>Status</th>
+              <th>Latency</th>
+              <th>Error</th>
+            </tr>
+          </thead>
+          <tbody id="testResultAttemptsBody"></tbody>
+        </table>
+      </div>
+      <div class="test-modal-footer">
+        <button id="testResultOkBtn" type="button">OK</button>
       </div>
     </div>
-    <div class="hint">Uses /v1/self-service/request-token with email verification. If email is not configured, link will be returned for manual share.</div>
   </div>
 
-  <div class="card stack">
-    <script src="app.js"></script>
-  </body>
-  </html>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -4,6 +4,12 @@ export interface RDPProfile extends ConnectableProfile {
     options: RDPProfileOptions
 }
 
+export interface RDPSessionLogSettings {
+    enabled: boolean
+    directory?: string
+    logInputEvents?: boolean
+}
+
 export interface RDPProfileOptions {
     host: string
     port?: number
@@ -33,4 +39,6 @@ export interface RDPProfileOptions {
     bitmapCaching?: boolean
     // Advanced
     customParams?: string
+    // Session logging
+    sessionLog?: RDPSessionLogSettings
 }

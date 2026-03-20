@@ -13,6 +13,8 @@ import { RecoveryProvider } from './recoveryProvider'
 import { RDPHotkeyProvider } from './hotkeys'
 import { RDPProfilesService } from './profiles'
 import { RDPService } from './services/rdp.service'
+import { RDPPasswordStorageService } from './services/passwordStorage.service'
+import { RDPSessionLoggerService } from './services/sessionLogger.service'
 
 /** @hidden */
 @NgModule({
@@ -29,6 +31,8 @@ import { RDPService } from './services/rdp.service'
         { provide: HotkeyProvider, useClass: RDPHotkeyProvider, multi: true },
         { provide: ProfileProvider, useExisting: RDPProfilesService, multi: true },
         RDPService,
+        RDPPasswordStorageService,
+        RDPSessionLoggerService,
     ],
     declarations: [
         RDPProfileSettingsComponent,

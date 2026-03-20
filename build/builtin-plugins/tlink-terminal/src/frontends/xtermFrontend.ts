@@ -12,6 +12,7 @@ import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { ImageAddon } from '@xterm/addon-image'
 import { CanvasAddon } from '@xterm/addon-canvas'
+import { WebLinksAddon } from '@xterm/addon-web-links'
 import { BaseTerminalProfile, TerminalColorScheme } from '../api/interfaces'
 import { getTerminalBackgroundColor } from '../helpers'
 import './xterm.css'
@@ -259,6 +260,9 @@ export class XTermFrontend extends Frontend {
         this.ready.complete()
 
         this.xterm.loadAddon(this.search)
+        this.xterm.loadAddon(new WebLinksAddon((_event, uri) => {
+            window.open(uri, '_blank')
+        }))
 
         this.search.onDidChangeResults(state => {
             this.searchState = state

@@ -15,6 +15,16 @@ const RETRY_MAX = parseInt(process.env.PROXY_RETRY_MAX || '2', 10);
 const RETRY_BASE_MS = parseInt(process.env.PROXY_RETRY_BASE_MS || '500', 10);
 const RETRY_MAX_MS = parseInt(process.env.PROXY_MAX_MS || process.env.PROXY_RETRY_MAX_MS || '4000', 10);
 const FAILOVER_ON_429 = process.env.PROXY_FAILOVER_ON_429 !== 'false';
+const RETRYABLE_ERROR_CODES = new Set([
+    'ECONNRESET',
+    'ETIMEDOUT',
+    'ECONNABORTED',
+    'ECONNREFUSED',
+    'ENOTFOUND',
+    'EAI_AGAIN',
+    'EHOSTUNREACH',
+    'ENETUNREACH'
+]);
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -29,9 +39,7 @@ function isRetryable(error) {
         status === 502 ||
         status === 503 ||
         status === 504 ||
-        code === 'ECONNRESET' ||
-        code === 'ETIMEDOUT' ||
-        code === 'ECONNABORTED'
+        RETRYABLE_ERROR_CODES.has(code)
     );
 }
 
@@ -107,6 +115,11 @@ function createStreamGuard() {
 export async function chatCompletions(req, res) {
     let providerName = 'unknown';
     let finalReason = null;
+    let incomingModel = req.body?.model;
+    let routingReason = null;
+    let routingIntent = null;
+    let routingModeLabel = 'off';
+    let attempts = [];
     try {
         const userIP = req.ip || req.connection.remoteAddress;
         const userId = req.user?.id || req.user?.name || 'anonymous';
@@ -119,7 +132,7 @@ export async function chatCompletions(req, res) {
         const routingSettings = getRoutingSettings();
         const routingMode = (routingSettings.mode || process.env.ROUTING_MODE || 'auto').toLowerCase();
         const routingEnabled = routingMode !== 'off';
-        const incomingModel = req.body.model;
+        incomingModel = req.body?.model;
 
         const providers = getAllProviders(req.user?.allowedProviders);
         if (!providers.length) {
@@ -218,16 +231,17 @@ export async function chatCompletions(req, res) {
         }
 
         const wantsAuto = isAutoModel(incomingModel);
-        const routingModeLabel = routingEnabled ? (wantsAuto ? 'auto' : 'explicit') : 'off';
-        const routingReason = routingInfo?.reason || null;
-        const routingIntent = routingInfo?.intent || null;
+        routingModeLabel = routingEnabled ? (wantsAuto ? 'auto' : 'explicit') : 'off';
+        routingReason = routingInfo?.reason || null;
+        routingIntent = routingInfo?.intent || null;
 
         let lastError = null;
 
-        const attempts = [];
+        attempts = [];
 
         for (const candidate of orderedProviders) {
             finalReason = null;
+            providerName = candidate.name || providerName;
             // Get provider configuration
             const config = getProviderConfig(candidate.name, req.user?.allowedProviders);
             if (!config || !config.apiKey) {
@@ -362,6 +376,14 @@ export async function chatCompletions(req, res) {
                     lastError = error;
                     recordRequest(candidate.name, false, userId);
                     const status = error?.response?.status;
+                    const attemptEntry = {
+                        provider: candidate.name,
+                        model: effectiveModel,
+                        status: status || error?.code || 'error',
+                        error: error?.response?.data?.error?.message || error?.message,
+                        reason: error?.response?.data?.error?.code || error?.response?.data?.error?.type || finalReason
+                    };
+                    attempts.push(attemptEntry);
                     recordAudit({
                         success: false,
                         userId,
@@ -376,8 +398,8 @@ export async function chatCompletions(req, res) {
                         latencyMs: null,
                         error: error?.response?.data?.error?.message || error?.message,
                         reason: error?.response?.data?.error?.code || error?.response?.data?.error?.type || finalReason,
-                        attemptCount: attempts.length + 1,
-                        attempts: [...attempts, { provider: candidate.name, model: effectiveModel, status: status || error?.code || 'error', error: error?.response?.data?.error?.message || error?.message, reason: error?.response?.data?.error?.code || error?.response?.data?.error?.type || finalReason }]
+                        attemptCount: attempts.length,
+                        attempts
                     });
                     const shouldRetry = isRetryable(error) && attempt < RETRY_MAX;
                     const shouldFailover = status === 429 && FAILOVER_ON_429 && attempt >= RETRY_MAX;
@@ -397,30 +419,9 @@ export async function chatCompletions(req, res) {
                     }
 
                     if (!isRetryable(error)) {
-                        // Non-retryable error - return immediately
-                        if (error.response) {
-                            return res.status(error.response.status).json({
-                                error: {
-                                    message: error.response.data?.error?.message || 'Provider error',
-                                    type: error.response.data?.error?.type || 'provider_error',
-                                    code: error.response.data?.error?.code
-                                }
-                            });
-                        } else if (error.request) {
-                            return res.status(503).json({
-                                error: {
-                                    message: 'Provider unavailable',
-                                    type: 'provider_unavailable'
-                                }
-                            });
-                        } else {
-                            return res.status(500).json({
-                                error: {
-                                    message: error.message || 'Internal proxy error',
-                                    type: 'internal_error'
-                                }
-                            });
-                        }
+                        // Non-retryable provider error: move to next provider candidate.
+                        console.warn(`Failing over from ${candidate.name} due to non-retryable provider error`);
+                        break;
                     }
                 }
             }

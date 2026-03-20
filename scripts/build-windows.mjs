@@ -3,8 +3,14 @@
 import { build as builder } from 'electron-builder'
 import * as vars from './vars.mjs'
 import { execSync } from 'child_process'
+import * as fs from 'fs'
+import * as path from 'path'
+import * as url from 'url'
 import { getArtifactSuffix, getExtraResources, isOllamaBundleEnabled } from './bundle-ollama.mjs'
 import { ensureBuiltinPlugins } from './ensure-builtin-plugins.mjs'
+
+const __dirname = url.fileURLToPath(new URL('.', import.meta.url))
+const repoRoot = path.resolve(__dirname, '..')
 
 const isTag = (process.env.GITHUB_REF || process.env.BUILD_SOURCEBRANCH || '').startsWith('refs/tags/')
 const keypair = process.env.SM_KEYPAIR_ALIAS
@@ -25,6 +31,28 @@ const requestedWindowsArtifacts = (process.env.TLINK_WINDOWS_ARTIFACTS || '')
     .filter(Boolean)
 
 const windowsTargets = requestedWindowsArtifacts.length ? requestedWindowsArtifacts : ['nsis', 'zip']
+
+// Remove nested .bin symlink directories to prevent EEXIST errors during packaging
+function removeNestedBinDirs (baseDir) {
+    if (!fs.existsSync(baseDir)) return
+    function walk (dir) {
+        let entries
+        try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
+        for (const e of entries) {
+            const full = path.join(dir, e.name)
+            if (e.isDirectory()) {
+                if (e.name === '.bin' && dir.endsWith('node_modules')) {
+                    fs.rmSync(full, { recursive: true, force: true })
+                } else {
+                    walk(full)
+                }
+            }
+        }
+    }
+    walk(baseDir)
+}
+removeNestedBinDirs(path.join(repoRoot, 'app', 'node_modules'))
+removeNestedBinDirs(path.join(repoRoot, 'build', 'builtin-plugins'))
 
 builder({
     dir: true,

@@ -220,6 +220,7 @@ export declare class CodeEditorTabComponent extends BaseTabComponent implements 
     private toggleFolderSelection;
     private remapFileSelectionPath;
     private extendFileSelection;
+    private extendFolderSelection;
     private pruneFileSelectionToVisibleTree;
     private selectFilesForContextMenu;
     private selectFoldersForContextMenu;
@@ -242,6 +243,8 @@ export declare class CodeEditorTabComponent extends BaseTabComponent implements 
     handleFileContextAction(action: string): Promise<void>;
     private openFileFromDiskPath;
     private createFolderInFolder;
+    private resolveFolderCreationParent;
+    private getNextAvailableFolderName;
     private createFileInFolder;
     private renameFolderOnDisk;
     private renameFileOnDisk;
@@ -401,6 +404,7 @@ export declare class CodeEditorTabComponent extends BaseTabComponent implements 
     onKeydown(event: KeyboardEvent): void;
     private isTextInputLikeTarget;
     private configureLanguageDefaults;
+    private isCancellationErrorLike;
     private applyTheme;
     private ensureDocumentOnDisk;
     private getActiveSelectionText;

@@ -23,6 +23,8 @@ dotenv.config();
 const app = express();
 // Default proxy port; can still be overridden via PORT env var.
 const PORT = process.env.PORT || 3052;
+// Security default: do not place admin token in URL unless explicitly enabled.
+const INCLUDE_ADMIN_TOKEN_IN_URL = process.env.ADMIN_URL_INCLUDE_TOKEN === 'true';
 
 // Security middleware
 app.use(helmet());
@@ -70,7 +72,38 @@ const limiter = rateLimit({
 
 app.use('/v1/', limiter);
 
+function buildAdminUrl (req) {
+    const params = new URLSearchParams();
+    const query = req.query || {};
+    for (const [key, value] of Object.entries(query)) {
+        if (Array.isArray(value)) {
+            if (value.length > 0 && value[0] != null) params.set(key, String(value[0]));
+        } else if (value != null) {
+            params.set(key, String(value));
+        }
+    }
+
+    const adminToken = (process.env.ADMIN_TOKEN || '').trim();
+    if (INCLUDE_ADMIN_TOKEN_IN_URL && adminToken && !params.has('adminToken')) {
+        params.set('adminToken', adminToken);
+    }
+
+    const q = params.toString();
+    return q ? `/admin/?${q}` : '/admin/';
+}
+
 // Routes
+app.get('/', (req, res) => {
+    const enableAdminUI = process.env.ENABLE_ADMIN_UI !== 'false';
+    if (enableAdminUI) {
+        return res.redirect(buildAdminUrl(req));
+    }
+    return res.json({
+        status: 'ok',
+        service: 'tlink-ai-proxy',
+        message: 'Admin UI disabled (ENABLE_ADMIN_UI=false)'
+    });
+});
 app.get('/health', healthCheck);
 app.get('/metrics', metrics);
 app.get('/API-ADMIN.md', (req, res) => {
@@ -84,6 +117,10 @@ app.get('/v1/verify-email', verifyEmail);
 const enableAdminUI = process.env.ENABLE_ADMIN_UI !== 'false';
 if (enableAdminUI) {
     const adminUiPath = path.join(process.cwd(), 'src', 'admin');
+    // Redirect only the exact /admin path; keep /admin/ for static index.html.
+    app.get(/^\/admin$/, (req, res) => {
+        return res.redirect(buildAdminUrl(req));
+    });
     app.use('/admin', express.static(adminUiPath));
     app.use('/admin/api', requireAdmin, adminRouter);
     app.use('/admin/api', requireAdmin, adminTestRouter);

@@ -400,6 +400,89 @@ Plugins and themes can be installed directly from the Settings view inside Tlink
 [**IQ Hive**](https://iqhive.com) is providing financial support for the project development
 
 
+<a name="rdp"></a>
+
+# RDP Client
+
+Built-in RDP support with dual-client architecture:
+
+* **Built-in client** (node-rdpjs) - embedded canvas-based, SSL-only
+* **FreeRDP client** (xfreerdp) - external window, full NLA/TLS support
+* **Auto-fallback** - automatically switches to FreeRDP when server requires NLA
+* **Secure credentials** - passwords passed via stdin, not visible in process list
+* **Keychain integration** - save/load passwords from macOS Keychain or Windows Credential Manager
+* **Connection status** - amber (connecting), green (connected), red (error) tab indicators
+* **Full keyboard** - complete XT scancode mapping (~100 keys)
+* **Auto-reconnect** - configurable reconnection with rate limiting
+* **Profile import/export** - JSON-based profile sharing
+* **Session logging** - JSONL event logging for audit trails
+* **Test Connection** - validate host/port before connecting
+
+### FreeRDP Setup
+
+**macOS:**
+```bash
+brew install freerdp
+brew install --cask xquartz
+# Log out and back in, then:
+open -a XQuartz
+export DISPLAY=:0 && xhost +localhost
+```
+
+**Windows (MSYS2):**
+```bash
+pacman -S mingw-w64-ucrt-x86_64-freerdp
+# Add C:\msys64\ucrt64\bin to PATH
+```
+
+**Linux:**
+```bash
+sudo apt install freerdp2-x11
+```
+
+<a name="building-installers"></a>
+
+# Building Installers
+
+### macOS (DMG)
+
+```bash
+npm run build
+./build-mac-dmg.sh
+
+# Ad-hoc signed (no Apple Developer cert):
+CSC_IDENTITY_AUTO_DISCOVERY=false node scripts/build-macos.mjs
+```
+
+Output: `dist/tlink-<version>-macos-<arch>.dmg`
+
+### Windows (NSIS Installer)
+
+```bash
+npm run build
+node scripts/build-windows.mjs
+```
+
+For code-signed builds, set: `SM_API_KEY`, `SM_CLIENT_CERT_FILE`, `SM_CLIENT_CERT_PASSWORD`, `SM_CODE_SIGNING_CERT_SHA1_HASH`
+
+Output: `dist/tlink-<version>-setup-<arch>.exe`
+
+### Linux (DEB, RPM, AppImage)
+
+```bash
+npm run build
+node scripts/build-linux.mjs
+```
+
+Output: `.deb`, `.rpm`, `.pacman`, `.AppImage`, `.tar.gz` in `dist/`
+
+### Full Build
+
+```bash
+./build.sh                    # Current platform
+OLLAMA_BUNDLE=1 ./build.sh    # With Ollama bundled
+```
+
 <a name="contributing"></a>
 # Contributing
 

@@ -23,9 +23,17 @@ export declare class RDPService {
      * Execute a command with custom environment variables (fallback if platform doesn't support it)
      * For GUI applications like xfreerdp, we use spawn with detached:true so it runs independently
      */
+    /**
+     * Test TCP connectivity to an RDP host.
+     */
+    testConnection(host: string, port: number, timeoutMs?: number): Promise<{
+        success: boolean;
+        error?: string;
+        latencyMs?: number;
+    }>;
     private execWithEnv;
     /**
      * Launch FreeRDP (xfreerdp) as external executable
      */
-    launchFreeRDP(profile: RDPProfile, parentWindow?: string | null): Promise<void>;
+    launchFreeRDP(profile: RDPProfile, parentWindow?: string | null, password?: string): Promise<void>;
 }

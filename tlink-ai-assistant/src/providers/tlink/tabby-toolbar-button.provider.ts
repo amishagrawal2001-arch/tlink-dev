@@ -5,11 +5,17 @@ import { LoggerService } from '../../services/core/logger.service';
 
 @Injectable()
 export class TabbyToolbarButtonProvider extends ToolbarButtonProvider {
+    private tabbyRunning = false;
+    private tabbyStatusChecked = false;
+    private readonly tabbyStatusPollMs = 5000;
+    private readonly statusIconClass = 'tlink-tabby-status-icon';
+
     constructor(
         private config: ConfigProviderService,
         private logger: LoggerService
     ) {
         super();
+        this.startStatusPolling();
     }
 
     provide(): ToolbarButton[] {
@@ -25,8 +31,157 @@ export class TabbyToolbarButtonProvider extends ToolbarButtonProvider {
                 click: () => {
                     this.openTabbyUrl();
                 }
+            },
+            {
+                icon: this.getStatusIconSvg(),
+                weight: 12,
+                title: this.getStatusTitle(),
+                touchBarTitle: 'Tabby',
+                click: () => {
+                    this.refreshTabbyStatus(true).catch(error => {
+                        this.logger.warn('Failed to refresh Tabby status from toolbar click', { error: String(error) });
+                    });
+                }
             }
         ];
+    }
+
+    private startStatusPolling(): void {
+        // Kick off immediately so the icon reflects current state soon after toolbar render.
+        this.refreshTabbyStatus().catch(error => {
+            this.logger.warn('Initial Tabby status check failed', { error: String(error) });
+        });
+
+        setInterval(() => {
+            this.refreshTabbyStatus().catch(error => {
+                this.logger.warn('Tabby status poll failed', { error: String(error) });
+            });
+        }, this.tabbyStatusPollMs);
+    }
+
+    private getStatusIconSvg(): string {
+        const dotFill = this.getStatusDotColor();
+        const ringStroke = this.getStatusRingColor();
+        return `<svg class="${this.statusIconClass}" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="6" stroke="${ringStroke}" stroke-width="1.4"></circle>
+            <circle class="tlink-tabby-status-dot" cx="8" cy="8" r="3.2" fill="${dotFill}"></circle>
+        </svg>`;
+    }
+
+    private getStatusTitle(): string {
+        if (!this.tabbyStatusChecked) {
+            return 'Tabby server status: checking...';
+        }
+        return this.tabbyRunning
+            ? 'Tabby server status: running'
+            : 'Tabby server status: stopped';
+    }
+
+    private getStatusDotColor(): string {
+        if (!this.tabbyStatusChecked) {
+            return '#9aa0a6';
+        }
+        return this.tabbyRunning ? '#2fb344' : '#e03131';
+    }
+
+    private getStatusRingColor(): string {
+        if (!this.tabbyStatusChecked) {
+            return '#9aa0a6';
+        }
+        return this.tabbyRunning ? '#2fb344' : '#a0a4aa';
+    }
+
+    private applyStatusToToolbarIcon(): void {
+        if (typeof document === 'undefined') {
+            return;
+        }
+        document.querySelectorAll(`svg.${this.statusIconClass}`).forEach(root => {
+            const ring = root.querySelector('circle:first-of-type') as SVGCircleElement | null;
+            const dot = root.querySelector('.tlink-tabby-status-dot') as SVGCircleElement | null;
+            if (ring) {
+                ring.setAttribute('stroke', this.getStatusRingColor());
+            }
+            if (dot) {
+                dot.setAttribute('fill', this.getStatusDotColor());
+            }
+            const button = root.closest('button');
+            if (button) {
+                button.setAttribute('title', this.getStatusTitle());
+            }
+        });
+    }
+
+    private async refreshTabbyStatus(fromUserClick = false): Promise<void> {
+        const running = await this.checkTabbyReachability();
+        this.tabbyRunning = running;
+        this.tabbyStatusChecked = true;
+        this.applyStatusToToolbarIcon();
+        if (fromUserClick) {
+            this.logger.info('Tabby toolbar status check', { running });
+        }
+    }
+
+    private async checkTabbyReachability(): Promise<boolean> {
+        const target = this.getTabbyHostPort();
+        if (!target) {
+            return false;
+        }
+
+        const win: any = window as any;
+        const net = win?.require?.('net');
+        if (!net?.createConnection) {
+            return false;
+        }
+
+        return this.checkTcpPort(net, target.host, target.port, 2200);
+    }
+
+    private getTabbyHostPort(): { host: string; port: number } | null {
+        try {
+            const base = this.getTabbyServiceBaseUrl();
+            const parsed = new URL(base);
+            const host = parsed.hostname || '127.0.0.1';
+            const scheme = (parsed.protocol || '').toLowerCase();
+            const port = parsed.port
+                ? Number(parsed.port)
+                : (scheme === 'https:' ? 443 : 80);
+            if (!Number.isFinite(port) || port <= 0) {
+                return null;
+            }
+            return { host, port };
+        } catch {
+            return null;
+        }
+    }
+
+    private checkTcpPort(net: any, host: string, port: number, timeoutMs: number): Promise<boolean> {
+        return new Promise(resolve => {
+            let settled = false;
+            const socket = net.createConnection({ host, port });
+
+            const finish = (result: boolean) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                try {
+                    socket.destroy();
+                } catch {
+                    // no-op
+                }
+                resolve(result);
+            };
+
+            try {
+                socket.setTimeout(timeoutMs);
+                socket.once('connect', () => finish(true));
+                socket.once('timeout', () => finish(false));
+                socket.once('error', () => finish(false));
+                socket.once('close', () => finish(false));
+            } catch {
+                finish(false);
+            }
+        });
     }
 
     private async openTabbyUrl(): Promise<void> {
@@ -50,6 +205,13 @@ export class TabbyToolbarButtonProvider extends ToolbarButtonProvider {
     private getTabbyBaseUrl(): string {
         const base = this.config.getProviderConfig('tabby')?.baseURL || 'http://localhost:8080';
         return String(base).trim().replace(/\/+$/, '');
+    }
+
+    private getTabbyServiceBaseUrl(): string {
+        const base = this.getTabbyBaseUrl();
+        return base
+            .replace(/\/(v1beta|v1)$/i, '')
+            .replace(/\/models$/i, '');
     }
 
     private getTabbyWebUrl(baseURL: string): string {

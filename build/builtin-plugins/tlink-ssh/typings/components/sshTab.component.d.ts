@@ -27,6 +27,10 @@ export declare class SSHTabComponent extends ConnectableTerminalTabComponent<SSH
     private suppressAutoReconnect;
     private sftpAutostarted;
     private initializationPromise;
+    sessionStartTime: Date | null;
+    private durationTimer;
+    bytesReceived: number;
+    bytesSent: number;
     constructor(injector: Injector, ssh: SSHService, ngbModal: NgbModal, profilesService: ProfilesService, sshMultiplexer: SSHMultiplexerService);
     ngOnInit(): void;
     openSessionLogDirectory(): Promise<void>;
@@ -42,5 +46,9 @@ export declare class SSHTabComponent extends ConnectableTerminalTabComponent<SSH
     showPortForwarding(): void;
     canClose(): Promise<boolean>;
     openSFTP(): Promise<void>;
+    private startDurationTracking;
+    private stopDurationTracking;
+    getSessionDuration(): string;
+    getFormattedBandwidth(): string;
     protected isSessionExplicitlyTerminated(): boolean;
 }

@@ -1,5 +1,5 @@
 import { Injector } from '@angular/core';
-import { NewTabParameters, PartialProfile, TranslateService, QuickConnectProfileProvider } from 'tlink-core';
+import { NewTabParameters, PartialProfile, TranslateService, QuickConnectProfileProvider, ConfigService, NotificationsService } from 'tlink-core';
 import { SSHProfileSettingsComponent } from './components/sshProfileSettings.component';
 import { SSHTabComponent } from './components/sshTab.component';
 import { PasswordStorageService } from './services/passwordStorage.service';
@@ -8,6 +8,8 @@ export declare class SSHProfilesService extends QuickConnectProfileProvider<SSHP
     private passwordStorage;
     private translate;
     private injector;
+    private configService;
+    private notifications;
     id: string;
     name: string;
     settingsComponent: typeof SSHProfileSettingsComponent;
@@ -49,7 +51,8 @@ export declare class SSHProfilesService extends QuickConnectProfileProvider<SSHP
         };
         clearServiceMessagesOnConnect: boolean;
     };
-    constructor(passwordStorage: PasswordStorageService, translate: TranslateService, injector: Injector);
+    constructor(passwordStorage: PasswordStorageService, translate: TranslateService, injector: Injector, configService: ConfigService, notifications: NotificationsService);
+    private initAutoImport;
     getBuiltinProfiles(): Promise<PartialProfile<SSHProfile>[]>;
     getNewTabParameters(profile: SSHProfile): Promise<NewTabParameters<SSHTabComponent>>;
     getSuggestedName(profile: SSHProfile): string;

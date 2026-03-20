@@ -41,6 +41,11 @@ interface RDPClientOptions {
 
 declare function createRDPClient(options: RDPClientOptions): RDPClient
 
+const isConnectionResetError = (error: Error): boolean => {
+    const code = (error as any)?.code
+    return code === 'ECONNRESET' || (error.message?.includes('ECONNRESET') ?? false)
+}
+
 export class RDPSession {
     private client: RDPClient | null = null
     private logger: Logger
@@ -109,7 +114,11 @@ export class RDPSession {
             })
 
             this.client.on('error', (error: Error) => {
-                this.logger.error('RDP error:', error)
+                if (isConnectionResetError(error)) {
+                    this.logger.warn('RDP connection reset by remote host')
+                } else {
+                    this.logger.error('RDP error:', error)
+                }
                 this.error$.next(error)
                 this.open = false
             })
@@ -132,7 +141,7 @@ export class RDPSession {
         }
     }
 
-    sendKeyEvent (code: number, isPressed: boolean): void {
+    sendKeyEvent (code: number, isPressed: boolean, _extended?: boolean): void {
         if (this.client && this.open) {
             this.client.sendKeyEventScancode(code, isPressed)
         }
@@ -158,4 +167,3 @@ export class RDPSession {
         this.willDestroy$.complete()
     }
 }
-

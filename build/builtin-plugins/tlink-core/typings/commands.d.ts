@@ -7,11 +7,11 @@ import { CommandProvider, Command } from './api/commands';
 /** @hidden */
 export declare class CoreCommandProvider extends CommandProvider {
     private hostApp;
-    private app;
+    private _app;
     private profilesService;
     private translate;
     private config;
-    constructor(hostApp: HostAppService, app: AppService, profilesService: ProfilesService, translate: TranslateService, config: ConfigService);
+    constructor(hostApp: HostAppService, _app: AppService, profilesService: ProfilesService, translate: TranslateService, config: ConfigService);
     activate(): Promise<void>;
     provide(): Promise<Command[]>;
     private cycleColorSchemeMode;

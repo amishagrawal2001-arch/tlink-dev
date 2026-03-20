@@ -10,6 +10,7 @@ export declare class SSHConfigProvider extends ConfigProvider {
             x11Display: null;
             knownHosts: never[];
             verifyHostKeys: boolean;
+            autoImportConfig: boolean;
         };
         hotkeys: {
             'restart-ssh-session': never[];

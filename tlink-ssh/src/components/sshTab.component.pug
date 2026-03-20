@@ -6,6 +6,13 @@ terminal-toolbar([tab]='this')
         onclick='event.stopPropagation()'
     ) {{profile.options.user}}@{{profile.options.host}}:{{profile.options.port}}
 
+    small.text-muted.me-2(*ngIf='session && session.open && sessionStartTime')
+        i.fas.fa-clock.me-1
+        | {{getSessionDuration()}}
+    small.text-muted.me-2(*ngIf='session && session.open && (bytesReceived > 0 || bytesSent > 0)')
+        i.fas.fa-exchange-alt.me-1
+        | {{getFormattedBandwidth()}}
+
     .me-2(*ngIf='session')
         button.btn.btn-sm.btn-link(
             (click)='openSessionLogDirectory()',

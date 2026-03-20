@@ -1,8 +1,10 @@
 import express from 'express';
+import fs from 'fs';
 import {
     getUsers,
     addUser,
     updateUser,
+    deleteUser,
     addTokenToUser,
     removeTokenFromUser,
     createVerificationToken
@@ -12,9 +14,11 @@ import { sendVerificationEmail } from '../notifications/email.js';
 import { listAudits, exportAudits } from '../audit/store.js';
 import { getProviderHealth } from '../providers/health.js';
 import { setProviderSuppressed } from '../providers/health.js';
+import { getProviderAdminConfig, updateProviderAdminConfig } from '../providers/config.js';
 import { getBilling } from '../users/quota.js';
 import { getRoutingSettings, saveRoutingSettings } from '../routing/settings.js';
 import { getBuiltinHeuristics } from '../router.js';
+import { getTelemetry } from '../providers/telemetry.js';
 
 const router = express.Router();
 
@@ -84,8 +88,29 @@ router.get('/users/:id', (req, res) => {
     res.json({ user: sanitizeUser(user, withTokens) });
 });
 
+router.delete('/users/:id', (req, res) => {
+    const userId = req.params.id;
+    const removed = deleteUser(userId);
+    if (!removed) {
+        return res.status(404).json({ error: { message: 'User not found', type: 'not_found' } });
+    }
+    return res.status(204).end();
+});
+
 router.post('/users', async (req, res) => {
-    const { email, name, id, allowedProviders, preferredProvider, modelRouting, verified, active, tokenExpiresInDays, billing } = req.body || {};
+    const {
+        email,
+        name,
+        id,
+        allowedProviders,
+        preferredProvider,
+        lockedProvider,
+        modelRouting,
+        verified,
+        active,
+        tokenExpiresInDays,
+        billing,
+    } = req.body || {};
     if (!email && !id && !name) {
         return res.status(400).json({ error: { message: 'email or id or name required', type: 'bad_request' } });
     }
@@ -102,6 +127,7 @@ router.post('/users', async (req, res) => {
             deniedModelsByProvider: req.body?.deniedModelsByProvider || {},
             rateLimit: req.body?.rateLimit || null,
             rateLimitByProvider: req.body?.rateLimitByProvider || {},
+            lockedProvider: lockedProvider || null,
             preferredProvider: preferredProvider || null,
             modelRouting: modelRouting || {},
             billing: billing || undefined,
@@ -185,22 +211,54 @@ router.post('/users/:id/reset-usage', (req, res) => {
 
 // Placeholder: resend verification email
 router.post('/users/:id/resend', async (req, res) => {
-    const verification = createVerificationToken(req.params.id);
+    const userId = req.params.id;
+    const requestedEmail = (req.body?.email || '').trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (requestedEmail && !emailRegex.test(requestedEmail)) {
+        return res.status(400).json({ error: { message: 'Invalid email format', type: 'bad_request' } });
+    }
+
+    const existing = getUsers().find(u => u.id === userId);
+    if (!existing) {
+        return res.status(404).json({ error: { message: 'User not found', type: 'not_found' } });
+    }
+
+    const effectiveEmail = requestedEmail || (existing.email || '').trim();
+    if (!effectiveEmail) {
+        return res.status(400).json({ error: { message: 'User email missing; provide email in request body', type: 'bad_request' } });
+    }
+
+    // Allow admin to set/update email before issuing verification token.
+    if (requestedEmail && requestedEmail !== existing.email) {
+        const updated = updateUser(userId, {
+            email: requestedEmail,
+            verified: false,
+            active: false
+        });
+        if (!updated) {
+            return res.status(404).json({ error: { message: 'User not found', type: 'not_found' } });
+        }
+    }
+
+    const verification = createVerificationToken(userId);
     const user = verification?.user;
     if (!user) {
         return res.status(404).json({ error: { message: 'User not found', type: 'not_found' } });
     }
     const verificationUrl = buildVerificationUrl(req, verification?.token);
     let emailResult = null;
-    if (user.email) {
+    if (effectiveEmail) {
         try {
-            emailResult = await sendVerificationEmail({ to: user.email, link: verificationUrl });
+            emailResult = await sendVerificationEmail({ to: effectiveEmail, link: verificationUrl });
         } catch (err) {
             console.error('Failed to send verification email', err);
             emailResult = { sent: false, reason: 'send_failed' };
         }
     }
-    res.json({ message: 'Verification link issued', verificationUrl, emailResult, user: sanitizeUser(user) });
+    const message = emailResult?.sent
+        ? `Verification link sent to ${effectiveEmail}`
+        : `Verification link generated for ${effectiveEmail}`;
+    res.json({ message, verificationUrl, emailResult, user: sanitizeUser(user) });
 });
 
 router.get('/audit', (req, res) => {
@@ -247,6 +305,62 @@ router.post('/providers/health/:provider/suppress', (req, res) => {
     res.json({ provider, suppressed: !!suppressed });
 });
 
+router.get('/providers/config', (req, res) => {
+    const includeSecrets = req.query.includeSecrets === '1' || req.query.includeSecrets === 'true';
+    res.json(getProviderAdminConfig({ includeSecrets }));
+});
+
+router.post('/providers/config', (req, res) => {
+    try {
+        const result = updateProviderAdminConfig(req.body || {}, {
+            persist: req.body?.persist,
+        });
+        return res.json(result);
+    } catch (error) {
+        console.error('Failed to update provider config', error);
+        return res.status(500).json({
+            error: {
+                message: 'Failed to update provider configuration',
+                type: 'internal_error',
+            },
+        });
+    }
+});
+
+router.get('/env-file', (req, res) => {
+    const envFilePath = getProviderAdminConfig()?.persistence?.envFile
+        || process.env.PROXY_ENV_FILE
+        || process.env.DOTENV_CONFIG_PATH
+        || `${process.cwd()}/.env`;
+    const includeContent = req.query.includeContent !== 'false';
+
+    if (!fs.existsSync(envFilePath)) {
+        return res.status(404).json({
+            error: { message: `.env file not found at ${envFilePath}`, type: 'not_found' }
+        });
+    }
+
+    try {
+        const stat = fs.statSync(envFilePath);
+        const content = includeContent ? fs.readFileSync(envFilePath, 'utf8') : '';
+        return res.json({
+            envFile: envFilePath,
+            sizeBytes: stat.size,
+            lineCount: includeContent ? content.split(/\r?\n/).length : 0,
+            mtime: stat.mtime?.toISOString?.() || null,
+            content,
+        });
+    } catch (error) {
+        console.error('Failed to read env file', error);
+        return res.status(500).json({
+            error: {
+                message: 'Failed to read env file',
+                type: 'internal_error',
+            },
+        });
+    }
+});
+
 router.get('/usage', (req, res) => {
     const format = req.query.format === 'csv' ? 'csv' : 'json';
     const users = getUsers();
@@ -268,6 +382,57 @@ router.get('/usage', (req, res) => {
         return res.send(csv);
     }
     res.json({ items: rows, total: rows.length });
+});
+
+router.get('/overview', (req, res) => {
+    const users = getUsers();
+    const health = getProviderHealth();
+    const telemetry = getTelemetry();
+    const latestAudit = listAudits({ page: 1, pageSize: 1 });
+
+    const verifiedUsers = users.filter(u => u.verified).length;
+    const activeUsers = users.filter(u => u.active !== false).length;
+    const configuredProviders = new Set();
+    users.forEach(u => (u.allowedProviders || []).forEach(p => configuredProviders.add(p)));
+
+    const usage = users.reduce((acc, u) => {
+        acc.totalRequests += u.billing?.totalRequests || 0;
+        acc.totalPromptTokens += u.billing?.totalPromptTokens || 0;
+        acc.totalCompletionTokens += u.billing?.totalCompletionTokens || 0;
+        return acc;
+    }, { totalRequests: 0, totalPromptTokens: 0, totalCompletionTokens: 0 });
+
+    const suppressedProviders = health.filter(h => h.suppressed).length;
+    const unhealthyProviders = health.filter(h => !!h.lastErrorAt).length;
+
+    res.json({
+        users: {
+            total: users.length,
+            verified: verifiedUsers,
+            active: activeUsers
+        },
+        usage,
+        providers: {
+            configured: configuredProviders.size,
+            tracked: health.length,
+            unhealthy: unhealthyProviders,
+            suppressed: suppressedProviders
+        },
+        telemetry,
+        latestAudit: latestAudit.items?.[0] || null,
+        timestamp: new Date().toISOString()
+    });
+});
+
+router.get('/activity', (req, res) => {
+    const { page = 1, pageSize = 50, search = '', provider, status, success, reason } = req.query;
+    const audit = listAudits({ page, pageSize, search, provider, status, success, reason });
+    const telemetry = getTelemetry();
+    res.json({
+        ...audit,
+        telemetry,
+        timestamp: new Date().toISOString()
+    });
 });
 
 export default router;

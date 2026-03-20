@@ -1,5 +1,10 @@
 # Tlink AI Proxy Server
 
+############# Admin URL #############
+http://localhost:3052/admin/?adminToken=TYLLINKNETSTRUCT
+
+
+
 This is a standalone proxy server that routes AI requests to various providers, allowing you to:
 - Share API keys across users (without exposing them)
 - Implement rate limiting
@@ -46,12 +51,19 @@ User's Tlink App → Your Proxy Server → AI Provider APIs (Groq, OpenAI, etc.)
    npm start
    ```
 
-4. **Update Tlink config:**
+4. **Open Admin UI (browser):**
+   - `http://<server-ip>:<port>/admin`
+   - If admin UI is enabled, `http://<server-ip>:<port>/` redirects to `/admin`
+   - For security, redirects do **not** append `?adminToken=<ADMIN_TOKEN>` by default.
+     Set `ADMIN_URL_INCLUDE_TOKEN=true` only if you explicitly want quick-login URLs.
+   - Use `ADMIN_TOKEN` (and optional OTP) in the UI connection panel.
+
+5. **Update Tlink config:**
    - Point `baseURL` to your proxy server URL
    - Users don't need API keys anymore!
 
 ## Deployment Options
 
-- **Local development:** `http://localhost:3000`
+- **Local development:** `http://localhost:3052`
 - **Cloud:** Deploy to Heroku, Railway, Render, AWS, etc.
 - **Docker:** Use provided Dockerfile

@@ -7,14 +7,15 @@ import { AppService } from './services/app.service'
 import { ProfilesService } from './services/profiles.service'
 import { ConfigService } from './services/config.service'
 import { CommandProvider, Command, CommandLocation } from './api/commands'
-import { CodeEditorTabComponent } from './components/codeEditorTab.component'
+// import { CodeEditorTabComponent } from './components/codeEditorTab.component' // Tlink Studio - deactivated
 
 /** @hidden */
 @Injectable({ providedIn: 'root' })
 export class CoreCommandProvider extends CommandProvider {
     constructor (
         private hostApp: HostAppService,
-        private app: AppService,
+        // @ts-ignore Tlink Studio deactivated – keep for DI stability
+        private _app: AppService,
         private profilesService: ProfilesService,
         private translate: TranslateService,
         private config: ConfigService,
@@ -47,23 +48,24 @@ export class CoreCommandProvider extends CommandProvider {
                 icon: require('./icons/color-scheme.svg'),
                 run: async () => this.cycleColorSchemeMode(),
             },
-            {
-                id: 'core:new-code-editor',
-                locations: [CommandLocation.StartPage], // Removed RightToolbar - button only in left dock now
-                label: this.translate.instant('Tlink Studio'),
-                icon: require('./icons/code.svg'),
-                run: async () => {
-                    if (this.hostApp.openCodeEditorWindow()) {
-                        return
-                    }
-                    const existing = this.app.tabs.find(tab => tab instanceof CodeEditorTabComponent)
-                    if (existing) {
-                        this.app.selectTab(existing)
-                        return
-                    }
-                    this.app.openNewTab({ type: CodeEditorTabComponent })
-                },
-            },
+            // Tlink Studio - deactivated
+            // {
+            //     id: 'core:new-code-editor',
+            //     locations: [CommandLocation.StartPage],
+            //     label: this.translate.instant('Tlink Studio'),
+            //     icon: require('./icons/code.svg'),
+            //     run: async () => {
+            //         if (this.hostApp.openCodeEditorWindow()) {
+            //             return
+            //         }
+            //         const existing = this.app.tabs.find(tab => tab instanceof CodeEditorTabComponent)
+            //         if (existing) {
+            //             this.app.selectTab(existing)
+            //             return
+            //         }
+            //         this.app.openNewTab({ type: CodeEditorTabComponent })
+            //     },
+            // },
             ...this.profilesService.getRecentProfiles().map((profile, index) => ({
                 id: `core:recent-profile-${index}`,
                 label: profile.name,

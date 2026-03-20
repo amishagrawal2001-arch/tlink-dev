@@ -6,6 +6,9 @@ import { getUserByTokenWithMeta, hasUsersConfigured, recordUserUsage } from './u
 export function authenticateUser(req, res, next) {
     // Skip auth for token issuance endpoint (it has its own admin check)
     if (
+        req.path === '/' ||
+        req.path === '/health' ||
+        req.path === '/metrics' ||
         req.path === '/v1/tokens' ||
         req.path.startsWith('/admin') ||
         req.path === '/v1/verify-email' ||

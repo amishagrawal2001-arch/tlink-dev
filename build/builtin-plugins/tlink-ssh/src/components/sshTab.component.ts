@@ -39,6 +39,10 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
     private suppressAutoReconnect = false
     private sftpAutostarted = false
     private initializationPromise: Promise<void>|null = null
+    sessionStartTime: Date | null = null
+    private durationTimer: ReturnType<typeof setInterval> | null = null
+    bytesReceived = 0
+    bytesSent = 0
 
     constructor (
         injector: Injector,
@@ -50,6 +54,13 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
         super(injector)
         this.sessionChanged$.subscribe(() => {
             this.activeKIPrompt = null
+            if (this.session?.open) {
+                this.startDurationTracking()
+                // Track bandwidth
+                this.session.binaryOutput$?.subscribe(data => {
+                    this.bytesReceived += data?.length ?? 0
+                })
+            }
             if (this.startInSFTP && this.session?.open && !this.sftpAutostarted) {
                 this.sftpAutostarted = true
                 void this.openSFTP()
@@ -253,10 +264,19 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
         this.suppressAutoReconnect = false
         this.reconnectTimestamps = []
 
+        // Display connection info banner
+        if (session.open && this.frontendIsReady) {
+            const host = session.profile.options.host
+            const port = session.profile.options.port ?? 22
+            this.write(`\r${colors.black.bgGreen(' Connected ')} ${host}:${port}\r\n`)
+        }
+
         return session
     }
 
     protected onSessionDestroyed (): void {
+        this.stopDurationTracking()
+
         if (this.reconnecting) {
             this.setSession(null)
             return
@@ -411,6 +431,49 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
         setTimeout(() => {
             this.sftpPanelVisible = true
         }, 100)
+    }
+
+    private startDurationTracking (): void {
+        this.sessionStartTime = new Date()
+        this.bytesReceived = 0
+        this.bytesSent = 0
+        this.stopDurationTracking()
+        this.durationTimer = setInterval(() => {
+            if (this.sessionStartTime && this.session?.open) {
+                const elapsed = Date.now() - this.sessionStartTime.getTime()
+                const h = Math.floor(elapsed / 3600000)
+                const m = Math.floor((elapsed % 3600000) / 60000)
+                const s = Math.floor((elapsed % 60000) / 1000)
+                const duration = h > 0 ? `${h}h${m}m` : `${m}m${s}s`
+                this.setTitle(`SSH: ${this.profile.options.user}@${this.profile.options.host} [${duration}]`)
+            }
+        }, 10000) // Update every 10 seconds
+    }
+
+    private stopDurationTracking (): void {
+        if (this.durationTimer) {
+            clearInterval(this.durationTimer)
+            this.durationTimer = null
+        }
+    }
+
+    getSessionDuration (): string {
+        if (!this.sessionStartTime) {
+            return ''
+        }
+        const elapsed = Date.now() - this.sessionStartTime.getTime()
+        const h = Math.floor(elapsed / 3600000)
+        const m = Math.floor((elapsed % 3600000) / 60000)
+        return h > 0 ? `${h}h ${m}m` : `${m}m`
+    }
+
+    getFormattedBandwidth (): string {
+        const format = (bytes: number) => {
+            if (bytes < 1024) return `${bytes}B`
+            if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)}KB`
+            return `${(bytes / 1048576).toFixed(1)}MB`
+        }
+        return `${format(this.bytesReceived)} / ${format(this.bytesSent)}`
     }
 
     protected isSessionExplicitlyTerminated (): boolean {

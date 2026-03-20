@@ -36,7 +36,7 @@ appearance:
     - open-shared-session-link
     - profiles
     - session-manager
-    - code-editor
+    # - code-editor  # Tlink Studio - deactivated
     - remote-desktop
     - sftp
     - ssh

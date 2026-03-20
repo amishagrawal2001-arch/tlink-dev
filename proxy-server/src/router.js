@@ -5,8 +5,34 @@ import { getRoutingSettings } from './routing/settings.js';
 const AUTO_TOKENS = ['auto', 'tlink-proxy-auto', 'tlink-agentic-auto'];
 const OPENAI_STRONG = process.env.ROUTER_OPENAI_STRONG_MODEL || process.env.OPENAI_DEFAULT_MODEL || 'gpt-4o';
 const OPENAI_FAST = process.env.ROUTER_OPENAI_FAST_MODEL || process.env.OPENAI_DEFAULT_MODEL || 'gpt-4o-mini';
-const GROQ_STRONG = process.env.ROUTER_GROQ_STRONG_MODEL || process.env.GROQ_DEFAULT_MODEL || 'llama-3.1-70b-versatile';
 const GROQ_FAST = process.env.ROUTER_GROQ_FAST_MODEL || process.env.GROQ_DEFAULT_MODEL || 'llama-3.1-8b-instant';
+const GROQ_STRONG = process.env.ROUTER_GROQ_STRONG_MODEL || process.env.GROQ_DEFAULT_MODEL || GROQ_FAST;
+const OPENAI_AUDIO = process.env.ROUTER_OPENAI_AUDIO_MODEL || OPENAI_FAST;
+const GROQ_AUDIO = process.env.ROUTER_GROQ_AUDIO_MODEL || GROQ_FAST;
+
+function providerBaseName(name) {
+    return String(name || '').split('-')[0] || '';
+}
+
+function isNonChatModel(model) {
+    const m = String(model || '').toLowerCase();
+    return m.startsWith('whisper') || m.includes('/whisper') || m.startsWith('tts-');
+}
+
+function fallbackChatModel(providerName, cfg) {
+    const base = providerBaseName(providerName || cfg?.name);
+    if (base === 'openai') return OPENAI_FAST;
+    if (base === 'groq') return GROQ_FAST;
+    return cfg?.defaultModel || OPENAI_FAST;
+}
+
+function normalizeChatModelForProvider(model, cfg, requestedModel) {
+    const candidate = model || cfg?.defaultModel || requestedModel || 'auto';
+    if (!isNonChatModel(candidate)) {
+        return candidate;
+    }
+    return fallbackChatModel(cfg?.name, cfg);
+}
 
 function normalizeIntent(intent) {
     if (!intent) return null;
@@ -96,7 +122,7 @@ export function pickProviderModel({ user, requestedModel, messages, rules, inten
             : providerByBase(providers, base);
         if (!provider) return;
         const cfg = getProviderConfig(provider.name, user?.allowedProviders);
-        const effectiveModel = model || cfg?.defaultModel || requestedModel || 'auto';
+        const effectiveModel = normalizeChatModelForProvider(model, cfg, requestedModel);
         candidates.push({ provider, model: effectiveModel, reason });
     };
 
@@ -137,8 +163,8 @@ export function pickProviderModel({ user, requestedModel, messages, rules, inten
             pushCandidate('openai', OPENAI_STRONG, 'rule:vision->openai');
             break;
         case 'audio':
-            pushCandidate('openai', 'whisper-1', 'rule:audio->openai');
-            pushCandidate('groq', 'whisper-large-v3', 'rule:audio->groq');
+            pushCandidate('openai', OPENAI_AUDIO, 'rule:audio->openai');
+            pushCandidate('groq', GROQ_AUDIO, 'rule:audio->groq');
             break;
         default:
             pushCandidate('groq', GROQ_FAST, 'rule:default->groq');
@@ -193,8 +219,8 @@ export function getBuiltinHeuristics() {
             { intent: 'translate/summarize', order: 1, provider: 'openai', model: OPENAI_FAST },
             { intent: 'translate/summarize', order: 2, provider: 'groq', model: GROQ_FAST },
             { intent: 'vision', order: 1, provider: 'openai', model: OPENAI_STRONG },
-            { intent: 'audio', order: 1, provider: 'openai', model: 'whisper-1' },
-            { intent: 'audio', order: 2, provider: 'groq', model: 'whisper-large-v3' },
+            { intent: 'audio', order: 1, provider: 'openai', model: OPENAI_AUDIO },
+            { intent: 'audio', order: 2, provider: 'groq', model: GROQ_AUDIO },
             { intent: 'default', order: 1, provider: 'groq', model: GROQ_FAST },
             { intent: 'default', order: 2, provider: 'openai', model: OPENAI_FAST }
         ]

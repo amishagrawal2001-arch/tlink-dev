@@ -40,6 +40,11 @@
   resolved "https://registry.yarnpkg.com/@xterm/addon-unicode11/-/addon-unicode11-0.7.0.tgz#cf4fa4da58b0cbcad3666e03d642184f76fe7d27"
   integrity sha512-HIhQpRenrslPn6GlUmCYZcSXvdU0JkTgXQ66dx9QwXEzgNhoh70b7hXPZDBoMD/bH/7DYlseeGO7qKQlFzyhbA==
 
+"@xterm/addon-web-links@^0.12.0":
+  version "0.12.0"
+  resolved "https://registry.yarnpkg.com/@xterm/addon-web-links/-/addon-web-links-0.12.0.tgz#bc34ae46f4c12012256d451ac2b9be791c0b6bfa"
+  integrity sha512-4Smom3RPyVp7ZMYOYDoC/9eGJJJqYhnPLGGqJ6wOBfB8VxPViJNSKdgRYb8NpaM6YSelEKbA2SStD7lGyqaobw==
+
 "@xterm/addon-webgl@^0.17.0":
   version "0.17.0"
   resolved "https://registry.yarnpkg.com/@xterm/addon-webgl/-/addon-webgl-0.17.0.tgz#1da534456b7971ebb2f08c381d4732d1f104d7d8"

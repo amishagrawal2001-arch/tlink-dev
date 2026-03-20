@@ -1,1067 +1,1402 @@
 (() => {
-  const adminTokenEl = document.getElementById('adminToken');
-  const adminOtpEl = document.getElementById('adminOtp');
-  const baseUrlEl = document.getElementById('baseUrl');
-  const statusEl = document.getElementById('status');
-  const filterVerifiedEl = document.getElementById('filterVerified');
-  const filterActiveEl = document.getElementById('filterActive');
-  const filterHasLimitsEl = document.getElementById('filterHasLimits');
-  const tableBody = document.querySelector('#usersTable tbody');
-  const tokensUserEl = document.getElementById('tokensUser');
-  const tokensTableBody = document.querySelector('#tokensTable tbody');
-  const tokenStatusEl = document.getElementById('tokenStatus');
-  const tokenTtlEl = document.getElementById('tokenTtl');
-  const auditTableBody = document.querySelector('#auditTable tbody');
-  const auditStatusEl = document.getElementById('auditStatusMsg');
-  const auditPageEl = document.getElementById('auditPage');
-  const auditPageSizeEl = document.getElementById('auditPageSize');
-  const auditReasonEl = document.getElementById('auditReasonFilter');
-  const healthTableBody = document.querySelector('#healthTable tbody');
-  const healthStatusEl = document.getElementById('healthStatus');
-  const usageTableBody = document.querySelector('#usageTable tbody');
-  const usageStatusEl = document.getElementById('usageStatus');
-  const usagePageEl = document.getElementById('usagePage');
-  const usagePageSizeEl = document.getElementById('usagePageSize');
-  const polModal = document.getElementById('policiesModal');
-  const polUserLabel = document.getElementById('policiesUserLabel');
-  const polAllowedModelsEl = document.getElementById('polAllowedModels');
-  const polDeniedModelsEl = document.getElementById('polDeniedModels');
-  const polAllowedByProviderEl = document.getElementById('polAllowedByProvider');
-  const polDeniedByProviderEl = document.getElementById('polDeniedByProvider');
-  const polRateLimitEl = document.getElementById('polRateLimit');
-  const polRateByProviderEl = document.getElementById('polRateByProvider');
-  const polStatusEl = document.getElementById('polStatus');
-  const polSaveBtn = document.getElementById('polSaveBtn');
-  const polCancelBtn = document.getElementById('polCancelBtn');
-  const bulkRateMaxEl = document.getElementById('bulkRateMax');
-  const bulkRateWindowEl = document.getElementById('bulkRateWindow');
-  const bulkRateByProviderEl = document.getElementById('bulkRateByProvider');
-  const bulkQuotaEl = document.getElementById('bulkQuota');
-  const bulkStatusEl = document.getElementById('bulkStatus');
-  const selfEmailEl = document.getElementById('selfEmail');
-  const selfStatusEl = document.getElementById('selfStatus');
-  const auditFromEl = document.getElementById('auditFrom');
-  const auditToEl = document.getElementById('auditTo');
-  const auditPresetTodayBtn = document.getElementById('auditPresetToday');
-  const auditPreset7dBtn = document.getElementById('auditPreset7d');
-  const auditPresetAllBtn = document.getElementById('auditPresetAll');
-  const healthSuppressFailingBtn = document.getElementById('healthSuppressFailing');
-  const healthUnsuppressAllBtn = document.getElementById('healthUnsuppressAll');
-  const healthActionsStatusEl = document.getElementById('healthActionsStatus');
-  const healthFailThresholdEl = document.getElementById('healthFailThreshold');
-  const healthErrorMinutesEl = document.getElementById('healthErrorMinutes');
-  const healthPageEl = document.getElementById('healthPage');
-  const healthPageSizeEl = document.getElementById('healthPageSize');
-  const userPageEl = document.getElementById('userPage');
-  const userPageSizeEl = document.getElementById('userPageSize');
-  const bulkProviderPoliciesEl = document.getElementById('bulkProviderPolicies');
-  const usageFromEl = document.getElementById('usageFrom');
-  const usageToEl = document.getElementById('usageTo');
-  const usagePresetTodayBtn = document.getElementById('usagePresetToday');
-  const usagePreset7dBtn = document.getElementById('usagePreset7d');
-  const usagePresetAllBtn = document.getElementById('usagePresetAll');
-  const suppressButtons = new Map();
-  const routingModeEl = document.getElementById('routingMode');
-  const routingRulesEl = document.getElementById('routingRules');
-  const routingStatusEl = document.getElementById('routingStatus');
-  const routingLoadBtn = document.getElementById('routingLoadBtn');
-  const routingSaveBtn = document.getElementById('routingSaveBtn');
+  const $ = (id) => document.getElementById(id);
 
-  let tokensUserId = null;
-  let cachedUsers = [];
-  let policiesUserId = null;
-  let cachedHealth = [];
-  let cachedUsage = [];
+  const els = {
+    serverAddress: $('serverAddress'),
+    themeSelect: $('themeSelect'),
+    baseUrl: $('baseUrl'),
+    adminToken: $('adminToken'),
+    adminOtp: $('adminOtp'),
+    connectBtn: $('connectBtn'),
+    refreshAllBtn: $('refreshAllBtn'),
+    copyAuthBtn: $('copyAuthBtn'),
+    connectionStatus: $('connectionStatus'),
+    providerGroqApiKey: $('providerGroqApiKey'),
+    providerOpenaiApiKey: $('providerOpenaiApiKey'),
+    providerAnthropicApiKey: $('providerAnthropicApiKey'),
+    providerGroqModel: $('providerGroqModel'),
+    providerOpenaiModel: $('providerOpenaiModel'),
+    providerAnthropicModel: $('providerAnthropicModel'),
+    providerPersistEnv: $('providerPersistEnv'),
+    loadProviderConfigBtn: $('loadProviderConfigBtn'),
+    saveProviderConfigBtn: $('saveProviderConfigBtn'),
+    providerConfigSummary: $('providerConfigSummary'),
+    providerConfigStatus: $('providerConfigStatus'),
+    loadEnvFileBtn: $('loadEnvFileBtn'),
+    copyEnvFileBtn: $('copyEnvFileBtn'),
+    envFileMeta: $('envFileMeta'),
+    envFileContent: $('envFileContent'),
+    envFileStatus: $('envFileStatus'),
 
-  const fmtDate = (v) => v ? new Date(v).toLocaleString() : '-';
-  const summarizeTokens = (tokens = []) => {
-    if (!tokens.length) return '0';
-    const expired = tokens.filter(t => t.expired).length;
-    const soonest = tokens.map(t => t.expiresAt).filter(Boolean).sort()[0];
-    const parts = [`${tokens.length}`];
-    if (expired) parts.push(`(${expired} expired)`);
-    if (soonest) parts.push(`exp ${new Date(soonest).toLocaleDateString()}`);
-    return parts.join(' ');
+    statUsers: $('statUsers'),
+    statVerified: $('statVerified'),
+    statActive: $('statActive'),
+    statRequests: $('statRequests'),
+    statPrompt: $('statPrompt'),
+    statCompletion: $('statCompletion'),
+    statProviders: $('statProviders'),
+    statSuppressed: $('statSuppressed'),
+    overviewStatus: $('overviewStatus'),
+
+    userSearch: $('userSearch'),
+    userFilterActive: $('userFilterActive'),
+    userFilterVerified: $('userFilterVerified'),
+    loadUsersBtn: $('loadUsersBtn'),
+    usersTableBody: $('usersTableBody'),
+    usersStatus: $('usersStatus'),
+    usersSelectedLabel: $('usersSelectedLabel'),
+    usersVerifyEmail: $('usersVerifyEmail'),
+    usersTestIntent: $('usersTestIntent'),
+    usersTestPrompt: $('usersTestPrompt'),
+    usersActionTokensBtn: $('usersActionTokensBtn'),
+    usersActionToggleActiveBtn: $('usersActionToggleActiveBtn'),
+    usersActionResetUsageBtn: $('usersActionResetUsageBtn'),
+    usersActionResendBtn: $('usersActionResendBtn'),
+    usersActionTestBtn: $('usersActionTestBtn'),
+    usersActionDeleteBtn: $('usersActionDeleteBtn'),
+
+    newUserEmail: $('newUserEmail'),
+    newUserName: $('newUserName'),
+    newUserId: $('newUserId'),
+    newAllowedProviders: $('newAllowedProviders'),
+    newPreferredProvider: $('newPreferredProvider'),
+    newLockedProvider: $('newLockedProvider'),
+    newUserVerified: $('newUserVerified'),
+    newUserActive: $('newUserActive'),
+    createUserBtn: $('createUserBtn'),
+    createUserStatus: $('createUserStatus'),
+
+    selectedUserId: $('selectedUserId'),
+    tokenTtlDays: $('tokenTtlDays'),
+    addTokenBtn: $('addTokenBtn'),
+    reloadTokensBtn: $('reloadTokensBtn'),
+    tokensTableBody: $('tokensTableBody'),
+    tokensStatus: $('tokensStatus'),
+
+    routingMode: $('routingMode'),
+    routingRules: $('routingRules'),
+    loadRoutingBtn: $('loadRoutingBtn'),
+    sampleRoutingBtn: $('sampleRoutingBtn'),
+    saveRoutingBtn: $('saveRoutingBtn'),
+    routingStatus: $('routingStatus'),
+
+    selfServiceEmail: $('selfServiceEmail'),
+    sendSelfServiceBtn: $('sendSelfServiceBtn'),
+    selfServiceStatus: $('selfServiceStatus'),
+
+    activitySearch: $('activitySearch'),
+    activityProvider: $('activityProvider'),
+    activityStatusFilter: $('activityStatusFilter'),
+    activityAutoRefresh: $('activityAutoRefresh'),
+    loadActivityBtn: $('loadActivityBtn'),
+    exportAuditBtn: $('exportAuditBtn'),
+    activityTableBody: $('activityTableBody'),
+    activityStatus: $('activityStatus'),
+
+    loadHealthBtn: $('loadHealthBtn'),
+    unsuppressAllBtn: $('unsuppressAllBtn'),
+    healthTableBody: $('healthTableBody'),
+    healthStatus: $('healthStatus'),
+
+    loadUsageBtn: $('loadUsageBtn'),
+    usageTableBody: $('usageTableBody'),
+    usageStatus: $('usageStatus'),
+    testResultModal: $('testResultModal'),
+    testResultBadge: $('testResultBadge'),
+    testResultTitle: $('testResultTitle'),
+    testResultSummary: $('testResultSummary'),
+    testResultAttemptsBody: $('testResultAttemptsBody'),
+    testResultCloseBtn: $('testResultCloseBtn'),
+    testResultOkBtn: $('testResultOkBtn'),
   };
 
-  function setStatus(msg) { statusEl.textContent = msg; }
-  function setCreateStatus(msg) { document.getElementById('createStatus').textContent = msg; }
-  function setTokenStatus(msg) { tokenStatusEl.textContent = msg; }
-  function setAuditStatus(msg) { auditStatusEl.textContent = msg; }
-  function setBulkStatus(msg) { bulkStatusEl.textContent = msg; }
-  function setSelfStatus(msg) { selfStatusEl.textContent = msg; }
-  function setRoutingStatus(msg) { routingStatusEl.textContent = msg; }
+  const state = {
+    users: [],
+    selectedUser: null,
+    health: [],
+    activityInterval: null,
+    themePreference: 'system',
+  };
+
+  const SAMPLE_ROUTING_RULES = [
+    { intent: 'code', provider: 'openai', model: 'gpt-4o' },
+    { intent: 'long', provider: 'openai', model: 'gpt-4o' },
+    { intent: 'translate', provider: 'openai', model: 'gpt-4o-mini' },
+    { intent: 'summarize', provider: 'openai', model: 'gpt-4o-mini' },
+    { intent: 'vision', provider: 'openai', model: 'gpt-4o' },
+    { intent: 'audio', provider: 'groq', model: 'whisper-large-v3' },
+    { intent: 'default', provider: 'groq', model: 'llama-3.1-8b-instant' },
+  ];
+
+  const INTENT_TEST_PROMPTS = {
+    default: 'Say hello in one line.',
+    code: 'Write a Python function to reverse a linked list.',
+    long: 'Provide a detailed 20-point architecture review for scaling an SSH proxy service.',
+    translate: 'Translate this to Hindi: Network maintenance starts at 9 PM.',
+    summarize: 'Summarize this update: We deployed a fix, monitored latency, and found no regressions.',
+    vision: 'Describe the image content and key objects.',
+    audio: 'Transcribe the attached audio and return plain text.',
+  };
+
+  function nowIso() {
+    return new Date().toISOString();
+  }
+
+  function fmtDate(v) {
+    if (!v) return '-';
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return String(v);
+    return d.toLocaleString();
+  }
+
+  function maskToken(token) {
+    if (!token) return '-';
+    if (token.length < 12) return token;
+    return `${token.slice(0, 6)}…${token.slice(-4)}`;
+  }
+
+  function setText(el, value) {
+    if (el) el.textContent = value;
+  }
+
+  function setStatus(el, msg, kind = 'info') {
+    if (!el) return;
+    el.textContent = msg || '';
+    const styles = getComputedStyle(document.documentElement);
+    const errorColor = styles.getPropertyValue('--status-error').trim() || '#b2183a';
+    const successColor = styles.getPropertyValue('--status-success').trim() || '#0f7a4b';
+    const infoColor = styles.getPropertyValue('--muted').trim() || '#9fb0d1';
+    el.style.color = kind === 'error' ? errorColor : kind === 'success' ? successColor : infoColor;
+  }
+
+  function asText(value, fallback = '-') {
+    if (value === null || value === undefined) return fallback;
+    const text = String(value).trim();
+    return text || fallback;
+  }
+
+  function trimForUi(value, maxLen = 140) {
+    const text = asText(value, '');
+    if (!text) return '-';
+    return text.length > maxLen ? `${text.slice(0, maxLen - 1)}…` : text;
+  }
+
+  function getTestPromptForIntent(intent) {
+    const key = String(intent || '').trim().toLowerCase();
+    return INTENT_TEST_PROMPTS[key] || INTENT_TEST_PROMPTS.default;
+  }
+
+  function updateUsersTestPromptPlaceholder() {
+    if (!els.usersTestPrompt) return;
+    const intent = (els.usersTestIntent?.value || 'default').trim().toLowerCase();
+    const prompt = getTestPromptForIntent(intent);
+    els.usersTestPrompt.placeholder = `Default for ${intent}: ${trimForUi(prompt, 96)}`;
+  }
+
+  function setTestModalSummaryField(label, value, options = {}) {
+    if (!els.testResultSummary) return;
+    const item = document.createElement('div');
+    item.className = 'test-modal-item';
+    const itemLabel = document.createElement('div');
+    itemLabel.className = 'test-modal-item-label';
+    itemLabel.textContent = label;
+    const itemValue = document.createElement('div');
+    itemValue.className = `test-modal-item-value${options.mono ? ' mono' : ''}`;
+    itemValue.textContent = asText(value, options.fallback || '-');
+    item.appendChild(itemLabel);
+    item.appendChild(itemValue);
+    els.testResultSummary.appendChild(item);
+  }
+
+  function normalizeAttemptRows(payload = {}) {
+    if (Array.isArray(payload.attempts) && payload.attempts.length > 0) {
+      return payload.attempts;
+    }
+    if (payload.provider || payload.model || payload.status) {
+      return [{
+        provider: payload.provider || '-',
+        model: payload.model || '-',
+        status: payload.status || '-',
+        latencyMs: payload.latencyMs,
+        error: payload.errorMessage || '',
+      }];
+    }
+    return [];
+  }
+
+  function closeTestResultModal() {
+    if (!els.testResultModal) return;
+    els.testResultModal.classList.remove('open');
+    els.testResultModal.setAttribute('aria-hidden', 'true');
+  }
+
+  function openTestResultModal(payload = {}) {
+    if (!els.testResultModal || !els.testResultSummary || !els.testResultAttemptsBody) return;
+
+    const ok = !!payload.ok;
+    const title = payload.title || (ok ? 'Provider Test Succeeded' : 'Provider Test Failed');
+    const badgeText = ok ? 'Success' : 'Failed';
+
+    if (els.testResultBadge) {
+      els.testResultBadge.textContent = badgeText;
+      els.testResultBadge.classList.remove('ok', 'bad');
+      els.testResultBadge.classList.add(ok ? 'ok' : 'bad');
+    }
+    if (els.testResultTitle) {
+      els.testResultTitle.textContent = title;
+    }
+
+    els.testResultSummary.innerHTML = '';
+    const attemptRows = normalizeAttemptRows(payload);
+    const attemptCount = payload.attemptCount || attemptRows.length || (ok ? 1 : 0);
+    const routingBits = [
+      payload.routingMode ? `mode=${payload.routingMode}` : null,
+      payload.routingReason ? `reason=${payload.routingReason}` : null,
+      payload.routingIntent ? `intent=${payload.routingIntent}` : null,
+    ].filter(Boolean).join(' | ');
+
+    setTestModalSummaryField('User', payload.userDisplay || payload.userId || '-');
+    if (payload.requestedIntent) {
+      setTestModalSummaryField('Requested Intent', payload.requestedIntent);
+    }
+    setTestModalSummaryField('Provider', payload.provider || '-');
+    setTestModalSummaryField('Model', payload.model || '-');
+    setTestModalSummaryField('HTTP Status', payload.status || '-');
+    setTestModalSummaryField('Attempts', attemptCount);
+    setTestModalSummaryField('Routing', routingBits || 'n/a', { mono: true });
+    if (payload.requestedPrompt) {
+      setTestModalSummaryField('Prompt', trimForUi(payload.requestedPrompt, 180), { mono: true });
+    }
+    if (payload.errorType || payload.errorCode) {
+      const errorMeta = [payload.errorType, payload.errorCode].filter(Boolean).join(' / ');
+      setTestModalSummaryField('Error Type', errorMeta || '-', { mono: true });
+    }
+    if (payload.errorMessage) {
+      setTestModalSummaryField('Message', payload.errorMessage, { mono: true });
+    } else if (payload.snippet) {
+      setTestModalSummaryField('Response Snippet', payload.snippet, { mono: true });
+    }
+
+    els.testResultAttemptsBody.innerHTML = '';
+    if (!attemptRows.length) {
+      const row = document.createElement('tr');
+      const col = document.createElement('td');
+      col.colSpan = 6;
+      col.textContent = ok ? 'No fallback attempts recorded.' : 'No attempt details available.';
+      row.appendChild(col);
+      els.testResultAttemptsBody.appendChild(row);
+    } else {
+      attemptRows.forEach((attempt, index) => {
+        const row = document.createElement('tr');
+        const cells = [
+          String(index + 1),
+          asText(attempt.provider),
+          asText(attempt.model),
+          asText(attempt.status),
+          attempt.latencyMs != null ? `${attempt.latencyMs}ms` : '-',
+          asText(attempt.error, '-'),
+        ];
+        cells.forEach((value) => {
+          const td = document.createElement('td');
+          td.textContent = value;
+          row.appendChild(td);
+        });
+        els.testResultAttemptsBody.appendChild(row);
+      });
+    }
+
+    els.testResultModal.classList.add('open');
+    els.testResultModal.setAttribute('aria-hidden', 'false');
+  }
+
+  function parseTestErrorDetails(error) {
+    const rawMessage = error?.message || 'Provider test failed';
+    const httpMatch = rawMessage.match(/^HTTP\s+(\d+)\s*:\s*([\s\S]+)$/i);
+    let status = null;
+    let rawBody = '';
+    if (httpMatch) {
+      status = Number(httpMatch[1]);
+      rawBody = httpMatch[2] || '';
+    }
+
+    let body = null;
+    if (rawBody) {
+      try {
+        body = JSON.parse(rawBody);
+      } catch {
+        body = null;
+      }
+    }
+
+    const errorBody = body?.error || {};
+    return {
+      status: status || errorBody.status || '-',
+      errorMessage: errorBody.message || rawMessage,
+      errorType: errorBody.type || 'test_failed',
+      errorCode: errorBody.code || '',
+      provider: body?.provider || '-',
+      model: body?.model || '-',
+      routingMode: body?.routingMode || null,
+      routingReason: body?.routingReason || null,
+      routingIntent: body?.routingIntent || null,
+      attempts: Array.isArray(body?.attempts) ? body.attempts : [],
+      attemptCount: Number.isFinite(body?.attemptCount) ? body.attemptCount : null,
+    };
+  }
+
+  async function copyTextToClipboard(value) {
+    const text = String(value || '').trim();
+    if (!text) {
+      throw new Error('Nothing to copy');
+    }
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+
+    // Fallback for environments where Clipboard API is unavailable.
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(area);
+    if (!ok) {
+      throw new Error('Clipboard unavailable');
+    }
+  }
+
+  function resolveThemePreference(pref) {
+    if (pref === 'light' || pref === 'dark') return pref;
+    const media = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+    return media?.matches ? 'dark' : 'light';
+  }
+
+  function applyTheme(pref, persist = false) {
+    state.themePreference = pref || 'system';
+    const resolved = resolveThemePreference(state.themePreference);
+    document.documentElement.setAttribute('data-theme', resolved);
+    if (els.themeSelect) {
+      els.themeSelect.value = state.themePreference;
+    }
+    if (persist) {
+      saveConnectionPrefs();
+    }
+  }
+
+  function getBaseUrl() {
+    return (els.baseUrl.value || location.origin).replace(/\/$/, '');
+  }
+
+  function getAuthHeader() {
+    const token = (els.adminToken.value || '').trim();
+    return token ? `Bearer ${token}` : '';
+  }
+
+  function getUrlAdminToken() {
+    const params = new URLSearchParams(window.location.search || '');
+    return (params.get('adminToken') || params.get('token') || '').trim();
+  }
 
   async function api(path, opts = {}) {
-    const base = baseUrlEl.value || `${location.origin}`;
-    const url = `${base}/admin/api${path}`;
-    const headers = Object.assign({}, opts.headers || {}, {
-      'Authorization': `Bearer ${adminTokenEl.value}`,
-      'Content-Type': 'application/json'
-    });
-    if (adminOtpEl.value) headers['x-admin-otp'] = adminOtpEl.value;
-    const res = await fetch(url, { ...opts, headers });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`HTTP ${res.status}: ${text}`);
+    const url = `${getBaseUrl()}/admin/api${path}`;
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(opts.headers || {}),
+    };
+    const auth = getAuthHeader();
+    if (auth) headers.Authorization = auth;
+    const otp = (els.adminOtp.value || '').trim();
+    if (otp) headers['x-admin-otp'] = otp;
+
+    const response = await fetch(url, { ...opts, headers });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`HTTP ${response.status}: ${text}`);
     }
-    if (res.status === 204) return null;
-    return res.json();
+    if (response.status === 204) return null;
+    return response.json();
+  }
+
+  async function openEndpoint(path, opts = {}) {
+    const response = await fetch(`${getBaseUrl()}${path}`, opts);
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`HTTP ${response.status}: ${text}`);
+    }
+    return response.json();
+  }
+
+  function saveConnectionPrefs() {
+    const payload = {
+      baseUrl: els.baseUrl.value || location.origin,
+      adminOtp: els.adminOtp.value || '',
+      theme: state.themePreference || 'system',
+    };
+    localStorage.setItem('tlink-proxy-admin', JSON.stringify(payload));
+  }
+
+  function loadConnectionPrefs() {
+    try {
+      const raw = localStorage.getItem('tlink-proxy-admin');
+      if (!raw) {
+        els.baseUrl.value = location.origin;
+        return;
+      }
+      const cfg = JSON.parse(raw);
+      els.baseUrl.value = cfg.baseUrl || location.origin;
+      els.adminOtp.value = cfg.adminOtp || '';
+      applyTheme(cfg.theme || 'system', false);
+    } catch {
+      els.baseUrl.value = location.origin;
+      applyTheme('system', false);
+    }
+  }
+
+  async function connect() {
+    setStatus(els.connectionStatus, 'Connecting...');
+    try {
+      const data = await api('/overview');
+      setStatus(els.connectionStatus, `Connected at ${nowIso()}`, 'success');
+      saveConnectionPrefs();
+      renderOverview(data);
+      await Promise.allSettled([
+        loadUsers(),
+        loadActivity(),
+        loadHealth(),
+        loadUsage(),
+        loadRouting(),
+        loadProviderConfig(),
+        loadEnvFile(),
+      ]);
+    } catch (error) {
+      console.error(error);
+      setStatus(els.connectionStatus, error.message, 'error');
+    }
+  }
+
+  function renderProviderConfigSummary(data) {
+    const providers = data?.providers || {};
+    const groq = providers.groq || {};
+    const openai = providers.openai || {};
+    const anthropic = providers.anthropic || {};
+    const resolveLoadedKey = (provider) => {
+      if (provider?.singleKey) return provider.singleKey;
+      if (Array.isArray(provider?.multiKeys) && provider.multiKeys.length > 0) {
+        return provider.multiKeys[0];
+      }
+      return '';
+    };
+
+    const summary = [
+      `GROQ: ${groq.hasKey ? `${groq.keyCount} key(s)` : 'not configured'}`,
+      `OPENAI: ${openai.hasKey ? `${openai.keyCount} key(s)` : 'not configured'}`,
+      `ANTHROPIC: ${anthropic.hasKey ? `${anthropic.keyCount} key(s)` : 'not configured'}`,
+    ].join(' | ');
+    setStatus(els.providerConfigSummary, summary);
+
+    if (els.providerGroqApiKey) els.providerGroqApiKey.value = resolveLoadedKey(groq);
+    if (els.providerOpenaiApiKey) els.providerOpenaiApiKey.value = resolveLoadedKey(openai);
+    if (els.providerAnthropicApiKey) els.providerAnthropicApiKey.value = resolveLoadedKey(anthropic);
+    if (els.providerGroqModel) els.providerGroqModel.value = groq.defaultModel || '';
+    if (els.providerOpenaiModel) els.providerOpenaiModel.value = openai.defaultModel || '';
+    if (els.providerAnthropicModel) els.providerAnthropicModel.value = anthropic.defaultModel || '';
+    if (els.providerPersistEnv && data?.persistence?.defaultEnabled != null) {
+      els.providerPersistEnv.checked = !!data.persistence.defaultEnabled;
+    }
+  }
+
+  async function loadProviderConfig() {
+    setStatus(els.providerConfigStatus, 'Loading provider config...');
+    try {
+      const data = await api('/providers/config?includeSecrets=true');
+      renderProviderConfigSummary(data);
+      setStatus(els.providerConfigStatus, 'Provider config loaded', 'success');
+    } catch (error) {
+      console.error(error);
+      setStatus(els.providerConfigStatus, error.message, 'error');
+    }
+  }
+
+  async function saveProviderConfig() {
+    setStatus(els.providerConfigStatus, 'Saving provider config...');
+    try {
+      const body = {
+        persist: !!els.providerPersistEnv?.checked,
+      };
+
+      const groqKey = (els.providerGroqApiKey?.value || '').trim();
+      const openaiKey = (els.providerOpenaiApiKey?.value || '').trim();
+      const anthropicKey = (els.providerAnthropicApiKey?.value || '').trim();
+      const groqModel = (els.providerGroqModel?.value || '').trim();
+      const openaiModel = (els.providerOpenaiModel?.value || '').trim();
+      const anthropicModel = (els.providerAnthropicModel?.value || '').trim();
+
+      if (groqKey) body.groqApiKey = groqKey;
+      if (openaiKey) body.openaiApiKey = openaiKey;
+      if (anthropicKey) body.anthropicApiKey = anthropicKey;
+      if (groqModel) body.groqDefaultModel = groqModel;
+      if (openaiModel) body.openaiDefaultModel = openaiModel;
+      if (anthropicModel) body.anthropicDefaultModel = anthropicModel;
+
+      if (
+        !Object.prototype.hasOwnProperty.call(body, 'groqApiKey') &&
+        !Object.prototype.hasOwnProperty.call(body, 'openaiApiKey') &&
+        !Object.prototype.hasOwnProperty.call(body, 'anthropicApiKey') &&
+        !Object.prototype.hasOwnProperty.call(body, 'groqDefaultModel') &&
+        !Object.prototype.hasOwnProperty.call(body, 'openaiDefaultModel') &&
+        !Object.prototype.hasOwnProperty.call(body, 'anthropicDefaultModel')
+      ) {
+        setStatus(els.providerConfigStatus, 'Enter at least one key or default model to save', 'error');
+        return;
+      }
+
+      const result = await api('/providers/config', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+
+      if (els.providerGroqApiKey) els.providerGroqApiKey.value = '';
+      if (els.providerOpenaiApiKey) els.providerOpenaiApiKey.value = '';
+      if (els.providerAnthropicApiKey) els.providerAnthropicApiKey.value = '';
+
+      renderProviderConfigSummary(result.config);
+      setStatus(
+        els.providerConfigStatus,
+        `Saved provider config (${result.updatedKeys?.length || 0} fields${result.persisted ? ', persisted' : ''})`,
+        'success',
+      );
+      await Promise.allSettled([loadOverview(), loadHealth()]);
+    } catch (error) {
+      console.error(error);
+      setStatus(els.providerConfigStatus, error.message, 'error');
+    }
+  }
+
+  function renderEnvFile(data) {
+    if (els.envFileContent) {
+      els.envFileContent.value = data?.content || '';
+    }
+    const parts = [];
+    if (data?.envFile) parts.push(data.envFile);
+    if (Number.isFinite(data?.lineCount)) parts.push(`${data.lineCount} lines`);
+    if (Number.isFinite(data?.sizeBytes)) parts.push(`${data.sizeBytes} bytes`);
+    if (data?.mtime) parts.push(`updated ${fmtDate(data.mtime)}`);
+    setStatus(els.envFileMeta, parts.join(' | '));
+  }
+
+  async function loadEnvFile() {
+    setStatus(els.envFileStatus, 'Loading .env...');
+    try {
+      const data = await api('/env-file');
+      renderEnvFile(data);
+      setStatus(els.envFileStatus, '.env loaded', 'success');
+    } catch (error) {
+      console.error(error);
+      setStatus(els.envFileStatus, error.message, 'error');
+    }
+  }
+
+  async function copyEnvFile() {
+    const content = (els.envFileContent?.value || '').trim();
+    if (!content) {
+      setStatus(els.envFileStatus, 'Load .env first', 'error');
+      return;
+    }
+
+    try {
+      await copyTextToClipboard(content);
+      setStatus(els.envFileStatus, '.env copied to clipboard', 'success');
+    } catch (error) {
+      console.error(error);
+      setStatus(els.envFileStatus, 'Failed to copy .env', 'error');
+    }
+  }
+
+  function renderOverview(data) {
+    if (!data) return;
+    setText(els.statUsers, String(data.users?.total ?? '-'));
+    setText(els.statVerified, String(data.users?.verified ?? '-'));
+    setText(els.statActive, String(data.users?.active ?? '-'));
+    setText(els.statRequests, String(data.usage?.totalRequests ?? '-'));
+    setText(els.statPrompt, String(data.usage?.totalPromptTokens ?? '-'));
+    setText(els.statCompletion, String(data.usage?.totalCompletionTokens ?? '-'));
+    setText(els.statProviders, String(data.providers?.tracked ?? data.providers?.configured ?? '-'));
+    setText(els.statSuppressed, String(data.providers?.suppressed ?? '-'));
+
+    const latest = data.latestAudit
+      ? `Last audit: ${fmtDate(data.latestAudit.timestamp)} user=${data.latestAudit.userId} provider=${data.latestAudit.provider} status=${data.latestAudit.status}`
+      : 'No recent activity';
+    setStatus(els.overviewStatus, latest);
+  }
+
+  function filteredUsers() {
+    const search = (els.userSearch.value || '').trim().toLowerCase();
+    const activeFilter = els.userFilterActive.value;
+    const verifiedFilter = els.userFilterVerified.value;
+
+    return state.users.filter((u) => {
+      if (search) {
+        const hay = `${u.id || ''} ${u.name || ''} ${u.email || ''}`.toLowerCase();
+        if (!hay.includes(search)) return false;
+      }
+      if (activeFilter === 'active' && u.active === false) return false;
+      if (activeFilter === 'inactive' && u.active !== false) return false;
+      if (verifiedFilter === 'yes' && !u.verified) return false;
+      if (verifiedFilter === 'no' && !!u.verified) return false;
+      return true;
+    });
+  }
+
+  function getUserById(userId) {
+    if (!userId) return null;
+    return state.users.find((u) => u.id === userId) || null;
+  }
+
+  function updateUsersActionBar() {
+    const selectedUser = getUserById(state.selectedUser);
+    const hasSelection = !!selectedUser;
+
+    if (els.usersSelectedLabel) {
+      els.usersSelectedLabel.textContent = hasSelection
+        ? `Selected: ${selectedUser.name || selectedUser.id}`
+        : 'Selected: none';
+    }
+
+    const buttons = [
+      els.usersActionTokensBtn,
+      els.usersActionToggleActiveBtn,
+      els.usersActionResetUsageBtn,
+      els.usersActionResendBtn,
+      els.usersActionTestBtn,
+      els.usersActionDeleteBtn,
+    ];
+    buttons.forEach((btn) => {
+      if (btn) btn.disabled = !hasSelection;
+    });
+    if (els.usersVerifyEmail) {
+      els.usersVerifyEmail.disabled = !hasSelection;
+    }
+
+    if (els.usersActionToggleActiveBtn) {
+      els.usersActionToggleActiveBtn.textContent = hasSelection && selectedUser.active === false
+        ? 'Activate'
+        : 'Deactivate';
+    }
+  }
+
+  async function selectUser(userId, options = {}) {
+    const loadTokens = options.loadTokens !== false;
+    if (!userId) return;
+
+    state.selectedUser = userId;
+    if (els.selectedUserId) {
+      els.selectedUserId.value = userId;
+    }
+    const selectedUser = getUserById(userId);
+    if (els.usersVerifyEmail) {
+      els.usersVerifyEmail.value = selectedUser?.email || '';
+    }
+    renderUsers();
+    updateUsersActionBar();
+
+    if (loadTokens) {
+      await loadSelectedUserTokens();
+    }
+  }
+
+  async function runSelectedUserAction(action) {
+    const userId = (state.selectedUser || '').trim();
+    if (!userId) {
+      setStatus(els.usersStatus, 'Select a user first', 'error');
+      return;
+    }
+
+    if (action === 'select') {
+      await selectUser(userId);
+      return;
+    }
+    await runUserAction(action, userId);
+  }
+
+  function renderUsers() {
+    const users = filteredUsers();
+    els.usersTableBody.innerHTML = '';
+
+    users.forEach((user) => {
+      const tr = document.createElement('tr');
+      const statusClass = user.active === false ? 'bad' : 'ok';
+      const verifiedClass = user.verified ? 'ok' : 'warn';
+      if (user?.id) {
+        tr.setAttribute('data-user-row-id', user.id);
+      }
+      if (state.selectedUser && user.id === state.selectedUser) {
+        tr.classList.add('row-selected');
+      }
+      tr.innerHTML = `
+        <td>${user.name || user.id || '-'}</td>
+        <td>${user.email || '-'}</td>
+        <td>${(user.allowedProviders || []).join(', ') || '-'}</td>
+        <td><span class="pill ${statusClass}">${user.active === false ? 'inactive' : 'active'}</span></td>
+        <td><span class="pill ${verifiedClass}">${user.verified ? 'verified' : 'pending'}</span></td>
+        <td>${user.billing?.totalRequests || 0}</td>
+        <td>${fmtDate(user.lastUsedAt)}</td>
+      `;
+      els.usersTableBody.appendChild(tr);
+    });
+
+    updateUsersActionBar();
+    setStatus(els.usersStatus, `Loaded ${users.length} users (${state.users.length} total)`);
   }
 
   async function loadUsers() {
-    setStatus('Loading...');
+    setStatus(els.usersStatus, 'Loading users...');
     try {
-      const search = document.getElementById('search')?.value || '';
-      const data = await api(`/users?search=${encodeURIComponent(search)}&page=1&pageSize=500`);
-      cachedUsers = data.items || [];
-      renderUsers(applyUserFilters(cachedUsers));
-      renderStats(applyUserFilters(cachedUsers));
-      setStatus(`Loaded ${data.items.length}/${data.total}`);
-    } catch (err) {
-      console.error(err);
-      setStatus('Error loading users');
-    }
-  }
-
-  function applyUserFilters(users) {
-    return (users || []).filter(u => {
-      if (filterVerifiedEl.checked && !u.verified) return false;
-      if (filterActiveEl.checked && u.active === false) return false;
-      if (filterHasLimitsEl.checked) {
-        const hasRate = !!u.rateLimit || (u.rateLimitByProvider && Object.keys(u.rateLimitByProvider).length);
-        const limits = u.billing?.limits || {};
-        const hasQuota = !!limits.maxRequests || !!limits.maxPromptTokens || !!limits.maxCompletionTokens;
-        if (!hasRate && !hasQuota) return false;
+      const data = await api('/users?page=1&pageSize=500');
+      state.users = data.items || [];
+      if (state.selectedUser && !getUserById(state.selectedUser)) {
+        state.selectedUser = null;
+        if (els.selectedUserId) {
+          els.selectedUserId.value = '';
+        }
+        if (els.usersVerifyEmail) {
+          els.usersVerifyEmail.value = '';
+        }
+        els.tokensTableBody.innerHTML = '';
       }
-      return true;
-    });
-  }
-
-  function paginateUsers(users) {
-    const page = Math.max(1, Number(userPageEl?.value || 1));
-    const pageSize = Math.max(1, Number(userPageSizeEl?.value || 50));
-    const start = (page - 1) * pageSize;
-    const slice = users.slice(start, start + pageSize);
-    return { page, pageSize, total: users.length, slice };
-  }
-
-  function renderUsers(users) {
-    const { page, pageSize, total, slice } = paginateUsers(users);
-    tableBody.innerHTML = '';
-    slice.forEach(u => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${u.email || '-'}</td>
-        <td>${u.name || u.id}</td>
-        <td>
-          <span class="inline-edit" data-id="${u.id}" data-field="lockedProvider">
-            <span class="value">${u.lockedProvider || '-'}</span>
-            <button class="icon-btn" data-edit-inline="1" title="Edit">✏️</button>
-          </span>
-        </td>
-        <td><span class="pill ${u.verified ? 'ok' : 'bad'}">${u.verified ? 'yes' : 'no'}</span></td>
-        <td>
-          <span class="inline-edit" data-id="${u.id}" data-field="allowedProviders">
-            <span class="value">${(u.allowedProviders || []).join(', ') || '-'}</span>
-            <button class="icon-btn" data-edit-inline="1" title="Edit">✏️</button>
-          </span>
-        </td>
-        <td>
-          <span class="inline-edit" data-id="${u.id}" data-field="preferredProvider">
-            <span class="value">${u.preferredProvider || '-'}</span>
-            <button class="icon-btn" data-edit-inline="1" title="Edit">✏️</button>
-          </span>
-        </td>
-        <td>${fmtDate(u.lastUsedAt)}</td>
-        <td>${u.lastProvider || '-'}</td>
-        <td>${u.lastModel || '-'}</td>
-        <td>${fmtDate(u.createdAt)}</td>
-        <td>${summarizeTokens(u.tokens)}</td>
-        <td><span class="pill ${u.active === false ? 'bad' : 'ok'}">${u.active === false ? 'inactive' : 'active'}</span></td>
-        <td>${renderLimits(u)}</td>
-        <td class="row-actions">
-          <select data-action="menu" data-id="${u.id}">
-            <option value="">Actions…</option>
-            <option value="token">+ token</option>
-            <option value="policies">Policies</option>
-            <option value="billing">Billing</option>
-            <option value="reset-usage">Reset usage</option>
-            <option value="deactivate">${u.active === false ? 'Activate' : 'Deactivate'}</option>
-            <option value="resend">Resend verify</option>
-            <option value="tokens">View tokens</option>
-            <option value="test">Test</option>
-            <option value="audit">Audit</option>
-          </select>
-        </td>
-      `;
-      tableBody.appendChild(tr);
-    });
-    setStatus(`Users: showing ${(page - 1) * pageSize + 1}-${Math.min(page * pageSize, total)} of ${total}`);
-  }
-
-  function renderLimits(u) {
-    const pills = [];
-    if (u.rateLimit?.max || u.rateLimit?.windowMs) {
-      pills.push(`rate:${u.rateLimit.max ?? '?'}@${u.rateLimit.windowMs ? Math.round(u.rateLimit.windowMs/1000)+'s' : '?'}`);
+      renderUsers();
+      setStatus(els.usersStatus, `Loaded ${state.users.length} users`, 'success');
+    } catch (error) {
+      console.error(error);
+      setStatus(els.usersStatus, error.message, 'error');
     }
-    const rateByProvCount = u.rateLimitByProvider ? Object.keys(u.rateLimitByProvider).length : 0;
-    if (rateByProvCount) pills.push(`rate/${rateByProvCount}p`);
-    const limits = u.billing?.limits || {};
-    if (limits.maxRequests) pills.push(`quota:${limits.maxRequests} req`);
-    if (limits.maxPromptTokens) pills.push(`quota:${limits.maxPromptTokens} ptok`);
-    if (limits.maxCompletionTokens) pills.push(`quota:${limits.maxCompletionTokens} ctok`);
-    return pills.length ? pills.map(p => `<span class="badge-inline"><span class="dot"></span>${p}</span>`).join(' ') : '-';
-  }
-
-  function renderStats(users = []) {
-    const total = users.length;
-    const verified = users.filter(u => u.verified).length;
-    const active = users.filter(u => u.active !== false).length;
-    const totalRequests = users.reduce((sum, u) => sum + (u.billing?.totalRequests || 0), 0);
-    const totalPrompt = users.reduce((sum, u) => sum + (u.billing?.totalPromptTokens || 0), 0);
-    const totalCompletion = users.reduce((sum, u) => sum + (u.billing?.totalCompletionTokens || 0), 0);
-    document.getElementById('statUsers').textContent = total;
-    document.getElementById('statVerified').textContent = `${verified} (${total ? Math.round((verified/total)*100) : 0}%)`;
-    document.getElementById('statActive').textContent = `${active} (${total ? Math.round((active/total)*100) : 0}%)`;
-    document.getElementById('statRequests').textContent = totalRequests;
-    document.getElementById('statPrompt').textContent = totalPrompt;
-    document.getElementById('statCompletion').textContent = totalCompletion;
   }
 
   async function createUser() {
-    setCreateStatus('Creating...');
+    setStatus(els.createUserStatus, 'Creating...');
     try {
       const body = {
-        email: document.getElementById('newEmail').value || undefined,
-        name: document.getElementById('newName').value || undefined,
-        allowedProviders: (document.getElementById('newProviders').value || '').split(',').map(s => s.trim()).filter(Boolean),
-        allowedModels: (document.getElementById('newModels').value || '').split(',').map(s => s.trim()).filter(Boolean),
-        deniedModels: (document.getElementById('newDeniedModels').value || '').split(',').map(s => s.trim()).filter(Boolean),
-        preferredProvider: document.getElementById('newPreferred').value || undefined,
-        lockedProvider: document.getElementById('newLockedProvider').value || undefined
-      };
-      const modelsByProviderRaw = document.getElementById('newModelsByProvider').value || '';
-      const deniedByProviderRaw = document.getElementById('newDeniedByProvider').value || '';
-      const rateByProviderRaw = document.getElementById('newRateByProvider').value || '';
-      if (modelsByProviderRaw) {
-        try { body.allowedModelsByProvider = JSON.parse(modelsByProviderRaw); } catch (e) { console.error('Invalid allowedModelsByProvider JSON'); }
-      }
-      if (deniedByProviderRaw) {
-        try { body.deniedModelsByProvider = JSON.parse(deniedByProviderRaw); } catch (e) { console.error('Invalid deniedModelsByProvider JSON'); }
-      }
-      if (rateByProviderRaw) {
-        try { body.rateLimitByProvider = JSON.parse(rateByProviderRaw); } catch (e) { console.error('Invalid rateLimitByProvider JSON'); }
-      }
-      const rateMax = document.getElementById('newRateMax').value;
-      const rateWindow = document.getElementById('newRateWindow').value;
-      if (rateMax || rateWindow) {
-        body.rateLimit = {
-          max: rateMax ? Number(rateMax) : undefined,
-          windowMs: rateWindow ? Number(rateWindow) : undefined
-        };
-      }
-      const resp = await api('/users', { method: 'POST', body: JSON.stringify(body) });
-      const parts = [`Created. Token: ${resp.token || '(hidden)'}`];
-      if (resp.verificationUrl) parts.push(`Verify link: ${resp.verificationUrl}`);
-      setCreateStatus(parts.join(' • '));
-      await loadUsers();
-    } catch (err) {
-      console.error(err);
-      setCreateStatus('Error creating user');
-    }
-  }
-
-  async function editPolicies(userId) {
-    setStatus('Loading user...');
-    try {
-      const user = await fetchUser(userId);
-      policiesUserId = userId;
-      polUserLabel.textContent = `User: ${userId}`;
-      polAllowedModelsEl.value = (user.allowedModels || []).join(', ');
-      polDeniedModelsEl.value = (user.deniedModels || []).join(', ');
-      polAllowedByProviderEl.value = JSON.stringify(user.allowedModelsByProvider || {}, null, 2);
-      polDeniedByProviderEl.value = JSON.stringify(user.deniedModelsByProvider || {}, null, 2);
-      polRateLimitEl.value = user.rateLimit ? JSON.stringify(user.rateLimit, null, 2) : '';
-      polRateByProviderEl.value = JSON.stringify(user.rateLimitByProvider || {}, null, 2);
-      polStatusEl.textContent = '';
-      polModal.classList.remove('hidden');
-      setStatus('Ready');
-    } catch (err) {
-      console.error(err);
-      setStatus('Policy load failed');
-    }
-  }
-
-  async function editBilling(userId) {
-    setStatus('Loading billing...');
-    try {
-      const user = await fetchUser(userId);
-      const limits = user.billing?.limits || {};
-      const webhookUrl = user.billing?.webhookUrl || '';
-      const webhookThreshold = user.billing?.webhookThresholdRequests || '';
-      const webhookThresholdPrompt = user.billing?.webhookThresholdPromptTokens || '';
-      const webhookThresholdCompletion = user.billing?.webhookThresholdCompletionTokens || '';
-
-      const maxReq = prompt('Max requests (blank for none)', limits.maxRequests ?? '');
-      if (maxReq === null) { setStatus('Edit cancelled'); return; }
-      const maxPrompt = prompt('Max prompt tokens (blank for none)', limits.maxPromptTokens ?? '');
-      if (maxPrompt === null) { setStatus('Edit cancelled'); return; }
-      const maxCompletion = prompt('Max completion tokens (blank for none)', limits.maxCompletionTokens ?? '');
-      if (maxCompletion === null) { setStatus('Edit cancelled'); return; }
-      const hookUrl = prompt('Webhook URL (optional, overrides env)', webhookUrl);
-      if (hookUrl === null) { setStatus('Edit cancelled'); return; }
-      const hookThresh = prompt('Webhook threshold requests (optional)', webhookThreshold);
-      if (hookThresh === null) { setStatus('Edit cancelled'); return; }
-      const hookThreshPrompt = prompt('Webhook threshold prompt tokens (optional)', webhookThresholdPrompt);
-      if (hookThreshPrompt === null) { setStatus('Edit cancelled'); return; }
-      const hookThreshCompletion = prompt('Webhook threshold completion tokens (optional)', webhookThresholdCompletion);
-      if (hookThreshCompletion === null) { setStatus('Edit cancelled'); return; }
-
-      const billingLimits = {
-        maxRequests: maxReq ? Number(maxReq) : undefined,
-        maxPromptTokens: maxPrompt ? Number(maxPrompt) : undefined,
-        maxCompletionTokens: maxCompletion ? Number(maxCompletion) : undefined
+        email: (els.newUserEmail.value || '').trim() || undefined,
+        name: (els.newUserName.value || '').trim() || undefined,
+        id: (els.newUserId.value || '').trim() || undefined,
+        allowedProviders: (els.newAllowedProviders.value || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+        preferredProvider: (els.newPreferredProvider.value || '').trim() || undefined,
+        lockedProvider: (els.newLockedProvider.value || '').trim() || undefined,
+        verified: els.newUserVerified.value === 'true',
+        active: els.newUserActive.value !== 'false',
       };
 
-      await api(`/users/${encodeURIComponent(userId)}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          billingLimits,
-          billingWebhookUrl: hookUrl || undefined,
-          billingWebhookThreshold: hookThresh ? Number(hookThresh) : undefined,
-          billingWebhookThresholdPrompt: hookThreshPrompt ? Number(hookThreshPrompt) : undefined,
-          billingWebhookThresholdCompletion: hookThreshCompletion ? Number(hookThreshCompletion) : undefined
-        })
-      });
-      setStatus('Billing updated');
+      const result = await api('/users', { method: 'POST', body: JSON.stringify(body) });
+      setStatus(
+        els.createUserStatus,
+        `Created user ${result.user?.id || '-'}${result.token ? ` | token: ${result.token}` : ''}`,
+        'success',
+      );
       await loadUsers();
-    } catch (err) {
-      console.error(err);
-      setStatus('Billing update failed');
+      await loadOverview();
+    } catch (error) {
+      console.error(error);
+      setStatus(els.createUserStatus, error.message, 'error');
     }
   }
 
-  async function handleAction(e) {
-    const btn = e.target.closest('button[data-action]');
-    const select = e.target.closest('select[data-action="menu"]');
-    if (!btn && !select) return;
-    const id = (btn || select).dataset.id;
-    const action = btn ? btn.dataset.action : select.value;
-    if (!action) return;
-    try {
-      if (action === 'token') {
-        const resp = await api(`/users/${encodeURIComponent(id)}/tokens`, { method: 'POST', body: '{}' });
-        alert(`New token for ${id}: ${resp.token}`);
-      } else if (action === 'policies') {
-        await editPolicies(id);
-      } else if (action === 'billing') {
-        await editBilling(id);
-      } else if (action === 'reset-usage') {
-        await resetUsage(id);
-      } else if (action === 'deactivate') {
-        const makeInactive = btn.textContent.includes('Deactivate');
-        await api(`/users/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ active: !makeInactive }) });
-      } else if (action === 'resend') {
-        const resp = await api(`/users/${encodeURIComponent(id)}/resend`, { method: 'POST', body: '{}' });
-        alert(resp.verificationUrl ? `Verification link: ${resp.verificationUrl}` : 'Resend triggered');
-      } else if (action === 'tokens') {
-        await loadTokens(id);
-      } else if (action === 'test') {
-        await runTest(id);
-      } else if (action === 'audit') {
-        document.getElementById('auditSearch').value = id;
-        await loadAudit();
-        // open filtered audit in new tab
-        const base = baseUrlEl.value || `${location.origin}`;
-        window.open(`${base}/admin?auditSearch=${encodeURIComponent(id)}`, '_blank');
-      }
-      await loadUsers();
-    } catch (err) {
-      console.error(err);
-      alert('Action failed');
+  async function loadSelectedUserTokens() {
+    const userId = (state.selectedUser || '').trim();
+    if (!userId) {
+      els.tokensTableBody.innerHTML = '';
+      setStatus(els.tokensStatus, 'Select a user to manage tokens');
+      return;
     }
-    if (select) select.value = '';
-  }
 
-  async function resetUsage(userId) {
-    setStatus('Resetting usage...');
+    setStatus(els.tokensStatus, `Loading tokens for ${userId}...`);
     try {
-      await api(`/users/${encodeURIComponent(userId)}/reset-usage`, { method: 'POST', body: '{}' });
-      setStatus('Usage reset');
-    } catch (err) {
-      console.error(err);
-      setStatus('Reset failed');
-    }
-  }
-
-  async function loadTokens(userId) {
-    setTokenStatus('Loading tokens...');
-    try {
-      const data = await api(`/users/${encodeURIComponent(userId)}?includeTokens=1`);
-      tokensUserId = userId;
-      tokensUserEl.textContent = `${userId}`;
-      renderTokens(data.user.tokens || []);
-      setTokenStatus(`Loaded ${data.user.tokens?.length || 0}`);
-    } catch (err) {
-      console.error(err);
-      setTokenStatus('Error loading tokens');
-    }
-  }
-
-  function renderTokens(tokens) {
-    tokensTableBody.innerHTML = '';
-    (tokens || []).forEach(t => {
-      const tr = document.createElement('tr');
-      const tokenDisplay = t.token ? `${t.token.slice(0, 6)}…${t.token.slice(-4)}` : '(hidden)';
-      const expired = t.expiresAt && new Date(t.expiresAt) < new Date();
-      tr.innerHTML = `
-        <td>${tokenDisplay}</td>
-        <td>${fmtDate(t.createdAt)}</td>
-        <td>${t.expiresAt ? fmtDate(t.expiresAt) : '-'}</td>
-        <td>${fmtDate(t.lastUsedAt)}</td>
-        <td><span class="pill ${expired ? 'bad' : 'ok'}">${expired ? 'expired' : 'active'}</span></td>
-        <td class="row-actions">
-          <button data-token="${t.token}" data-action="copy-token">Copy</button>
-          <button data-token="${t.token}" data-action="revoke-token">Revoke</button>
-        </td>
-      `;
-      tokensTableBody.appendChild(tr);
-    });
-  }
-
-  async function runTest(userId) {
-    try {
-      const user = await fetchUser(userId);
-      const resp = await api(`/users/${encodeURIComponent(userId)}/test`, {
-        method: 'POST',
-        body: JSON.stringify({ user })
+      const data = await api(`/users/${encodeURIComponent(userId)}?includeTokens=true`);
+      const user = data.user;
+      const tokens = user.tokens || [];
+      els.tokensTableBody.innerHTML = '';
+      tokens.forEach((t) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="mono" title="${t.token || ''}">${maskToken(t.token)}</td>
+          <td>${fmtDate(t.createdAt)}</td>
+          <td>${fmtDate(t.expiresAt)}</td>
+          <td>${fmtDate(t.lastUsedAt)}</td>
+          <td class="actions">
+            <button class="secondary" data-token-copy="${encodeURIComponent(t.token || '')}">Copy</button>
+            <button class="bad" data-token-delete="${encodeURIComponent(t.token || '')}">Revoke</button>
+          </td>
+        `;
+        els.tokensTableBody.appendChild(tr);
       });
-      alert(`Test OK: provider=${resp.provider} model=${resp.model} status=${resp.status} latency=${resp.latencyMs}ms\n${resp.snippet || ''}`);
-    } catch (err) {
-      console.error(err);
-      alert(`Test failed: ${err.message}`);
+      setStatus(els.tokensStatus, `Loaded ${tokens.length} tokens`, 'success');
+    } catch (error) {
+      console.error(error);
+      setStatus(els.tokensStatus, error.message, 'error');
     }
-  }
-
-  async function fetchUser(userId) {
-    const resp = await api(`/users/${encodeURIComponent(userId)}?includeTokens=0`);
-    return resp.user;
   }
 
   async function addToken() {
-    if (!tokensUserId) {
-      setTokenStatus('Select a user first');
+    const userId = (state.selectedUser || '').trim();
+    if (!userId) {
+      setStatus(els.tokensStatus, 'Select a user first', 'error');
       return;
     }
-    setTokenStatus('Adding token...');
-    try {
-      const ttl = tokenTtlEl.value ? Number(tokenTtlEl.value) : undefined;
-      const body = ttl ? { expiresInDays: ttl } : {};
-      const resp = await api(`/users/${encodeURIComponent(tokensUserId)}/tokens`, { method: 'POST', body: JSON.stringify(body) });
-      setTokenStatus(`New token: ${resp.token}`);
-      await loadTokens(tokensUserId);
-      await loadUsers();
-    } catch (err) {
-      console.error(err);
-      setTokenStatus('Error adding token');
-    }
-  }
 
-  tokensTableBody.addEventListener('click', async (e) => {
-    const btn = e.target.closest('button[data-action]');
-    if (!btn) return;
-    const token = btn.dataset.token;
-    if (!token) return;
+    setStatus(els.tokensStatus, 'Adding token...');
     try {
-      if (btn.dataset.action === 'copy-token') {
-        await navigator.clipboard.writeText(token);
-        setTokenStatus('Token copied');
-      } else if (btn.dataset.action === 'revoke-token') {
-        const ok = confirm('Revoke this token?');
-        if (!ok) return;
-        await api(`/users/${encodeURIComponent(tokensUserId)}/tokens/${encodeURIComponent(token)}`, { method: 'DELETE' });
-        setTokenStatus('Token revoked');
-        await loadTokens(tokensUserId);
-        await loadUsers();
+      const ttl = Number(els.tokenTtlDays.value);
+      const body = Number.isFinite(ttl) && ttl > 0 ? { expiresInDays: ttl } : {};
+      const result = await api(`/users/${encodeURIComponent(userId)}/tokens`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      const tokenValue = result.token?.token || result.token || '';
+      if (tokenValue) {
+        try {
+          await copyTextToClipboard(tokenValue);
+          setStatus(els.tokensStatus, 'Token added and copied to clipboard', 'success');
+        } catch (copyError) {
+          console.error(copyError);
+          setStatus(els.tokensStatus, `Token added: ${tokenValue}`, 'success');
+        }
+      } else {
+        setStatus(els.tokensStatus, 'Token added', 'success');
       }
-    } catch (err) {
-      console.error(err);
-      setTokenStatus('Token action failed');
-    }
-  });
-
-  async function loadAudit() {
-    setAuditStatus('Loading...');
-    try {
-      const search = document.getElementById('auditSearch').value || '';
-      const provider = document.getElementById('auditProvider').value || '';
-      const status = document.getElementById('auditStatusFilter').value || '';
-      const reason = auditReasonEl.value || '';
-      const page = auditPageEl.value || 1;
-      const pageSize = auditPageSizeEl.value || 200;
-      const from = auditFromEl.value || '';
-      const to = auditToEl.value || '';
-      const qs = new URLSearchParams({
-        search,
-        provider,
-        status,
-        reason,
-        page,
-        pageSize,
-        from,
-        to
-      }).toString();
-      const data = await api(`/audit?${qs}`, { method: 'GET' });
-      renderAudit(data.items || []);
-      setAuditStatus(`Loaded ${data.items.length}/${data.total}`);
-    } catch (err) {
-      console.error(err);
-      setAuditStatus('Error loading audit');
+      await loadSelectedUserTokens();
+    } catch (error) {
+      console.error(error);
+      setStatus(els.tokensStatus, error.message, 'error');
     }
   }
 
-  function exportAuditCsv() {
-    const rows = Array.from(auditTableBody.querySelectorAll('tr')).map(tr =>
-      Array.from(tr.querySelectorAll('td')).map(td => td.textContent.replace(/"/g, '""'))
-    );
-    if (!rows.length) {
-      alert('No audit rows loaded');
-      return;
-    }
-    const header = ['Time', 'User', 'Provider', 'Model', 'Routed', 'Routing reason', 'Status', 'Reason', 'Attempts', 'Latency', 'Error'];
-    const csv = [header, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `audit-${Date.now()}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
+  async function revokeToken(token) {
+    const userId = (state.selectedUser || '').trim();
+    if (!userId || !token) return;
+    if (!confirm('Revoke this token?')) return;
 
-  async function loadHealth() {
-    healthStatusEl.textContent = 'Loading...';
+    setStatus(els.tokensStatus, 'Revoking token...');
     try {
-      const data = await api('/providers/health');
-      renderHealth(data.items || []);
-      healthStatusEl.textContent = `Loaded ${data.items.length}`;
-    } catch (err) {
-      console.error(err);
-      healthStatusEl.textContent = 'Error loading health';
+      await api(`/users/${encodeURIComponent(userId)}/tokens/${token}`, { method: 'DELETE' });
+      setStatus(els.tokensStatus, 'Token revoked', 'success');
+      await loadSelectedUserTokens();
+    } catch (error) {
+      console.error(error);
+      setStatus(els.tokensStatus, error.message, 'error');
     }
   }
 
-  async function loadUsage() {
-    usageStatusEl.textContent = 'Loading...';
+  async function runUserAction(action, userId) {
+    let testContext = null;
     try {
-      const data = await api('/usage');
-      cachedUsage = data.items || [];
-      renderUsage(applyUsageFilters(cachedUsage));
-    } catch (err) {
-      console.error(err);
-      usageStatusEl.textContent = 'Error loading usage';
-    }
-  }
-
-  async function loadRoutingSettings() {
-    try {
-      if (!adminTokenEl.value) {
-        setRoutingStatus('Add admin token first');
+      if (action === 'select') {
+        await selectUser(userId);
         return;
       }
-      setRoutingStatus('Loading...');
-      const data = await api('/routing');
-      routingModeEl.value = (data.mode || 'auto');
-      routingRulesEl.value = JSON.stringify(data.rules || [], null, 2);
-      setRoutingStatus('Loaded');
-    } catch (err) {
-      console.error(err);
-      setRoutingStatus('Failed to load');
-    }
-  }
 
-  async function saveRoutingSettings() {
-    try {
-      setRoutingStatus('Saving...');
-      let rules = [];
-      const raw = routingRulesEl.value.trim();
-      if (raw) {
-        rules = JSON.parse(raw);
-        if (!Array.isArray(rules)) throw new Error('Rules must be an array');
+      if (action === 'toggle-active') {
+        const user = state.users.find((u) => u.id === userId);
+        await api(`/users/${encodeURIComponent(userId)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ active: user?.active === false }),
+        });
+      } else if (action === 'reset-usage') {
+        await api(`/users/${encodeURIComponent(userId)}/reset-usage`, { method: 'POST', body: '{}' });
+      } else if (action === 'resend') {
+        const userPayload = state.users.find((u) => u.id === userId);
+        const requestedEmail = (els.usersVerifyEmail?.value || '').trim();
+        const targetEmail = requestedEmail || (userPayload?.email || '').trim();
+        if (!targetEmail) {
+          setStatus(els.usersStatus, 'Provide verification email for selected user', 'error');
+          return;
+        }
+        setStatus(els.usersStatus, `Sending verification link to ${targetEmail}...`);
+        const result = await api(`/users/${encodeURIComponent(userId)}/resend`, {
+          method: 'POST',
+          body: JSON.stringify({ email: targetEmail }),
+        });
+        if (els.usersVerifyEmail && result?.user?.email) {
+          els.usersVerifyEmail.value = result.user.email;
+        }
+        if (result?.verificationUrl) {
+          try {
+            await copyTextToClipboard(result.verificationUrl);
+            setStatus(
+              els.usersStatus,
+              `${result.message || 'Verification link sent'} | link copied to clipboard`,
+              'success',
+            );
+          } catch {
+            setStatus(els.usersStatus, `${result.message || 'Verification link sent'} | ${result.verificationUrl}`, 'success');
+          }
+        } else {
+          setStatus(els.usersStatus, result?.message || 'Verification link requested', 'success');
+        }
+      } else if (action === 'test') {
+        const userPayload = state.users.find((u) => u.id === userId);
+        const requestedIntent = (els.usersTestIntent?.value || 'default').trim().toLowerCase();
+        const customPrompt = (els.usersTestPrompt?.value || '').trim();
+        const prompt = customPrompt || getTestPromptForIntent(requestedIntent);
+        testContext = { requestedIntent, requestedPrompt: prompt };
+        setStatus(els.usersStatus, `Running ${requestedIntent} intent test for ${userPayload?.name || userId}...`);
+        const result = await api(`/users/${encodeURIComponent(userId)}/test`, {
+          method: 'POST',
+          body: JSON.stringify({
+            user: userPayload,
+            model: 'auto',
+            intent: requestedIntent,
+            prompt,
+            messages: [{ role: 'user', content: prompt }],
+          }),
+        });
+        openTestResultModal({
+          ok: true,
+          title: 'Provider Test Succeeded',
+          userId,
+          userDisplay: userPayload?.name || userPayload?.email || userId,
+          provider: result.provider,
+          model: result.model,
+          status: result.status,
+          latencyMs: result.latencyMs,
+          routingMode: result.routingMode,
+          routingReason: result.routingReason,
+          routingIntent: result.routingIntent,
+          snippet: result.snippet,
+          attempts: Array.isArray(result.attempts) ? result.attempts : [],
+          attemptCount: result.attemptCount,
+          requestedIntent,
+          requestedPrompt: prompt,
+        });
+        setStatus(els.usersStatus, `${requestedIntent} intent test succeeded for ${userPayload?.name || userId}`, 'success');
+      } else if (action === 'delete') {
+        if (!confirm(`Delete user ${userId}? This removes tokens and usage history for this user.`)) return;
+        await api(`/users/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+        if (state.selectedUser === userId) {
+          state.selectedUser = null;
+          els.selectedUserId.value = '';
+          if (els.usersVerifyEmail) {
+            els.usersVerifyEmail.value = '';
+          }
+          els.tokensTableBody.innerHTML = '';
+          updateUsersActionBar();
+        }
       }
-      const body = { mode: routingModeEl.value || 'auto', rules };
-      const data = await api('/routing', { method: 'POST', body: JSON.stringify(body) });
-      routingModeEl.value = data.mode || 'auto';
-      routingRulesEl.value = JSON.stringify(data.rules || [], null, 2);
-      setRoutingStatus('Saved');
-    } catch (err) {
-      console.error(err);
-      alert(`Failed to save routing: ${err.message}`);
-      setRoutingStatus('Error');
+
+      await Promise.allSettled([loadUsers(), loadOverview(), loadActivity(), loadUsage()]);
+    } catch (error) {
+      console.error(error);
+      if (action === 'test') {
+        const userPayload = state.users.find((u) => u.id === userId);
+        const details = parseTestErrorDetails(error);
+        openTestResultModal({
+          ok: false,
+          title: 'Provider Test Failed',
+          userId,
+          userDisplay: userPayload?.name || userPayload?.email || userId,
+          ...testContext,
+          ...details,
+        });
+      }
+      setStatus(els.usersStatus, error.message, 'error');
     }
   }
 
-  function exportUsageCsv() {
-    if (!usageTableBody.querySelector('tr')) {
-      alert('No usage rows loaded');
-      return;
-    }
-    const rows = Array.from(usageTableBody.querySelectorAll('tr')).map(tr =>
-      Array.from(tr.querySelectorAll('td')).map(td => td.textContent.replace(/"/g, '""'))
-    );
-    const header = ['User', 'Email', 'Requests', 'Prompt tokens', 'Completion tokens', 'Last provider', 'Last model', 'Updated'];
-    const csv = [header, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `usage-${Date.now()}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
-
-  function applyUsageFilters(items) {
-    const from = usageFromEl?.value ? new Date(usageFromEl.value).getTime() : null;
-    const to = usageToEl?.value ? new Date(usageToEl.value).getTime() + 24 * 60 * 60 * 1000 : null;
-    return (items || []).filter(r => {
-      const ts = r.updatedAt ? new Date(r.updatedAt).getTime() : null;
-      if (from && (!ts || ts < from)) return false;
-      if (to && (!ts || ts > to)) return false;
-      return true;
+  function renderActivity(rows = []) {
+    els.activityTableBody.innerHTML = '';
+    rows.forEach((r) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${fmtDate(r.timestamp)}</td>
+        <td>${r.userId || '-'}</td>
+        <td>${r.provider || '-'}</td>
+        <td>${r.model || '-'}</td>
+        <td>${r.status || '-'}</td>
+        <td>${r.reason || '-'}</td>
+        <td>${r.latencyMs != null ? `${r.latencyMs}ms` : '-'}</td>
+        <td title="${r.error || ''}">${r.error || '-'}</td>
+      `;
+      els.activityTableBody.appendChild(tr);
     });
   }
 
-  function renderUsage(items) {
-    const page = Math.max(1, Number(usagePageEl?.value || 1));
-    const pageSize = Math.max(1, Number(usagePageSizeEl?.value || 50));
-    const start = (page - 1) * pageSize;
-    const slice = (items || []).slice(start, start + pageSize);
-    usageTableBody.innerHTML = '';
-    slice.forEach(r => {
+  async function loadActivity() {
+    setStatus(els.activityStatus, 'Loading activity...');
+    try {
+      const search = encodeURIComponent((els.activitySearch.value || '').trim());
+      const provider = encodeURIComponent((els.activityProvider.value || '').trim());
+      const status = encodeURIComponent((els.activityStatusFilter.value || '').trim());
+      const data = await api(`/activity?page=1&pageSize=40&search=${search}&provider=${provider}&status=${status}`);
+      renderActivity(data.items || []);
+      const tele = data.telemetry || {};
+      setStatus(
+        els.activityStatus,
+        `Loaded ${data.items?.length || 0} rows | totalRequests=${tele.totalRequests || 0} errors=${tele.errors || 0}`,
+        'success',
+      );
+    } catch (error) {
+      console.error(error);
+      setStatus(els.activityStatus, error.message, 'error');
+    }
+  }
+
+  async function exportAuditCsv() {
+    try {
+      const auth = getAuthHeader();
+      const headers = auth ? { Authorization: auth } : {};
+      const otp = (els.adminOtp.value || '').trim();
+      if (otp) headers['x-admin-otp'] = otp;
+      const response = await fetch(`${getBaseUrl()}/admin/api/audit/export?format=csv`, { headers });
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`HTTP ${response.status}: ${text}`);
+      }
+      const text = await response.text();
+      const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `proxy-audit-${Date.now()}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setStatus(els.activityStatus, 'Audit CSV exported', 'success');
+    } catch (error) {
+      console.error(error);
+      setStatus(els.activityStatus, error.message, 'error');
+    }
+  }
+
+  function healthButton(row) {
+    const suppressed = !!row.suppressed;
+    const label = suppressed ? 'Unsuppress' : 'Suppress';
+    const klass = suppressed ? 'ok' : 'warn';
+    return `<button class="${klass}" data-health-provider="${row.provider}" data-health-target="${suppressed ? 'off' : 'on'}">${label}</button>`;
+  }
+
+  function renderHealth(rows = []) {
+    state.health = rows;
+    els.healthTableBody.innerHTML = '';
+    rows.forEach((r) => {
+      const tr = document.createElement('tr');
+      const suppressedLabel = r.suppressed ? `<span class="pill bad">yes</span>` : `<span class="pill ok">no</span>`;
+      tr.innerHTML = `
+        <td>${r.provider || '-'}</td>
+        <td>${fmtDate(r.lastSuccessAt)}</td>
+        <td>${fmtDate(r.lastErrorAt)}</td>
+        <td>${r.rollingLatencyMs != null ? `${r.rollingLatencyMs}ms` : '-'}</td>
+        <td>${suppressedLabel}</td>
+        <td>${r.provider ? healthButton(r) : '-'}</td>
+      `;
+      els.healthTableBody.appendChild(tr);
+    });
+  }
+
+  async function loadHealth() {
+    setStatus(els.healthStatus, 'Loading health...');
+    try {
+      const data = await api('/providers/health');
+      renderHealth(data.items || []);
+      setStatus(els.healthStatus, `Loaded ${data.items?.length || 0} providers`, 'success');
+    } catch (error) {
+      console.error(error);
+      setStatus(els.healthStatus, error.message, 'error');
+    }
+  }
+
+  async function setProviderSuppressed(provider, suppressed) {
+    if (!provider) return;
+    try {
+      await api(`/providers/health/${encodeURIComponent(provider)}/suppress`, {
+        method: 'POST',
+        body: JSON.stringify({ suppressed }),
+      });
+      await Promise.allSettled([loadHealth(), loadOverview()]);
+    } catch (error) {
+      console.error(error);
+      setStatus(els.healthStatus, error.message, 'error');
+    }
+  }
+
+  async function unsuppressAllProviders() {
+    for (const row of state.health) {
+      if (row?.provider && row.suppressed) {
+        // eslint-disable-next-line no-await-in-loop
+        await setProviderSuppressed(row.provider, false);
+      }
+    }
+    await loadHealth();
+  }
+
+  function renderUsage(rows = []) {
+    els.usageTableBody.innerHTML = '';
+    rows.forEach((r) => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${r.id}</td>
+        <td>${r.id || '-'}</td>
         <td>${r.email || '-'}</td>
-        <td>${r.totalRequests ?? 0}</td>
-        <td>${r.totalPromptTokens ?? 0}</td>
-        <td>${r.totalCompletionTokens ?? 0}</td>
+        <td>${r.totalRequests || 0}</td>
+        <td>${r.totalPromptTokens || 0}</td>
+        <td>${r.totalCompletionTokens || 0}</td>
         <td>${r.lastProvider || '-'}</td>
         <td>${r.lastModel || '-'}</td>
         <td>${fmtDate(r.updatedAt)}</td>
       `;
-      usageTableBody.appendChild(tr);
-    });
-    usageStatusEl.textContent = `Loaded ${(items || []).length} (showing ${Math.min(start + 1, items.length)}-${Math.min(start + slice.length, items.length)})`;
-  }
-
-  function renderHealth(items) {
-    cachedHealth = items || [];
-    const page = Math.max(1, Number(healthPageEl?.value || 1));
-    const pageSize = Math.max(1, Number(healthPageSizeEl?.value || 50));
-    const start = (page - 1) * pageSize;
-    const slice = cachedHealth.slice(start, start + pageSize);
-    healthTableBody.innerHTML = '';
-    slice.forEach(r => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${r.provider}</td>
-        <td>${fmtDate(r.lastSuccessAt)}</td>
-        <td>${fmtDate(r.lastErrorAt)}</td>
-        <td>${r.rollingLatencyMs != null ? r.rollingLatencyMs + ' ms' : '-'}</td>
-        <td>${r.successCount || 0}</td>
-        <td>${r.failureCount || 0}</td>
-        <td>${r.suppressed ? 'yes' : 'no'}</td>
-        <td>${r.suppressedUntil ? fmtDate(r.suppressedUntil) : '-'}</td>
-        <td>${r.suppressedReason || '-'}</td>
-        <td>${r.lastError || '-'}</td>
-        <td class="row-actions"><button data-provider="${r.provider}" data-suppressed="${r.suppressed ? '1' : '0'}">${r.suppressed ? 'Unsuppress' : 'Suppress'}</button></td>
-      `;
-      healthTableBody.appendChild(tr);
-    });
-    healthTableBody.querySelectorAll('button[data-provider]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const provider = btn.dataset.provider;
-        const suppressed = btn.dataset.suppressed === '1';
-        try {
-          await api(`/providers/health/${encodeURIComponent(provider)}/suppress`, {
-            method: 'POST',
-            body: JSON.stringify({ suppressed: !suppressed })
-          });
-          await loadHealth();
-        } catch (err) {
-          console.error(err);
-          alert('Failed to update provider suppression');
-        }
-      });
-    });
-    healthStatusEl.textContent = `Loaded ${cachedHealth.length} (showing ${Math.min(start + 1, cachedHealth.length)}-${Math.min(start + slice.length, cachedHealth.length)})`;
-  }
-
-  async function suppressFailing() {
-    if (!cachedHealth.length) return;
-    healthActionsStatusEl.textContent = 'Updating...';
-    const failThreshold = Math.max(1, Number(healthFailThresholdEl?.value || 1));
-    const minutes = Math.max(1, Number(healthErrorMinutesEl?.value || 60));
-    const cutoff = Date.now() - minutes * 60 * 1000;
-    const failing = cachedHealth.filter(r => {
-      const lastErrTs = r.lastErrorAt ? new Date(r.lastErrorAt).getTime() : 0;
-      return (r.failureCount || 0) >= failThreshold || (lastErrTs && lastErrTs >= cutoff);
-    });
-    for (const r of failing) {
-      try {
-        await api(`/providers/health/${encodeURIComponent(r.provider)}/suppress`, {
-          method: 'POST',
-          body: JSON.stringify({ suppressed: true, reason: 'auto-failing' })
-        });
-      } catch (err) {
-        console.error('Suppress failed for', r.provider, err);
-      }
-    }
-    healthActionsStatusEl.textContent = 'Done';
-    await loadHealth();
-  }
-
-  async function unsuppressAll() {
-    if (!cachedHealth.length) return;
-    healthActionsStatusEl.textContent = 'Updating...';
-    for (const r of cachedHealth) {
-      if (!r.suppressed) continue;
-      try {
-        await api(`/providers/health/${encodeURIComponent(r.provider)}/suppress`, {
-          method: 'POST',
-          body: JSON.stringify({ suppressed: false })
-        });
-      } catch (err) {
-        console.error('Unsuppress failed for', r.provider, err);
-      }
-    }
-    healthActionsStatusEl.textContent = 'Done';
-    await loadHealth();
-  }
-
-  function renderAudit(items) {
-    auditTableBody.innerHTML = '';
-    (items || []).forEach(r => {
-      const routed = `${r.routedProvider || '-'} / ${r.routedModel || '-'}`;
-      const routeReason = r.routingReason || r.routingMode || '-';
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${fmtDate(r.timestamp)}</td>
-        <td>${r.userId}</td>
-        <td>${r.provider}</td>
-        <td>${r.model}</td>
-        <td>${routed}</td>
-        <td>${routeReason}</td>
-        <td>${r.status || (r.success ? 'ok' : 'error')}</td>
-        <td>${r.reason || r.policyReason || '-'}</td>
-        <td>${r.attemptCount || (r.attempts ? r.attempts.length : '')}</td>
-        <td>${r.latencyMs != null ? r.latencyMs + ' ms' : '-'}</td>
-        <td>${r.error || '-'}</td>
-      `;
-      auditTableBody.appendChild(tr);
+      els.usageTableBody.appendChild(tr);
     });
   }
 
-  document.getElementById('loadBtn').addEventListener('click', loadUsers);
-  document.getElementById('searchBtn').addEventListener('click', loadUsers);
-  filterVerifiedEl.addEventListener('change', () => renderUsers(applyUserFilters(cachedUsers)));
-  filterActiveEl.addEventListener('change', () => renderUsers(applyUserFilters(cachedUsers)));
-  filterHasLimitsEl.addEventListener('change', () => renderUsers(applyUserFilters(cachedUsers)));
-  filterVerifiedEl.addEventListener('change', () => renderStats(applyUserFilters(cachedUsers)));
-  filterActiveEl.addEventListener('change', () => renderStats(applyUserFilters(cachedUsers)));
-  filterHasLimitsEl.addEventListener('change', () => renderStats(applyUserFilters(cachedUsers)));
-  userPageEl?.addEventListener('change', () => renderUsers(applyUserFilters(cachedUsers)));
-  userPageSizeEl?.addEventListener('change', () => renderUsers(applyUserFilters(cachedUsers)));
-  document.getElementById('createBtn').addEventListener('click', createUser);
-  document.getElementById('addTokenBtn').addEventListener('click', addToken);
-  document.getElementById('auditLoadBtn').addEventListener('click', loadAudit);
-  document.getElementById('auditCsvBtn').addEventListener('click', exportAuditCsv);
-  document.getElementById('auditFullBtn').addEventListener('click', async () => {
+  async function loadUsage() {
+    setStatus(els.usageStatus, 'Loading usage...');
     try {
-      const base = baseUrlEl.value || `${location.origin}`;
-      const headers = {
-        'Authorization': `Bearer ${adminTokenEl.value}`
-      };
-      if (adminOtpEl.value) headers['x-admin-otp'] = adminOtpEl.value;
-      const res = await fetch(`${base}/admin/api/audit/export?format=csv`, { headers });
-      const csv = await res.text();
-      if (!res.ok) throw new Error(csv);
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `audit-full-${Date.now()}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error(err);
-      alert('Full export failed');
+      const data = await api('/usage');
+      renderUsage(data.items || []);
+      setStatus(els.usageStatus, `Loaded ${data.items?.length || 0} usage rows`, 'success');
+    } catch (error) {
+      console.error(error);
+      setStatus(els.usageStatus, error.message, 'error');
     }
-  });
-  document.getElementById('healthLoadBtn').addEventListener('click', loadHealth);
-  document.getElementById('usageLoadBtn').addEventListener('click', loadUsage);
-  document.getElementById('usageCsvBtn').addEventListener('click', exportUsageCsv);
-  routingLoadBtn?.addEventListener('click', loadRoutingSettings);
-  routingSaveBtn?.addEventListener('click', saveRoutingSettings);
-  healthSuppressFailingBtn.addEventListener('click', suppressFailing);
-  healthUnsuppressAllBtn.addEventListener('click', unsuppressAll);
-  tableBody.addEventListener('click', handleAction);
-  tableBody.addEventListener('change', handleAction);
-  tableBody.addEventListener('click', inlineEditHandler);
-  document.getElementById('copyAuthBtn').addEventListener('click', async () => {
-    try {
-      const header = `Authorization: Bearer ${adminTokenEl.value}${adminOtpEl.value ? '\nX-Admin-Otp: ' + adminOtpEl.value : ''}`;
-      await navigator.clipboard.writeText(header);
-      setStatus('Auth header copied');
-    } catch (err) {
-      console.error(err);
-      setStatus('Copy failed');
-    }
-  });
-  document.querySelectorAll('.pill-btn[data-ttl]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      tokenTtlEl.value = btn.dataset.ttl;
-    });
-  });
-
-  // Defaults
-  baseUrlEl.value = `${location.origin}`;
-  // Preload filters from URL params if provided
-  const params = new URLSearchParams(location.search);
-  if (params.get('search')) document.getElementById('search').value = params.get('search');
-  if (params.get('auditSearch')) document.getElementById('auditSearch').value = params.get('auditSearch');
-  if (params.get('auditProvider')) document.getElementById('auditProvider').value = params.get('auditProvider');
-  if (params.get('auditStatus')) document.getElementById('auditStatusFilter').value = params.get('auditStatus');
-  if (params.get('auditReason')) document.getElementById('auditReasonFilter').value = params.get('auditReason');
-
-  // initial load
-  loadUsers();
-  loadAudit();
-  loadHealth();
-  loadUsage();
-  loadRoutingSettings();
-
-  polCancelBtn.addEventListener('click', () => {
-    polModal.classList.add('hidden');
-    policiesUserId = null;
-  });
-
-  async function applyBulkLimits() {
-    const users = applyUserFilters(cachedUsers);
-    if (!users.length) { setBulkStatus('No filtered users'); return; }
-    setBulkStatus(`Applying to ${users.length} users...`);
-    let rateLimit = null;
-    let rateLimitByProvider = {};
-    let billingLimits = null;
-    const max = bulkRateMaxEl.value ? Number(bulkRateMaxEl.value) : undefined;
-    const windowMs = bulkRateWindowEl.value ? Number(bulkRateWindowEl.value) : undefined;
-    if (max || windowMs) rateLimit = { max, windowMs };
-    if (bulkRateByProviderEl.value) {
-      try { rateLimitByProvider = JSON.parse(bulkRateByProviderEl.value); } catch { setBulkStatus('Invalid rateByProvider JSON'); return; }
-    }
-    if (bulkQuotaEl.value) {
-      try { billingLimits = JSON.parse(bulkQuotaEl.value); } catch { setBulkStatus('Invalid quota JSON'); return; }
-    }
-    for (const u of users) {
-      try {
-        await api(`/users/${encodeURIComponent(u.id)}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ rateLimit, rateLimitByProvider, billingLimits })
-        });
-      } catch (err) {
-        console.error('Bulk apply failed for', u.id, err);
-      }
-    }
-    setBulkStatus('Bulk apply done');
-    await loadUsers();
   }
 
-  document.getElementById('bulkApplyBtn').addEventListener('click', applyBulkLimits);
-
-  async function applyBulkPolicies() {
-    const users = applyUserFilters(cachedUsers);
-    if (!users.length) { setBulkStatus('No filtered users'); return; }
-    let defaults = {};
-    try { defaults = bulkProviderPoliciesEl.value ? JSON.parse(bulkProviderPoliciesEl.value) : {}; } catch { setBulkStatus('Invalid provider policies JSON'); return; }
-    setBulkStatus(`Applying provider policies to ${users.length} users...`);
-    for (const u of users) {
-      try {
-        await api(`/users/${encodeURIComponent(u.id)}`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            allowedModelsByProvider: defaults
-          })
-        });
-      } catch (err) {
-        console.error('Bulk policies failed for', u.id, err);
-      }
+  async function loadRouting() {
+    setStatus(els.routingStatus, 'Loading routing...');
+    try {
+      const data = await api('/routing');
+      els.routingMode.value = data.mode || 'auto';
+      els.routingRules.value = JSON.stringify(data.rules || [], null, 2);
+      setStatus(els.routingStatus, 'Routing loaded', 'success');
+    } catch (error) {
+      console.error(error);
+      setStatus(els.routingStatus, error.message, 'error');
     }
-    setBulkStatus('Policy defaults applied');
-    await loadUsers();
   }
 
-  document.getElementById('bulkPolicyBtn').addEventListener('click', applyBulkPolicies);
-
-  auditPresetTodayBtn.addEventListener('click', () => {
-    const today = new Date().toISOString().slice(0, 10);
-    auditFromEl.value = today;
-    auditToEl.value = today;
-  });
-  auditPreset7dBtn.addEventListener('click', () => {
-    const now = new Date();
-    const to = now.toISOString().slice(0, 10);
-    const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    auditFromEl.value = from;
-    auditToEl.value = to;
-  });
-  auditPresetAllBtn.addEventListener('click', () => {
-    auditFromEl.value = '';
-    auditToEl.value = '';
-  });
-
-  usagePresetTodayBtn.addEventListener('click', () => {
-    const today = new Date().toISOString().slice(0, 10);
-    usageFromEl.value = today;
-    usageToEl.value = today;
-    renderUsage(applyUsageFilters(cachedUsage));
-  });
-  usagePreset7dBtn.addEventListener('click', () => {
-    const now = new Date();
-    const to = now.toISOString().slice(0, 10);
-    const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    usageFromEl.value = from;
-    usageToEl.value = to;
-    renderUsage(applyUsageFilters(cachedUsage));
-  });
-  usagePresetAllBtn.addEventListener('click', () => {
-    usageFromEl.value = '';
-    usageToEl.value = '';
-    renderUsage(applyUsageFilters(cachedUsage));
-  });
-  usagePageEl?.addEventListener('change', () => renderUsage(applyUsageFilters(cachedUsage)));
-  usagePageSizeEl?.addEventListener('change', () => renderUsage(applyUsageFilters(cachedUsage)));
-  healthPageEl?.addEventListener('change', () => renderHealth(cachedHealth));
-  healthPageSizeEl?.addEventListener('change', () => renderHealth(cachedHealth));
-  routingLoadBtn?.addEventListener('click', loadRoutingSettings);
-  routingSaveBtn?.addEventListener('click', saveRoutingSettings);
-
-  async function sendSelfService() {
-    const email = (selfEmailEl.value || '').trim();
-    if (!email) { setSelfStatus('Email required'); return; }
-    setSelfStatus('Sending...');
+  async function saveRouting() {
+    setStatus(els.routingStatus, 'Saving routing...');
     try {
-      const base = baseUrlEl.value || `${location.origin}`;
-      const headers = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${adminTokenEl.value || ''}`
-      };
-      if (adminOtpEl.value) headers['x-admin-otp'] = adminOtpEl.value;
-      const res = await fetch(`${base}/v1/self-service/request-token`, {
+      const raw = (els.routingRules.value || '').trim();
+      const rules = raw ? JSON.parse(raw) : [];
+      const body = { mode: els.routingMode.value || 'auto', rules };
+      const data = await api('/routing', { method: 'POST', body: JSON.stringify(body) });
+      els.routingMode.value = data.mode || 'auto';
+      els.routingRules.value = JSON.stringify(data.rules || [], null, 2);
+      setStatus(els.routingStatus, 'Routing saved', 'success');
+    } catch (error) {
+      console.error(error);
+      setStatus(els.routingStatus, error.message, 'error');
+    }
+  }
+
+  function applySampleRouting() {
+    els.routingMode.value = 'auto';
+    els.routingRules.value = JSON.stringify(SAMPLE_ROUTING_RULES, null, 2);
+    setStatus(els.routingStatus, 'Sample routing loaded. Click Save routing to apply.', 'success');
+  }
+
+  async function sendSelfServiceLink() {
+    const email = (els.selfServiceEmail.value || '').trim();
+    if (!email) {
+      setStatus(els.selfServiceStatus, 'Email is required', 'error');
+      return;
+    }
+    setStatus(els.selfServiceStatus, 'Requesting self-service link...');
+
+    try {
+      const data = await openEndpoint('/v1/self-service/request-token', {
         method: 'POST',
-        headers,
-        body: JSON.stringify({ email })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error?.message || 'Error');
-      setSelfStatus(data.verificationUrl ? `Link: ${data.verificationUrl}` : 'Email sent');
-    } catch (err) {
-      console.error(err);
-      setSelfStatus('Send failed');
+      const details = data.verificationUrl ? ` | ${data.verificationUrl}` : '';
+      setStatus(els.selfServiceStatus, `${data.message || 'Done'}${details}`, 'success');
+    } catch (error) {
+      console.error(error);
+      setStatus(els.selfServiceStatus, error.message, 'error');
     }
   }
-  document.getElementById('selfSendBtn').addEventListener('click', sendSelfService);
-  polSaveBtn.addEventListener('click', async () => {
-    if (!policiesUserId) return;
-    polStatusEl.textContent = 'Saving...';
+
+  async function loadOverview() {
+    setStatus(els.overviewStatus, 'Loading overview...');
     try {
-      const allowedModels = (polAllowedModelsEl.value || '').split(',').map(s => s.trim()).filter(Boolean);
-      const deniedModels = (polDeniedModelsEl.value || '').split(',').map(s => s.trim()).filter(Boolean);
-      let allowedModelsByProvider = {};
-      let deniedModelsByProvider = {};
-      let rateLimit = null;
-      let rateLimitByProvider = {};
-      try { allowedModelsByProvider = polAllowedByProviderEl.value ? JSON.parse(polAllowedByProviderEl.value) : {}; } catch { throw new Error('Invalid allowedByProvider JSON'); }
-      try { deniedModelsByProvider = polDeniedByProviderEl.value ? JSON.parse(polDeniedByProviderEl.value) : {}; } catch { throw new Error('Invalid deniedByProvider JSON'); }
-      try { rateLimit = polRateLimitEl.value ? JSON.parse(polRateLimitEl.value) : null; } catch { throw new Error('Invalid rateLimit JSON'); }
-      try { rateLimitByProvider = polRateByProviderEl.value ? JSON.parse(polRateByProviderEl.value) : {}; } catch { throw new Error('Invalid rateLimitByProvider JSON'); }
-
-      await api(`/users/${encodeURIComponent(policiesUserId)}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          allowedModels,
-          deniedModels,
-          allowedModelsByProvider,
-          deniedModelsByProvider,
-          rateLimit,
-          rateLimitByProvider
-        })
-      });
-      polStatusEl.textContent = 'Saved';
-      polModal.classList.add('hidden');
-      policiesUserId = null;
-      await loadUsers();
-    } catch (err) {
-      console.error(err);
-      polStatusEl.textContent = err.message || 'Save failed';
+      const data = await api('/overview');
+      renderOverview(data);
+      setStatus(els.overviewStatus, `Updated at ${fmtDate(data.timestamp)}`, 'success');
+    } catch (error) {
+      console.error(error);
+      setStatus(els.overviewStatus, error.message, 'error');
     }
-  });
+  }
 
-  async function inlineEditHandler(e) {
-    const btn = e.target.closest('button[data-edit-inline]');
-    if (!btn) return;
-    const container = btn.closest('.inline-edit');
-    if (!container) return;
-    const field = container.dataset.field;
-    const userId = container.dataset.id;
-    const valueEl = container.querySelector('.value');
-    const current = valueEl ? valueEl.textContent.trim() : '';
-    // Build inline editor
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.value = current === '-' ? '' : current;
-    const saveBtn = document.createElement('button');
-    saveBtn.textContent = 'Save';
-    const cancelBtn = document.createElement('button');
-    cancelBtn.textContent = 'Cancel';
-    container.innerHTML = '';
-    container.appendChild(input);
-    container.appendChild(saveBtn);
-    container.appendChild(cancelBtn);
+  function configureActivityAutoRefresh() {
+    if (state.activityInterval) {
+      clearInterval(state.activityInterval);
+      state.activityInterval = null;
+    }
+    const seconds = Number(els.activityAutoRefresh.value);
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      return;
+    }
+    state.activityInterval = setInterval(() => {
+      void loadActivity();
+      void loadOverview();
+    }, seconds * 1000);
+  }
 
-    const reset = () => loadUsers();
+  async function refreshAll() {
+    await Promise.allSettled([
+      loadOverview(),
+      loadUsers(),
+      loadActivity(),
+      loadHealth(),
+      loadUsage(),
+      loadRouting(),
+      loadProviderConfig(),
+      loadEnvFile(),
+    ]);
+  }
 
-    cancelBtn.addEventListener('click', reset);
-    saveBtn.addEventListener('click', async () => {
+  function bindEvents() {
+    els.connectBtn.addEventListener('click', () => void connect());
+    els.refreshAllBtn.addEventListener('click', () => void refreshAll());
+    els.loadProviderConfigBtn.addEventListener('click', () => void loadProviderConfig());
+    els.saveProviderConfigBtn.addEventListener('click', () => void saveProviderConfig());
+    els.loadEnvFileBtn.addEventListener('click', () => void loadEnvFile());
+    els.copyEnvFileBtn.addEventListener('click', () => void copyEnvFile());
+
+    els.copyAuthBtn.addEventListener('click', async () => {
+      const auth = getAuthHeader();
+      if (!auth) {
+        setStatus(els.connectionStatus, 'Admin token is empty', 'error');
+        return;
+      }
       try {
-        const raw = input.value.trim();
-        const body = {};
-        if (field === 'allowedProviders') {
-          body.allowedProviders = raw ? raw.split(',').map(s => s.trim()).filter(Boolean) : [];
-        } else if (field === 'preferredProvider') {
-          body.preferredProvider = raw || null;
-        } else if (field === 'lockedProvider') {
-          body.lockedProvider = raw || null;
-        } else {
-          reset();
-          return;
-        }
-        await api(`/users/${encodeURIComponent(userId)}`, {
-          method: 'PATCH',
-          body: JSON.stringify(body)
-        });
-        await loadUsers();
-      } catch (err) {
-        console.error(err);
-        alert('Inline update failed');
-        reset();
+        await navigator.clipboard.writeText(`Authorization: ${auth}`);
+        setStatus(els.connectionStatus, 'Authorization header copied', 'success');
+      } catch (error) {
+        console.error(error);
+        setStatus(els.connectionStatus, 'Failed to copy header', 'error');
+      }
+    });
+
+    els.loadUsersBtn.addEventListener('click', () => void loadUsers());
+    els.userSearch.addEventListener('input', renderUsers);
+    els.userFilterActive.addEventListener('change', renderUsers);
+    els.userFilterVerified.addEventListener('change', renderUsers);
+    els.usersTestIntent?.addEventListener('change', updateUsersTestPromptPlaceholder);
+
+    els.usersTableBody.addEventListener('click', (event) => {
+      const row = event.target.closest('tr[data-user-row-id]');
+      if (!row) return;
+      const userId = row.getAttribute('data-user-row-id');
+      if (!userId) return;
+      void selectUser(userId);
+    });
+
+    els.usersActionTokensBtn.addEventListener('click', () => void runSelectedUserAction('select'));
+    els.usersActionToggleActiveBtn.addEventListener('click', () => void runSelectedUserAction('toggle-active'));
+    els.usersActionResetUsageBtn.addEventListener('click', () => void runSelectedUserAction('reset-usage'));
+    els.usersActionResendBtn.addEventListener('click', () => void runSelectedUserAction('resend'));
+    els.usersActionTestBtn.addEventListener('click', () => void runSelectedUserAction('test'));
+    els.usersActionDeleteBtn.addEventListener('click', () => void runSelectedUserAction('delete'));
+
+    els.createUserBtn.addEventListener('click', () => void createUser());
+    els.addTokenBtn.addEventListener('click', () => void addToken());
+    els.reloadTokensBtn.addEventListener('click', () => void loadSelectedUserTokens());
+
+    els.tokensTableBody.addEventListener('click', (event) => {
+      const copyBtn = event.target.closest('button[data-token-copy]');
+      if (copyBtn) {
+        const encoded = copyBtn.getAttribute('data-token-copy');
+        const token = encoded ? decodeURIComponent(encoded) : '';
+        if (!token) return;
+        void (async () => {
+          try {
+            await copyTextToClipboard(token);
+            setStatus(els.tokensStatus, 'Token copied to clipboard', 'success');
+          } catch (error) {
+            console.error(error);
+            setStatus(els.tokensStatus, 'Failed to copy token', 'error');
+          }
+        })();
+        return;
+      }
+
+      const btn = event.target.closest('button[data-token-delete]');
+      if (!btn) return;
+      const token = btn.getAttribute('data-token-delete');
+      if (!token) return;
+      void revokeToken(token);
+    });
+
+    els.loadRoutingBtn.addEventListener('click', () => void loadRouting());
+    els.sampleRoutingBtn.addEventListener('click', applySampleRouting);
+    els.saveRoutingBtn.addEventListener('click', () => void saveRouting());
+
+    els.sendSelfServiceBtn.addEventListener('click', () => void sendSelfServiceLink());
+
+    els.themeSelect?.addEventListener('change', () => {
+      applyTheme(els.themeSelect.value || 'system', true);
+      setStatus(els.connectionStatus, `Theme set to ${els.themeSelect.value || 'system'}`, 'success');
+    });
+
+    els.loadActivityBtn.addEventListener('click', () => void loadActivity());
+    els.exportAuditBtn.addEventListener('click', () => void exportAuditCsv());
+    els.activityAutoRefresh.addEventListener('change', configureActivityAutoRefresh);
+
+    els.loadHealthBtn.addEventListener('click', () => void loadHealth());
+    els.unsuppressAllBtn.addEventListener('click', () => void unsuppressAllProviders());
+    els.healthTableBody.addEventListener('click', (event) => {
+      const btn = event.target.closest('button[data-health-provider]');
+      if (!btn) return;
+      const provider = btn.getAttribute('data-health-provider');
+      const target = btn.getAttribute('data-health-target');
+      if (!provider || !target) return;
+      void setProviderSuppressed(provider, target === 'on');
+    });
+
+    els.loadUsageBtn.addEventListener('click', () => void loadUsage());
+
+    els.testResultCloseBtn?.addEventListener('click', closeTestResultModal);
+    els.testResultOkBtn?.addEventListener('click', closeTestResultModal);
+    els.testResultModal?.addEventListener('click', (event) => {
+      if (event.target === els.testResultModal) {
+        closeTestResultModal();
+      }
+    });
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && els.testResultModal?.classList.contains('open')) {
+        closeTestResultModal();
       }
     });
   }
+
+  function init() {
+    els.serverAddress.textContent = location.origin;
+    loadConnectionPrefs();
+    if (!document.documentElement.getAttribute('data-theme')) {
+      applyTheme('system', false);
+    }
+    const media = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+    media?.addEventListener?.('change', () => {
+      if (state.themePreference === 'system') {
+        applyTheme('system', false);
+      }
+    });
+    bindEvents();
+    updateUsersTestPromptPlaceholder();
+    configureActivityAutoRefresh();
+    const urlToken = getUrlAdminToken();
+    if (urlToken) {
+      els.adminToken.value = urlToken;
+      setStatus(els.connectionStatus, 'Admin token loaded from URL. Connecting...', 'success');
+      void connect();
+      return;
+    }
+    setStatus(els.connectionStatus, 'Enter admin token and click Connect');
+  }
+
+  init();
 })();

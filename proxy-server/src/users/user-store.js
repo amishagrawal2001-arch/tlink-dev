@@ -208,6 +208,16 @@ export function updateUser(userId, patch) {
     return users[idx];
 }
 
+export function deleteUser(userId) {
+    if (!userId) return null;
+    const users = loadUsers();
+    const idx = users.findIndex(u => u.id === userId);
+    if (idx === -1) return null;
+    const [removed] = users.splice(idx, 1);
+    saveUsers(users);
+    return removed || null;
+}
+
 export function getUserByEmail(email) {
     if (!email) return null;
     const users = loadUsers();

@@ -10,6 +10,7 @@ type WinstonLogger = {
     info: (...args: any[]) => void
     debug: (...args: any[]) => void
     log?: (...args: any[]) => void
+    isConsoleFallback?: boolean
 }
 
 const makeConsoleLogger = (): WinstonLogger => ({
@@ -18,6 +19,7 @@ const makeConsoleLogger = (): WinstonLogger => ({
     info: console.info.bind(console),
     debug: console.debug?.bind(console) ?? console.log.bind(console),
     log: console.log.bind(console),
+    isConsoleFallback: true,
 })
 
 const initializeWinston = (electron: ElectronService): WinstonLogger => {
@@ -79,6 +81,9 @@ export class WinstonAndConsoleLogger extends ConsoleLogger {
 
     protected doLog (level: string, ...args: any[]): void {
         super.doLog(level, ...args)
+        if (this.winstonLogger.isConsoleFallback) {
+            return
+        }
         const target = this.winstonLogger[level] ?? this.winstonLogger.log
         if (target) {
             target(...args)

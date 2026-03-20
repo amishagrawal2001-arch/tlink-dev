@@ -327,6 +327,7 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     }
 
     private loadFoldersFromState (): void {
+        const localRoot = path.resolve(this.folderRoot)
         let paths: string[] = []
         if (typeof localStorage !== 'undefined') {
             const stored = localStorage.getItem('codeEditor.folders')
@@ -338,15 +339,21 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
                 }
             }
         }
-        if (!paths.includes(this.folderRoot)) {
-            paths.unshift(this.folderRoot)
+        if (!paths.includes(localRoot)) {
+            paths.unshift(localRoot)
         }
-        const existing = paths.filter(p => p && fsSync.existsSync(p) && fsSync.statSync(p).isDirectory())
+        const existing = paths
+            .map(p => p ? path.resolve(p) : '')
+            .filter(p => p && fsSync.existsSync(p) && fsSync.statSync(p).isDirectory())
+            .filter(p => this.isSameFsPath(p, localRoot) || !this.isTreePathEqualOrDescendant(p, localRoot))
         const unique: string[] = []
         for (const p of existing) {
-            if (!unique.includes(p)) {
-                unique.push(p)
+            if (!unique.some(existingPath => this.isSameFsPath(existingPath, p))) {
+                unique.push(path.resolve(p))
             }
+        }
+        if (!unique.some(p => this.isSameFsPath(p, localRoot))) {
+            unique.unshift(localRoot)
         }
         this.folders = unique.map(p => ({ path: p, name: this.getFolderDisplayName(p) }))
         this.loadScopedExternalFilesFromState(unique)
@@ -1168,6 +1175,43 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
         this.cdr.markForCheck()
     }
 
+    private extendFolderSelection (folderPath: string): void {
+        const targetKey = this.getFsPathKey(folderPath)
+        if (!targetKey) {
+            return
+        }
+        const visible = this.getVisibleTreeFolderPaths()
+        if (!visible.length) {
+            return
+        }
+        const targetIndex = visible.findIndex(p => this.isSameFsPath(p, folderPath))
+        if (targetIndex < 0) {
+            this.setFolderSelection([folderPath])
+            return
+        }
+        let anchorIndex = -1
+        if (this.folderSelectionAnchorKey) {
+            anchorIndex = visible.findIndex(p => this.getFsPathKey(p) === this.folderSelectionAnchorKey)
+        }
+        if (anchorIndex < 0) {
+            anchorIndex = targetIndex
+        }
+        const start = Math.min(anchorIndex, targetIndex)
+        const end = Math.max(anchorIndex, targetIndex)
+        const next = new Set<string>()
+        for (const p of visible.slice(start, end + 1)) {
+            const key = this.getFsPathKey(p)
+            if (key) {
+                next.add(key)
+            }
+        }
+        this.selectedFolderPathKeys = next
+        if (!this.folderSelectionAnchorKey) {
+            this.folderSelectionAnchorKey = targetKey
+        }
+        this.cdr.markForCheck()
+    }
+
     private pruneFileSelectionToVisibleTree (): void {
         const allowedKeys = new Set<string>()
         for (const filePath of this.getVisibleTreeFilePaths()) {
@@ -1437,36 +1481,9 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     }
 
     async addFolder (): Promise<void> {
-        const name = (await this.promptForName('New folder name', 'Folder'))?.trim()
-        if (!name) {
-            return
-        }
-        if (/[\\/]/.test(name)) {
-            this.setError('Folder name cannot contain slashes')
-            return
-        }
-        const target = path.join(this.folderRoot, name)
-        if (fsSync.existsSync(target) && !fsSync.statSync(target).isDirectory()) {
-            this.setError('A file with that name already exists')
-            return
-        }
-        if (!fsSync.existsSync(target)) {
-            try {
-                await fs.mkdir(target, { recursive: true })
-            } catch (err: any) {
-                this.setError(`Cannot create folder: ${err?.message ?? err}`)
-                return
-            }
-        }
-        if (!this.folders.find(f => f.path === target)) {
-            this.folders.push({ name, path: target })
-        }
-        this.setRootModeToFullFolder(target)
-        this.selectFolder(target)
-        this.persistFolders()
-        this.expandedFolders.add(target)
-        this.updateTreeItems()
-        window.setTimeout(() => this.cdr.markForCheck(), 0)
+        const selectedFile = this.getSelectedFilePathsFromTree()[0] ?? null
+        const parentFolder = this.selectedFolderPath ?? (selectedFile ? path.dirname(selectedFile) : this.folderRoot)
+        await this.createFolderInFolder(parentFolder)
     }
 
     async openFolderFromDisk (): Promise<void> {
@@ -1484,6 +1501,34 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
 
     private attachFolderToTree (folderPath: string, selectFolder = true, scopeToFilePath: string|null = null): void {
         const resolved = path.resolve(folderPath)
+        const localRoot = path.resolve(this.folderRoot)
+        const isNestedLocalPath = this.isTreePathEqualOrDescendant(resolved, localRoot) && !this.isSameFsPath(resolved, localRoot)
+        if (isNestedLocalPath) {
+            // Keep everything under Tlink Studio represented by its single root.
+            const rootExists = this.folders.some(folder => this.isSameFsPath(folder.path, localRoot))
+            if (!rootExists) {
+                this.folders.unshift({ name: this.getFolderDisplayName(localRoot), path: localRoot })
+            }
+            this.pruneNestedWorkspaceFolders(localRoot)
+            if (scopeToFilePath) {
+                this.setRootModeToOpenedFiles(localRoot, scopeToFilePath)
+            } else if (this.getFolderTreeMode(localRoot) === 'opened') {
+                this.syncOpenedFileScopeForRoot(localRoot)
+            } else {
+                this.setRootModeToFullFolder(localRoot)
+            }
+            this.expandedFolders.add(localRoot)
+            this.expandedFolders.add(resolved)
+            this.revealLocalFolderPath(localRoot, resolved)
+            if (selectFolder) {
+                this.selectFolder(resolved)
+            } else {
+                this.persistFolders()
+            }
+            this.updateTreeItems()
+            window.setTimeout(() => this.cdr.markForCheck(), 0)
+            return
+        }
         const existing = this.folders.find(f => this.isSameFsPath(f.path, resolved))
         if (existing) {
             existing.path = resolved
@@ -1799,7 +1844,9 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
     }
 
     private async createFolderInFolder (parentFolder: string): Promise<void> {
-        const name = (await this.promptForName('New folder name', 'Folder'))?.trim()
+        const resolvedParent = this.resolveFolderCreationParent(parentFolder)
+        const defaultName = this.getNextAvailableFolderName(resolvedParent, 'Folder')
+        const name = (await this.promptForName('New folder name', defaultName))?.trim()
         if (!name) {
             return
         }
@@ -1807,15 +1854,77 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             this.setError('Folder name cannot contain slashes')
             return
         }
-        const target = path.join(parentFolder, name)
+        let target = path.join(resolvedParent, name)
+        if (fsSync.existsSync(target)) {
+            target = await this.ensureUniquePath(resolvedParent, name)
+        }
         try {
             await fs.mkdir(target, { recursive: false })
-            this.expandedFolders.add(parentFolder)
+            const workspaceRoot = this.getWorkspaceRootForPath(target)
+            if (workspaceRoot && this.getFolderTreeMode(workspaceRoot) === 'opened') {
+                this.setRootModeToFullFolder(workspaceRoot)
+            }
+            if (workspaceRoot) {
+                this.expandPathWithinRoot(workspaceRoot, target)
+            }
+            this.revealTreePath(resolvedParent, true)
+            this.revealTreePath(target, true)
+            this.selectFolder(target)
+            this.expandedFolders.add(resolvedParent)
             this.persistFolders()
             this.updateTreeItems()
             window.setTimeout(() => this.cdr.markForCheck(), 0)
         } catch (err: any) {
             this.setError(`Cannot create folder: ${err?.message ?? err}`)
+        }
+    }
+
+    private resolveFolderCreationParent (preferredParent: string|null|undefined): string {
+        const fallbackRoot = path.resolve(this.folderRoot)
+        const candidates: Array<string|null|undefined> = [
+            preferredParent,
+            this.selectedFolderPath,
+            this.getSelectedFilePathsFromTree()[0] ? path.dirname(this.getSelectedFilePathsFromTree()[0]) : null,
+            fallbackRoot,
+        ]
+        for (const candidate of candidates) {
+            if (!candidate) {
+                continue
+            }
+            const resolved = path.resolve(candidate)
+            try {
+                const stat = fsSync.statSync(resolved)
+                if (stat.isDirectory()) {
+                    return resolved
+                }
+                if (stat.isFile()) {
+                    const dir = path.dirname(resolved)
+                    if (fsSync.existsSync(dir) && fsSync.statSync(dir).isDirectory()) {
+                        return dir
+                    }
+                }
+            } catch {
+                // try next candidate
+            }
+        }
+        try {
+            fsSync.mkdirSync(fallbackRoot, { recursive: true })
+        } catch {
+            // best effort; caller will surface any error on create
+        }
+        return fallbackRoot
+    }
+
+    private getNextAvailableFolderName (parentFolder: string, baseName: string): string {
+        const resolvedParent = path.resolve(parentFolder)
+        let index = 0
+        while (true) {
+            const candidate = index === 0 ? baseName : `${baseName}-${index}`
+            const target = path.join(resolvedParent, candidate)
+            if (!fsSync.existsSync(target)) {
+                return candidate
+            }
+            index++
         }
     }
 
@@ -2499,6 +2608,13 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             return
         }
         if (node.isFolder) {
+            if (event.shiftKey) {
+                if (node.path) {
+                    this.extendFolderSelection(node.path)
+                }
+                this.selectFolder(node.path || null, false)
+                return
+            }
             if (isMultiSelect) {
                 if (node.path) {
                     this.toggleFolderSelection(node.path)
@@ -4959,8 +5075,8 @@ export class CodeEditorTabComponent extends BaseTabComponent implements AfterVie
             minimap: { enabled: this.minimapEnabled },
             theme: this.currentThemeId(),
             wordWrap: this.wordWrapEnabled ? 'on' : 'off',
-            lineNumbersMinChars: 2,
-            lineDecorationsWidth: 8,
+            lineNumbersMinChars: 1,
+            lineDecorationsWidth: 0,
             glyphMargin: false,
             fontSize: this.fontSize,
             lineHeight: this.lineHeight,

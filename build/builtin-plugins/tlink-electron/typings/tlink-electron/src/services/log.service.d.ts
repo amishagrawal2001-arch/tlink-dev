@@ -6,6 +6,7 @@ type WinstonLogger = {
     info: (...args: any[]) => void;
     debug: (...args: any[]) => void;
     log?: (...args: any[]) => void;
+    isConsoleFallback?: boolean;
 };
 export declare class WinstonAndConsoleLogger extends ConsoleLogger {
     private winstonLogger;

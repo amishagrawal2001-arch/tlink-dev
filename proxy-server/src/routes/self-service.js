@@ -5,6 +5,8 @@ import {
 } from '../users/user-store.js';
 import { sendVerificationEmail } from '../notifications/email.js';
 
+const EXPOSE_SELF_SERVICE_LINK = process.env.SELF_SERVICE_EXPOSE_LINK === 'true';
+
 function html(body) {
   return `<!doctype html><html><body>${body}</body></html>`;
 }
@@ -34,12 +36,19 @@ router.post('/self-service/request-token', async (req, res) => {
       emailResult = { sent: false, reason: 'send_failed' };
     }
 
+    const fallbackMessage = EXPOSE_SELF_SERVICE_LINK
+      ? 'Email send failed; use the link below.'
+      : 'Email send failed; contact your administrator.';
     const resp = {
-      message: emailResult?.sent ? 'Verification link sent. Check your email.' : 'Email send failed; use the link below.',
-      emailResult,
-      verificationUrl: link
+      message: emailResult?.sent ? 'Verification link sent. Check your email.' : fallbackMessage,
+      emailResult
     };
-    // Always include the link so admins can share it manually if email is down.
+
+    // Safety default: do not expose claim URL/token in unauthenticated API response.
+    if (EXPOSE_SELF_SERVICE_LINK) {
+      resp.verificationUrl = link;
+    }
+
     return res.json(resp);
   } catch (err) {
     console.error('Self-service request failed', err);

@@ -1,5 +1,5 @@
 import { Injectable, InjectFlags, Injector } from '@angular/core'
-import { NewTabParameters, PartialProfile, TranslateService, QuickConnectProfileProvider } from 'tlink-core'
+import { NewTabParameters, PartialProfile, TranslateService, QuickConnectProfileProvider, ConfigService, NotificationsService } from 'tlink-core'
 import { SSHProfileSettingsComponent } from './components/sshProfileSettings.component'
 import { SSHTabComponent } from './components/sshTab.component'
 import { PasswordStorageService } from './services/passwordStorage.service'
@@ -53,11 +53,36 @@ export class SSHProfilesService extends QuickConnectProfileProvider<SSHProfile> 
         private passwordStorage: PasswordStorageService,
         private translate: TranslateService,
         private injector: Injector,
+        private configService: ConfigService,
+        private notifications: NotificationsService,
     ) {
         super()
         for (const k of Object.values(SSHAlgorithmType)) {
             this.configDefaults.options.algorithms[k] = [...defaultAlgorithms[k]]
             if (k !== SSHAlgorithmType.COMPRESSION) { this.configDefaults.options.algorithms[k].sort() }
+        }
+
+        // Auto-sync: watch SSH config importers for changes
+        setTimeout(() => this.initAutoImport(), 0)
+    }
+
+    private initAutoImport (): void {
+        const importers = this.injector.get<SSHProfileImporter[]>(SSHProfileImporter as any, [], InjectFlags.Optional)
+        for (const importer of importers) {
+            // Start file watching if the importer supports it
+            if (typeof (importer as any).startWatching === 'function') {
+                (importer as any).startWatching()
+            }
+
+            importer.onChange$.subscribe(() => {
+                if (this.configService.store.ssh?.autoImportConfig === false) {
+                    return
+                }
+                this.notifications.info(this.translate.instant('SSH config changed, re-importing profiles...'))
+                // Builtin profiles are re-fetched automatically when the profile list is next accessed.
+                // Force a config change event so the UI refreshes.
+                this.configService.save()
+            })
         }
     }
 

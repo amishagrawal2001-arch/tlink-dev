@@ -18,6 +18,19 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                 )
 
             .mb-3
+                button.btn.btn-outline-primary.btn-sm(
+                    type='button',
+                    (click)='testConnection()',
+                    [disabled]='testing || !profile.options.host'
+                )
+                    i.fas.fa-plug.me-1
+                    span(translate) Test Connection
+                    i.fas.fa-spinner.fa-spin.ms-1(*ngIf='testing')
+                .mt-1(*ngIf='testResult')
+                    .text-success(*ngIf='testResult.success') Connected ({{testResult.latencyMs}}ms)
+                    .text-danger(*ngIf='!testResult.success') {{testResult.error}}
+
+            .mb-3
                 label(translate) Username
                 input.form-control(
                     type='text',
@@ -38,7 +51,7 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                     input.form-control(
                         [type]='showPassword ? "text" : "password"',
                         [(ngModel)]='profile.options.password',
-                        placeholder='(leave empty to prompt on connect)',
+                        placeholder='(leave empty to use keychain)',
                     )
                     button.btn.btn-outline-secondary(
                         type='button',
@@ -46,6 +59,20 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                         [attr.aria-label]='showPassword ? "Hide password" : "Show password"'
                     )
                         i.fa([ngClass]='showPassword ? "fa-eye-slash" : "fa-eye"')
+                .mt-1.d-flex.gap-2
+                    button.btn.btn-sm.btn-outline-success(
+                        type='button',
+                        (click)='saveToKeychain()',
+                        [disabled]='!profile.options.password || !profile.options.host'
+                    )
+                        i.fas.fa-key.me-1
+                        span(translate) Save to Keychain
+                    button.btn.btn-sm.btn-outline-danger(
+                        type='button',
+                        (click)='clearFromKeychain()'
+                    )
+                        i.fas.fa-trash.me-1
+                        span(translate) Clear Saved
 
             .mb-3
                 label(translate) RDP Client
@@ -53,6 +80,20 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                     option([value]="'node-rdpjs'") node-rdpjs (Embedded, SSL-only)
                     option([value]="'xfreerdp'") FreeRDP (External, NLA/TLS support)
                 small.form-text.text-muted(translate) Choose the RDP client. FreeRDP supports modern servers but opens in a separate window.
+
+            .mb-3.d-flex.gap-2
+                button.btn.btn-sm.btn-outline-secondary(
+                    type='button',
+                    (click)='exportProfile()'
+                )
+                    i.fas.fa-file-export.me-1
+                    span(translate) Export Profile
+                button.btn.btn-sm.btn-outline-secondary(
+                    type='button',
+                    (click)='importProfile()'
+                )
+                    i.fas.fa-file-import.me-1
+                    span(translate) Import Profile
 
     li(ngbNavItem)
         a(ngbNavLink, translate) Display
@@ -194,5 +235,24 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                         id='bitmapCaching'
                     )
                     label.form-check-label(for='bitmapCaching', translate) Enable Bitmap Caching
+
+            .mt-3
+                h6(translate) Session Logging
+                .form-check
+                    input.form-check-input(
+                        type='checkbox',
+                        [(ngModel)]='sessionLogEnabled',
+                        id='sessionLogEnabled',
+                        (ngModelChange)='onSessionLogToggle($event)'
+                    )
+                    label.form-check-label(for='sessionLogEnabled', translate) Enable Session Logging
+                .form-check.ms-3(*ngIf='sessionLogEnabled')
+                    input.form-check-input(
+                        type='checkbox',
+                        [(ngModel)]='sessionLogInputEvents',
+                        id='sessionLogInputEvents',
+                        (ngModelChange)='onSessionLogInputToggle($event)'
+                    )
+                    label.form-check-label(for='sessionLogInputEvents', translate) Log keyboard and mouse events
 
 div([ngbNavOutlet]='nav')

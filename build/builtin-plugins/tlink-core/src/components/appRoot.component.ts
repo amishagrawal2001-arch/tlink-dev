@@ -137,7 +137,7 @@ export class AppRootComponent implements OnInit {
         'open-shared-session-link',
         'profiles',
         'session-manager',
-        'code-editor',
+        // 'code-editor',  // Tlink Studio - deactivated
         'remote-desktop',
         'sftp',
         'ssh',
@@ -153,7 +153,7 @@ export class AppRootComponent implements OnInit {
         'session-manager',
         'remote-desktop',
         'ssh',
-        'code-editor',
+        // 'code-editor',  // Tlink Studio - deactivated
         'intellij-editor',
         'ai-chat',
         'ai-assistant',
@@ -169,7 +169,7 @@ export class AppRootComponent implements OnInit {
         'open-shared-session-link',
         'profiles',
         'session-manager',
-        'code-editor',
+        // 'code-editor',  // Tlink Studio - deactivated
         'remote-desktop',
         'sftp',
         'ssh',
@@ -1276,6 +1276,9 @@ export class AppRootComponent implements OnInit {
     }
 
     isLeftDockItemVisible (item: string): boolean {
+        if (item === 'code-editor') {
+            return false // Tlink Studio - deactivated
+        }
         if (item === 'ssh') {
             return !!(this.sshSidePanel || this.sshSidebarCommand)
         }

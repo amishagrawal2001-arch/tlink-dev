@@ -120,13 +120,20 @@ export class RDPService {
         }
 
         // Fall back to system-installed xfreerdp
+        // FreeRDP v3 uses 'xfreerdp3' as binary name; v2 uses 'xfreerdp'
         try {
-            // Try common paths
-            const commonPaths = ['xfreerdp', '/usr/bin/xfreerdp', '/usr/local/bin/xfreerdp']
-            
+            const commonPaths = [
+                'xfreerdp3', 'xfreerdp',
+                '/usr/bin/xfreerdp3', '/usr/bin/xfreerdp',
+                '/usr/local/bin/xfreerdp3', '/usr/local/bin/xfreerdp',
+            ]
+
             // On macOS with Homebrew
             if (this.hostApp.platform === Platform.macOS) {
-                commonPaths.push('/opt/homebrew/bin/xfreerdp', '/usr/local/bin/xfreerdp')
+                commonPaths.push(
+                    '/opt/homebrew/bin/xfreerdp3', '/opt/homebrew/bin/xfreerdp',
+                    '/usr/local/bin/xfreerdp3', '/usr/local/bin/xfreerdp',
+                )
             }
 
             for (const path of commonPaths) {
@@ -141,14 +148,16 @@ export class RDPService {
             }
 
             // Try using 'which' command (if available via exec)
-            try {
-                const { stdout } = await this.exec('which xfreerdp')
-                const foundPath = stdout?.toString().trim()
-                if (foundPath) {
-                    return foundPath
+            for (const bin of ['xfreerdp3', 'xfreerdp']) {
+                try {
+                    const { stdout } = await this.exec(`which ${bin}`)
+                    const foundPath = stdout?.toString().trim()
+                    if (foundPath) {
+                        return foundPath
+                    }
+                } catch {
+                    // not found, try next
                 }
-            } catch {
-                // which not available or xfreerdp not found
             }
 
             return null
@@ -161,18 +170,52 @@ export class RDPService {
      * Execute a command with custom environment variables (fallback if platform doesn't support it)
      * For GUI applications like xfreerdp, we use spawn with detached:true so it runs independently
      */
-    private async execWithEnv (app: string, argv: string[], env: NodeJS.ProcessEnv): Promise<void> {
+    /**
+     * Test TCP connectivity to an RDP host.
+     */
+    async testConnection (host: string, port: number, timeoutMs = 5000): Promise<{ success: boolean, error?: string, latencyMs?: number }> {
+        const net = require('net')
+        const start = Date.now()
+        return new Promise(resolve => {
+            const socket = new net.Socket()
+            const timer = setTimeout(() => {
+                socket.destroy()
+                resolve({ success: false, error: `Connection timed out after ${timeoutMs}ms` })
+            }, timeoutMs)
+
+            socket.connect(port, host, () => {
+                clearTimeout(timer)
+                const latencyMs = Date.now() - start
+                socket.destroy()
+                resolve({ success: true, latencyMs })
+            })
+
+            socket.on('error', (err: Error) => {
+                clearTimeout(timer)
+                socket.destroy()
+                resolve({ success: false, error: err.message })
+            })
+        })
+    }
+
+    private async execWithEnv (app: string, argv: string[], env: NodeJS.ProcessEnv, stdinData?: string): Promise<void> {
         return new Promise<void>((resolve, reject) => {
             const { spawn } = require('child_process')
             let errorOutput = ''
             let hasResolved = false
             let hasStarted = false
-            
+
             const child = spawn(app, argv, {
                 env,
                 detached: true,
-                stdio: ['ignore', 'pipe', 'pipe'] // Capture stderr to detect errors
+                stdio: [stdinData ? 'pipe' : 'ignore', 'pipe', 'pipe'],
             })
+
+            // Write stdin data (password for /from-stdin)
+            if (stdinData && child.stdin) {
+                child.stdin.write(stdinData + '\n')
+                child.stdin.end()
+            }
             
             // Capture stderr to detect connection errors
             child.stderr?.on('data', (data: Buffer) => {
@@ -182,19 +225,20 @@ export class RDPService {
                     hasStarted = true
                 }
                 
-                // Check for common connection errors
-                if (output.includes('ERRCONNECT') || 
-                    output.includes('Failed') ||
-                    output.includes('ERROR') ||
-                    output.includes('failed to open display')) {
-                    if (!hasResolved) {
-                        hasResolved = true
-                        // Wait a bit to collect more error output
-                        setTimeout(() => {
-                            try { child.kill() } catch {}
-                            reject(new Error(`xfreerdp connection failed:\n${errorOutput}`))
-                        }, 500)
-                    }
+                // Check for fatal connection errors only.
+                // FreeRDP v3 logs [ERROR] and [WARN] tags to stderr during
+                // normal startup, so only match actual failure indicators.
+                const isFatal = output.includes('ERRCONNECT') ||
+                    output.includes('LOGON_FAILURE') ||
+                    output.includes('failed to open display') ||
+                    output.includes('X server not available')
+                if (isFatal && !hasResolved) {
+                    hasResolved = true
+                    // Wait a bit to collect more error output
+                    setTimeout(() => {
+                        try { child.kill() } catch {}
+                        reject(new Error(`xfreerdp connection failed:\n${errorOutput}`))
+                    }, 500)
                 }
             })
             
@@ -248,7 +292,7 @@ export class RDPService {
     /**
      * Launch FreeRDP (xfreerdp) as external executable
      */
-    async launchFreeRDP (profile: RDPProfile, parentWindow?: string|null): Promise<void> {
+    async launchFreeRDP (profile: RDPProfile, parentWindow?: string|null, password?: string): Promise<void> {
         const xfreerdpPath = await this.getFreeRDPPath()
         if (!xfreerdpPath) {
             if (this.hostApp.platform === Platform.macOS) {
@@ -259,7 +303,19 @@ export class RDPService {
                     'Then restart the app and try again.'
                 )
             }
-            throw new Error('FreeRDP (xfreerdp) is not installed or not found in PATH. Please install it: brew install freerdp (macOS) or apt-get install freerdp2-x11 (Linux)')
+            if (this.hostApp.platform === Platform.Windows) {
+                throw new Error(
+                    'FreeRDP (xfreerdp) is required.\n\n' +
+                    'Install on Windows using MSYS2:\n' +
+                    '1) Install MSYS2\n' +
+                    '2) Open the MSYS2 UCRT64 shell and run: pacman -Syu\n' +
+                    '3) Then run: pacman -S mingw-w64-ucrt-x86_64-freerdp\n' +
+                    '4) Add C:\\msys64\\ucrt64\\bin to PATH\n' +
+                    '5) Verify in PowerShell: where xfreerdp\n\n' +
+                    'Then restart the app and try again.'
+                )
+            }
+            throw new Error('FreeRDP (xfreerdp) is not installed or not found in PATH. Please install it: apt-get install freerdp2-x11 (Linux)')
         }
 
         const args: string[] = []
@@ -269,12 +325,13 @@ export class RDPService {
         const port = profile.options.port ?? 3389
         args.push(`/v:${host}:${port}`)
 
-        // Credentials
+        // Credentials — pass password via stdin to avoid exposure in process list
+        const effectivePassword = password ?? profile.options.password
         if (profile.options.user) {
             args.push(`/u:${profile.options.user}`)
         }
-        if (profile.options.password) {
-            args.push(`/p:${profile.options.password}`)
+        if (effectivePassword) {
+            args.push('/from-stdin')
         }
         if (profile.options.domain) {
             args.push(`/d:${profile.options.domain}`)
@@ -377,18 +434,18 @@ export class RDPService {
         //     args.push('+aero')  // Not a valid xfreerdp flag
         // }
 
-        // Security
-        if (profile.options.enableNLA) {
+        // Security — let FreeRDP auto-negotiate by default.
+        // Only force a specific mode if explicitly configured.
+        if (profile.options.enableNLA === true) {
             args.push('/sec:nla')
-        } else if (profile.options.enableTLS) {
+        } else if (profile.options.enableTLS === true) {
             args.push('/sec:tls')
-        } else {
-            args.push('/sec:rdp') // RDP security (SSL)
         }
+        // Otherwise: omit /sec flag entirely — FreeRDP will try NLA > TLS > RDP automatically
 
-        if (profile.options.ignoreCertificate) {
-            args.push('/cert:ignore')
-        }
+        // Always ignore certificate in non-interactive mode — FreeRDP v3
+        // prompts on stdin for cert acceptance which hangs in a spawned process.
+        args.push('/cert:ignore')
 
         // Performance
         if (profile.options.compression) {
@@ -457,16 +514,27 @@ export class RDPService {
             }
         }
 
+        // Remove stale FreeRDP known host keys that can cause cert verification
+        // to fail even with /cert:ignore on FreeRDP v3
+        try {
+            const homeDir = process.env.HOME || process.env.USERPROFILE || ''
+            const knownHostFile = path.join(homeDir, '.config', 'freerdp', 'server', `${host}_${port}.pem`)
+            if (fs.existsSync(knownHostFile)) {
+                fs.unlinkSync(knownHostFile)
+            }
+        } catch {
+            // ignore — best effort cleanup
+        }
+
         // Launch xfreerdp
         try {
             // On macOS, ensure DISPLAY environment variable is set for XQuartz
             if (this.hostApp.platform === Platform.macOS) {
                 const display = await this.ensureXQuartzDisplay()
                 const macEnv = display ? { ...env, DISPLAY: display } : env
-                await this.execWithEnv(xfreerdpPath, args, macEnv)
+                await this.execWithEnv(xfreerdpPath, args, macEnv, effectivePassword || undefined)
             } else {
-                // On other platforms, also use detached spawn for GUI applications
-                await this.execWithEnv(xfreerdpPath, args, env)
+                await this.execWithEnv(xfreerdpPath, args, env, effectivePassword || undefined)
             }
         } catch (error: any) {
             const errorMessage = error?.message ?? error?.toString() ?? 'Unknown error'

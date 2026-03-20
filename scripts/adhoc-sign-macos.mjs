@@ -55,6 +55,12 @@ function validateBundledStudioAssets (appPath) {
     assertFileExists(path.join(monacoPath, 'vs', 'editor', 'editor.main.js'), 'Monaco editor bundle')
 }
 
+function validateBundledNativeModules (appPath) {
+    const resourcesPath = path.join(appPath, 'Contents', 'Resources')
+    const keytarNodePath = path.join(resourcesPath, 'node_modules', 'keytar', 'build', 'Release', 'keytar.node')
+    assertFileExists(keytarNodePath, 'keytar native module')
+}
+
 export default async function afterPack (context) {
     if (context.electronPlatformName !== 'darwin') {
         return
@@ -66,6 +72,7 @@ export default async function afterPack (context) {
     }
 
     validateBundledStudioAssets(appPath)
+    validateBundledNativeModules(appPath)
 
     const identity = context.packager?.platformSpecificBuildOptions?.identity
     if (identity && await hasSigningIdentity(identity)) {

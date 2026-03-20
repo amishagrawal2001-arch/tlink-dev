@@ -1,4 +1,40 @@
 {
   "mode": "auto",
-  "rules": []
+  "rules": [
+    {
+      "intent": "code",
+      "provider": "openai",
+      "model": "gpt-4o"
+    },
+    {
+      "intent": "long",
+      "provider": "openai",
+      "model": "gpt-4o"
+    },
+    {
+      "intent": "translate",
+      "provider": "openai",
+      "model": "gpt-4o-mini"
+    },
+    {
+      "intent": "summarize",
+      "provider": "openai",
+      "model": "gpt-4o-mini"
+    },
+    {
+      "intent": "vision",
+      "provider": "openai",
+      "model": "gpt-4o"
+    },
+    {
+      "intent": "audio",
+      "provider": "groq",
+      "model": "whisper-large-v3"
+    },
+    {
+      "intent": "default",
+      "provider": "groq",
+      "model": "llama-3.1-8b-instant"
+    }
+  ]
 }

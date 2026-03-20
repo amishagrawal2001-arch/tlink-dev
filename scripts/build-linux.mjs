@@ -40,6 +40,29 @@ const requestedLinuxArtifacts = (process.env.TLINK_LINUX_ARTIFACTS || '')
 
 const linuxTargets = requestedLinuxArtifacts.length ? requestedLinuxArtifacts : ['deb', 'tar.gz', 'rpm', 'pacman', 'appimage']
 
+// Remove nested .bin symlink directories to prevent EEXIST errors during packaging
+const repoRoot = path.resolve(__dirname, '..')
+function removeNestedBinDirs (baseDir) {
+    if (!fs.existsSync(baseDir)) return
+    function walk (dir) {
+        let entries
+        try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
+        for (const e of entries) {
+            const full = path.join(dir, e.name)
+            if (e.isDirectory()) {
+                if (e.name === '.bin' && dir.endsWith('node_modules')) {
+                    fs.rmSync(full, { recursive: true, force: true })
+                } else {
+                    walk(full)
+                }
+            }
+        }
+    }
+    walk(baseDir)
+}
+removeNestedBinDirs(path.join(repoRoot, 'app', 'node_modules'))
+removeNestedBinDirs(path.join(repoRoot, 'build', 'builtin-plugins'))
+
 builder({
     dir: true,
     linux: linuxTargets,

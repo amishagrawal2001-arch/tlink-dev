@@ -1,10 +1,33 @@
 import { Component, Injector, OnDestroy, ViewChild, ElementRef, HostBinding, AfterViewInit, HostListener } from '@angular/core'
 import { marker as _ } from '@biesbjerg/ngx-translate-extract-marker'
-import { BaseTabComponent, PlatformService, TranslateService, NotificationsService, GetRecoveryTokenOptions, RecoveryToken, HostAppService } from 'tlink-core'
+import { BaseTabComponent, ConfigService, PlatformService, TranslateService, NotificationsService, GetRecoveryTokenOptions, RecoveryToken, HostAppService } from 'tlink-core'
 import { Platform } from 'tlink-core'
 import { RDPProfile } from '../api'
 import { RDPSession } from '../session/rdp'
 import { RDPService } from '../services/rdp.service'
+import { RDPPasswordStorageService } from '../services/passwordStorage.service'
+import { RDPSessionLoggerService, SessionLogHandle } from '../services/sessionLogger.service'
+import { SCANCODE_MAP, isExtendedScancode, getRawScancode } from '../session/scancodes'
+
+/** FreeRDP ERRCONNECT code → user-friendly message */
+const FREERDP_ERROR_MAP: Record<string, string> = {
+    'LOGON_FAILURE': 'Login failed. Check username, password, and domain.',
+    'ACCOUNT_LOCKED_OUT': 'Account is locked out. Contact your administrator.',
+    'CONNECT_TRANSPORT_FAILED': 'Cannot reach the server. Check hostname and port.',
+    'DNS_NAME_NOT_RESOLVED': 'Hostname not found. Check the server address.',
+    'DNS_ERROR': 'DNS lookup failed. Check network and server address.',
+    'CONNECT_FAILED': 'Connection failed. Ensure RDP is enabled on the remote machine.',
+    'CONNECT_CANCELLED': 'Connection cancelled by the server.',
+    'TLS_CONNECT_FAILED': 'TLS handshake failed. The server may have rejected the connection.',
+    'AUTHENTICATION_FAILED': 'Authentication failed. Check credentials or try a different security mode.',
+    'PASSWORD_EXPIRED': 'Password has expired. Change it on the server and reconnect.',
+    'PASSWORD_MUST_CHANGE': 'Password must be changed before login.',
+    'INSUFFICIENT_PRIVILEGES': 'Insufficient privileges. You may not have RDP access on this server.',
+    'KDC_UNREACHABLE': 'Kerberos KDC unreachable. Check domain controller connectivity.',
+    'ACCOUNT_DISABLED': 'Account is disabled. Contact your administrator.',
+    'ACCOUNT_EXPIRED': 'Account has expired. Contact your administrator.',
+    'WRONG_PASSWORD': 'Wrong password.',
+}
 
 /** @hidden */
 @Component({
@@ -15,7 +38,7 @@ import { RDPService } from '../services/rdp.service'
 export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, OnDestroy {
     @HostBinding('class.rdp-tab') hostClass = true
     @ViewChild('canvas', { static: true }) canvas?: ElementRef<HTMLCanvasElement>
-    
+
     profile: RDPProfile
     Platform = Platform
     connecting = false
@@ -24,6 +47,16 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
     private ctx: CanvasRenderingContext2D | null = null
     private rdpSession: RDPSession | null = null
     private imageData: ImageData | null = null
+    private fallingBackToFreeRDP = false
+
+    // Reconnect state
+    reconnectOffered = false
+    private isDisconnectedByHand = false
+    private reconnecting = false
+    private reconnectTimestamps: number[] = []
+
+    // Session logging
+    private logHandle: SessionLogHandle | null = null
 
     protected platform: PlatformService
     protected hostApp: HostAppService
@@ -31,7 +64,10 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
     protected notifications: NotificationsService
     protected injector: Injector
     private rdpService: RDPService
-    usingExternalClient = false // Track if using xfreerdp (external)
+    private configService: ConfigService
+    private passwordStorage: RDPPasswordStorageService
+    private sessionLogger: RDPSessionLoggerService
+    usingExternalClient = false
 
     constructor (injector: Injector) {
         super(injector)
@@ -41,6 +77,9 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
         this.translate = injector.get(TranslateService)
         this.notifications = injector.get(NotificationsService)
         this.rdpService = injector.get(RDPService)
+        this.configService = injector.get(ConfigService)
+        this.passwordStorage = injector.get(RDPPasswordStorageService)
+        this.sessionLogger = injector.get(RDPSessionLoggerService)
     }
 
     ngAfterViewInit (): void {
@@ -49,7 +88,6 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
             return
         }
 
-        // Defer title setting to avoid change detection errors
         setTimeout(() => {
             this.setTitle(`RDP: ${this.profile.options.user}@${this.profile.options.host}`)
         }, 0)
@@ -59,13 +97,14 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
             this.resizeCanvas()
         }
 
-        // Defer connect call to avoid change detection errors
         setTimeout(() => {
             void this.connect()
         }, 0)
     }
 
     ngOnDestroy (): void {
+        this.sessionLogger.stopLogging(this.logHandle)
+        this.logHandle = null
         this.disconnect()
         if (this.imageData) {
             this.imageData = null
@@ -83,11 +122,9 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
         this.canvas.nativeElement.width = width
         this.canvas.nativeElement.height = height
 
-        // Fill with black background
         this.ctx.fillStyle = '#000000'
         this.ctx.fillRect(0, 0, width, height)
 
-        // Display "Connecting..." message
         this.ctx.fillStyle = '#FFFFFF'
         this.ctx.font = '24px monospace'
         this.ctx.textAlign = 'center'
@@ -106,7 +143,6 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
             if (!handle || !Buffer.isBuffer(handle)) {
                 return null
             }
-            // xfreerdp expects hex window id (e.g., 0x123456)
             if (handle.length >= 8 && typeof handle.readBigUInt64LE === 'function') {
                 const id = handle.readBigUInt64LE(0)
                 return `0x${id.toString(16)}`
@@ -118,13 +154,27 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
         }
     }
 
+    /** Parse FreeRDP ERRCONNECT codes from stderr into user-friendly messages */
+    private parseFreeRDPError (message: string): string | null {
+        for (const [code, hint] of Object.entries(FREERDP_ERROR_MAP)) {
+            if (message.includes(code)) {
+                return hint
+            }
+        }
+        return null
+    }
+
     private summarizeExternalError (message: string): string {
+        const parsed = this.parseFreeRDPError(message)
+        if (parsed) {
+            return parsed
+        }
+
         const lines = (message || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean)
         if (!lines.length) {
             return message
         }
 
-        // Common FreeRDP signals
         const logonFail = lines.some(l => l.toLowerCase().includes('logon_failure') || l.toLowerCase().includes('nla_recv_pdu'))
         const certWarn = lines.some(l => l.toLowerCase().includes('tls_verify_certificate'))
         const displayErr = lines.some(l => l.toLowerCase().includes('display') || l.toLowerCase().includes('x server not available') || l.toLowerCase().includes('xquartz'))
@@ -140,15 +190,55 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
             hints.push(
                 'X server not available – ensure XQuartz/X11 is running and DISPLAY is set. ' +
                 'Steps: install XQuartz (brew install --cask xquartz or latest .dmg from xquartz.org), start it (open -a XQuartz), ' +
-                'allow network clients in XQuartz Security prefs, then in a terminal run: export DISPLAY=:0 && /opt/X11/bin/xhost +localhost before launching Tlink. ' +
-                'If XQuartz fails to start or /opt/X11/bin is missing, reinstall from the official .dmg and reboot/log out.'
+                'allow network clients in XQuartz Security prefs, then in a terminal run: export DISPLAY=:0 && /opt/X11/bin/xhost +localhost before launching Tlink.'
             )
         }
 
-        // Build a minimal user-friendly message
         const firstLine = lines[0]
         const hintText = hints.join(' ')
         return [firstLine, hintText].filter(Boolean).join('\n')
+    }
+
+    private getFreeRDPInstallHint (): string {
+        const macOSHint = 'macOS:\n' +
+            '1) brew install freerdp\n' +
+            '2) brew install --cask xquartz\n' +
+            '3) Log out/in once, then run: open -a XQuartz\n' +
+            '4) In terminal before launching Tlink: export DISPLAY=:0 && xhost +localhost'
+
+        const windowsHint = 'Windows:\n' +
+            '1) Install MSYS2\n' +
+            '2) In MSYS2 UCRT64 shell run: pacman -Syu\n' +
+            '3) Then run: pacman -S mingw-w64-ucrt-x86_64-freerdp\n' +
+            '4) Add C:\\msys64\\ucrt64\\bin to PATH\n' +
+            '5) Verify in PowerShell: where xfreerdp'
+
+        return `Install FreeRDP:\n${macOSHint}\n\n${windowsHint}`
+    }
+
+    private summarizeEmbeddedError (error: any): string {
+        const rawMessage = error?.message || error?.toString?.() || 'Connection failed'
+        const errorCode = error?.code as string | undefined
+        const installHint = this.getFreeRDPInstallHint()
+
+        if (errorCode === 'NODE_RDP_PROTOCOL_X224_NEG_FAILURE' || rawMessage.includes('X224_NEG_FAILURE')) {
+            return 'This server needs a secure sign-in method that the built-in RDP client cannot use.\n\n' +
+                'Please open profile settings, change "Client Type" to "FreeRDP", and try again.\n\n' +
+                installHint
+        }
+        if (errorCode === 'NODE_RDP_PROTOCOL_X224_NLA_NOT_SUPPORTED' || rawMessage.includes('NLA_NOT_SUPPORTED')) {
+            return 'This server requires Network Level Authentication (NLA), which the built-in RDP client does not support.\n\n' +
+                'Please switch "Client Type" to "FreeRDP" in profile settings and reconnect.\n\n' +
+                installHint
+        }
+        if (errorCode === 'ECONNRESET' || rawMessage.includes('ECONNRESET')) {
+            return 'The server closed the connection.\n\n' +
+                'This usually means the built-in RDP client was rejected during security checks. ' +
+                'Switch "Client Type" to "FreeRDP" and try again.\n\n' +
+                installHint
+        }
+
+        return rawMessage
     }
 
     copyError (): void {
@@ -159,7 +249,6 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
             navigator.clipboard?.writeText(this.connectionError)
             this.notifications.info(this.translate.instant('Copied error message'))
         } catch {
-            // Fallback for older environments
             const textarea = document.createElement('textarea')
             textarea.value = this.connectionError
             document.body.appendChild(textarea)
@@ -170,24 +259,65 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
         }
     }
 
+    private setStatusConnecting (): void {
+        this.setProgress(0.5)
+        this.color = '#FFA500'
+    }
+
+    private setStatusConnected (): void {
+        this.setProgress(null)
+        this.color = '#00CC00'
+    }
+
+    private setStatusError (): void {
+        this.setProgress(null)
+        this.color = '#FF4444'
+    }
+
+    private setStatusDisconnected (): void {
+        this.setProgress(null)
+        this.color = null
+    }
+
+    private async resolvePassword (): Promise<string | undefined> {
+        if (this.profile.options.password) {
+            return this.profile.options.password
+        }
+        try {
+            const stored = await this.passwordStorage.loadPassword(this.profile)
+            if (stored) {
+                return stored
+            }
+        } catch {
+            // keychain unavailable
+        }
+        return undefined
+    }
+
     async connect (): Promise<void> {
         if (this.connected || this.connecting) {
             return
         }
 
-        // Check which client to use
+        this.fallingBackToFreeRDP = false
+        this.reconnectOffered = false
+        this.isDisconnectedByHand = false
+        this.setStatusConnecting()
+
         const clientType = this.profile.options.clientType ?? 'node-rdpjs'
 
         if (clientType === 'xfreerdp') {
-            // Use FreeRDP (external client)
             this.connecting = true
             this.connectionError = null
             this.usingExternalClient = true
 
             try {
                 const parentWindow = this.getNativeWindowHandleHex()
-                await this.rdpService.launchFreeRDP(this.profile, parentWindow)
+                const password = await this.resolvePassword()
+                await this.rdpService.launchFreeRDP(this.profile, parentWindow, password)
                 this.connected = true
+                this.setStatusConnected()
+                this.startSessionLogging('xfreerdp')
                 if (parentWindow && this.hostApp.platform !== Platform.macOS) {
                     this.notifications.info(this.translate.instant('FreeRDP launched in embedded window'))
                 } else {
@@ -198,7 +328,7 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
                 this.connectionError = this.summarizeExternalError(rawMessage)
                 this.notifications.error(this.connectionError || 'Failed to launch FreeRDP')
                 this.connected = false
-                // Keep focus on this tab to let the user see the error
+                this.setStatusError()
             } finally {
                 this.connecting = false
             }
@@ -211,51 +341,62 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
         this.usingExternalClient = false
 
         try {
-            // Create RDP session
             this.rdpSession = new RDPSession(this.injector, this.profile)
 
-            // Subscribe to bitmap updates
             this.rdpSession.bitmap$.subscribe(bitmap => {
                 this.handleBitmapUpdate(bitmap)
             })
 
-                   // Subscribe to errors
-                   this.rdpSession.error$.subscribe(error => {
-                       let errorMessage = error.message || error.toString()
-                       const errorCode = (error as any).code
-                       
-                       // Provide helpful error messages for common protocol errors
-                       if (errorCode === 'NODE_RDP_PROTOCOL_X224_NEG_FAILURE' || errorMessage.includes('X224_NEG_FAILURE')) {
-                           errorMessage = 'RDP protocol negotiation failed. The server requires NLA/TLS authentication, which is not supported by the embedded client (node-rdpjs). ' +
-                               'To connect to this server, please change the "Client Type" setting to "FreeRDP" in the profile settings, or configure the RDP server to allow SSL-only connections (not recommended for security).'
-                       } else if (errorCode === 'NODE_RDP_PROTOCOL_X224_NLA_NOT_SUPPORTED' || errorMessage.includes('NLA_NOT_SUPPORTED')) {
-                           errorMessage = 'The server requires NLA (Network Level Authentication), which is not supported by the embedded client (node-rdpjs). ' +
-                               'To connect to this server, please change the "Client Type" setting to "FreeRDP" in the profile settings, or configure the RDP server to allow SSL-only connections (not recommended for security).'
-                       }
-                       
-                       this.connectionError = errorMessage
-                       this.notifications.error(errorMessage)
-                       this.connected = false
-                   })
+            this.rdpSession.error$.subscribe(error => {
+                const errorCode = (error as any)?.code as string | undefined
+                const rawMessage = error?.message || error?.toString?.() || ''
 
-            // Subscribe to session destruction
-            this.rdpSession.willDestroy$.subscribe(() => {
+                if (errorCode === 'NODE_RDP_PROTOCOL_X224_NEG_FAILURE' || rawMessage.includes('X224_NEG_FAILURE') ||
+                    errorCode === 'NODE_RDP_PROTOCOL_X224_NLA_NOT_SUPPORTED' || rawMessage.includes('NLA_NOT_SUPPORTED') ||
+                    errorCode === 'ECONNRESET' || rawMessage.includes('ECONNRESET')) {
+                    this.fallingBackToFreeRDP = true
+                    this.notifications.info(this.translate.instant('Built-in client rejected, retrying with FreeRDP...'))
+                    this.rdpSession?.destroy()
+                    this.rdpSession = null
+                    this.connecting = false
+                    this.connected = false
+                    void this.connectWithFreeRDP()
+                    return
+                }
+
+                const errorMessage = this.summarizeEmbeddedError(error)
+                this.connectionError = errorMessage
+                this.notifications.error(errorMessage)
                 this.connected = false
+                this.setStatusError()
             })
 
-            // Start the RDP connection
+            this.rdpSession.willDestroy$.subscribe(() => {
+                if (this.connected) {
+                    this.connected = false
+                    this.setStatusDisconnected()
+                    this.onSessionEnd()
+                }
+            })
+
             await this.rdpSession.start()
 
-            // Wait a bit for connection to establish
             await new Promise<void>((resolve, reject) => {
                 const timeout = setTimeout(() => {
                     reject(new Error('Connection timeout'))
                 }, 30000)
 
                 const checkConnection = () => {
+                    if (this.fallingBackToFreeRDP) {
+                        clearTimeout(timeout)
+                        resolve()
+                        return
+                    }
                     if (this.rdpSession?.open) {
                         clearTimeout(timeout)
                         this.connected = true
+                        this.setStatusConnected()
+                        this.startSessionLogging('node-rdpjs')
                         resolve()
                     } else if (!this.rdpSession || this.connectionError) {
                         clearTimeout(timeout)
@@ -268,8 +409,11 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
             })
 
         } catch (error: any) {
-            this.connectionError = error?.message ?? 'Failed to connect'
-            this.notifications.error(this.connectionError || 'Failed to connect')
+            if (!this.fallingBackToFreeRDP) {
+                this.connectionError = error?.message ?? 'Failed to connect'
+                this.notifications.error(this.connectionError || 'Failed to connect')
+                this.setStatusError()
+            }
             if (this.rdpSession) {
                 this.rdpSession.destroy()
                 this.rdpSession = null
@@ -277,6 +421,116 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
         } finally {
             this.connecting = false
         }
+    }
+
+    private async connectWithFreeRDP (): Promise<void> {
+        this.connecting = true
+        this.connectionError = null
+        this.usingExternalClient = true
+        this.setStatusConnecting()
+
+        try {
+            const parentWindow = this.getNativeWindowHandleHex()
+            const password = await this.resolvePassword()
+            await this.rdpService.launchFreeRDP(this.profile, parentWindow, password)
+            this.connected = true
+            this.setStatusConnected()
+            this.startSessionLogging('xfreerdp')
+
+            // Auto-save client type after successful fallback
+            if (this.fallingBackToFreeRDP) {
+                this.profile.options.clientType = 'xfreerdp'
+                try {
+                    const profiles = this.configService.store.profiles as any[]
+                    if (profiles) {
+                        const idx = profiles.findIndex((p: any) => p.id === (this.profile as any).id)
+                        if (idx >= 0) {
+                            profiles[idx].options = { ...profiles[idx].options, clientType: 'xfreerdp' }
+                            this.configService.save()
+                        }
+                    }
+                } catch {
+                    // ignore save errors
+                }
+                this.notifications.info(this.translate.instant('Client type saved as FreeRDP for future connections'))
+            }
+
+            if (parentWindow && this.hostApp.platform !== Platform.macOS) {
+                this.notifications.info(this.translate.instant('FreeRDP launched in embedded window'))
+            } else {
+                this.notifications.info(this.translate.instant('FreeRDP launched in external window'))
+            }
+        } catch (error: any) {
+            const rawMessage = error?.message ?? 'Failed to launch FreeRDP'
+            this.connectionError = this.summarizeExternalError(rawMessage)
+            this.notifications.error(this.connectionError || 'Failed to launch FreeRDP')
+            this.connected = false
+            this.setStatusError()
+        } finally {
+            this.connecting = false
+        }
+    }
+
+    private startSessionLogging (client: string): void {
+        this.logHandle = this.sessionLogger.startLogging(this.profile)
+        this.sessionLogger.logEvent(this.logHandle, 'connect', {
+            client,
+            host: this.profile.options.host,
+            port: this.profile.options.port ?? 3389,
+            user: this.profile.options.user,
+        })
+    }
+
+    private onSessionEnd (): void {
+        this.sessionLogger.logEvent(this.logHandle, 'disconnect')
+        this.sessionLogger.stopLogging(this.logHandle)
+        this.logHandle = null
+
+        if (this.isDisconnectedByHand || this.reconnecting) {
+            return
+        }
+
+        const behavior = (this.profile as any).behaviorOnSessionEnd ?? 'reconnect'
+
+        if (behavior === 'close') {
+            this.destroy()
+            return
+        }
+
+        if (behavior === 'reconnect') {
+            const now = Date.now()
+            this.reconnectTimestamps = this.reconnectTimestamps.filter(t => now - t < 10000)
+            if (this.reconnectTimestamps.length >= 5) {
+                this.reconnectOffered = true
+                this.notifications.error(this.translate.instant('Too many reconnect attempts. Click to retry.'))
+                return
+            }
+            this.reconnectTimestamps.push(now)
+            void this.reconnect()
+            return
+        }
+
+        this.reconnectOffered = true
+    }
+
+    async reconnect (): Promise<void> {
+        if (this.reconnecting) {
+            return
+        }
+        this.reconnecting = true
+        this.reconnectOffered = false
+        this.isDisconnectedByHand = false
+        if (this.rdpSession) {
+            this.rdpSession.destroy()
+            this.rdpSession = null
+        }
+        this.connected = false
+
+        await new Promise(resolve => setTimeout(resolve, 1000))
+
+        this.reconnecting = false
+        this.fallingBackToFreeRDP = false
+        void this.connect()
     }
 
     private handleBitmapUpdate (bitmap: any): void {
@@ -287,9 +541,7 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
         try {
             const { x, y, width, height, bitsPerPixel, buffer } = bitmap
 
-            // Create ImageData from bitmap buffer
             if (bitsPerPixel === 32) {
-                // RGBA format
                 if (!this.imageData || this.imageData.width !== width || this.imageData.height !== height) {
                     this.imageData = this.ctx.createImageData(width, height)
                 }
@@ -297,7 +549,6 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
                 this.imageData.data.set(data)
                 this.ctx.putImageData(this.imageData, x, y)
             } else if (bitsPerPixel === 24) {
-                // RGB format - convert to RGBA
                 if (!this.imageData || this.imageData.width !== width || this.imageData.height !== height) {
                     this.imageData = this.ctx.createImageData(width, height)
                 }
@@ -305,10 +556,10 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
                 const rgbaData = this.imageData.data
                 for (let i = 0; i < rgbData.length; i += 3) {
                     const rgbaIndex = (i / 3) * 4
-                    rgbaData[rgbaIndex] = rgbData[i] // R
-                    rgbaData[rgbaIndex + 1] = rgbData[i + 1] // G
-                    rgbaData[rgbaIndex + 2] = rgbData[i + 2] // B
-                    rgbaData[rgbaIndex + 3] = 255 // A
+                    rgbaData[rgbaIndex] = rgbData[i]
+                    rgbaData[rgbaIndex + 1] = rgbData[i + 1]
+                    rgbaData[rgbaIndex + 2] = rgbData[i + 2]
+                    rgbaData[rgbaIndex + 3] = 255
                 }
                 this.ctx.putImageData(this.imageData, x, y)
             }
@@ -322,10 +573,15 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
         if (!this.connected || !this.rdpSession) {
             return
         }
-        // Convert key event to scancode (simplified - would need proper keycode mapping)
-        const scancode = this.getScancodeFromKeyEvent(event)
-        if (scancode) {
-            this.rdpSession.sendKeyEvent(scancode, true)
+        const scancode = SCANCODE_MAP[event.code]
+        if (scancode !== undefined) {
+            event.preventDefault()
+            const extended = isExtendedScancode(scancode)
+            const raw = getRawScancode(scancode)
+            this.rdpSession.sendKeyEvent(raw, true, extended)
+            if (this.profile.options.sessionLog?.logInputEvents) {
+                this.sessionLogger.logEvent(this.logHandle, 'key', { code: event.code, scancode: raw, extended, pressed: true })
+            }
         }
     }
 
@@ -334,9 +590,12 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
         if (!this.connected || !this.rdpSession) {
             return
         }
-        const scancode = this.getScancodeFromKeyEvent(event)
-        if (scancode) {
-            this.rdpSession.sendKeyEvent(scancode, false)
+        const scancode = SCANCODE_MAP[event.code]
+        if (scancode !== undefined) {
+            event.preventDefault()
+            const extended = isExtendedScancode(scancode)
+            const raw = getRawScancode(scancode)
+            this.rdpSession.sendKeyEvent(raw, false, extended)
         }
     }
 
@@ -348,7 +607,7 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
         const rect = this.canvas.nativeElement.getBoundingClientRect()
         const x = Math.floor(event.clientX - rect.left)
         const y = Math.floor(event.clientY - rect.top)
-        const button = event.button === 0 ? 1 : event.button === 2 ? 2 : 0 // Left=1, Right=2
+        const button = event.button === 0 ? 1 : event.button === 2 ? 2 : 0
         this.rdpSession.sendPointerEvent(x, y, button, true)
     }
 
@@ -372,28 +631,20 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
         const rect = this.canvas.nativeElement.getBoundingClientRect()
         const x = Math.floor(event.clientX - rect.left)
         const y = Math.floor(event.clientY - rect.top)
-        this.rdpSession.sendPointerEvent(x, y, 0, false) // Move event
-    }
-
-    private getScancodeFromKeyEvent (event: KeyboardEvent): number | null {
-        // Simplified scancode mapping - would need complete mapping for production
-        // This is a basic implementation
-        const keyMap: Record<string, number> = {
-            'Enter': 0x1C,
-            'Escape': 0x01,
-            'Backspace': 0x0E,
-            'Tab': 0x0F,
-            'Space': 0x39,
-        }
-        return keyMap[event.key] ?? event.keyCode ?? null
+        this.rdpSession.sendPointerEvent(x, y, 0, false)
     }
 
     disconnect (): void {
+        this.isDisconnectedByHand = true
         if (this.rdpSession) {
             this.rdpSession.destroy()
             this.rdpSession = null
         }
         this.connected = false
+        this.setStatusDisconnected()
+        this.sessionLogger.logEvent(this.logHandle, 'disconnect')
+        this.sessionLogger.stopLogging(this.logHandle)
+        this.logHandle = null
     }
 
     async getRecoveryToken (options?: GetRecoveryTokenOptions): Promise<RecoveryToken|null> {

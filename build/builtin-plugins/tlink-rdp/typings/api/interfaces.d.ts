@@ -2,6 +2,11 @@ import { ConnectableProfile } from 'tlink-core';
 export interface RDPProfile extends ConnectableProfile {
     options: RDPProfileOptions;
 }
+export interface RDPSessionLogSettings {
+    enabled: boolean;
+    directory?: string;
+    logInputEvents?: boolean;
+}
 export interface RDPProfileOptions {
     host: string;
     port?: number;
@@ -26,4 +31,5 @@ export interface RDPProfileOptions {
     compression?: boolean;
     bitmapCaching?: boolean;
     customParams?: string;
+    sessionLog?: RDPSessionLogSettings;
 }

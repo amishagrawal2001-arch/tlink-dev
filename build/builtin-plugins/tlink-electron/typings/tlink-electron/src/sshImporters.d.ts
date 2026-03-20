@@ -3,7 +3,13 @@ import { PartialProfile } from 'tlink-core';
 import { SSHProfileImporter, SSHProfile, AutoPrivateKeyLocator } from 'tlink-ssh';
 import { ElectronService } from './services/electron.service';
 export declare class OpenSSHImporter extends SSHProfileImporter {
+    lastImportedAt: Date | null;
+    lastImportedCount: number;
+    private watchers;
+    private debounceTimer;
     getProfiles(): Promise<PartialProfile<SSHProfile>[]>;
+    startWatching(): void;
+    stopWatching(): void;
 }
 export declare class StaticFileImporter extends SSHProfileImporter {
     private configPath;

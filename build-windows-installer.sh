@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+TLINK_BUILD_TARGETS=windows \
+TLINK_BUILD_WINDOWS_INSTALLER_ONLY=1 \
+TLINK_BUILD_WINDOWS_ARCHES="${TLINK_BUILD_WINDOWS_ARCHES:-x64 arm64}" \
+./build.sh

@@ -4,6 +4,25 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
+# ---------------------------------------------------------------------------
+# Trap: ALWAYS restore native modules when this script exits, even on failure.
+# Installer builds recompile native modules for the target arch (e.g. x86_64)
+# which breaks the local dev environment on ARM Macs.
+# ---------------------------------------------------------------------------
+_restore_native_on_exit() {
+    local exit_code=$?
+    if [[ "${TLINK_SKIP_REBUILD_NATIVE:-0}" != "1" ]]; then
+        echo ""
+        if [[ $exit_code -ne 0 ]]; then
+            echo "==> Build failed (exit $exit_code). Restoring native modules for local dev ..."
+        else
+            echo "==> Restoring native modules for local dev environment ..."
+        fi
+        bash "$ROOT_DIR/scripts/rebuild-native.sh" || echo "WARNING: Native module restore failed. Run: ./scripts/rebuild-native.sh"
+    fi
+}
+trap _restore_native_on_exit EXIT
+
 show_help() {
     cat <<'EOF'
 Usage: ./build.sh [--help]
@@ -20,8 +39,10 @@ Environment options:
   TLINK_WINDOWS_ARTIFACTS=nsis,zip        Windows artifacts list.
   TLINK_BUILD_LINUX_INSTALLER_ONLY=1      Build only Linux installers (no tar.gz).
   TLINK_LINUX_ARTIFACTS=deb,rpm,pacman,appimage  Linux artifacts list.
+  TLINK_CLEAN_DIST=1                      Clean per-platform dist folders before builds.
 
   TLINK_SKIP_INSTALL_DEPS=1              Skip scripts/install-deps.mjs (not recommended).
+  TLINK_SKIP_REBUILD_NATIVE=1            Skip restoring native modules for local dev after build.
   TLINK_BUNDLE_OLLAMA=1                   Bundle Ollama into artifacts.
   TLINK_OLLAMA_DIR=/path/to/extras-ollama Directory for Ollama binaries.
   TLINK_OLLAMA_AUTO_DOWNLOAD=1            Auto-download Ollama binaries.
@@ -53,15 +74,31 @@ TLINK_BUILD_MAC_DMG_ONLY="${TLINK_BUILD_MAC_DMG_ONLY:-0}"
 TLINK_BUILD_WINDOWS_INSTALLER_ONLY="${TLINK_BUILD_WINDOWS_INSTALLER_ONLY:-0}"
 TLINK_BUILD_LINUX_INSTALLER_ONLY="${TLINK_BUILD_LINUX_INSTALLER_ONLY:-0}"
 TLINK_SKIP_INSTALL_DEPS="${TLINK_SKIP_INSTALL_DEPS:-0}"
+TLINK_CLEAN_DIST="${TLINK_CLEAN_DIST:-1}"
+
+normalize_arch() {
+    local arch="$1"
+    case "$arch" in
+        arm64|aarch64) echo "arm64" ;;
+        x64|x86_64|amd64) echo "x64" ;;
+        *) echo "$arch" ;;
+    esac
+}
+
+normalize_mac_arch() {
+    local arch
+    arch="$(normalize_arch "$1")"
+    if [[ "$arch" == "x64" ]]; then
+        echo "x86_64"
+        return 0
+    fi
+    echo "$arch"
+}
 
 detect_arch() {
     local arch
     arch="$(node -p "process.env.ARCH || process.arch")"
-    case "$arch" in
-        arm64|aarch64) echo "arm64" ;;
-        x64|x86_64) echo "x64" ;;
-        *) echo "$arch" ;;
-    esac
+    normalize_arch "$arch"
 }
 
 is_valid_binary() {
@@ -154,8 +191,13 @@ extract_windows_archive() {
 
 ensure_ollama_binary() {
     local platform="$1"
+    local target_arch="${2:-}"
     local arch
-    arch="$(detect_arch)"
+    if [[ -n "$target_arch" ]]; then
+        arch="$(normalize_arch "$target_arch")"
+    else
+        arch="$(detect_arch)"
+    fi
 
     if [[ "$platform" == "mac" ]]; then
         local mac_bin="$OLLAMA_DIR/mac/ollama"
@@ -257,10 +299,10 @@ ensure_ollama_binary() {
 
 build_mac() {
     local bundle="$1"
-    local arch="$2"
-    rm -rf "$ROOT_DIR/dist/mac"* "$ROOT_DIR/dist/mac-"* 2>/dev/null || true
+    local arch
+    arch="$(normalize_mac_arch "$2")"
     if [[ "$bundle" == "1" ]]; then
-        if ensure_ollama_binary "mac"; then
+        if ensure_ollama_binary "mac" "$arch"; then
             echo "==> macOS build ($arch, with Ollama bundle)"
             if [[ "$TLINK_BUILD_MAC_DMG_ONLY" == "1" ]]; then
                 TLINK_MAC_ARTIFACTS="dmg" ARCH="$arch" TLINK_BUNDLE_OLLAMA=1 node scripts/build-macos.mjs
@@ -282,10 +324,10 @@ build_mac() {
 
 build_windows() {
     local bundle="$1"
-    local arch="$2"
-    rm -rf "$ROOT_DIR/dist/win"* "$ROOT_DIR/dist/win-"* 2>/dev/null || true
+    local arch
+    arch="$(normalize_arch "$2")"
     if [[ "$bundle" == "1" ]]; then
-        if ensure_ollama_binary "windows"; then
+        if ensure_ollama_binary "windows" "$arch"; then
             echo "==> Windows build ($arch, with Ollama bundle)"
             if [[ "$TLINK_BUILD_WINDOWS_INSTALLER_ONLY" == "1" ]]; then
                 TLINK_WINDOWS_ARTIFACTS="nsis" ARCH="$arch" TLINK_BUNDLE_OLLAMA=1 node scripts/build-windows.mjs
@@ -307,9 +349,10 @@ build_windows() {
 
 build_linux() {
     local bundle="$1"
-    local arch="$2"
+    local arch
+    arch="$(normalize_arch "$2")"
     if [[ "$bundle" == "1" ]]; then
-        if ensure_ollama_binary "linux"; then
+        if ensure_ollama_binary "linux" "$arch"; then
             echo "==> Linux build ($arch, with Ollama bundle)"
             if [[ "$TLINK_BUILD_LINUX_INSTALLER_ONLY" == "1" ]]; then
                 TLINK_LINUX_ARTIFACTS="deb,rpm,pacman,appimage" ARCH="$arch" npm_config_arch="$arch" npm_config_target_arch="$arch" TLINK_BUNDLE_OLLAMA=1 node scripts/build-linux.mjs
@@ -351,15 +394,25 @@ echo "==> Preparing builtin plugins"
 node --input-type=module -e "import { ensureBuiltinPlugins } from './scripts/ensure-builtin-plugins.mjs'; ensureBuiltinPlugins();"
 
 if [[ ",$TLINK_BUILD_TARGETS," == *",mac,"* ]]; then
+    if [[ "$TLINK_CLEAN_DIST" == "1" ]]; then
+        rm -rf "$ROOT_DIR/dist/mac"* "$ROOT_DIR/dist/mac-"* 2>/dev/null || true
+    fi
     for arch in $MAC_ARCHES; do
         build_mac 0 "$arch"
+        # Clean intermediate app bundle between passes to avoid symlink collisions
+        rm -rf "$ROOT_DIR/dist/mac" "$ROOT_DIR/dist/mac-arm64" "$ROOT_DIR/dist/mac-universal" 2>/dev/null || true
         build_mac 1 "$arch"
     done
 fi
 
 if [[ ",$TLINK_BUILD_TARGETS," == *",windows,"* ]]; then
+    if [[ "$TLINK_CLEAN_DIST" == "1" ]]; then
+        rm -rf "$ROOT_DIR/dist/win"* "$ROOT_DIR/dist/win-"* 2>/dev/null || true
+    fi
     for arch in $WIN_ARCHES; do
         build_windows 0 "$arch"
+        # Clean intermediate app dir between passes to avoid symlink collisions
+        rm -rf "$ROOT_DIR/dist/win-unpacked" "$ROOT_DIR/dist/win-arm64-unpacked" 2>/dev/null || true
         build_windows 1 "$arch"
     done
 fi
@@ -367,6 +420,8 @@ fi
 if [[ ",$TLINK_BUILD_TARGETS," == *",linux,"* ]]; then
     for arch in $LINUX_ARCHES; do
         build_linux 0 "$arch"
+        # Clean intermediate app dir between passes to avoid symlink collisions
+        rm -rf "$ROOT_DIR/dist/linux-unpacked" "$ROOT_DIR/dist/linux-arm64-unpacked" 2>/dev/null || true
         build_linux 1 "$arch"
     done
 fi

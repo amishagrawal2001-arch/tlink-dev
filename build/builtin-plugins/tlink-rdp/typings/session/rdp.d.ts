@@ -20,7 +20,7 @@ export declare class RDPSession {
     error$: Subject<Error>;
     constructor(injector: Injector, profile: RDPProfile);
     start(): Promise<void>;
-    sendKeyEvent(code: number, isPressed: boolean): void;
+    sendKeyEvent(code: number, isPressed: boolean, _extended?: boolean): void;
     sendPointerEvent(x: number, y: number, button: number, isPressed: boolean): void;
     destroy(): void;
 }

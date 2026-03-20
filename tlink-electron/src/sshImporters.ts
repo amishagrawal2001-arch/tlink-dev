@@ -356,18 +356,66 @@ async function convertToSSHProfiles (config: SSHConfig): Promise<PartialProfile<
 
 @Injectable({ providedIn: 'root' })
 export class OpenSSHImporter extends SSHProfileImporter {
-    async getProfiles (): Promise<PartialProfile<SSHProfile>[]> {
+    lastImportedAt: Date | null = null
+    lastImportedCount = 0
 
+    private watchers: fsSync.FSWatcher[] = []
+    private debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+    async getProfiles (): Promise<PartialProfile<SSHProfile>[]> {
         const configPath = path.join(process.env.HOME ?? '~', '.ssh', 'config')
 
         try {
             const config: SSHConfig = await parseSSHConfigFile(configPath)
-            return await convertToSSHProfiles(config)
+            const profiles = await convertToSSHProfiles(config)
+            this.lastImportedAt = new Date()
+            this.lastImportedCount = profiles.length
+            return profiles
         } catch (e) {
             if (e.code === 'ENOENT') {
                 return []
             }
             throw e
+        }
+    }
+
+    startWatching (): void {
+        this.stopWatching()
+        const sshDir = path.join(process.env.HOME ?? '~', '.ssh')
+        const configPath = path.join(sshDir, 'config')
+        const configDPath = path.join(sshDir, 'config.d')
+
+        const watchFile = (p: string) => {
+            try {
+                if (!fsSync.existsSync(p)) {
+                    return
+                }
+                const watcher = fsSync.watch(p, { persistent: false }, () => {
+                    if (this.debounceTimer) {
+                        clearTimeout(this.debounceTimer)
+                    }
+                    this.debounceTimer = setTimeout(() => {
+                        this.onChange$.next()
+                    }, 1000)
+                })
+                this.watchers.push(watcher)
+            } catch {
+                // ignore watch errors
+            }
+        }
+
+        watchFile(configPath)
+        watchFile(configDPath)
+    }
+
+    stopWatching (): void {
+        for (const watcher of this.watchers) {
+            try { watcher.close() } catch { /* ignore */ }
+        }
+        this.watchers = []
+        if (this.debounceTimer) {
+            clearTimeout(this.debounceTimer)
+            this.debounceTimer = null
         }
     }
 }

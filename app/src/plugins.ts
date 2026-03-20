@@ -297,6 +297,14 @@ async function parsePluginInfo (pluginDir: string, packageName: string): Promise
             return null
         }
 
+        if (typeof info.main === 'string' && info.main.trim()) {
+            const mainPath = path.resolve(pluginPath, info.main)
+            if (!await fs.exists(mainPath)) {
+                console.warn(`Skipping ${packageName}: main entry is missing (${info.main})`)
+                return null
+            }
+        }
+
         const { author: authorInfo } = info
         const author = typeof authorInfo === 'object' && authorInfo?.name ? authorInfo.name : authorInfo
 
@@ -370,8 +378,9 @@ export async function loadPlugins (foundPlugins: PluginInfo[], progress: Progres
     progress(0, 1)
     for (const foundPlugin of foundPlugins) {
         pluginsPromises.push(new Promise(x => {
-            console.info(`Loading ${foundPlugin.name}: ${nodeRequire.resolve(foundPlugin.path)}`)
             try {
+                const resolvedPath = nodeRequire.resolve(foundPlugin.path)
+                console.info(`Loading ${foundPlugin.name}: ${resolvedPath}`)
                 const packageModule = nodeRequire(foundPlugin.path)
                 if (foundPlugin.packageName.startsWith('tlink-')) {
                     cachedBuiltinModules[foundPlugin.packageName.replace('tlink-', 'terminus-')] = packageModule

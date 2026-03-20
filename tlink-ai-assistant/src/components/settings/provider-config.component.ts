@@ -150,6 +150,8 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
     tabbyStartInProgress = false;
     tabbyRestartInProgress = false;
     tabbyStopInProgress = false;
+    private readonly tabbyServerCommandTimeoutMs = 45_000;
+    private readonly tabbyReachabilityRequestTimeoutMs = 3_000;
 
     // API Key 格式校验规则
     private apiKeyPatterns: { [key: string]: RegExp } = {
@@ -492,6 +494,75 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
         return String(rawBase).trim().replace(/\/+$/, '');
     }
 
+    private getTabbyServiceBaseUrl(): string {
+        const base = this.getTabbyBaseUrl();
+        return base
+            .replace(/\/(v1beta|v1)$/i, '')
+            .replace(/\/models$/i, '');
+    }
+
+    private getPreferredTabbyCompletionModel(): string {
+        const completion = String(this.tabbyActiveModels?.completion || '').trim();
+        if (completion && this.getTabbyModelKind(completion) === 'completion') {
+            return completion;
+        }
+
+        const providerModel = String(this.configs['tabby']?.model || '').trim();
+        if (providerModel && providerModel.toLowerCase() !== 'default' && this.getTabbyModelKind(providerModel) === 'completion') {
+            return providerModel;
+        }
+
+        return this.getDefaultTabbyModelForKind('completion');
+    }
+
+    private getPreferredTabbyChatModel(): string {
+        const chat = String(this.tabbyActiveModels?.chat || '').trim();
+        if (chat && this.getTabbyModelKind(chat) === 'chat') {
+            return chat;
+        }
+
+        const providerModel = String(this.configs['tabby']?.model || '').trim();
+        if (providerModel && providerModel.toLowerCase() !== 'default' && this.getTabbyModelKind(providerModel) === 'chat') {
+            return providerModel;
+        }
+
+        return this.getDefaultTabbyModelForKind('chat');
+    }
+
+    private runTabbyStartModelPrecheck(silent = false): void {
+        if (silent) {
+            return;
+        }
+
+        const selectedCompletion = String(this.tabbyActiveModels?.completion || '').trim();
+        const selectedChat = String(this.tabbyActiveModels?.chat || '').trim();
+        const resolvedCompletion = this.getPreferredTabbyCompletionModel();
+        const resolvedChat = this.getPreferredTabbyChatModel();
+
+        const warnings: string[] = [];
+        if (selectedCompletion && selectedCompletion !== resolvedCompletion) {
+            warnings.push(`Completion "${selectedCompletion}" is not a completion model.`);
+        }
+        if (selectedChat && selectedChat !== resolvedChat) {
+            warnings.push(`Chat "${selectedChat}" is not a chat model.`);
+        }
+
+        if (!warnings.length) {
+            return;
+        }
+
+        const message =
+            `Tabby model pre-check: ${warnings.join(' ')} ` +
+            `Using completion "${resolvedCompletion}" and chat "${resolvedChat}" for startup.`;
+        this.toast.warning(message, 9000);
+        this.logger.warn('Tabby model pre-check adjusted startup model selection', {
+            selectedCompletion,
+            selectedChat,
+            resolvedCompletion,
+            resolvedChat
+        });
+    }
+
     async startTabbyServer(event?: Event, silent = false): Promise<boolean> {
         if (event) {
             event.preventDefault();
@@ -517,6 +588,8 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
             return false;
         }
 
+        this.runTabbyStartModelPrecheck(silent);
+
         this.tabbyStartInProgress = true;
         if (!silent) {
             this.toast.info('Starting Tabby server...');
@@ -524,7 +597,7 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
 
         try {
             const command = this.getTabbyStartCommandForCurrentPlatform();
-            const result = await this.executeShellCommand(command);
+            const result = await this.executeShellCommand(command, undefined, this.tabbyServerCommandTimeoutMs);
             if (result.code !== 0) {
                 const shortOutput = this.getTailOutput(result.output);
                 const detail = shortOutput ? `\n\n${this.makeToastSafe(shortOutput)}` : '';
@@ -585,12 +658,14 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
             return false;
         }
 
+        this.runTabbyStartModelPrecheck(false);
+
         this.tabbyRestartInProgress = true;
         this.toast.info('Restarting Tabby server...');
 
         try {
             const command = this.getTabbyRestartCommandForCurrentPlatform();
-            const result = await this.executeShellCommand(command);
+            const result = await this.executeShellCommand(command, undefined, this.tabbyServerCommandTimeoutMs);
             if (result.code !== 0) {
                 const shortOutput = this.getTailOutput(result.output);
                 const detail = shortOutput ? `\n\n${this.makeToastSafe(shortOutput)}` : '';
@@ -648,7 +723,7 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
 
         try {
             const command = this.getTabbyStopCommandForCurrentPlatform();
-            const result = await this.executeShellCommand(command);
+            const result = await this.executeShellCommand(command, undefined, this.tabbyServerCommandTimeoutMs);
             if (result.code !== 0) {
                 const shortOutput = this.getTailOutput(result.output);
                 const detail = shortOutput ? `\n\n${this.makeToastSafe(shortOutput)}` : '';
@@ -854,8 +929,13 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
 
     private getTabbyStartCommandForCurrentPlatform(): string {
         const platform = this.getPlatform();
+        const completionModel = this.getPreferredTabbyCompletionModel();
+        const chatModel = this.getPreferredTabbyChatModel();
 
         if (platform === 'darwin') {
+            const deviceBackend = this.isArm64Arch() ? 'metal' : 'cpu';
+            const escapedCompletionModel = this.quoteForPosixShell(completionModel);
+            const escapedChatModel = this.quoteForPosixShell(chatModel);
             return [
                 'TABBY_BIN="$(command -v tabby || true)"',
                 'if [ -z "$TABBY_BIN" ] && [ -x "/opt/homebrew/bin/tabby" ]; then TABBY_BIN="/opt/homebrew/bin/tabby"; fi',
@@ -866,14 +946,15 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
                 'pkill -f "llama-server -m $HOME/.tabby/models/TabbyML/" >/dev/null 2>&1 || true',
                 'sleep 1',
                 'if lsof -nP -iTCP:8080 -sTCP:LISTEN >/dev/null 2>&1; then echo "tabby already listening on 8080"; exit 0; fi',
-                'if [ -f "$HOME/.tabby/config.toml" ]; then TABBY_SERVE_ARGS="serve --host 0.0.0.0 --port 8080 --device metal --chat-device metal"; else TABBY_SERVE_ARGS="serve --model StarCoder-1B --chat-model Qwen2-1.5B-Instruct --host 0.0.0.0 --port 8080 --device metal --chat-device metal"; fi',
-                'nohup "$TABBY_BIN" $TABBY_SERVE_ARGS > "$HOME/.tabby/tlink-tabby.log" 2>&1 < /dev/null &',
+                `nohup "$TABBY_BIN" serve --model ${escapedCompletionModel} --chat-model ${escapedChatModel} --host 0.0.0.0 --port 8080 --device ${deviceBackend} --chat-device ${deviceBackend} > "$HOME/.tabby/tlink-tabby.log" 2>&1 < /dev/null &`,
                 'echo "Started Tabby: $TABBY_BIN"'
             ].join('\n');
         }
 
         if (platform === 'win32') {
-            return `powershell -NoProfile -ExecutionPolicy Bypass -Command "$tabby=(Get-Command tabby -ErrorAction SilentlyContinue); if(-not $tabby){ throw 'tabby binary not found in PATH' }; $config=Join-Path $env:USERPROFILE '.tabby\\\\config.toml'; $args=if(Test-Path $config){'serve --host 0.0.0.0 --port 8080 --device cpu --chat-device cpu'}else{'serve --model StarCoder-1B --chat-model Qwen2-1.5B-Instruct --host 0.0.0.0 --port 8080 --device cpu --chat-device cpu'}; Start-Process -FilePath $tabby.Source -ArgumentList $args -WindowStyle Hidden; Write-Output ('Started Tabby: ' + $tabby.Source)"`;
+            const escapedCompletionModel = this.escapeForPowerShellSingleQuote(completionModel);
+            const escapedChatModel = this.escapeForPowerShellSingleQuote(chatModel);
+            return `powershell -NoProfile -ExecutionPolicy Bypass -Command "$tabby=(Get-Command tabby -ErrorAction SilentlyContinue); if(-not $tabby){ throw 'tabby binary not found in PATH' }; $args='serve --model ${escapedCompletionModel} --chat-model ${escapedChatModel} --host 0.0.0.0 --port 8080 --device cpu --chat-device cpu'; Start-Process -FilePath $tabby.Source -ArgumentList $args -WindowStyle Hidden; Write-Output ('Started Tabby: ' + $tabby.Source)"`;
         }
 
         throw new Error('Auto-start Tabby is supported on macOS and Windows in Tlink. Start Tabby manually on this OS.');
@@ -887,7 +968,9 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
         }
 
         if (platform === 'win32') {
-            return `powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Process tabby -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 750; $tabby=(Get-Command tabby -ErrorAction SilentlyContinue); if(-not $tabby){ throw 'tabby binary not found in PATH' }; $config=Join-Path $env:USERPROFILE '.tabby\\\\config.toml'; $args=if(Test-Path $config){'serve --host 0.0.0.0 --port 8080 --device cpu --chat-device cpu'}else{'serve --model StarCoder-1B --chat-model Qwen2-1.5B-Instruct --host 0.0.0.0 --port 8080 --device cpu --chat-device cpu'}; Start-Process -FilePath $tabby.Source -ArgumentList $args -WindowStyle Hidden; Write-Output ('Restarted Tabby: ' + $tabby.Source)"`;
+            const completionModel = this.escapeForPowerShellSingleQuote(this.getPreferredTabbyCompletionModel());
+            const chatModel = this.escapeForPowerShellSingleQuote(this.getPreferredTabbyChatModel());
+            return `powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Process tabby -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 750; $tabby=(Get-Command tabby -ErrorAction SilentlyContinue); if(-not $tabby){ throw 'tabby binary not found in PATH' }; $args='serve --model ${completionModel} --chat-model ${chatModel} --host 0.0.0.0 --port 8080 --device cpu --chat-device cpu'; Start-Process -FilePath $tabby.Source -ArgumentList $args -WindowStyle Hidden; Write-Output ('Restarted Tabby: ' + $tabby.Source)"`;
         }
 
         throw new Error('Auto-restart Tabby is supported on macOS and Windows in Tlink. Restart Tabby manually on this OS.');
@@ -951,7 +1034,7 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
             : this.tabbyInstallCommands.dockerUnix;
     }
 
-    private executeShellCommand(command: string, cwd?: string): Promise<{ code: number | null; output: string }> {
+    private executeShellCommand(command: string, cwd?: string, timeoutMs?: number): Promise<{ code: number | null; output: string }> {
         return new Promise((resolve, reject) => {
             const win: any = window as any;
             const childProcess = win?.require?.('child_process');
@@ -973,12 +1056,75 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
                     output = output.slice(-24000);
                 }
             };
+            let settled = false;
+            let timeoutId: ReturnType<typeof setTimeout> | null = null;
+            let forceKillId: ReturnType<typeof setTimeout> | null = null;
+
+            const finish = (result?: { code: number | null; output: string }, error?: any) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                }
+                if (forceKillId) {
+                    clearTimeout(forceKillId);
+                }
+                if (error) {
+                    reject(error);
+                    return;
+                }
+                resolve(result || { code: null, output });
+            };
 
             child.stdout?.on('data', append);
             child.stderr?.on('data', append);
-            child.on('error', reject);
-            child.on('close', (code: number | null) => resolve({ code, output }));
+            child.on('error', (error: any) => finish(undefined, error));
+            child.on('close', (code: number | null) => finish({ code, output }));
+
+            if (timeoutMs && timeoutMs > 0) {
+                timeoutId = setTimeout(() => {
+                    append(`\n[Tlink] Command timed out after ${Math.round(timeoutMs / 1000)}s. Terminating process.`);
+                    try {
+                        child.kill('SIGTERM');
+                    } catch {
+                        // no-op
+                    }
+
+                    forceKillId = setTimeout(() => {
+                        try {
+                            child.kill('SIGKILL');
+                        } catch {
+                            // no-op
+                        }
+                        finish({ code: -1, output });
+                    }, 1500);
+                }, timeoutMs);
+            }
         });
+    }
+
+    private async fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
+        if (typeof AbortController !== 'undefined') {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                return await fetch(url, {
+                    method: 'GET',
+                    signal: controller.signal
+                });
+            } finally {
+                clearTimeout(timeoutId);
+            }
+        }
+
+        return await Promise.race([
+            fetch(url, { method: 'GET' }),
+            new Promise<Response>((_, reject) => {
+                setTimeout(() => reject(new Error('Request timed out')), timeoutMs);
+            })
+        ]);
     }
 
     private getTailOutput(output: string, maxLines = 8): string {
@@ -1210,6 +1356,8 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
 
     private async tryStartTabbyDirectlyOnMac(): Promise<boolean> {
         this.toast.warning('Homebrew service start failed. Trying direct Tabby launch...', 6000);
+        const completionModel = this.quoteForPosixShell(this.getPreferredTabbyCompletionModel());
+        const chatModel = this.quoteForPosixShell(this.getPreferredTabbyChatModel());
 
         const command = [
             'TABBY_BIN="$(command -v tabby || true)"',
@@ -1217,8 +1365,7 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
             'if [ -z "$TABBY_BIN" ] && [ -x "/usr/local/bin/tabby" ]; then TABBY_BIN="/usr/local/bin/tabby"; fi',
             'if [ -z "$TABBY_BIN" ]; then echo "tabby binary not found"; exit 1; fi',
             'mkdir -p "$HOME/.tabby"',
-            'if [ -f "$HOME/.tabby/config.toml" ]; then TABBY_SERVE_ARGS="serve --host 0.0.0.0 --port 8080 --device cpu --chat-device cpu"; else TABBY_SERVE_ARGS="serve --model StarCoder-1B --chat-model Qwen2-1.5B-Instruct --host 0.0.0.0 --port 8080 --device cpu --chat-device cpu"; fi',
-            'nohup "$TABBY_BIN" $TABBY_SERVE_ARGS > "$HOME/.tabby/tlink-tabby.log" 2>&1 < /dev/null &',
+            `nohup "$TABBY_BIN" serve --model ${completionModel} --chat-model ${chatModel} --host 0.0.0.0 --port 8080 --device cpu --chat-device cpu > "$HOME/.tabby/tlink-tabby.log" 2>&1 < /dev/null &`,
             'echo "Started Tabby directly: $TABBY_BIN"'
         ].join('\n');
 
@@ -1320,16 +1467,13 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
     }
 
     private async checkTabbyReachability(silent = false): Promise<boolean> {
-        const base = this.getTabbyBaseUrl();
+        const base = this.getTabbyServiceBaseUrl();
         // Try non-auth endpoints first to avoid noisy 401 logs when auth is enabled.
         const endpoints = [`${base}/health`, `${base}/v1/health`, base];
 
         for (const endpoint of endpoints) {
             try {
-                const response = await fetch(endpoint, {
-                    method: 'GET',
-                    signal: AbortSignal.timeout(3000)
-                });
+                const response = await this.fetchWithTimeout(endpoint, this.tabbyReachabilityRequestTimeoutMs);
                 if (response.ok) {
                     if (!silent) {
                         this.toast.success(`Tabby server is reachable at ${base}`);
@@ -3070,7 +3214,7 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
         if (!providerConfig?.baseURL || !providerConfig?.apiKey) {
             return;
         }
-        this.refreshTabbyModels(true).catch(err => {
+        this.refreshTabbyModels(true, false).catch(err => {
             this.logger.warn('Tabby models preload failed', { error: err?.message || err });
         });
     }
