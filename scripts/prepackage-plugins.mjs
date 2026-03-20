@@ -55,7 +55,8 @@ function stagePlugin(plugin) {
 }
 
 function runYarn(args, cwd) {
-    execFileSync('yarn', args, {
+    const yarnCmd = process.platform === 'win32' ? 'yarn.cmd' : 'yarn'
+    execFileSync(yarnCmd, args, {
         cwd,
         env: process.env,
         stdio: 'inherit',
