@@ -566,66 +566,49 @@ export class AppRootComponent implements OnInit {
     }
 
     @HostListener('window:mousemove', ['$event'])
-    onBottomResizeMove (event: MouseEvent): void {
-        if (!this.bottomPanelResizing) {
-            return
+    onResizeMove (event: MouseEvent): void {
+        if (this.bottomPanelResizing) {
+            const delta = this.bottomPanelResizeStartY - event.clientY
+            const next = this.clampBottomPanelHeight(this.bottomPanelResizeStartHeight + delta)
+            this.bottomPanelHeight = next
+            this.bottomPanel.setHeight(next)
         }
-        const delta = this.bottomPanelResizeStartY - event.clientY
-        const next = this.clampBottomPanelHeight(this.bottomPanelResizeStartHeight + delta)
-        this.bottomPanelHeight = next
-        this.bottomPanel.setHeight(next)
-    }
-
-    @HostListener('window:mousemove', ['$event'])
-    onSidePanelResizeMove (event: MouseEvent): void {
-        if (!this.sidePanelResizing) {
-            return
+        if (this.sidePanelResizing) {
+            const delta = this.sidePanelResizeStartX - event.clientX
+            const next = this.clampSidePanelWidth(this.sidePanelResizeStartWidth + delta)
+            this.sidePanelWidth = next
+            this.sidePanel.setWidth(next)
         }
-        const delta = this.sidePanelResizeStartX - event.clientX
-        const next = this.clampSidePanelWidth(this.sidePanelResizeStartWidth + delta)
-        this.sidePanelWidth = next
-        this.sidePanel.setWidth(next)
     }
 
     @HostListener('window:mouseup')
-    onBottomResizeEnd (): void {
+    onResizeEnd (): void {
         this.bottomPanelResizing = false
-    }
-
-    @HostListener('window:mouseup')
-    onSidePanelResizeEnd (): void {
         this.sidePanelResizing = false
     }
 
     @HostListener('window:touchmove', ['$event'])
-    onBottomResizeMoveTouch (event: TouchEvent): void {
-        if (!this.bottomPanelResizing || !event.touches.length) {
+    onResizeMoveTouch (event: TouchEvent): void {
+        if (!event.touches.length) {
             return
         }
-        const delta = this.bottomPanelResizeStartY - event.touches[0].clientY
-        const next = this.clampBottomPanelHeight(this.bottomPanelResizeStartHeight + delta)
-        this.bottomPanelHeight = next
-        this.bottomPanel.setHeight(next)
-    }
-
-    @HostListener('window:touchmove', ['$event'])
-    onSidePanelResizeMoveTouch (event: TouchEvent): void {
-        if (!this.sidePanelResizing || !event.touches.length) {
-            return
+        if (this.bottomPanelResizing) {
+            const delta = this.bottomPanelResizeStartY - event.touches[0].clientY
+            const next = this.clampBottomPanelHeight(this.bottomPanelResizeStartHeight + delta)
+            this.bottomPanelHeight = next
+            this.bottomPanel.setHeight(next)
         }
-        const delta = this.sidePanelResizeStartX - event.touches[0].clientX
-        const next = this.clampSidePanelWidth(this.sidePanelResizeStartWidth + delta)
-        this.sidePanelWidth = next
-        this.sidePanel.setWidth(next)
+        if (this.sidePanelResizing) {
+            const delta = this.sidePanelResizeStartX - event.touches[0].clientX
+            const next = this.clampSidePanelWidth(this.sidePanelResizeStartWidth + delta)
+            this.sidePanelWidth = next
+            this.sidePanel.setWidth(next)
+        }
     }
 
     @HostListener('window:touchend')
-    onBottomResizeEndTouch (): void {
+    onResizeEndTouch (): void {
         this.bottomPanelResizing = false
-    }
-
-    @HostListener('window:touchend')
-    onSidePanelResizeEndTouch (): void {
         this.sidePanelResizing = false
     }
 
