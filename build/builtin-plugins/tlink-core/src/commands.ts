@@ -7,6 +7,9 @@ import { AppService } from './services/app.service'
 import { ProfilesService } from './services/profiles.service'
 import { ConfigService } from './services/config.service'
 import { CommandProvider, Command, CommandLocation } from './api/commands'
+import { BookmarksService } from './services/bookmarks.service'
+import { SidePanelService } from './services/sidePanel.service'
+import { BookmarksPanelComponent } from './components/bookmarksPanel.component'
 // import { CodeEditorTabComponent } from './components/codeEditorTab.component' // Tlink Studio - deactivated
 
 /** @hidden */
@@ -86,5 +89,53 @@ export class CoreCommandProvider extends CommandProvider {
         const next = order[(currentIndex + 1) % order.length]
         this.config.store.appearance.colorSchemeMode = next
         this.config.save()
+    }
+}
+
+/** @hidden */
+@Injectable({ providedIn: 'root' })
+export class BookmarksCommandProvider extends CommandProvider {
+    private bookmarksPanelReg = {
+        id: 'bookmarks',
+        component: BookmarksPanelComponent,
+        label: 'Bookmarks',
+        width: 280,
+    }
+
+    constructor (
+        private bookmarksService: BookmarksService,
+        private sidePanel: SidePanelService,
+        private translate: TranslateService,
+    ) {
+        super()
+        this.sidePanel.register(this.bookmarksPanelReg)
+    }
+
+    async provide (): Promise<Command[]> {
+        const commands: Command[] = [
+            {
+                id: 'core:toggle-bookmarks',
+                label: this.translate.instant('Toggle bookmarks panel'),
+                icon: 'fas fa-bookmark',
+                run: async () => {
+                    this.sidePanel.toggle(this.bookmarksPanelReg)
+                },
+            },
+        ]
+
+        // Add individual bookmark commands for the palette
+        for (const bookmark of this.bookmarksService.getAll()) {
+            commands.push({
+                id: `core:bookmark-${bookmark.id}`,
+                label: bookmark.label,
+                sublabel: bookmark.command,
+                icon: 'fas fa-bookmark',
+                run: async () => {
+                    // Execution handled when selected from palette
+                },
+            })
+        }
+
+        return commands
     }
 }

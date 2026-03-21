@@ -1,0 +1,36 @@
+.modal-header
+    h5.modal-title {{ isEditing ? 'Edit Bookmark' : 'Add Bookmark' }}
+    button.close(type='button', (click)='dismiss()')
+        span &times;
+
+.modal-body
+    .form-group
+        label Label
+        input.form-control(
+            type='text',
+            [(ngModel)]='label',
+            placeholder='e.g. Deploy to production',
+            autofocus,
+        )
+
+    .form-group.mt-2
+        label Command
+        input.form-control(
+            type='text',
+            [(ngModel)]='command',
+            placeholder='e.g. npm run deploy',
+            style='font-family: monospace',
+        )
+
+    .form-group.mt-2
+        label Category
+        input.form-control(
+            type='text',
+            [(ngModel)]='category',
+            placeholder='e.g. DevOps',
+            [ngbTypeahead]='categorySearch',
+        )
+
+.modal-footer
+    button.btn.btn-outline-secondary((click)='dismiss()') Cancel
+    button.btn.btn-primary((click)='save()', [disabled]='!label || !command') Save

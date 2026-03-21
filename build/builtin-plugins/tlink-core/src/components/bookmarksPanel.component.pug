@@ -1,0 +1,41 @@
+.bookmarks-panel
+    .panel-header
+        h4 Bookmarks
+        button.btn.btn-sm.btn-primary((click)='addBookmark()')
+            i.fas.fa-plus
+            span &nbsp;Add
+
+    .panel-search(*ngIf='bookmarks.length > 0')
+        input.form-control.form-control-sm(
+            type='text',
+            placeholder='Search bookmarks...',
+            [(ngModel)]='searchQuery',
+        )
+
+    .panel-body
+        .empty-state(*ngIf='filteredBookmarks.length === 0')
+            i.fas.fa-bookmark
+            p(*ngIf='bookmarks.length === 0') No bookmarks yet. Click "Add" or right-click in a terminal.
+            p(*ngIf='bookmarks.length > 0 && filteredBookmarks.length === 0') No matching bookmarks.
+
+        .bookmark-category(*ngFor='let cat of categories')
+            .category-header(*ngIf='cat')
+                i.fas.fa-folder
+                span {{ cat }}
+            .category-header(*ngIf='!cat')
+                i.fas.fa-folder-open
+                span Uncategorized
+
+            .bookmark-item(
+                *ngFor='let bm of getBookmarksByCategory(cat)',
+                (click)='executeBookmark(bm)',
+                [title]='bm.command',
+            )
+                .bookmark-info
+                    .bookmark-label {{ bm.label }}
+                    .bookmark-command {{ bm.command }}
+                .bookmark-actions
+                    button.btn.btn-sm((click)='editBookmark(bm, $event)')
+                        i.fas.fa-pen
+                    button.btn.btn-sm((click)='removeBookmark(bm, $event)')
+                        i.fas.fa-trash

@@ -1,4 +1,6 @@
 import { NgModule } from '@angular/core'
+import { CommonModule } from '@angular/common'
+import { NgbModule } from '@ng-bootstrap/ng-bootstrap'
 import { PlatformService, LogService, UpdaterService, DockingService, HostAppService, ThemesService, Platform, AppService, ConfigService, WIN_BUILD_FLUENT_BG_SUPPORTED, isWindowsBuild, HostWindowService, HotkeyProvider, ConfigProvider, FileProvider } from 'tlink-core'
 import { TerminalColorSchemeProvider, TerminalDecorator } from 'tlink-terminal'
 import { SFTPContextMenuItemProvider, SSHProfileImporter, AutoPrivateKeyLocator } from 'tlink-ssh'
@@ -24,6 +26,8 @@ import { EditSFTPContextMenu } from './sftpContextMenu'
 import { OpenSSHImporter, PrivateKeyLocator, StaticFileImporter } from './sshImporters'
 import { ElectronPTYInterface } from './pty'
 import { PathDropDecorator } from './pathDrop'
+import { UpdateBannerComponent } from './components/updateBanner.component'
+import { WhatsNewModalComponent } from './components/whatsNewModal.component'
 
 import { CmderShellProvider } from './shells/cmder'
 import { Cygwin32ShellProvider } from './shells/cygwin32'
@@ -41,6 +45,17 @@ import { WSLShellProvider } from './shells/wsl'
 import { VSDevToolsProvider } from './shells/vs'
 
 @NgModule({
+    imports: [
+        CommonModule,
+        NgbModule,
+    ],
+    declarations: [
+        UpdateBannerComponent,
+        WhatsNewModalComponent,
+    ],
+    exports: [
+        UpdateBannerComponent,
+    ],
     providers: [
         { provide: TerminalColorSchemeProvider, useClass: HyperColorSchemes, multi: true },
         { provide: PlatformService, useExisting: ElectronPlatformService },
@@ -96,6 +111,7 @@ export default class ElectronModule {
         themeService: ThemesService,
         app: AppService,
         dockMenu: DockMenuService,
+        private updater: UpdaterService,
     ) {
         config.ready$.toPromise().then(() => {
             touchbar.update()
@@ -106,6 +122,14 @@ export default class ElectronModule {
             this.registerGlobalHotkey()
             this.updateVibrancy()
             this.updateWindowControlsColor()
+
+            // Check for What's New on startup
+            if (config.store.showWhatsNew !== false && this.updater instanceof ElectronUpdaterService) {
+                const whatsNew = (this.updater as ElectronUpdaterService).checkWhatsNew()
+                if (whatsNew) {
+                    console.info(`Updated to version ${whatsNew.version}`)
+                }
+            }
         })
 
         config.changed$.subscribe(() => {

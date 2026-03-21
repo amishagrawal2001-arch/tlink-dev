@@ -37,6 +37,10 @@ import { DebugDecorator } from './features/debug'
 import { ZModemDecorator } from './features/zmodem'
 import { SessionLoggerDecorator } from './features/sessionLogger'
 import { SessionSharingDecorator } from './features/sessionSharing'
+import { OutputAnalyzerDecorator } from './features/outputAnalyzer'
+import { SessionRecorderDecorator } from './features/sessionRecorder'
+import { SessionRecordingCommandProvider } from './sessionRecordingProvider'
+import { SessionReplayTabComponent } from './components/sessionReplayTab.component'
 import { TerminalConfigProvider } from './config'
 import { TerminalHotkeyProvider } from './hotkeys'
 import { CopyPasteContextMenu, MiscContextMenu, LegacyContextMenu, ReconnectContextMenu, SaveAsProfileContextMenu, SessionSharingContextMenu } from './tabContextMenu'
@@ -71,6 +75,8 @@ import { SessionManagerCommandProvider } from './sessionManagerProvider'
         { provide: TerminalDecorator, useClass: DebugDecorator, multi: true },
         { provide: TerminalDecorator, useClass: SessionLoggerDecorator, multi: true },
         { provide: TerminalDecorator, useClass: SessionSharingDecorator, multi: true },
+        { provide: TerminalDecorator, useClass: OutputAnalyzerDecorator, multi: true },
+        { provide: TerminalDecorator, useClass: SessionRecorderDecorator, multi: true },
 
         { provide: TabContextMenuItemProvider, useClass: CopyPasteContextMenu, multi: true },
         { provide: TabContextMenuItemProvider, useClass: MiscContextMenu, multi: true },
@@ -84,6 +90,7 @@ import { SessionManagerCommandProvider } from './sessionManagerProvider'
         { provide: CommandProvider, useClass: CommandWindowCommandProvider, multi: true },
         { provide: CommandProvider, useClass: ButtonBarCommandProvider, multi: true },
         { provide: CommandProvider, useClass: SessionManagerCommandProvider, multi: true },
+        { provide: CommandProvider, useClass: SessionRecordingCommandProvider, multi: true },
         { provide: TabRecoveryProvider, useClass: CommandWindowRecoveryProvider, multi: true },
     ],
     declarations: [
@@ -107,6 +114,7 @@ import { SessionManagerCommandProvider } from './sessionManagerProvider'
         ColorTemplatesPanelComponent,
         SessionLogSettingsModalComponent,
         SharedSessionTabComponent,
+        SessionReplayTabComponent,
     ],
     exports: [
         ColorPickerComponent,

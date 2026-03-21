@@ -1,6 +1,7 @@
 import { ConfigProvider as CoreConfigProvider, Platform } from 'tlink-core'
 import { DefaultColorSchemes } from './colorSchemes'
 import { DEFAULT_OUTPUT_HIGHLIGHT_RULES } from './outputHighlighting'
+import { DEFAULT_OUTPUT_ANALYZER_PATTERNS } from './features/outputAnalyzerPatterns'
 
 // Fallback base class to avoid runtime crashes if the core export is undefined
 const ConfigProvider: any = CoreConfigProvider ?? class {}
@@ -69,6 +70,15 @@ export class TerminalConfigProvider extends ConfigProvider {
             minimumContrastRatio: 4,
             trimWhitespaceOnPaste: true,
             commandWindowBottomVisible: false,
+            outputAnalyzer: {
+                enabled: true,
+                throttleMs: 5000,
+                patterns: DEFAULT_OUTPUT_ANALYZER_PATTERNS,
+            },
+            sessionRecording: {
+                enabled: true,
+                directory: '',
+            },
         },
     }
 

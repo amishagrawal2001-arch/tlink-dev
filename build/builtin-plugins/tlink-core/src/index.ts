@@ -54,7 +54,9 @@ import { AppHotkeyProvider } from './hotkeys'
 import { TaskCompletionContextMenu, CommonOptionsContextMenu, TabManagementContextMenu, ProfilesContextMenu } from './tabContextMenu'
 import { LastCLIHandler, ProfileCLIHandler } from './cli'
 import { SplitLayoutProfilesService } from './profiles'
-import { CoreCommandProvider } from './commands'
+import { CoreCommandProvider, BookmarksCommandProvider } from './commands'
+import { BookmarksPanelComponent } from './components/bookmarksPanel.component'
+import { BookmarkEditModalComponent } from './components/bookmarkEditModal.component'
 import { CodeEditorTabComponent } from './components/codeEditorTab.component'
 import { CodeEditorRecoveryProvider } from './codeEditorRecoveryProvider'
 
@@ -126,6 +128,7 @@ const PROVIDERS = [
     { provide: FileProvider, useClass: VaultFileProvider, multi: true },
     { provide: ProfileProvider, useExisting: SplitLayoutProfilesService, multi: true },
     { provide: CommandProvider, useExisting: CoreCommandProvider, multi: true },
+    { provide: CommandProvider, useExisting: BookmarksCommandProvider, multi: true },
     {
         provide: LOCALE_ID,
         deps: [LocaleService],
@@ -183,6 +186,8 @@ const PROVIDERS = [
         WelcomeTabComponent,
         TransfersMenuComponent,
         ShareSessionModalComponent,
+        BookmarksPanelComponent,
+        BookmarkEditModalComponent,
         DropZoneDirective,
         CdkAutoDropGroup,
         ProfileIconComponent,
@@ -261,10 +266,14 @@ export default class AppModule { // eslint-disable-line @typescript-eslint/no-ex
                     return
                 }
                 this.showGroupSelector(group).catch(() => null)
+            } else if (hotkey === 'command-palette') {
+                commands.showPalette().catch(() => null)
             } else if (hotkey === 'command-selector') {
                 commands.showSelector().catch(() => null)
             } else if (hotkey === 'profile-selector') {
                 commands.run('core:profile-selector', {})
+            } else if (hotkey === 'toggle-bookmarks') {
+                commands.run('core:toggle-bookmarks', {})
             }
         })
 

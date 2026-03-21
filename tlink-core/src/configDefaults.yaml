@@ -52,6 +52,10 @@ codeEditor:
   # If set, Code Editor "Run in terminal" will open this profile ID (so you can give it a custom terminalColorScheme/theme)
   runProfile: null
 hotkeys:
+  command-palette:
+    - 'Ctrl-P'
+  toggle-bookmarks:
+    - 'Ctrl-Shift-B'
   profile:
     __nonStructural: true
   profile-selectors:
@@ -64,6 +68,7 @@ profileDefaults:
   __nonStructural: true
   ssh:
     disableDynamicTitle: true
+bookmarks: []
 recoverTabs: true
 enableAnalytics: true
 enableWelcomeTab: true

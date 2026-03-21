@@ -1,6 +1,7 @@
 import { Inject, Injectable, Optional } from '@angular/core'
-import { AppService, Command, CommandContext, CommandProvider, ConfigService, MenuItemOptions, SplitTabComponent, TabContextMenuItemProvider, ToolbarButton, ToolbarButtonProvider, TranslateService } from '../api'
+import { AppService, Command, CommandContext, CommandProvider, ConfigService, MenuItemOptions, SelectorOption, SplitTabComponent, TabContextMenuItemProvider, ToolbarButton, ToolbarButtonProvider, TranslateService } from '../api'
 import { SelectorService } from './selector.service'
+import { ProfilesService } from './profiles.service'
 
 @Injectable({ providedIn: 'root' })
 export class CommandService {
@@ -11,6 +12,7 @@ export class CommandService {
         private config: ConfigService,
         private app: AppService,
         private translate: TranslateService,
+        private profilesService: ProfilesService,
         @Optional() @Inject(TabContextMenuItemProvider) protected contextMenuProviders: TabContextMenuItemProvider[],
         @Optional() @Inject(ToolbarButtonProvider) private toolbarButtonProviders: ToolbarButtonProvider[],
         @Inject(CommandProvider) private commandProviders: CommandProvider[],
@@ -88,6 +90,72 @@ export class CommandService {
         const commands = await this.getCommands(context)
         const command = commands.find(x => x.id === id)
         await command?.run()
+    }
+
+    async showPalette (): Promise<void> {
+        if (this.selector.active) {
+            return
+        }
+
+        const options: SelectorOption<void>[] = []
+
+        // Open tabs
+        const tabs = this.app.tabs
+        for (let i = 0; i < tabs.length; i++) {
+            const tab = tabs[i]
+            options.push({
+                name: tab.title || `Tab ${i + 1}`,
+                group: this.translate.instant('Open Tabs'),
+                icon: 'fas fa-window-maximize',
+                weight: -30,
+                callback: () => { this.app.selectTab(tab) },
+            })
+        }
+
+        // Recent profiles
+        const recentProfiles = this.profilesService.getRecentProfiles()
+        for (const profile of recentProfiles) {
+            options.push({
+                ...this.profilesService.selectorOptionForProfile(profile),
+                group: this.translate.instant('Recent'),
+                weight: -20,
+                callback: () => { this.profilesService.openNewTabForProfile(profile) },
+            })
+        }
+
+        // All profiles
+        const allProfiles = await this.profilesService.getProfiles()
+        for (const profile of allProfiles) {
+            if (profile.isTemplate) {
+                continue
+            }
+            options.push({
+                ...this.profilesService.selectorOptionForProfile(profile),
+                group: this.translate.instant('Profiles'),
+                weight: -10,
+                callback: () => { this.profilesService.openNewTabForProfile(profile) },
+            })
+        }
+
+        // Commands
+        const context: CommandContext = {}
+        const tab = this.app.activeTab
+        if (tab instanceof SplitTabComponent) {
+            context.tab = tab.getFocusedTab() ?? undefined
+        }
+        const commands = await this.getCommands(context)
+        for (const c of commands) {
+            options.push({
+                name: c.label,
+                description: c.sublabel,
+                icon: c.icon,
+                group: this.translate.instant('Commands'),
+                weight: 0,
+                callback: c.run,
+            })
+        }
+
+        return this.selector.show(this.translate.instant('Command Palette'), options)
     }
 
     async showSelector (): Promise<void> {

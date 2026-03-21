@@ -8,8 +8,16 @@ import { HotkeyDescription, HotkeyProvider } from './api/hotkeyProvider'
 export class AppHotkeyProvider extends HotkeyProvider {
     hotkeys: HotkeyDescription[] = [
         {
+            id: 'command-palette',
+            name: this.translate.instant('Show command palette'),
+        },
+        {
             id: 'command-selector',
             name: this.translate.instant('Show command selector'),
+        },
+        {
+            id: 'toggle-bookmarks',
+            name: this.translate.instant('Toggle bookmarks panel'),
         },
         {
             id: 'profile-selector',

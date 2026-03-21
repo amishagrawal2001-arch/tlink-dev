@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core'
 import axios from 'axios'
+import { BehaviorSubject } from 'rxjs'
 
 import { Logger, LogService, ConfigService, UpdaterService, PlatformService, TranslateService } from 'tlink-core'
 import { ElectronService } from '../services/electron.service'
@@ -12,6 +13,12 @@ export class ElectronUpdaterService extends UpdaterService {
     private downloaded: Promise<boolean>
     private electronUpdaterAvailable = true
     private updateURL: string
+
+    // Enhanced update notification state
+    readonly updateAvailable$ = new BehaviorSubject<boolean>(false)
+    readonly updateVersion$ = new BehaviorSubject<string>('')
+    readonly releaseNotes$ = new BehaviorSubject<string>('')
+    readonly downloadProgress$ = new BehaviorSubject<number>(-1)
 
     constructor (
         log: LogService,
@@ -28,12 +35,23 @@ export class ElectronUpdaterService extends UpdaterService {
             return
         }
 
-        this.electron.ipcRenderer.on('updater:update-available', () => {
+        this.electron.ipcRenderer.on('updater:update-available', (_event, info) => {
             this.logger.info('Update available')
+            if (info?.version) {
+                this.updateVersion$.next(info.version)
+            }
+            this.updateAvailable$.next(true)
+            void this.fetchReleaseNotes()
         })
 
         this.electron.ipcRenderer.on('updater:update-not-available', () => {
             this.logger.info('No updates')
+        })
+
+        this.electron.ipcRenderer.on('updater:download-progress', (_event, progress) => {
+            if (progress?.percent !== undefined) {
+                this.downloadProgress$.next(progress.percent)
+            }
         })
 
         this.electron.ipcRenderer.on('updater:error', err => {
@@ -113,6 +131,37 @@ export class ElectronUpdaterService extends UpdaterService {
             return false
         }
         return this.downloaded
+    }
+
+    checkWhatsNew (): { version: string, notes: string } | null {
+        const currentVersion = this.electron.app.getVersion()
+        const lastSeen = this.config.store.lastSeenVersion ?? ''
+        if (lastSeen && lastSeen !== currentVersion) {
+            this.config.store.lastSeenVersion = currentVersion
+            this.config.save()
+            return { version: currentVersion, notes: this.releaseNotes$.value }
+        }
+        if (!lastSeen) {
+            this.config.store.lastSeenVersion = currentVersion
+            this.config.save()
+        }
+        return null
+    }
+
+    private async fetchReleaseNotes (): Promise<void> {
+        try {
+            const response = await axios.get(UPDATES_URL)
+            const data = response.data
+            if (data.body) {
+                this.releaseNotes$.next(data.body)
+            }
+            if (data.tag_name) {
+                const version = data.tag_name.replace(/^v/, '')
+                this.updateVersion$.next(version)
+            }
+        } catch (error) {
+            this.logger.debug('Failed to fetch release notes', error)
+        }
     }
 
     async update (): Promise<void> {

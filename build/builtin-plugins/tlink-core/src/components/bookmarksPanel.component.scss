@@ -1,0 +1,127 @@
+.bookmarks-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 8px;
+    font-size: 13px;
+
+    .panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+
+        h4 {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .btn {
+            font-size: 11px;
+            padding: 2px 8px;
+        }
+    }
+
+    .panel-search {
+        margin-bottom: 8px;
+
+        .form-control {
+            font-size: 12px;
+        }
+    }
+
+    .panel-body {
+        flex: 1;
+        overflow-y: auto;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 20px;
+        color: rgba(128, 128, 128, 0.7);
+
+        i {
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+
+        p {
+            font-size: 12px;
+            margin: 0;
+        }
+    }
+
+    .category-header {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        padding: 6px 4px 4px;
+        color: rgba(128, 128, 128, 0.8);
+
+        i {
+            margin-right: 4px;
+        }
+    }
+
+    .bookmark-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 8px;
+        margin: 1px 0;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background 0.15s;
+
+        &:hover {
+            background: rgba(128, 128, 128, 0.15);
+
+            .bookmark-actions {
+                opacity: 1;
+            }
+        }
+
+        .bookmark-info {
+            flex: 1;
+            min-width: 0;
+
+            .bookmark-label {
+                font-weight: 500;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .bookmark-command {
+                font-size: 11px;
+                font-family: monospace;
+                color: rgba(128, 128, 128, 0.7);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+        }
+
+        .bookmark-actions {
+            opacity: 0;
+            transition: opacity 0.15s;
+            display: flex;
+            gap: 2px;
+
+            .btn {
+                padding: 1px 4px;
+                font-size: 10px;
+                background: transparent;
+                border: none;
+                color: rgba(128, 128, 128, 0.7);
+
+                &:hover {
+                    color: inherit;
+                }
+            }
+        }
+    }
+}

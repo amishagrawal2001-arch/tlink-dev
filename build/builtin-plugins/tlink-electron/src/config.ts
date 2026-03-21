@@ -23,5 +23,8 @@ export class ElectronConfigProvider extends ConfigProvider {
         },
     }
 
-    defaults = {}
+    defaults = {
+        lastSeenVersion: '',
+        showWhatsNew: true,
+    }
 }

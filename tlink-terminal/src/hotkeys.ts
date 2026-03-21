@@ -109,6 +109,10 @@ export class TerminalHotkeyProvider extends HotkeyProvider {
             name: this.translate.instant('Scroll terminal to bottom'),
         },
         {
+            id: 'toggle-recording',
+            name: this.translate.instant('Toggle session recording'),
+        },
+        {
             id: 'reconnect-tab',
             name: this.translate.instant('Reconnect current tab (Serial/Telnet/SSH)'),
         },

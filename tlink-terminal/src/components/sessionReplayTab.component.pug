@@ -1,0 +1,25 @@
+.session-replay-container
+    .replay-toolbar
+        .replay-controls
+            button.btn.btn-sm.btn-outline-secondary((click)='togglePlayback()')
+                i.fas([class.fa-play]='!isPlaying', [class.fa-pause]='isPlaying')
+
+            button.btn.btn-sm.btn-outline-secondary((click)='restart()')
+                i.fas.fa-redo
+
+            select.form-control.form-control-sm.speed-select([(ngModel)]='playbackSpeed', (ngModelChange)='onSpeedChange()')
+                option([value]='0.5') 0.5x
+                option([value]='1') 1x
+                option([value]='2') 2x
+                option([value]='5') 5x
+
+        .replay-progress
+            .progress-bar-container((click)='seekTo($event)')
+                .progress-fill([style.width.%]='progressPercent')
+
+            span.replay-time {{ formatTime(currentTime) }} / {{ formatTime(totalDuration) }}
+
+        .replay-info
+            span.replay-profile {{ profileName }}
+
+    .replay-terminal(#replayTerminal)

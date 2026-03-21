@@ -541,8 +541,8 @@ export class Window {
         autoUpdater.autoDownload = true
         autoUpdater.autoInstallOnAppQuit = true
 
-        autoUpdater.on('update-available', () => {
-            this.send('updater:update-available')
+        autoUpdater.on('update-available', (info) => {
+            this.send('updater:update-available', info)
         })
 
         autoUpdater.on('update-not-available', () => {
@@ -551,6 +551,10 @@ export class Window {
 
         autoUpdater.on('error', err => {
             this.send('updater:error', err)
+        })
+
+        autoUpdater.on('download-progress', (progress) => {
+            this.send('updater:download-progress', progress)
         })
 
         autoUpdater.on('update-downloaded', () => {
