@@ -47,17 +47,34 @@
             <div class="hero-badge">
                 <i class="fas fa-bolt"></i> Open Source &middot; MIT Licensed &middot; Cross-Platform
             </div>
+            <div style="display:inline-flex;align-items:center;gap:8px;padding:8px 20px;border-radius:999px;background:rgba(74,158,255,0.1);border:1px solid rgba(74,158,255,0.25);color:#4a9eff;font-size:13px;font-weight:500;margin-bottom:24px">
+                <i class="fas fa-shield-halved"></i> Offline AI &middot; No Cloud Required &middot; Your Data Stays Local
+            </div>
             <h1 class="hero-title">
-                The Modern Terminal for<br>
-                <span class="gradient-text">DevOps & Network Engineers</span>
+                AI-Powered Terminal that<br>
+                <span class="gradient-text">Works Completely Offline</span>
             </h1>
             <p class="hero-subtitle">
-                SSH, RDP, Serial, Telnet, and SFTP in one powerful application with
-                AI-powered assistance, live session sharing, and session recording.
+                Bundled Ollama LLM runs locally on your machine &mdash; no API keys, no cloud, no data leaving your network.
+                SSH, RDP, Serial, Telnet, SFTP, and a full AI coding agent in one app.
             </p>
+            <div style="display:flex;justify-content:center;gap:32px;margin:24px 0;flex-wrap:wrap">
+                <div style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text-secondary)">
+                    <i class="fas fa-wifi-slash" style="color:#22c55e;font-size:18px"></i>
+                    <span><strong style="color:var(--text-primary)">No internet needed</strong> for AI</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text-secondary)">
+                    <i class="fas fa-lock" style="color:#22c55e;font-size:18px"></i>
+                    <span><strong style="color:var(--text-primary)">Zero data leakage</strong> guaranteed</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text-secondary)">
+                    <i class="fas fa-building-shield" style="color:#22c55e;font-size:18px"></i>
+                    <span><strong style="color:var(--text-primary)">Enterprise compliant</strong> by design</span>
+                </div>
+            </div>
             <div class="hero-actions">
                 <a href="#download" class="btn btn-primary btn-lg">
-                    <i class="fas fa-download"></i> Download for Free
+                    <i class="fas fa-download"></i> Download with Offline AI
                 </a>
                 <a href="#features" class="btn btn-outline btn-lg">
                     <i class="fas fa-play-circle"></i> See Features
@@ -90,8 +107,8 @@
                     <div class="stat-label">Protocols Supported</div>
                 </div>
                 <div class="stat">
-                    <div class="stat-number">6+</div>
-                    <div class="stat-label">AI Providers</div>
+                    <div class="stat-number">100%</div>
+                    <div class="stat-label">Offline AI Ready</div>
                 </div>
                 <div class="stat">
                     <div class="stat-number">3</div>
@@ -115,10 +132,10 @@
             </div>
             <div class="features-grid">
                 <div class="feature-card featured">
-                    <div class="feature-icon gradient-bg"><i class="fas fa-wand-magic-sparkles"></i></div>
-                    <h3>AI Assistant</h3>
-                    <p>Built-in AI powered by OpenAI, Claude, Ollama (local), and more. Get command suggestions, troubleshoot errors, and generate scripts without leaving the terminal.</p>
-                    <div class="feature-tag">New</div>
+                    <div class="feature-icon gradient-bg"><i class="fas fa-microchip"></i></div>
+                    <h3>Offline AI (Bundled Ollama)</h3>
+                    <p>AI runs 100% locally on your machine with bundled Ollama LLM. No API keys, no cloud, no data leaves your network. Also supports OpenAI, Claude, Groq when online.</p>
+                    <div class="feature-tag">MSP</div>
                 </div>
                 <div class="feature-card featured">
                     <div class="feature-icon gradient-bg"><i class="fas fa-share-nodes"></i></div>
@@ -176,6 +193,65 @@
                     <div class="feature-icon"><i class="fas fa-puzzle-piece"></i></div>
                     <h3>Plugin System</h3>
                     <p>Extensible architecture with community plugins. Add custom color schemes, AI providers, connection types, and more.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Offline AI Highlight Section -->
+    <section class="section" style="background:linear-gradient(135deg,rgba(74,158,255,0.03),rgba(34,197,94,0.03))">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge" style="background:rgba(34,197,94,0.1);border-color:rgba(34,197,94,0.25);color:#22c55e">Main Selling Point</span>
+                <h2>Why Offline AI changes everything</h2>
+                <p>Your terminal data is sensitive &mdash; server credentials, configs, logs. Tlink keeps AI processing 100% local.</p>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;margin-top:40px">
+                <div>
+                    <div style="display:flex;flex-direction:column;gap:24px">
+                        <div style="display:flex;gap:16px;align-items:flex-start">
+                            <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#22c55e,#16a34a);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:white;font-size:20px">
+                                <i class="fas fa-plane-slash"></i>
+                            </div>
+                            <div>
+                                <h4 style="margin:0 0 4px;font-size:16px">Works on air-gapped networks</h4>
+                                <p style="margin:0;color:var(--text-secondary);font-size:14px">Bundled Ollama LLM (llama3.1:8b) runs entirely on your machine. No internet connection required for AI features.</p>
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:16px;align-items:flex-start">
+                            <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#3b82f6,#2563eb);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:white;font-size:20px">
+                                <i class="fas fa-user-secret"></i>
+                            </div>
+                            <div>
+                                <h4 style="margin:0 0 4px;font-size:16px">Zero data leaves your machine</h4>
+                                <p style="margin:0;color:var(--text-secondary);font-size:14px">No credentials, commands, or terminal output are sent to any external server. Complete privacy for sensitive environments.</p>
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:16px;align-items:flex-start">
+                            <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#f59e0b,#d97706);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:white;font-size:20px">
+                                <i class="fas fa-building-shield"></i>
+                            </div>
+                            <div>
+                                <h4 style="margin:0 0 4px;font-size:16px">Enterprise & compliance ready</h4>
+                                <p style="margin:0;color:var(--text-secondary);font-size:14px">Meet SOC 2, HIPAA, and PCI-DSS requirements effortlessly. No third-party data processing agreements needed for AI.</p>
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:16px;align-items:flex-start">
+                            <div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#8b5cf6,#7c3aed);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:white;font-size:20px">
+                                <i class="fas fa-cloud-arrow-up"></i>
+                            </div>
+                            <div>
+                                <h4 style="margin:0 0 4px;font-size:16px">Optional cloud when you want it</h4>
+                                <p style="margin:0;color:var(--text-secondary);font-size:14px">Switch to OpenAI, Claude, Groq, or vLLM anytime. Use cloud AI for complex tasks, local AI for everything else.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div style="border-radius:16px;overflow:hidden;border:1px solid var(--border);box-shadow:0 25px 80px rgba(0,0,0,0.4)">
+                    <img src="build-with-local-agent-or-vscode.png" alt="Tlink - Build with Local AI Agent" style="width:100%;display:block">
+                    <div style="padding:12px 16px;background:var(--bg-card);text-align:center;font-size:13px;color:var(--text-secondary)">
+                        <i class="fas fa-microchip" style="color:#22c55e;margin-right:6px"></i> AI Agent running locally &mdash; no cloud, no API keys
+                    </div>
                 </div>
             </div>
         </div>
