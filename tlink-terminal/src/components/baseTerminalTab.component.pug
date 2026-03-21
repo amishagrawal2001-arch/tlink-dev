@@ -7,7 +7,6 @@ terminal-toolbar([tab]='this')
 )
     button.btn.btn-sm.btn-link(type='button', (click)='closePane()', aria-label='Close pane')
         i.fas.fa-times
-terminal-button-bar([tab]='this')
 .content(#content, [style.opacity]='frontendIsReady ? 1 : 0')
 search-panel(
     *ngIf='showSearchPanel && hasFocus && frontend',
@@ -16,3 +15,4 @@ search-panel(
     [frontend]='frontend',
     (close)='showSearchPanel = false; frontend.cancelSearch()'
 )
+terminal-button-bar([tab]='this')
