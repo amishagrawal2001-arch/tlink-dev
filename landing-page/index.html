@@ -67,8 +67,15 @@
                 <span><i class="fab fa-windows"></i> Windows</span>
                 <span><i class="fab fa-linux"></i> Linux</span>
             </div>
-            <div class="hero-screenshot">
-                <img src="screenshot-welcome.png" alt="Tlink Terminal - Multi-protocol terminal emulator" loading="eager">
+            <div class="hero-screenshots-dual">
+                <div class="hero-screenshot">
+                    <div class="theme-label">Dark Theme</div>
+                    <img src="screenshot-welcome.png" alt="Tlink Terminal - Dark Theme" loading="eager">
+                </div>
+                <div class="hero-screenshot">
+                    <div class="theme-label">Light Theme</div>
+                    <img src="screenshot-welcome-light.png" alt="Tlink Terminal - Light Theme" loading="eager">
+                </div>
             </div>
         </div>
     </section>
@@ -181,78 +188,84 @@
                 <h2>See Tlink in action</h2>
                 <p>A powerful terminal experience built for professionals.</p>
             </div>
+            <div class="screenshot-categories">
+                <button class="cat-btn active" onclick="filterScreenshots('all')">All</button>
+                <button class="cat-btn" onclick="filterScreenshots('terminal')">Terminal</button>
+                <button class="cat-btn" onclick="filterScreenshots('ai')">AI Assistant</button>
+                <button class="cat-btn" onclick="filterScreenshots('settings')">Settings</button>
+            </div>
             <div class="screenshots-gallery">
-                <div class="screenshot-item active" onclick="showScreenshot(0)">
-                    <div class="screenshot-preview">
-                        <img src="screenshot-welcome.png" alt="Welcome Screen" loading="lazy">
-                    </div>
-                    <div class="screenshot-label">
-                        <i class="fas fa-home"></i> Welcome
-                    </div>
+                <div class="screenshot-item active" data-cat="terminal" onclick="showScreenshot(0)">
+                    <div class="screenshot-preview"><img src="screenshot-welcome.png" alt="Welcome" loading="lazy"></div>
+                    <div class="screenshot-label"><i class="fas fa-home"></i> Welcome</div>
                 </div>
-                <div class="screenshot-item" onclick="showScreenshot(1)">
-                    <div class="screenshot-preview">
-                        <img src="screenshot-ssh-session.png" alt="SSH Session" loading="lazy">
-                    </div>
-                    <div class="screenshot-label">
-                        <i class="fas fa-key"></i> SSH Session
-                    </div>
+                <div class="screenshot-item" data-cat="terminal" onclick="showScreenshot(1)">
+                    <div class="screenshot-preview"><img src="screenshot-ssh-session.png" alt="SSH Session" loading="lazy"></div>
+                    <div class="screenshot-label"><i class="fas fa-key"></i> SSH Session</div>
                 </div>
-                <div class="screenshot-item" onclick="showScreenshot(2)">
-                    <div class="screenshot-preview">
-                        <img src="screenshot-terminal.png" alt="Terminal" loading="lazy">
-                    </div>
-                    <div class="screenshot-label">
-                        <i class="fas fa-terminal"></i> Terminal
-                    </div>
+                <div class="screenshot-item" data-cat="terminal" onclick="showScreenshot(2)">
+                    <div class="screenshot-preview"><img src="screenshot-terminal.png" alt="Terminal" loading="lazy"></div>
+                    <div class="screenshot-label"><i class="fas fa-terminal"></i> Terminal</div>
                 </div>
-                <div class="screenshot-item" onclick="showScreenshot(3)">
-                    <div class="screenshot-preview">
-                        <img src="screenshot-profiles.png" alt="Connection Profiles" loading="lazy">
-                    </div>
-                    <div class="screenshot-label">
-                        <i class="fas fa-server"></i> Profiles
-                    </div>
+                <div class="screenshot-item" data-cat="terminal" onclick="showScreenshot(3)">
+                    <div class="screenshot-preview"><img src="screenshot-profiles.png" alt="Profiles" loading="lazy"></div>
+                    <div class="screenshot-label"><i class="fas fa-server"></i> Profiles</div>
                 </div>
-                <div class="screenshot-item" onclick="showScreenshot(4)">
-                    <div class="screenshot-preview">
-                        <img src="screenshot-settings.png" alt="Settings" loading="lazy">
-                    </div>
-                    <div class="screenshot-label">
-                        <i class="fas fa-gear"></i> Settings
-                    </div>
+                <div class="screenshot-item" data-cat="terminal" onclick="showScreenshot(4)">
+                    <div class="screenshot-preview"><img src="screenshot-shells.png" alt="Shells" loading="lazy"></div>
+                    <div class="screenshot-label"><i class="fas fa-laptop-code"></i> Shells</div>
                 </div>
-                <div class="screenshot-item" onclick="showScreenshot(5)">
-                    <div class="screenshot-preview">
-                        <img src="screenshot-themes.png" alt="Color Themes" loading="lazy">
-                    </div>
-                    <div class="screenshot-label">
-                        <i class="fas fa-palette"></i> Themes
-                    </div>
+                <div class="screenshot-item" data-cat="terminal" onclick="showScreenshot(5)">
+                    <div class="screenshot-preview"><img src="screenshot-themes.png" alt="Themes" loading="lazy"></div>
+                    <div class="screenshot-label"><i class="fas fa-palette"></i> Themes</div>
                 </div>
-                <div class="screenshot-item" onclick="showScreenshot(6)">
-                    <div class="screenshot-preview">
-                        <img src="screenshot-command-window.png" alt="Command Window" loading="lazy">
-                    </div>
-                    <div class="screenshot-label">
-                        <i class="fas fa-paper-plane"></i> Commands
-                    </div>
+                <div class="screenshot-item" data-cat="terminal" onclick="showScreenshot(6)">
+                    <div class="screenshot-preview"><img src="screenshot-command-window.png" alt="Commands" loading="lazy"></div>
+                    <div class="screenshot-label"><i class="fas fa-paper-plane"></i> Commands</div>
                 </div>
-                <div class="screenshot-item" onclick="showScreenshot(7)">
-                    <div class="screenshot-preview">
-                        <img src="screenshot-session-sharing.png" alt="Session Sharing" loading="lazy">
-                    </div>
-                    <div class="screenshot-label">
-                        <i class="fas fa-share-nodes"></i> Sharing
-                    </div>
+                <div class="screenshot-item" data-cat="terminal" onclick="showScreenshot(7)">
+                    <div class="screenshot-preview"><img src="screenshot-session-sharing.png" alt="Sharing" loading="lazy"></div>
+                    <div class="screenshot-label"><i class="fas fa-share-nodes"></i> Sharing</div>
                 </div>
-                <div class="screenshot-item" onclick="showScreenshot(8)">
-                    <div class="screenshot-preview">
-                        <img src="screenshot-shells.png" alt="Shell Selector" loading="lazy">
-                    </div>
-                    <div class="screenshot-label">
-                        <i class="fas fa-laptop-code"></i> Shells
-                    </div>
+                <div class="screenshot-item" data-cat="ai" onclick="showScreenshot(8)">
+                    <div class="screenshot-preview"><img src="screenshot-ai-chat.png" alt="AI Chat" loading="lazy"></div>
+                    <div class="screenshot-label"><i class="fas fa-robot"></i> AI Chat</div>
+                </div>
+                <div class="screenshot-item" data-cat="ai" onclick="showScreenshot(9)">
+                    <div class="screenshot-preview"><img src="screenshot-ai-settings.png" alt="AI Settings" loading="lazy"></div>
+                    <div class="screenshot-label"><i class="fas fa-sliders"></i> AI Settings</div>
+                </div>
+                <div class="screenshot-item" data-cat="ai" onclick="showScreenshot(10)">
+                    <div class="screenshot-preview"><img src="screenshot-ai-providers.png" alt="AI Providers" loading="lazy"></div>
+                    <div class="screenshot-label"><i class="fas fa-cloud"></i> AI Providers</div>
+                </div>
+                <div class="screenshot-item" data-cat="ai" onclick="showScreenshot(11)">
+                    <div class="screenshot-preview"><img src="screenshot-local-llm.png" alt="Local LLM" loading="lazy"></div>
+                    <div class="screenshot-label"><i class="fas fa-microchip"></i> Local LLM</div>
+                </div>
+                <div class="screenshot-item" data-cat="ai" onclick="showScreenshot(12)">
+                    <div class="screenshot-preview"><img src="screenshot-vllm.png" alt="vLLM" loading="lazy"></div>
+                    <div class="screenshot-label"><i class="fas fa-database"></i> vLLM</div>
+                </div>
+                <div class="screenshot-item" data-cat="ai" onclick="showScreenshot(13)">
+                    <div class="screenshot-preview"><img src="screenshot-copilot-agent.png" alt="Copilot Agent" loading="lazy"></div>
+                    <div class="screenshot-label"><i class="fas fa-code"></i> Copilot Agent</div>
+                </div>
+                <div class="screenshot-item" data-cat="settings" onclick="showScreenshot(14)">
+                    <div class="screenshot-preview"><img src="screenshot-settings.png" alt="Settings" loading="lazy"></div>
+                    <div class="screenshot-label"><i class="fas fa-gear"></i> Settings</div>
+                </div>
+                <div class="screenshot-item" data-cat="settings" onclick="showScreenshot(15)">
+                    <div class="screenshot-preview"><img src="screenshot-ssh-settings.png" alt="SSH Settings" loading="lazy"></div>
+                    <div class="screenshot-label"><i class="fas fa-key"></i> SSH Config</div>
+                </div>
+                <div class="screenshot-item" data-cat="settings" onclick="showScreenshot(16)">
+                    <div class="screenshot-preview"><img src="screenshot-workspaces.png" alt="Workspaces" loading="lazy"></div>
+                    <div class="screenshot-label"><i class="fas fa-layer-group"></i> Workspaces</div>
+                </div>
+                <div class="screenshot-item" data-cat="settings" onclick="showScreenshot(17)">
+                    <div class="screenshot-preview"><img src="screenshot-backup.png" alt="Backup" loading="lazy"></div>
+                    <div class="screenshot-label"><i class="fas fa-cloud-arrow-up"></i> Backup</div>
                 </div>
             </div>
             <div class="screenshot-viewer" id="screenshotViewer">
@@ -264,13 +277,27 @@
     <script>
         const screenshots = [
             'screenshot-welcome.png', 'screenshot-ssh-session.png', 'screenshot-terminal.png',
-            'screenshot-profiles.png', 'screenshot-settings.png', 'screenshot-themes.png',
-            'screenshot-command-window.png', 'screenshot-session-sharing.png', 'screenshot-shells.png'
+            'screenshot-profiles.png', 'screenshot-shells.png', 'screenshot-themes.png',
+            'screenshot-command-window.png', 'screenshot-session-sharing.png',
+            'screenshot-ai-chat.png', 'screenshot-ai-settings.png', 'screenshot-ai-providers.png',
+            'screenshot-local-llm.png', 'screenshot-vllm.png', 'screenshot-copilot-agent.png',
+            'screenshot-settings.png', 'screenshot-ssh-settings.png', 'screenshot-workspaces.png',
+            'screenshot-backup.png'
         ];
         function showScreenshot(index) {
             document.getElementById('screenshotImg').src = screenshots[index];
             document.querySelectorAll('.screenshot-item').forEach((el, i) => {
                 el.classList.toggle('active', i === index);
+            });
+        }
+        function filterScreenshots(cat) {
+            document.querySelectorAll('.cat-btn').forEach(b => b.classList.toggle('active', b.textContent.toLowerCase().includes(cat === 'all' ? 'all' : cat)));
+            document.querySelectorAll('.screenshot-item').forEach(el => {
+                if (cat === 'all') {
+                    el.style.display = '';
+                } else {
+                    el.style.display = el.dataset.cat === cat ? '' : 'none';
+                }
             });
         }
     </script>
