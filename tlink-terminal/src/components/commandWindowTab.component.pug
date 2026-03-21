@@ -16,13 +16,6 @@
                     .panel-actions
                         button.btn.btn-outline-secondary.btn-sm.btn-icon(
                             type='button',
-                            (click)='toggleCommandArea()',
-                            [ngbTooltip]='commandAreaHidden ? "Show" : "Hide"',
-                            [attr.aria-label]='commandAreaHidden ? "Show" : "Hide"'
-                        )
-                            i.fas([class.fa-eye]='commandAreaHidden', [class.fa-eye-slash]='!commandAreaHidden')
-                        button.btn.btn-outline-secondary.btn-sm.btn-icon(
-                            type='button',
                             (click)='cycleTargetMode()',
                             [ngbTooltip]='targetModeTooltip',
                             [attr.aria-label]='targetModeTooltip'
