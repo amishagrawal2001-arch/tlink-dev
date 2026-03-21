@@ -367,6 +367,21 @@ export class AppRootComponent implements OnInit {
         return this.bottomPanelVisible && this.bottomPanelId === 'command-window'
     }
 
+    get isButtonBarEnabled (): boolean {
+        return !!this.config.store.terminal?.buttonBar?.enabled
+    }
+
+    toggleButtonBar (): void {
+        if (!this.config.store.terminal) {
+            this.config.store.terminal = {}
+        }
+        if (!this.config.store.terminal.buttonBar) {
+            this.config.store.terminal.buttonBar = {}
+        }
+        this.config.store.terminal.buttonBar.enabled = !this.config.store.terminal.buttonBar.enabled
+        this.config.save()
+    }
+
     openSettingsFromDock (): void {
         this.hostApp.openSettingsUI()
     }

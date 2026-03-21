@@ -250,6 +250,17 @@ title-bar(
                         rect(x='1.5', y='2.5', width='13', height='11', rx='1.5', ry='1.5', fill='none', stroke='currentColor', stroke-width='1.2')
                         polyline(points='4,5.5 6.5,8 4,10.5', fill='none', stroke='currentColor', stroke-width='1.2', stroke-linecap='round', stroke-linejoin='round')
                         line(x1='7.5', y1='10.5', x2='12', y2='10.5', stroke='currentColor', stroke-width='1.2', stroke-linecap='round')
+                button.btn.btn-sm.btn-icon.shortcut-icon-button(
+                    type='button',
+                    [class.active]='isButtonBarEnabled',
+                    ngbTooltip='Button bar',
+                    (click)='toggleButtonBar()'
+                )
+                    svg(width='14', height='14', viewBox='0 0 16 16', aria-hidden='true', focusable='false')
+                        rect(x='1.5', y='3', width='13', height='10', rx='1.5', ry='1.5', fill='none', stroke='currentColor', stroke-width='1.2')
+                        line(x1='1.5', y1='7', x2='14.5', y2='7', stroke='currentColor', stroke-width='1.2')
+                        rect(x='3.5', y='8.5', width='3', height='2.5', rx='0.5', fill='currentColor')
+                        rect(x='8', y='8.5', width='3', height='2.5', rx='0.5', fill='currentColor')
             .shortcut-spacer
             .shortcut-toolbar(*ngIf='rightToolbarButtons?.length || updatesAvailable')
                 button.btn.btn-sm.btn-icon.shortcut-icon-button.toolbar-icon-button(
