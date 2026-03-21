@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tlink - The Modern Terminal for DevOps & Network Engineers</title>
+    <meta name="description" content="SSH, RDP, Serial, Telnet, SFTP in one powerful cross-platform terminal with AI assistant, session sharing, and session recording.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container nav-container">
+            <a href="#" class="nav-brand">
+                <span class="brand-icon"><i class="fas fa-terminal"></i></span>
+                <span class="brand-text">Tlink</span>
+            </a>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#screenshots">Screenshots</a>
+                <a href="#protocols">Protocols</a>
+                <a href="#msp">For MSPs</a>
+                <a href="#pricing">Pricing</a>
+                <a href="#comparison">Compare</a>
+            </div>
+            <div class="nav-actions">
+                <a href="https://github.com/amishagrawal2001-arch/tlink-dev" class="btn btn-ghost" target="_blank">
+                    <i class="fab fa-github"></i> GitHub
+                </a>
+                <a href="#download" class="btn btn-primary">Download Free</a>
+            </div>
+            <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open');document.querySelector('.nav-actions').classList.toggle('open')">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-glow"></div>
+        <div class="container">
+            <div class="hero-badge">
+                <i class="fas fa-bolt"></i> Open Source &middot; MIT Licensed &middot; Cross-Platform
+            </div>
+            <h1 class="hero-title">
+                The Modern Terminal for<br>
+                <span class="gradient-text">DevOps & Network Engineers</span>
+            </h1>
+            <p class="hero-subtitle">
+                SSH, RDP, Serial, Telnet, and SFTP in one powerful application with
+                AI-powered assistance, live session sharing, and session recording.
+            </p>
+            <div class="hero-actions">
+                <a href="#download" class="btn btn-primary btn-lg">
+                    <i class="fas fa-download"></i> Download for Free
+                </a>
+                <a href="#features" class="btn btn-outline btn-lg">
+                    <i class="fas fa-play-circle"></i> See Features
+                </a>
+            </div>
+            <div class="hero-platforms">
+                <span><i class="fab fa-apple"></i> macOS</span>
+                <span><i class="fab fa-windows"></i> Windows</span>
+                <span><i class="fab fa-linux"></i> Linux</span>
+            </div>
+            <div class="hero-screenshot">
+                <img src="screenshot-main.png" alt="Tlink Terminal - Multi-protocol terminal emulator" loading="eager">
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Bar -->
+    <section class="stats-bar">
+        <div class="container">
+            <div class="stats-grid">
+                <div class="stat">
+                    <div class="stat-number">5</div>
+                    <div class="stat-label">Protocols Supported</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">6+</div>
+                    <div class="stat-label">AI Providers</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">3</div>
+                    <div class="stat-label">Platforms</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">AES-256</div>
+                    <div class="stat-label">Encryption</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge">Features</span>
+                <h2>Everything you need in one terminal</h2>
+                <p>Stop juggling PuTTY, mRemoteNG, WinSCP, and a dozen other tools. Tlink brings it all together.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card featured">
+                    <div class="feature-icon gradient-bg"><i class="fas fa-wand-magic-sparkles"></i></div>
+                    <h3>AI Assistant</h3>
+                    <p>Built-in AI powered by OpenAI, Claude, Ollama (local), and more. Get command suggestions, troubleshoot errors, and generate scripts without leaving the terminal.</p>
+                    <div class="feature-tag">New</div>
+                </div>
+                <div class="feature-card featured">
+                    <div class="feature-icon gradient-bg"><i class="fas fa-share-nodes"></i></div>
+                    <h3>Live Session Sharing</h3>
+                    <p>Share terminal sessions with team members via secure links. Read-only for observers or interactive for collaborative troubleshooting. Password-protected with expiration.</p>
+                    <div class="feature-tag">New</div>
+                </div>
+                <div class="feature-card featured">
+                    <div class="feature-icon gradient-bg"><i class="fas fa-circle-dot"></i></div>
+                    <h3>Session Recording & Replay</h3>
+                    <p>Record terminal sessions with timestamps. Replay with speed control (0.5x to 5x) for training, auditing, and debugging. Timestamped JSONL format.</p>
+                    <div class="feature-tag">New</div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-magnifying-glass"></i></div>
+                    <h3>Command Palette</h3>
+                    <p>Press Ctrl+P to instantly search across open tabs, profiles, recent connections, and commands. Fuzzy search gets you where you need to go fast.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-bookmark"></i></div>
+                    <h3>Terminal Bookmarks</h3>
+                    <p>Save frequently used commands with labels and categories. Quick-execute from the side panel or command palette. Never retype complex commands again.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-triangle-exclamation"></i></div>
+                    <h3>Smart Output Analyzer</h3>
+                    <p>Auto-detects errors in terminal output (permission denied, command not found, connection refused) and shows fix suggestions in real-time.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-shield-halved"></i></div>
+                    <h3>Encrypted Vault</h3>
+                    <p>AES-256 encrypted credential storage with PBKDF2 key derivation. SSH keys, passwords, and API keys secured with system keyring integration.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-columns"></i></div>
+                    <h3>Split Panes & Workspaces</h3>
+                    <p>Split terminals horizontally and vertically. Save complete workspace layouts and restore them instantly. Drag-and-drop tab management.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-folder-open"></i></div>
+                    <h3>SFTP File Browser</h3>
+                    <p>Built-in file browser panel for SSH sessions. Upload, download, create directories, and manage remote files without leaving the terminal.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-file-import"></i></div>
+                    <h3>SSH Config Auto-Import</h3>
+                    <p>Automatically imports hosts from ~/.ssh/config with live file watching. Changes detected instantly &mdash; no restart needed.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-terminal"></i></div>
+                    <h3>Command Window</h3>
+                    <p>Send commands to multiple terminals simultaneously. Target active tab, all visible tabs, or every tab at once. Resizable bottom panel.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-puzzle-piece"></i></div>
+                    <h3>Plugin System</h3>
+                    <p>Extensible architecture with community plugins. Add custom color schemes, AI providers, connection types, and more.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Screenshots Section -->
+    <section id="screenshots" class="section section-dark">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge">Screenshots</span>
+                <h2>See Tlink in action</h2>
+                <p>A powerful terminal experience built for professionals.</p>
+            </div>
+            <div class="screenshots-gallery">
+                <div class="screenshot-item active" onclick="showScreenshot(0)">
+                    <div class="screenshot-preview">
+                        <img src="screenshot-main.png" alt="Tlink Main Interface" loading="lazy">
+                    </div>
+                    <div class="screenshot-label">
+                        <i class="fas fa-desktop"></i> Main Interface
+                    </div>
+                </div>
+                <div class="screenshot-item" onclick="showScreenshot(1)">
+                    <div class="screenshot-preview">
+                        <img src="screenshot-ssh.png" alt="SSH Connection" loading="lazy">
+                    </div>
+                    <div class="screenshot-label">
+                        <i class="fas fa-key"></i> SSH Connection
+                    </div>
+                </div>
+                <div class="screenshot-item" onclick="showScreenshot(2)">
+                    <div class="screenshot-preview">
+                        <img src="screenshot-terminal.png" alt="Terminal Session" loading="lazy">
+                    </div>
+                    <div class="screenshot-label">
+                        <i class="fas fa-terminal"></i> Terminal Session
+                    </div>
+                </div>
+            </div>
+            <div class="screenshot-viewer" id="screenshotViewer">
+                <img src="screenshot-main.png" alt="Tlink Screenshot" id="screenshotImg">
+            </div>
+        </div>
+    </section>
+
+    <script>
+        const screenshots = ['screenshot-main.png', 'screenshot-ssh.png', 'screenshot-terminal.png'];
+        function showScreenshot(index) {
+            document.getElementById('screenshotImg').src = screenshots[index];
+            document.querySelectorAll('.screenshot-item').forEach((el, i) => {
+                el.classList.toggle('active', i === index);
+            });
+        }
+    </script>
+
+    <!-- Protocols Section -->
+    <section id="protocols" class="section section-dark">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge">Protocols</span>
+                <h2>One app, every protocol</h2>
+                <p>Connect to any device using the protocol it needs. All in the same window, the same workflow.</p>
+            </div>
+            <div class="protocols-grid">
+                <div class="protocol-card">
+                    <div class="protocol-icon ssh"><i class="fas fa-key"></i></div>
+                    <h3>SSH</h3>
+                    <p>Full SSH2 with password, public key, agent forwarding, jump hosts, SOCKS proxy, and port forwarding (local, remote, dynamic).</p>
+                    <ul class="protocol-features">
+                        <li><i class="fas fa-check"></i> Key authentication</li>
+                        <li><i class="fas fa-check"></i> SSH agent</li>
+                        <li><i class="fas fa-check"></i> Jump hosts / Bastion</li>
+                        <li><i class="fas fa-check"></i> Port forwarding</li>
+                        <li><i class="fas fa-check"></i> SOCKS proxy</li>
+                        <li><i class="fas fa-check"></i> SFTP file transfer</li>
+                    </ul>
+                </div>
+                <div class="protocol-card">
+                    <div class="protocol-icon rdp"><i class="fas fa-desktop"></i></div>
+                    <h3>RDP</h3>
+                    <p>Windows Remote Desktop with automatic FreeRDP fallback for NLA-enabled servers. Certificate handling and credential management.</p>
+                    <ul class="protocol-features">
+                        <li><i class="fas fa-check"></i> NLA authentication</li>
+                        <li><i class="fas fa-check"></i> FreeRDP fallback</li>
+                        <li><i class="fas fa-check"></i> Certificate handling</li>
+                        <li><i class="fas fa-check"></i> Session recovery</li>
+                    </ul>
+                </div>
+                <div class="protocol-card">
+                    <div class="protocol-icon serial"><i class="fas fa-plug"></i></div>
+                    <h3>Serial</h3>
+                    <p>Serial console connections for network hardware. Configure baud rate, data bits, parity, and stop bits for Cisco, Juniper, and more.</p>
+                    <ul class="protocol-features">
+                        <li><i class="fas fa-check"></i> Configurable baud rate</li>
+                        <li><i class="fas fa-check"></i> Terminal emulation</li>
+                        <li><i class="fas fa-check"></i> Network device support</li>
+                    </ul>
+                </div>
+                <div class="protocol-card">
+                    <div class="protocol-icon telnet"><i class="fas fa-network-wired"></i></div>
+                    <h3>Telnet & Socket</h3>
+                    <p>Telnet protocol and raw TCP socket connections for legacy devices and custom services.</p>
+                    <ul class="protocol-features">
+                        <li><i class="fas fa-check"></i> Telnet protocol</li>
+                        <li><i class="fas fa-check"></i> Raw TCP sockets</li>
+                        <li><i class="fas fa-check"></i> Legacy device support</li>
+                    </ul>
+                </div>
+                <div class="protocol-card">
+                    <div class="protocol-icon local"><i class="fas fa-laptop-code"></i></div>
+                    <h3>Local Shell</h3>
+                    <p>Native local terminal with full shell support. PowerShell on Windows, Bash/Zsh on macOS and Linux.</p>
+                    <ul class="protocol-features">
+                        <li><i class="fas fa-check"></i> PowerShell / CMD</li>
+                        <li><i class="fas fa-check"></i> Bash / Zsh / Fish</li>
+                        <li><i class="fas fa-check"></i> WSL support</li>
+                        <li><i class="fas fa-check"></i> Git Bash / MSYS2</li>
+                    </ul>
+                </div>
+                <div class="protocol-card">
+                    <div class="protocol-icon sftp"><i class="fas fa-file-arrow-up"></i></div>
+                    <h3>SFTP & ZModem</h3>
+                    <p>Integrated file transfer with visual SFTP browser and ZModem protocol support for inline file transfers.</p>
+                    <ul class="protocol-features">
+                        <li><i class="fas fa-check"></i> Visual file browser</li>
+                        <li><i class="fas fa-check"></i> Drag-and-drop upload</li>
+                        <li><i class="fas fa-check"></i> ZModem (sz/rz)</li>
+                        <li><i class="fas fa-check"></i> Directory operations</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- MSP Section -->
+    <section id="msp" class="section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge">For MSPs</span>
+                <h2>Built for Managed Service Providers</h2>
+                <p>Manage thousands of devices across hundreds of customers. One tool for your entire team.</p>
+            </div>
+            <div class="msp-grid">
+                <div class="msp-card">
+                    <div class="msp-icon"><i class="fas fa-server"></i></div>
+                    <h3>Multi-Device Management</h3>
+                    <ul>
+                        <li>Organize 1000s of devices by customer, site, or environment</li>
+                        <li>Bulk import from SSH config or profiles</li>
+                        <li>Quick connect with fuzzy search (Ctrl+P)</li>
+                        <li>Profile groups and hierarchical organization</li>
+                    </ul>
+                </div>
+                <div class="msp-card">
+                    <div class="msp-icon"><i class="fas fa-users"></i></div>
+                    <h3>Team Collaboration</h3>
+                    <ul>
+                        <li>Live session sharing via secure links</li>
+                        <li>Read-only mode for junior engineers</li>
+                        <li>Interactive mode for pair troubleshooting</li>
+                        <li>Password-protected, expiring share links</li>
+                    </ul>
+                </div>
+                <div class="msp-card">
+                    <div class="msp-icon"><i class="fas fa-clipboard-check"></i></div>
+                    <h3>Compliance & Audit</h3>
+                    <ul>
+                        <li>Session recording with timestamps</li>
+                        <li>Session replay for audit review</li>
+                        <li>Configurable session logging</li>
+                        <li>AES-256 encrypted credential vault</li>
+                    </ul>
+                </div>
+                <div class="msp-card">
+                    <div class="msp-icon"><i class="fas fa-robot"></i></div>
+                    <h3>Automation & Efficiency</h3>
+                    <ul>
+                        <li>Command window for multi-device commands</li>
+                        <li>Terminal bookmarks for frequent commands</li>
+                        <li>Login scripts for auto-setup</li>
+                        <li>AI assistant for command help</li>
+                    </ul>
+                </div>
+                <div class="msp-card">
+                    <div class="msp-icon"><i class="fas fa-shield-halved"></i></div>
+                    <h3>Security First</h3>
+                    <ul>
+                        <li>No plaintext passwords &mdash; ever</li>
+                        <li>System keyring integration</li>
+                        <li>SSH agent forwarding</li>
+                        <li>SOC 2 / ISO 27001 friendly</li>
+                    </ul>
+                </div>
+                <div class="msp-card">
+                    <div class="msp-icon"><i class="fas fa-gauge-high"></i></div>
+                    <h3>NOC / SOC Ready</h3>
+                    <ul>
+                        <li>Smart output analyzer for error detection</li>
+                        <li>Multi-terminal broadcast commands</li>
+                        <li>Split pane layouts for monitoring</li>
+                        <li>Color-coded connection status</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Comparison Section -->
+    <section id="comparison" class="section section-dark">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge">Compare</span>
+                <h2>Why teams choose Tlink</h2>
+                <p>See how Tlink stacks up against other terminal and remote access tools.</p>
+            </div>
+            <div class="comparison-table-wrapper">
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Feature</th>
+                            <th class="highlight">Tlink</th>
+                            <th>PuTTY</th>
+                            <th>MobaXterm</th>
+                            <th>Termius</th>
+                            <th>Royal TSX</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>SSH</td>
+                            <td class="highlight"><i class="fas fa-check yes"></i></td>
+                            <td><i class="fas fa-check yes"></i></td>
+                            <td><i class="fas fa-check yes"></i></td>
+                            <td><i class="fas fa-check yes"></i></td>
+                            <td><i class="fas fa-check yes"></i></td>
+                        </tr>
+                        <tr>
+                            <td>RDP</td>
+                            <td class="highlight"><i class="fas fa-check yes"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                            <td><i class="fas fa-check yes"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                            <td><i class="fas fa-check yes"></i></td>
+                        </tr>
+                        <tr>
+                            <td>Serial Console</td>
+                            <td class="highlight"><i class="fas fa-check yes"></i></td>
+                            <td><i class="fas fa-check yes"></i></td>
+                            <td><i class="fas fa-check yes"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                        </tr>
+                        <tr>
+                            <td>SFTP</td>
+                            <td class="highlight"><i class="fas fa-check yes"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                            <td><i class="fas fa-check yes"></i></td>
+                            <td><i class="fas fa-check yes"></i></td>
+                            <td><i class="fas fa-check yes"></i></td>
+                        </tr>
+                        <tr>
+                            <td>AI Assistant</td>
+                            <td class="highlight"><i class="fas fa-check yes"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                        </tr>
+                        <tr>
+                            <td>Session Sharing</td>
+                            <td class="highlight"><i class="fas fa-check yes"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                            <td><i class="fas fa-check yes"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                        </tr>
+                        <tr>
+                            <td>Session Recording</td>
+                            <td class="highlight"><i class="fas fa-check yes"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                        </tr>
+                        <tr>
+                            <td>Output Analyzer</td>
+                            <td class="highlight"><i class="fas fa-check yes"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                        </tr>
+                        <tr>
+                            <td>Encrypted Vault</td>
+                            <td class="highlight"><i class="fas fa-check yes"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                            <td><i class="fas fa-check yes"></i></td>
+                            <td><i class="fas fa-check yes"></i></td>
+                        </tr>
+                        <tr>
+                            <td>Open Source</td>
+                            <td class="highlight"><i class="fas fa-check yes"></i></td>
+                            <td><i class="fas fa-check yes"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                            <td><i class="fas fa-times no"></i></td>
+                        </tr>
+                        <tr>
+                            <td>Cross-Platform</td>
+                            <td class="highlight"><i class="fas fa-check yes"></i></td>
+                            <td>Windows</td>
+                            <td>Windows</td>
+                            <td><i class="fas fa-check yes"></i></td>
+                            <td>macOS</td>
+                        </tr>
+                        <tr>
+                            <td>Price</td>
+                            <td class="highlight"><strong>Free</strong></td>
+                            <td>Free</td>
+                            <td>$69</td>
+                            <td>$10/mo</td>
+                            <td>$29</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge">Pricing</span>
+                <h2>Simple, transparent pricing</h2>
+                <p>Start free with all core features. Upgrade when your team grows.</p>
+            </div>
+            <div class="pricing-grid">
+                <div class="pricing-card">
+                    <div class="pricing-tier">Community</div>
+                    <div class="pricing-price">
+                        <span class="price-amount">$0</span>
+                        <span class="price-period">forever</span>
+                    </div>
+                    <p class="pricing-desc">For individual engineers and open source enthusiasts.</p>
+                    <ul class="pricing-features">
+                        <li><i class="fas fa-check"></i> All protocols (SSH, RDP, Serial, Telnet)</li>
+                        <li><i class="fas fa-check"></i> Unlimited connections</li>
+                        <li><i class="fas fa-check"></i> Split panes & workspaces</li>
+                        <li><i class="fas fa-check"></i> SFTP file browser</li>
+                        <li><i class="fas fa-check"></i> Encrypted vault</li>
+                        <li><i class="fas fa-check"></i> Command palette & bookmarks</li>
+                        <li><i class="fas fa-check"></i> Plugin system</li>
+                        <li><i class="fas fa-check"></i> Community support</li>
+                    </ul>
+                    <a href="#download" class="btn btn-outline btn-block">Download Free</a>
+                </div>
+                <div class="pricing-card popular">
+                    <div class="popular-badge">Most Popular</div>
+                    <div class="pricing-tier">Professional</div>
+                    <div class="pricing-price">
+                        <span class="price-amount">$9</span>
+                        <span class="price-period">/user/month</span>
+                    </div>
+                    <p class="pricing-desc">For power users and small teams.</p>
+                    <ul class="pricing-features">
+                        <li><i class="fas fa-check"></i> Everything in Community</li>
+                        <li><i class="fas fa-check"></i> AI Assistant (all providers)</li>
+                        <li><i class="fas fa-check"></i> Session recording & replay</li>
+                        <li><i class="fas fa-check"></i> Smart output analyzer</li>
+                        <li><i class="fas fa-check"></i> Auto backup & restore</li>
+                        <li><i class="fas fa-check"></i> Priority email support</li>
+                    </ul>
+                    <a href="#download" class="btn btn-primary btn-block">Start Free Trial</a>
+                </div>
+                <div class="pricing-card">
+                    <div class="pricing-tier">Team</div>
+                    <div class="pricing-price">
+                        <span class="price-amount">$19</span>
+                        <span class="price-period">/user/month</span>
+                    </div>
+                    <p class="pricing-desc">For MSPs and engineering teams.</p>
+                    <ul class="pricing-features">
+                        <li><i class="fas fa-check"></i> Everything in Professional</li>
+                        <li><i class="fas fa-check"></i> Live session sharing</li>
+                        <li><i class="fas fa-check"></i> Centralized profile management</li>
+                        <li><i class="fas fa-check"></i> Team workspaces</li>
+                        <li><i class="fas fa-check"></i> Session audit logs</li>
+                        <li><i class="fas fa-check"></i> Priority support + Slack</li>
+                    </ul>
+                    <a href="#download" class="btn btn-outline btn-block">Contact Sales</a>
+                </div>
+                <div class="pricing-card">
+                    <div class="pricing-tier">Enterprise</div>
+                    <div class="pricing-price">
+                        <span class="price-amount">Custom</span>
+                    </div>
+                    <p class="pricing-desc">For large organizations with compliance needs.</p>
+                    <ul class="pricing-features">
+                        <li><i class="fas fa-check"></i> Everything in Team</li>
+                        <li><i class="fas fa-check"></i> SSO / SAML integration</li>
+                        <li><i class="fas fa-check"></i> Audit logging API</li>
+                        <li><i class="fas fa-check"></i> Custom deployment</li>
+                        <li><i class="fas fa-check"></i> Dedicated support engineer</li>
+                        <li><i class="fas fa-check"></i> SLA guarantee</li>
+                    </ul>
+                    <a href="#download" class="btn btn-outline btn-block">Contact Sales</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Download Section -->
+    <section id="download" class="section section-dark">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge">Download</span>
+                <h2>Get Tlink for your platform</h2>
+                <p>Native installers for every major operating system. Free and open source.</p>
+            </div>
+            <div class="download-grid">
+                <div class="download-card">
+                    <div class="download-icon"><i class="fab fa-apple"></i></div>
+                    <h3>macOS</h3>
+                    <p>Intel & Apple Silicon</p>
+                    <div class="download-buttons">
+                        <a href="#" class="btn btn-primary btn-sm">DMG (Apple Silicon)</a>
+                        <a href="#" class="btn btn-outline btn-sm">DMG (Intel)</a>
+                    </div>
+                </div>
+                <div class="download-card">
+                    <div class="download-icon"><i class="fab fa-windows"></i></div>
+                    <h3>Windows</h3>
+                    <p>x64 & ARM64</p>
+                    <div class="download-buttons">
+                        <a href="#" class="btn btn-primary btn-sm">Installer (x64)</a>
+                        <a href="#" class="btn btn-outline btn-sm">Portable (x64)</a>
+                    </div>
+                </div>
+                <div class="download-card">
+                    <div class="download-icon"><i class="fab fa-linux"></i></div>
+                    <h3>Linux</h3>
+                    <p>DEB, RPM, AppImage, Snap</p>
+                    <div class="download-buttons">
+                        <a href="#" class="btn btn-primary btn-sm">DEB (x64)</a>
+                        <a href="#" class="btn btn-outline btn-sm">AppImage</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section">
+        <div class="container">
+            <h2>Ready to modernize your terminal workflow?</h2>
+            <p>Join thousands of engineers who've replaced their tool sprawl with Tlink.</p>
+            <div class="cta-actions">
+                <a href="#download" class="btn btn-primary btn-lg"><i class="fas fa-download"></i> Download for Free</a>
+                <a href="https://github.com/amishagrawal2001-arch/tlink-dev" class="btn btn-outline btn-lg" target="_blank"><i class="fab fa-github"></i> Star on GitHub</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <div class="nav-brand">
+                        <span class="brand-icon"><i class="fas fa-terminal"></i></span>
+                        <span class="brand-text">Tlink</span>
+                    </div>
+                    <p>The modern terminal for DevOps and network engineers. Open source, cross-platform, AI-powered.</p>
+                </div>
+                <div class="footer-links">
+                    <h4>Product</h4>
+                    <a href="#features">Features</a>
+                    <a href="#protocols">Protocols</a>
+                    <a href="#pricing">Pricing</a>
+                    <a href="#download">Download</a>
+                </div>
+                <div class="footer-links">
+                    <h4>For Teams</h4>
+                    <a href="#msp">MSP Solutions</a>
+                    <a href="#comparison">Compare</a>
+                    <a href="#">Documentation</a>
+                    <a href="#">Release Notes</a>
+                </div>
+                <div class="footer-links">
+                    <h4>Community</h4>
+                    <a href="https://github.com/amishagrawal2001-arch/tlink-dev" target="_blank">GitHub</a>
+                    <a href="#">Discord</a>
+                    <a href="#">Twitter</a>
+                    <a href="#">Blog</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2025 Tlink. MIT License. Built with Electron, Angular, and xterm.js.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
