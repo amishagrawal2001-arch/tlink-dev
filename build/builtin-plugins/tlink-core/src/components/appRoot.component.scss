@@ -424,6 +424,23 @@ $tab-border-radius: 4px;
         cursor: ns-resize;
         z-index: 2;
         touch-action: none;
+
+        &::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 2px;
+            transform: translateX(-50%);
+            width: 36px;
+            height: 4px;
+            border-radius: 2px;
+            background: var(--theme-fg-less, rgba(128, 128, 128, 0.3));
+            transition: background 0.15s;
+        }
+
+        &:hover::after {
+            background: var(--theme-fg-more, rgba(128, 128, 128, 0.6));
+        }
     }
 }
 
