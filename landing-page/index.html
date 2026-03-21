@@ -85,14 +85,32 @@
                 <span><i class="fab fa-windows"></i> Windows</span>
                 <span><i class="fab fa-linux"></i> Linux</span>
             </div>
-            <div class="hero-screenshots-dual">
-                <div class="hero-screenshot">
-                    <div class="theme-label">Dark Theme</div>
-                    <img src="screenshot-welcome.png" alt="Tlink Terminal - Dark Theme" loading="eager">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:48px">
+                <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);box-shadow:0 20px 60px rgba(0,0,0,0.4)">
+                    <img src="screenshot-welcome.png" alt="Tlink Terminal - Dark Theme" style="width:100%;display:block" loading="eager">
+                    <div style="padding:10px 16px;background:var(--bg-card);text-align:center;font-size:12px;font-weight:500;color:var(--text-secondary)">
+                        <i class="fas fa-terminal" style="color:#4a9eff;margin-right:6px"></i> Terminal &mdash; SSH, RDP, Serial, Telnet, SFTP
+                    </div>
                 </div>
-                <div class="hero-screenshot">
-                    <div class="theme-label">Light Theme</div>
-                    <img src="screenshot-welcome-light.png" alt="Tlink Terminal - Light Theme" loading="eager">
+                <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);box-shadow:0 20px 60px rgba(0,0,0,0.4)">
+                    <img src="build-with-local-agent-or-vscode.png" alt="Build with Local AI Agent" style="width:100%;display:block" loading="eager">
+                    <div style="padding:10px 16px;background:var(--bg-card);text-align:center;font-size:12px;font-weight:500;color:var(--text-secondary)">
+                        <i class="fas fa-microchip" style="color:#22c55e;margin-right:6px"></i> Offline AI Agent &mdash; No Cloud Required
+                    </div>
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px">
+                <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);box-shadow:0 20px 60px rgba(0,0,0,0.4)">
+                    <img src="tabby-Multi-user-access-with-tabby.png" alt="Multi-User Access with Tabby" style="width:100%;display:block" loading="eager">
+                    <div style="padding:10px 16px;background:var(--bg-card);text-align:center;font-size:12px;font-weight:500;color:var(--text-secondary)">
+                        <i class="fas fa-users" style="color:#f59e0b;margin-right:6px"></i> Multi-User Access &mdash; Teams & Groups
+                    </div>
+                </div>
+                <div style="border-radius:12px;overflow:hidden;border:1px solid var(--border);box-shadow:0 20px 60px rgba(0,0,0,0.4)">
+                    <img src="tlink-studio-colum-editor.png" alt="Tlink Studio - Code Editor" style="width:100%;display:block" loading="eager">
+                    <div style="padding:10px 16px;background:var(--bg-card);text-align:center;font-size:12px;font-weight:500;color:var(--text-secondary)">
+                        <i class="fas fa-code" style="color:#8b5cf6;margin-right:6px"></i> Tlink Studio &mdash; Code Editor & Topology
+                    </div>
                 </div>
             </div>
         </div>
@@ -332,6 +350,14 @@
                     <div class="screenshot-preview"><img src="build-with-local-agent-or-vscode.png" alt="Build with Agent" loading="lazy"></div>
                     <div class="screenshot-label"><i class="fas fa-robot"></i> Build with Agent</div>
                 </div>
+                <div class="screenshot-item" data-cat="terminal" onclick="showScreenshot(19)">
+                    <div class="screenshot-preview"><img src="tabby-Multi-user-access-with-tabby.png" alt="Multi-User Access" loading="lazy"></div>
+                    <div class="screenshot-label"><i class="fas fa-users"></i> Multi-User</div>
+                </div>
+                <div class="screenshot-item" data-cat="terminal" onclick="showScreenshot(20)">
+                    <div class="screenshot-preview"><img src="tlink-studio-colum-editor.png" alt="Studio Code Editor" loading="lazy"></div>
+                    <div class="screenshot-label"><i class="fas fa-code"></i> Studio Editor</div>
+                </div>
                 <div class="screenshot-item" data-cat="settings" onclick="showScreenshot(14)">
                     <div class="screenshot-preview"><img src="screenshot-settings.png" alt="Settings" loading="lazy"></div>
                     <div class="screenshot-label"><i class="fas fa-gear"></i> Settings</div>
@@ -363,7 +389,8 @@
             'screenshot-ai-chat.png', 'screenshot-ai-settings.png', 'screenshot-ai-providers.png',
             'screenshot-local-llm.png', 'screenshot-vllm.png', 'screenshot-copilot-agent.png',
             'screenshot-settings.png', 'screenshot-ssh-settings.png', 'screenshot-workspaces.png',
-            'screenshot-backup.png', 'build-with-local-agent-or-vscode.png'
+            'screenshot-backup.png', 'build-with-local-agent-or-vscode.png',
+            'tabby-Multi-user-access-with-tabby.png', 'tlink-studio-colum-editor.png'
         ];
         function showScreenshot(index) {
             document.getElementById('screenshotImg').src = screenshots[index];
