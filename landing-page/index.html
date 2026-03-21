@@ -68,7 +68,7 @@
                 <span><i class="fab fa-linux"></i> Linux</span>
             </div>
             <div class="hero-screenshot">
-                <img src="screenshot-main.png" alt="Tlink Terminal - Multi-protocol terminal emulator" loading="eager">
+                <img src="screenshot-welcome.png" alt="Tlink Terminal - Multi-protocol terminal emulator" loading="eager">
             </div>
         </div>
     </section>
@@ -184,37 +184,89 @@
             <div class="screenshots-gallery">
                 <div class="screenshot-item active" onclick="showScreenshot(0)">
                     <div class="screenshot-preview">
-                        <img src="screenshot-main.png" alt="Tlink Main Interface" loading="lazy">
+                        <img src="screenshot-welcome.png" alt="Welcome Screen" loading="lazy">
                     </div>
                     <div class="screenshot-label">
-                        <i class="fas fa-desktop"></i> Main Interface
+                        <i class="fas fa-home"></i> Welcome
                     </div>
                 </div>
                 <div class="screenshot-item" onclick="showScreenshot(1)">
                     <div class="screenshot-preview">
-                        <img src="screenshot-ssh.png" alt="SSH Connection" loading="lazy">
+                        <img src="screenshot-ssh-session.png" alt="SSH Session" loading="lazy">
                     </div>
                     <div class="screenshot-label">
-                        <i class="fas fa-key"></i> SSH Connection
+                        <i class="fas fa-key"></i> SSH Session
                     </div>
                 </div>
                 <div class="screenshot-item" onclick="showScreenshot(2)">
                     <div class="screenshot-preview">
-                        <img src="screenshot-terminal.png" alt="Terminal Session" loading="lazy">
+                        <img src="screenshot-terminal.png" alt="Terminal" loading="lazy">
                     </div>
                     <div class="screenshot-label">
-                        <i class="fas fa-terminal"></i> Terminal Session
+                        <i class="fas fa-terminal"></i> Terminal
+                    </div>
+                </div>
+                <div class="screenshot-item" onclick="showScreenshot(3)">
+                    <div class="screenshot-preview">
+                        <img src="screenshot-profiles.png" alt="Connection Profiles" loading="lazy">
+                    </div>
+                    <div class="screenshot-label">
+                        <i class="fas fa-server"></i> Profiles
+                    </div>
+                </div>
+                <div class="screenshot-item" onclick="showScreenshot(4)">
+                    <div class="screenshot-preview">
+                        <img src="screenshot-settings.png" alt="Settings" loading="lazy">
+                    </div>
+                    <div class="screenshot-label">
+                        <i class="fas fa-gear"></i> Settings
+                    </div>
+                </div>
+                <div class="screenshot-item" onclick="showScreenshot(5)">
+                    <div class="screenshot-preview">
+                        <img src="screenshot-themes.png" alt="Color Themes" loading="lazy">
+                    </div>
+                    <div class="screenshot-label">
+                        <i class="fas fa-palette"></i> Themes
+                    </div>
+                </div>
+                <div class="screenshot-item" onclick="showScreenshot(6)">
+                    <div class="screenshot-preview">
+                        <img src="screenshot-command-window.png" alt="Command Window" loading="lazy">
+                    </div>
+                    <div class="screenshot-label">
+                        <i class="fas fa-paper-plane"></i> Commands
+                    </div>
+                </div>
+                <div class="screenshot-item" onclick="showScreenshot(7)">
+                    <div class="screenshot-preview">
+                        <img src="screenshot-session-sharing.png" alt="Session Sharing" loading="lazy">
+                    </div>
+                    <div class="screenshot-label">
+                        <i class="fas fa-share-nodes"></i> Sharing
+                    </div>
+                </div>
+                <div class="screenshot-item" onclick="showScreenshot(8)">
+                    <div class="screenshot-preview">
+                        <img src="screenshot-shells.png" alt="Shell Selector" loading="lazy">
+                    </div>
+                    <div class="screenshot-label">
+                        <i class="fas fa-laptop-code"></i> Shells
                     </div>
                 </div>
             </div>
             <div class="screenshot-viewer" id="screenshotViewer">
-                <img src="screenshot-main.png" alt="Tlink Screenshot" id="screenshotImg">
+                <img src="screenshot-welcome.png" alt="Tlink Screenshot" id="screenshotImg">
             </div>
         </div>
     </section>
 
     <script>
-        const screenshots = ['screenshot-main.png', 'screenshot-ssh.png', 'screenshot-terminal.png'];
+        const screenshots = [
+            'screenshot-welcome.png', 'screenshot-ssh-session.png', 'screenshot-terminal.png',
+            'screenshot-profiles.png', 'screenshot-settings.png', 'screenshot-themes.png',
+            'screenshot-command-window.png', 'screenshot-session-sharing.png', 'screenshot-shells.png'
+        ];
         function showScreenshot(index) {
             document.getElementById('screenshotImg').src = screenshots[index];
             document.querySelectorAll('.screenshot-item').forEach((el, i) => {

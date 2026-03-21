@@ -298,7 +298,7 @@ a:hover { color: #6db8ff; }
     overflow: hidden;
     border: 2px solid var(--border);
     transition: all 0.3s;
-    width: 180px;
+    width: 120px;
     flex-shrink: 0;
 }
 
