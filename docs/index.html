@@ -252,6 +252,10 @@
                     <div class="screenshot-preview"><img src="screenshot-copilot-agent.png" alt="Copilot Agent" loading="lazy"></div>
                     <div class="screenshot-label"><i class="fas fa-code"></i> Copilot Agent</div>
                 </div>
+                <div class="screenshot-item" data-cat="ai" onclick="showScreenshot(18)">
+                    <div class="screenshot-preview"><img src="build-with-local-agent-or-vscode.png" alt="Build with Agent" loading="lazy"></div>
+                    <div class="screenshot-label"><i class="fas fa-robot"></i> Build with Agent</div>
+                </div>
                 <div class="screenshot-item" data-cat="settings" onclick="showScreenshot(14)">
                     <div class="screenshot-preview"><img src="screenshot-settings.png" alt="Settings" loading="lazy"></div>
                     <div class="screenshot-label"><i class="fas fa-gear"></i> Settings</div>
@@ -283,7 +287,7 @@
             'screenshot-ai-chat.png', 'screenshot-ai-settings.png', 'screenshot-ai-providers.png',
             'screenshot-local-llm.png', 'screenshot-vllm.png', 'screenshot-copilot-agent.png',
             'screenshot-settings.png', 'screenshot-ssh-settings.png', 'screenshot-workspaces.png',
-            'screenshot-backup.png'
+            'screenshot-backup.png', 'build-with-local-agent-or-vscode.png'
         ];
         function showScreenshot(index) {
             document.getElementById('screenshotImg').src = screenshots[index];
