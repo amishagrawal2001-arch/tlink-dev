@@ -665,40 +665,123 @@
         <div class="container">
             <div class="section-header">
                 <span class="section-badge">Download</span>
-                <h2>Get Tlink for your platform</h2>
-                <p>Native installers for every major operating system. Free and open source.</p>
+                <h2>Choose your Tlink product</h2>
+                <p>Two powerful products for different workflows. Both free, open source, and cross-platform.</p>
             </div>
-            <div class="download-grid">
-                <div class="download-card">
-                    <div class="download-icon"><i class="fab fa-apple"></i></div>
-                    <h3>macOS</h3>
-                    <p>Intel & Apple Silicon</p>
-                    <div class="download-buttons">
-                        <a href="#" class="btn btn-primary btn-sm">DMG (Apple Silicon)</a>
-                        <a href="#" class="btn btn-outline btn-sm">DMG (Intel)</a>
+
+            <!-- Product Selector -->
+            <div class="product-selector">
+                <button class="product-tab active" onclick="selectProduct('terminal')">
+                    <i class="fas fa-terminal"></i> Tlink Terminal
+                </button>
+                <button class="product-tab" onclick="selectProduct('studio')">
+                    <i class="fas fa-code"></i> Tlink Studio
+                </button>
+            </div>
+
+            <!-- Tlink Terminal -->
+            <div class="product-section" id="product-terminal">
+                <div class="product-hero-row">
+                    <div class="product-info">
+                        <h3><i class="fas fa-terminal"></i> Tlink Terminal</h3>
+                        <p class="product-tagline">Multi-protocol terminal for DevOps & network engineers</p>
+                        <ul class="product-highlights">
+                            <li><i class="fas fa-check"></i> SSH, RDP, Serial, Telnet, SFTP</li>
+                            <li><i class="fas fa-check"></i> AI Assistant with 9+ providers</li>
+                            <li><i class="fas fa-check"></i> Live session sharing & recording</li>
+                            <li><i class="fas fa-check"></i> Command palette, bookmarks, output analyzer</li>
+                            <li><i class="fas fa-check"></i> Encrypted vault & workspace management</li>
+                        </ul>
                     </div>
                 </div>
-                <div class="download-card">
-                    <div class="download-icon"><i class="fab fa-windows"></i></div>
-                    <h3>Windows</h3>
-                    <p>x64 & ARM64</p>
-                    <div class="download-buttons">
-                        <a href="#" class="btn btn-primary btn-sm">Installer (x64)</a>
-                        <a href="#" class="btn btn-outline btn-sm">Portable (x64)</a>
+                <div class="download-grid">
+                    <div class="download-card">
+                        <div class="download-icon"><i class="fab fa-apple"></i></div>
+                        <h3>macOS</h3>
+                        <p>Intel & Apple Silicon</p>
+                        <div class="download-buttons">
+                            <a href="#" class="btn btn-primary btn-sm">DMG (Apple Silicon)</a>
+                            <a href="#" class="btn btn-outline btn-sm">DMG (Intel)</a>
+                        </div>
+                    </div>
+                    <div class="download-card">
+                        <div class="download-icon"><i class="fab fa-windows"></i></div>
+                        <h3>Windows</h3>
+                        <p>x64 & ARM64</p>
+                        <div class="download-buttons">
+                            <a href="#" class="btn btn-primary btn-sm">Installer (x64)</a>
+                            <a href="#" class="btn btn-outline btn-sm">Portable (x64)</a>
+                        </div>
+                    </div>
+                    <div class="download-card">
+                        <div class="download-icon"><i class="fab fa-linux"></i></div>
+                        <h3>Linux</h3>
+                        <p>DEB, RPM, AppImage, Snap</p>
+                        <div class="download-buttons">
+                            <a href="#" class="btn btn-primary btn-sm">DEB (x64)</a>
+                            <a href="#" class="btn btn-outline btn-sm">AppImage</a>
+                        </div>
                     </div>
                 </div>
-                <div class="download-card">
-                    <div class="download-icon"><i class="fab fa-linux"></i></div>
-                    <h3>Linux</h3>
-                    <p>DEB, RPM, AppImage, Snap</p>
-                    <div class="download-buttons">
-                        <a href="#" class="btn btn-primary btn-sm">DEB (x64)</a>
-                        <a href="#" class="btn btn-outline btn-sm">AppImage</a>
+            </div>
+
+            <!-- Tlink Studio -->
+            <div class="product-section" id="product-studio" style="display:none">
+                <div class="product-hero-row">
+                    <div class="product-info">
+                        <h3><i class="fas fa-code"></i> Tlink Studio</h3>
+                        <p class="product-tagline">Integrated code editor & terminal IDE with AI-powered development</p>
+                        <ul class="product-highlights">
+                            <li><i class="fas fa-check"></i> Monaco-based code editor with terminal</li>
+                            <li><i class="fas fa-check"></i> Copilot VSCode Agent integration</li>
+                            <li><i class="fas fa-check"></i> AI-powered pair programming mode</li>
+                            <li><i class="fas fa-check"></i> Built-in terminal with all Tlink protocols</li>
+                            <li><i class="fas fa-check"></i> MCP server support & LangChain integration</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="download-grid">
+                    <div class="download-card">
+                        <div class="download-icon"><i class="fab fa-apple"></i></div>
+                        <h3>macOS</h3>
+                        <p>Intel & Apple Silicon</p>
+                        <div class="download-buttons">
+                            <a href="#" class="btn btn-primary btn-sm">DMG (Apple Silicon)</a>
+                            <a href="#" class="btn btn-outline btn-sm">DMG (Intel)</a>
+                        </div>
+                    </div>
+                    <div class="download-card">
+                        <div class="download-icon"><i class="fab fa-windows"></i></div>
+                        <h3>Windows</h3>
+                        <p>x64 & ARM64</p>
+                        <div class="download-buttons">
+                            <a href="#" class="btn btn-primary btn-sm">Installer (x64)</a>
+                            <a href="#" class="btn btn-outline btn-sm">Portable (x64)</a>
+                        </div>
+                    </div>
+                    <div class="download-card">
+                        <div class="download-icon"><i class="fab fa-linux"></i></div>
+                        <h3>Linux</h3>
+                        <p>DEB, RPM, AppImage, Snap</p>
+                        <div class="download-buttons">
+                            <a href="#" class="btn btn-primary btn-sm">DEB (x64)</a>
+                            <a href="#" class="btn btn-outline btn-sm">AppImage</a>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </section>
+
+    <script>
+        function selectProduct(product) {
+            document.getElementById('product-terminal').style.display = product === 'terminal' ? '' : 'none';
+            document.getElementById('product-studio').style.display = product === 'studio' ? '' : 'none';
+            document.querySelectorAll('.product-tab').forEach(btn => {
+                btn.classList.toggle('active', btn.textContent.toLowerCase().includes(product));
+            });
+        }
+    </script>
 
     <!-- CTA Section -->
     <section class="cta-section">
