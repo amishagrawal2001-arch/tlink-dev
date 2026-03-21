@@ -38,7 +38,7 @@ import { FastHtmlBindDirective } from './directives/fastHtmlBind.directive'
 import { DropZoneDirective } from './directives/dropZone.directive'
 import { CdkAutoDropGroup } from './directives/cdkAutoDropGroup.directive'
 
-import { Theme, CLIHandler, TabContextMenuItemProvider, TabRecoveryProvider, HotkeyProvider, ConfigProvider, PlatformService, FileProvider, ProfilesService, ProfileProvider, QuickConnectProfileProvider, SelectorOption, Profile, SelectorService, CommandProvider, PartialProfileGroup, ProfileGroup } from './api'
+import { Theme, CLIHandler, TabContextMenuItemProvider, TabRecoveryProvider, HotkeyProvider, ConfigProvider, PlatformService, FileProvider, ProfilesService, ProfileProvider, QuickConnectProfileProvider, SelectorOption, Profile, SelectorService, CommandProvider, PartialProfileGroup, ProfileGroup, HostAppService } from './api'
 
 import { AppService } from './services/app.service'
 import { ConfigService } from './services/config.service'
@@ -220,6 +220,7 @@ export default class AppModule { // eslint-disable-line @typescript-eslint/no-ex
         platform: PlatformService,
         hotkeys: HotkeysService,
         commands: CommandService,
+        hostApp: HostAppService,
         ngbTooltipConfig: NgbTooltipConfig,
         public locale: LocaleService,
         private translate: TranslateService,
@@ -275,6 +276,20 @@ export default class AppModule { // eslint-disable-line @typescript-eslint/no-ex
             } else if (hotkey === 'toggle-bookmarks') {
                 commands.run('core:toggle-bookmarks', {})
             }
+        })
+
+        // Menu bar events
+        hostApp.commandPaletteRequest$.subscribe(() => {
+            commands.showPalette().catch(() => null)
+        })
+        hostApp.toggleBookmarksRequest$.subscribe(() => {
+            commands.run('core:toggle-bookmarks', {})
+        })
+        hostApp.toggleRecordingRequest$.subscribe(() => {
+            commands.run('terminal:toggle-recording', {})
+        })
+        hostApp.openRecordingRequest$.subscribe(() => {
+            commands.run('terminal:open-recording', {})
         })
 
         ngbTooltipConfig.openDelay = 750

@@ -28,6 +28,10 @@ export abstract class HostAppService {
     protected workspaceImportRequest = new Subject<void>()
     protected aiAssistantRequest = new Subject<void>()
     protected openCodeEditorRequest = new Subject<void>()
+    protected commandPaletteRequest = new Subject<void>()
+    protected toggleBookmarksRequest = new Subject<void>()
+    protected toggleRecordingRequest = new Subject<void>()
+    protected openRecordingRequest = new Subject<void>()
     protected configChangeBroadcast = new Subject<void>()
     protected logger: Logger
 
@@ -85,6 +89,22 @@ export abstract class HostAppService {
      */
     get workspaceImportRequest$ (): Observable<void> { return this.workspaceImportRequest }
 
+    /**
+     * Fired when Command Palette is selected from the menu
+     */
+    get commandPaletteRequest$ (): Observable<void> { return this.commandPaletteRequest }
+    /**
+     * Fired when Toggle Bookmarks is selected from the menu
+     */
+    get toggleBookmarksRequest$ (): Observable<void> { return this.toggleBookmarksRequest }
+    /**
+     * Fired when Toggle Recording is selected from the menu
+     */
+    get toggleRecordingRequest$ (): Observable<void> { return this.toggleRecordingRequest }
+    /**
+     * Fired when Open Recording is selected from the menu
+     */
+    get openRecordingRequest$ (): Observable<void> { return this.openRecordingRequest }
     /**
      * Fired when another window modified the config file
      */

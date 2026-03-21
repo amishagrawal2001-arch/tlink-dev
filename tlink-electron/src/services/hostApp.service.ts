@@ -49,6 +49,10 @@ export class ElectronHostAppService extends HostAppService {
             ;(window as any).__codeEditorFullWindowMode = !!fullWindowMode
             this.openCodeEditorRequest.next()
         }))
+        electron.ipcRenderer.on('host:command-palette', () => this.zone.run(() => this.commandPaletteRequest.next()))
+        electron.ipcRenderer.on('host:toggle-bookmarks', () => this.zone.run(() => this.toggleBookmarksRequest.next()))
+        electron.ipcRenderer.on('host:toggle-recording', () => this.zone.run(() => this.toggleRecordingRequest.next()))
+        electron.ipcRenderer.on('host:open-recording', () => this.zone.run(() => this.openRecordingRequest.next()))
 
         electron.ipcRenderer.on('cli', (_$event, argv: any, cwd: string, secondInstance: boolean) => this.zone.run(async () => {
             await this.dispatchCLIEvent(injector, { argv, cwd, secondInstance }, 'CLI arguments received')

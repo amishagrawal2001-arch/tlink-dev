@@ -937,6 +937,50 @@ export class Application {
                         },
                     },
                     { type: 'separator' },
+                    {
+                        label: 'Command Palette',
+                        accelerator: 'CmdOrCtrl+P',
+                        click: async () => {
+                            if (!this.hasWindows()) {
+                                await this.newWindow()
+                            }
+                            const target = this.windows.find(window => window.isFocused()) ?? this.windows[0]
+                            target.send('host:command-palette')
+                        },
+                    },
+                    {
+                        label: 'Bookmarks',
+                        accelerator: 'CmdOrCtrl+Shift+B',
+                        click: async () => {
+                            if (!this.hasWindows()) {
+                                await this.newWindow()
+                            }
+                            const target = this.windows.find(window => window.isFocused()) ?? this.windows[0]
+                            target.send('host:toggle-bookmarks')
+                        },
+                    },
+                    { type: 'separator' },
+                    {
+                        label: 'Toggle Session Recording',
+                        click: async () => {
+                            if (!this.hasWindows()) {
+                                await this.newWindow()
+                            }
+                            const target = this.windows.find(window => window.isFocused()) ?? this.windows[0]
+                            target.send('host:toggle-recording')
+                        },
+                    },
+                    {
+                        label: 'Open Session Recording',
+                        click: async () => {
+                            if (!this.hasWindows()) {
+                                await this.newWindow()
+                            }
+                            const target = this.windows.find(window => window.isFocused()) ?? this.windows[0]
+                            target.send('host:open-recording')
+                        },
+                    },
+                    { type: 'separator' },
                     { role: 'toggleDevTools' },
                     { type: 'separator' },
                     { role: 'togglefullscreen' },
