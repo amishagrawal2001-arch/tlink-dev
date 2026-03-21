@@ -93,7 +93,6 @@
                 <a href="index.html">Tlink Terminal</a>
                 <a href="#features">Features</a>
                 <a href="#topology">Topology</a>
-                <a href="#compare">Compare</a>
                 <a href="index.html#download">Download</a>
             </div>
             <div class="nav-actions">
@@ -142,12 +141,12 @@
                 <div class="arch-card">
                     <div class="arch-icon editor"><i class="fas fa-code"></i></div>
                     <h3>Monaco Code Editor</h3>
-                    <p>Full-featured code editor with multi-document tabs, diff view, syntax highlighting, file tree, and workspace management. 13K+ lines of editor code.</p>
+                    <p>Full-featured code editor with multi-document tabs, diff view, syntax highlighting, file tree, git status indicators, and session restore. 13K+ lines of editor code.</p>
                 </div>
                 <div class="arch-card">
                     <div class="arch-icon topology"><i class="fas fa-project-diagram"></i></div>
                     <h3>Topology Diagram Editor</h3>
-                    <p>Visual editor for network topologies and system architectures. Nodes, links, shapes, text, sticky notes with zoom, pan, and export.</p>
+                    <p>Visual editor for network topologies and system architectures. Nodes, links, shapes with zoom controls, snap-to-grid, undo/redo, and PNG export.</p>
                 </div>
                 <div class="arch-card">
                     <div class="arch-icon terminal"><i class="fas fa-terminal"></i></div>
@@ -172,8 +171,8 @@
                     <div class="stat-label">Lines of Editor Code</div>
                 </div>
                 <div class="stat">
-                    <div class="stat-number" style="background:linear-gradient(135deg,#8b5cf6,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent">992</div>
-                    <div class="stat-label">Topology Features</div>
+                    <div class="stat-number" style="background:linear-gradient(135deg,#8b5cf6,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent">9</div>
+                    <div class="stat-label">Topology Controls</div>
                 </div>
                 <div class="stat">
                     <div class="stat-number" style="background:linear-gradient(135deg,#8b5cf6,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent">5</div>
@@ -205,10 +204,11 @@
                         <li><i class="fas fa-check"></i> Multi-document tabs with syntax highlighting</li>
                         <li><i class="fas fa-check"></i> Side-by-side diff view for file comparisons</li>
                         <li><i class="fas fa-check"></i> File tree with full/opened file modes</li>
-                        <li><i class="fas fa-check"></i> ANSI decoration support for terminal output</li>
+                        <li><i class="fas fa-check"></i> Git status indicators (modified, staged, untracked)</li>
+                        <li><i class="fas fa-check"></i> Session restore with cursor &amp; scroll position</li>
                         <li><i class="fas fa-check"></i> External conflict detection when files change on disk</li>
                         <li><i class="fas fa-check"></i> Auto-save and state recovery on restart</li>
-                        <li><i class="fas fa-check"></i> Open files by path prompt</li>
+                        <li><i class="fas fa-check"></i> Compact single-row toolbar with theme &amp; palette controls</li>
                         <li><i class="fas fa-check"></i> Run code in integrated terminal</li>
                     </ul>
                 </div>
@@ -239,14 +239,16 @@
             <div class="features-detail" style="margin-bottom:80px">
                 <div class="feature-detail-text">
                     <h3><i class="fas fa-folder-tree"></i> Workspace & Git</h3>
-                    <p>Manage projects with folder trees, save and restore workspaces, and track Git status directly from the editor.</p>
+                    <p>Manage projects with folder trees, save and restore workspaces, and track Git status directly from the editor with live file-level indicators.</p>
                     <ul class="feature-detail-list">
                         <li><i class="fas fa-check"></i> Save and restore complete workspace layouts</li>
                         <li><i class="fas fa-check"></i> Import/export workspaces as URLs</li>
                         <li><i class="fas fa-check"></i> Git branch and commit status tracking</li>
-                        <li><i class="fas fa-check"></i> File status detection (modified, untracked, staged)</li>
+                        <li><i class="fas fa-check"></i> Live git file indicators &mdash; M (modified), S (staged), U (untracked)</li>
+                        <li><i class="fas fa-check"></i> Color-coded file names in tree (orange/green/gray)</li>
+                        <li><i class="fas fa-check"></i> Auto-refresh git status every 5 seconds</li>
                         <li><i class="fas fa-check"></i> Code editor folders with tree navigation</li>
-                        <li><i class="fas fa-check"></i> Multi-window with theme sync (dark/light)</li>
+                        <li><i class="fas fa-check"></i> Multi-window with theme sync (9 themes including Dracula, Nord, Monokai)</li>
                     </ul>
                 </div>
                 <div class="feature-visual">
@@ -269,17 +271,32 @@
                 <div class="feature-card featured" style="border-color:rgba(6,182,212,0.3);background:linear-gradient(135deg,rgba(6,182,212,0.05),rgba(139,92,246,0.05))">
                     <div class="feature-icon" style="background:linear-gradient(135deg,#06b6d4,#22d3ee);color:white"><i class="fas fa-circle-nodes"></i></div>
                     <h3>Nodes & Links</h3>
-                    <p>Create network nodes and connect them with directed or undirected links. Curved link rendering with customizable endpoints.</p>
+                    <p>Create network nodes and connect them with directed, undirected, or bidirectional links. Right-click any node or shape to add a link.</p>
                 </div>
                 <div class="feature-card featured" style="border-color:rgba(6,182,212,0.3);background:linear-gradient(135deg,rgba(6,182,212,0.05),rgba(139,92,246,0.05))">
                     <div class="feature-icon" style="background:linear-gradient(135deg,#06b6d4,#22d3ee);color:white"><i class="fas fa-shapes"></i></div>
                     <h3>Shapes & Annotations</h3>
-                    <p>Add shapes, text labels, and sticky notes to annotate your diagrams. Color palette customization for visual organization.</p>
+                    <p>Add rectangles, circles, ovals, text labels, and sticky notes. Right-click context menu with edit label, duplicate, and delete.</p>
                 </div>
                 <div class="feature-card featured" style="border-color:rgba(6,182,212,0.3);background:linear-gradient(135deg,rgba(6,182,212,0.05),rgba(139,92,246,0.05))">
                     <div class="feature-icon" style="background:linear-gradient(135deg,#06b6d4,#22d3ee);color:white"><i class="fas fa-expand"></i></div>
                     <h3>Canvas Controls</h3>
-                    <p>Zoom, pan, and marquee multi-select. Free link placement mode for quick topology creation. Canvas mode toggle.</p>
+                    <p>Zoom +/- buttons with percentage label, fit-to-view, snap-to-grid toggle, and undo/redo &mdash; all in a floating control bar.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-th"></i></div>
+                    <h3>Snap to Grid</h3>
+                    <p>Toggle snap-to-grid to align nodes, shapes, and text to a 24px grid. Keeps diagrams clean and organized.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-download"></i></div>
+                    <h3>Export as PNG</h3>
+                    <p>Export your topology diagram as a high-resolution 2x PNG image. One click from the canvas control bar.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fas fa-undo"></i></div>
+                    <h3>Undo / Redo</h3>
+                    <p>Full undo/redo history with 120-entry stack. Buttons in the control bar plus Ctrl+Z / Ctrl+Shift+Z keyboard shortcuts.</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon"><i class="fas fa-palette"></i></div>
@@ -294,7 +311,7 @@
                 <div class="feature-card">
                     <div class="feature-icon"><i class="fas fa-mouse-pointer"></i></div>
                     <h3>Interactive Editing</h3>
-                    <p>Click to select, drag to move, multi-select with marquee. Context menus for node and link properties.</p>
+                    <p>Click to select, drag to move, multi-select with marquee. Rich right-click context menus for nodes, shapes, and links.</p>
                 </div>
             </div>
 
@@ -312,49 +329,6 @@
                         <i class="fas fa-code" style="color:#a78bfa;margin-right:6px"></i> Topology as JSON / Code View
                     </div>
                 </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Comparison: Studio vs Terminal -->
-    <section id="compare" class="section">
-        <div class="container">
-            <div class="section-header">
-                <span class="section-badge" style="background:rgba(139,92,246,0.1);border-color:rgba(139,92,246,0.25);color:#a78bfa">Compare</span>
-                <h2>Tlink Studio vs Tlink Terminal</h2>
-                <p>Two products for different workflows. Use both, or pick the one that fits.</p>
-            </div>
-
-            <div class="vs-table">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Feature</th>
-                            <th class="hl">Tlink Studio</th>
-                            <th>Tlink Terminal</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr><td>Monaco Code Editor</td><td class="hl"><i class="fas fa-check yes"></i></td><td><i class="fas fa-times no"></i></td></tr>
-                        <tr><td>Topology Diagram Editor</td><td class="hl"><i class="fas fa-check yes"></i></td><td><i class="fas fa-times no"></i></td></tr>
-                        <tr><td>Multi-Window (Editor + Terminal)</td><td class="hl"><i class="fas fa-check yes"></i></td><td><i class="fas fa-times no"></i></td></tr>
-                        <tr><td>Git Integration</td><td class="hl"><i class="fas fa-check yes"></i></td><td><i class="fas fa-times no"></i></td></tr>
-                        <tr><td>File Tree & Workspace Folders</td><td class="hl"><i class="fas fa-check yes"></i></td><td><i class="fas fa-times no"></i></td></tr>
-                        <tr><td>Local Terminal</td><td class="hl"><i class="fas fa-check yes"></i></td><td><i class="fas fa-check yes"></i></td></tr>
-                        <tr><td>Workspaces</td><td class="hl"><i class="fas fa-check yes"></i></td><td><i class="fas fa-check yes"></i></td></tr>
-                        <tr><td>Color Schemes</td><td class="hl"><i class="fas fa-check yes"></i></td><td><i class="fas fa-check yes"></i></td></tr>
-                        <tr><td>SSH Connections</td><td><i class="fas fa-times no"></i></td><td><i class="fas fa-check yes"></i></td></tr>
-                        <tr><td>RDP Connections</td><td><i class="fas fa-times no"></i></td><td><i class="fas fa-check yes"></i></td></tr>
-                        <tr><td>Serial / Telnet</td><td><i class="fas fa-times no"></i></td><td><i class="fas fa-check yes"></i></td></tr>
-                        <tr><td>SFTP File Transfer</td><td><i class="fas fa-times no"></i></td><td><i class="fas fa-check yes"></i></td></tr>
-                        <tr><td>AI Assistant</td><td><i class="fas fa-times no"></i></td><td><i class="fas fa-check yes"></i></td></tr>
-                        <tr><td>Session Recording</td><td><i class="fas fa-times no"></i></td><td><i class="fas fa-check yes"></i></td></tr>
-                        <tr><td>Bookmarks & Output Analyzer</td><td><i class="fas fa-times no"></i></td><td><i class="fas fa-check yes"></i></td></tr>
-                        <tr><td>Plugin Manager</td><td><i class="fas fa-times no"></i></td><td><i class="fas fa-check yes"></i></td></tr>
-                        <tr><td><strong>Best For</strong></td><td class="hl"><strong>Code & Diagrams</strong></td><td><strong>Remote Access & DevOps</strong></td></tr>
-                        <tr><td><strong>Price</strong></td><td class="hl"><strong>Free</strong></td><td><strong>Free</strong></td></tr>
-                    </tbody>
-                </table>
             </div>
         </div>
     </section>
@@ -423,7 +397,7 @@
                 </div>
             </div>
             <div class="footer-bottom">
-                <p>&copy; 2025 Tlink. MIT License. Built with Electron, Angular, Monaco, and xterm.js.</p>
+                <p>&copy; 2025-2026 Tlink. MIT License. Built with Electron, Angular, Monaco, and xterm.js.</p>
             </div>
         </div>
     </footer>
