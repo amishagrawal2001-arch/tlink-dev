@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tlink Studio - Code Editor & Terminal IDE with AI</title>
-    <meta name="description" content="Integrated code editor and terminal IDE with Monaco editor, topology diagrams, AI pair programming, and bundled Ollama LLM.">
+    <title>Tlink Studio - Code Editor & Terminal IDE</title>
+    <meta name="description" content="Integrated code editor and terminal IDE with Monaco editor, topology diagram editor, and local terminal.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -36,8 +36,8 @@
             font-size: 22px; margin: 0 auto 16px;
         }
         .arch-icon.editor { background: linear-gradient(135deg, #8b5cf6, #a78bfa); color: white; }
+        .arch-icon.topology { background: linear-gradient(135deg, #06b6d4, #22d3ee); color: white; }
         .arch-icon.terminal { background: linear-gradient(135deg, #4a9eff, #60a5fa); color: white; }
-        .arch-icon.ai { background: linear-gradient(135deg, #f472b6, #fb923c); color: white; }
         .arch-card h3 { margin-bottom: 8px; font-size: 1.1rem; }
         .arch-card p { color: var(--text-secondary); font-size: 14px; }
 
@@ -55,9 +55,7 @@
             padding: 24px; min-height: 280px; display: flex; align-items: center; justify-content: center;
         }
         .feature-visual img { width: 100%; height: auto; border-radius: var(--radius); }
-        .feature-visual .placeholder {
-            text-align: center; color: var(--text-muted);
-        }
+        .feature-visual .placeholder { text-align: center; color: var(--text-muted); }
         .feature-visual .placeholder i { font-size: 48px; display: block; margin-bottom: 12px; color: rgba(139,92,246,0.3); }
 
         .tech-stack { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 40px; }
@@ -66,6 +64,16 @@
             font-size: 13px; font-weight: 500; color: var(--text-secondary); display: flex; align-items: center; gap: 6px;
         }
         .tech-pill i { color: var(--accent-blue); }
+
+        .vs-table { margin-top: 48px; }
+        .vs-table table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .vs-table th, .vs-table td { padding: 12px 16px; text-align: center; border-bottom: 1px solid var(--border); }
+        .vs-table th { background: var(--bg-card); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
+        .vs-table th:first-child, .vs-table td:first-child { text-align: left; font-weight: 500; }
+        .vs-table th.hl { color: #a78bfa; background: rgba(139,92,246,0.08); }
+        .vs-table td.hl { background: rgba(139,92,246,0.04); }
+        .vs-table .yes { color: var(--accent-green); }
+        .vs-table .no { color: #ef4444; opacity: 0.5; }
 
         @media (max-width: 768px) {
             .arch-grid { grid-template-columns: 1fr; }
@@ -77,22 +85,22 @@
     <!-- Navigation -->
     <nav class="navbar">
         <div class="container nav-container">
-            <a href="index.html" class="nav-brand">
+            <a href="tlink-studio.html" class="nav-brand">
                 <span class="brand-icon" style="background:linear-gradient(135deg,#8b5cf6,#f472b6)"><i class="fas fa-code"></i></span>
                 <span class="brand-text">Tlink Studio</span>
             </a>
             <div class="nav-links">
                 <a href="index.html">Tlink Terminal</a>
                 <a href="#features">Features</a>
-                <a href="#architecture">Architecture</a>
-                <a href="#ai">AI & Copilot</a>
+                <a href="#topology">Topology</a>
+                <a href="#compare">Compare</a>
                 <a href="index.html#download">Download</a>
             </div>
             <div class="nav-actions">
                 <a href="https://github.com/amishagrawal2001-arch/tlink-studio" class="btn btn-ghost" target="_blank">
                     <i class="fab fa-github"></i> GitHub
                 </a>
-                <a href="index.html#download" class="btn btn-primary">Download Free</a>
+                <a href="index.html#download" class="btn btn-primary" style="background:linear-gradient(135deg,#8b5cf6,#f472b6)">Download Free</a>
             </div>
             <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open');document.querySelector('.nav-actions').classList.toggle('open')">
                 <i class="fas fa-bars"></i>
@@ -109,11 +117,11 @@
             </div>
             <h1 class="hero-title">
                 Code Editor & Terminal IDE<br>
-                <span class="studio-gradient">Powered by AI</span>
+                <span class="studio-gradient">with Topology Diagrams</span>
             </h1>
             <p class="hero-subtitle">
-                Tlink Studio combines a full Monaco code editor, integrated terminal, topology diagram editor,
-                and AI-powered development with bundled Ollama LLM &mdash; all in one native desktop app.
+                Tlink Studio combines a full Monaco code editor, integrated local terminal,
+                and a visual topology diagram editor &mdash; all in one lightweight native desktop app.
             </p>
             <div class="hero-actions">
                 <a href="index.html#download" class="btn btn-primary btn-lg" style="background:linear-gradient(135deg,#8b5cf6,#f472b6)">
@@ -134,17 +142,17 @@
                 <div class="arch-card">
                     <div class="arch-icon editor"><i class="fas fa-code"></i></div>
                     <h3>Monaco Code Editor</h3>
-                    <p>Full-featured code editor with multi-document editing, diff view, syntax highlighting, file tree, and workspace management.</p>
+                    <p>Full-featured code editor with multi-document tabs, diff view, syntax highlighting, file tree, and workspace management. 13K+ lines of editor code.</p>
+                </div>
+                <div class="arch-card">
+                    <div class="arch-icon topology"><i class="fas fa-project-diagram"></i></div>
+                    <h3>Topology Diagram Editor</h3>
+                    <p>Visual editor for network topologies and system architectures. Nodes, links, shapes, text, sticky notes with zoom, pan, and export.</p>
                 </div>
                 <div class="arch-card">
                     <div class="arch-icon terminal"><i class="fas fa-terminal"></i></div>
                     <h3>Integrated Terminal</h3>
-                    <p>Built-in xterm.js terminal with local shell support. Run code directly from the editor. PowerShell, Bash, Zsh, Fish.</p>
-                </div>
-                <div class="arch-card">
-                    <div class="arch-icon ai"><i class="fas fa-robot"></i></div>
-                    <h3>AI Assistant</h3>
-                    <p>Dedicated AI window with Copilot VSCode Agent, bundled Ollama LLM, Anthropic Claude, and OpenAI. No API key needed for local AI.</p>
+                    <p>Built-in xterm.js terminal with local shell support. Run code from the editor. PowerShell, Bash, Zsh, Fish. Side panel quick-terminal.</p>
                 </div>
             </div>
         </div>
@@ -159,16 +167,16 @@
                     <div class="stat-label">Lines of Editor Code</div>
                 </div>
                 <div class="stat">
-                    <div class="stat-number" style="background:linear-gradient(135deg,#8b5cf6,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent">9+</div>
-                    <div class="stat-label">AI Providers</div>
+                    <div class="stat-number" style="background:linear-gradient(135deg,#8b5cf6,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent">992</div>
+                    <div class="stat-label">Topology Features</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" style="background:linear-gradient(135deg,#8b5cf6,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent">5</div>
+                    <div class="stat-label">Built-in Plugins</div>
                 </div>
                 <div class="stat">
                     <div class="stat-number" style="background:linear-gradient(135deg,#8b5cf6,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent">3</div>
-                    <div class="stat-label">Window Types</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-number" style="background:linear-gradient(135deg,#8b5cf6,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent">MIT</div>
-                    <div class="stat-label">Open Source License</div>
+                    <div class="stat-label">Platforms</div>
                 </div>
             </div>
         </div>
@@ -179,79 +187,61 @@
         <div class="container">
             <div class="section-header">
                 <span class="section-badge" style="background:rgba(139,92,246,0.1);border-color:rgba(139,92,246,0.25);color:#a78bfa">Features</span>
-                <h2>A complete development environment</h2>
-                <p>Everything you need to code, debug, and deploy &mdash; without leaving the app.</p>
+                <h2>A focused development environment</h2>
+                <p>Code editor + terminal + topology diagrams. Nothing more, nothing less.</p>
             </div>
 
             <!-- Feature 1: Monaco Editor -->
             <div class="features-detail" style="margin-bottom:80px">
                 <div class="feature-detail-text">
                     <h3><i class="fas fa-code"></i> Monaco Code Editor</h3>
-                    <p>The same editor engine that powers VS Code, deeply integrated into Tlink Studio with multi-document editing, diff views, and intelligent code assistance.</p>
+                    <p>The same editor engine that powers VS Code, deeply integrated with multi-document editing, diff views, and intelligent code assistance.</p>
                     <ul class="feature-detail-list">
                         <li><i class="fas fa-check"></i> Multi-document tabs with syntax highlighting</li>
                         <li><i class="fas fa-check"></i> Side-by-side diff view for file comparisons</li>
-                        <li><i class="fas fa-check"></i> File tree with full/opened modes</li>
+                        <li><i class="fas fa-check"></i> File tree with full/opened file modes</li>
                         <li><i class="fas fa-check"></i> ANSI decoration support for terminal output</li>
-                        <li><i class="fas fa-check"></i> External conflict detection for changed files</li>
+                        <li><i class="fas fa-check"></i> External conflict detection when files change on disk</li>
                         <li><i class="fas fa-check"></i> Auto-save and state recovery on restart</li>
+                        <li><i class="fas fa-check"></i> Open files by path prompt</li>
+                        <li><i class="fas fa-check"></i> Run code in integrated terminal</li>
                     </ul>
                 </div>
                 <div class="feature-visual">
-                    <img src="screenshot-copilot-agent.png" alt="Tlink Studio - Copilot Agent">
+                    <img src="screenshot-copilot-agent.png" alt="Tlink Studio - Code Editor">
                 </div>
             </div>
 
-            <!-- Feature 2: Topology Diagram Editor -->
+            <!-- Feature 2: Integrated Terminal -->
             <div class="features-detail reverse" style="margin-bottom:80px">
                 <div class="feature-detail-text">
-                    <h3><i class="fas fa-project-diagram"></i> Topology Diagram Editor</h3>
-                    <p>Visualize network topologies, system architectures, and infrastructure layouts with an integrated diagram editor that reads from YAML/JSON data.</p>
+                    <h3><i class="fas fa-terminal"></i> Integrated Terminal</h3>
+                    <p>Full local terminal powered by xterm.js with GPU-accelerated rendering. Run commands, execute scripts, and manage your development environment without switching apps.</p>
                     <ul class="feature-detail-list">
-                        <li><i class="fas fa-check"></i> Nodes, links, shapes, and text elements</li>
-                        <li><i class="fas fa-check"></i> Directed and curved link support</li>
-                        <li><i class="fas fa-check"></i> Multi-select with marquee selection</li>
-                        <li><i class="fas fa-check"></i> Zoom, pan, and color palette customization</li>
-                        <li><i class="fas fa-check"></i> Sticky notes for annotations</li>
-                        <li><i class="fas fa-check"></i> Export topology data as YAML/JSON</li>
+                        <li><i class="fas fa-check"></i> Local shell (PowerShell, Bash, Zsh, Fish, etc.)</li>
+                        <li><i class="fas fa-check"></i> Split panes for multiple terminals</li>
+                        <li><i class="fas fa-check"></i> Session logging to files</li>
+                        <li><i class="fas fa-check"></i> Color scheme customization</li>
+                        <li><i class="fas fa-check"></i> Search within terminal output</li>
                     </ul>
                 </div>
                 <div class="feature-visual">
-                    <div class="placeholder">
-                        <i class="fas fa-project-diagram"></i>
-                        <p>Network topology visualization with nodes, links, and annotations</p>
-                    </div>
+                    <img src="screenshot-settings.png" alt="Tlink Studio - Settings">
                 </div>
             </div>
 
-            <!-- Feature 3: Multi-Window Architecture -->
+            <!-- Feature 3: Workspace & Git -->
             <div class="features-detail" style="margin-bottom:80px">
                 <div class="feature-detail-text">
-                    <h3><i class="fas fa-window-restore"></i> Multi-Window Architecture</h3>
-                    <p>Three dedicated window types, each optimized for its purpose. Work across multiple screens with synchronized themes and state.</p>
+                    <h3><i class="fas fa-folder-tree"></i> Workspace & Git</h3>
+                    <p>Manage projects with folder trees, save and restore workspaces, and track Git status directly from the editor.</p>
                     <ul class="feature-detail-list">
-                        <li><i class="fas fa-check"></i> Code Editor window (1200x800) with file tree & tabs</li>
-                        <li><i class="fas fa-check"></i> AI Assistant window (800x700) for chat & suggestions</li>
-                        <li><i class="fas fa-check"></i> Terminal window with local shell & split panes</li>
-                        <li><i class="fas fa-check"></i> Theme sync across all windows (dark/light)</li>
-                        <li><i class="fas fa-check"></i> Independent window lifecycle management</li>
-                    </ul>
-                </div>
-                <div class="feature-visual">
-                    <img src="screenshot-ai-settings.png" alt="Tlink Studio - AI Settings">
-                </div>
-            </div>
-
-            <!-- Feature 4: Git Integration -->
-            <div class="features-detail reverse" style="margin-bottom:80px">
-                <div class="feature-detail-text">
-                    <h3><i class="fab fa-git-alt"></i> Git Integration</h3>
-                    <p>Built-in Git support for tracking changes, viewing branch status, and managing your code directly from the editor.</p>
-                    <ul class="feature-detail-list">
-                        <li><i class="fas fa-check"></i> Branch and commit status tracking</li>
+                        <li><i class="fas fa-check"></i> Save and restore complete workspace layouts</li>
+                        <li><i class="fas fa-check"></i> Import/export workspaces as URLs</li>
+                        <li><i class="fas fa-check"></i> Git branch and commit status tracking</li>
                         <li><i class="fas fa-check"></i> File status detection (modified, untracked, staged)</li>
-                        <li><i class="fas fa-check"></i> Remote repository information</li>
-                        <li><i class="fas fa-check"></i> Diff view integration with Monaco editor</li>
+                        <li><i class="fas fa-check"></i> Code editor folders with tree navigation</li>
+                        <li><i class="fas fa-check"></i> Multi-window with theme sync (dark/light)</li>
                     </ul>
                 </div>
                 <div class="feature-visual">
@@ -261,105 +251,109 @@
         </div>
     </section>
 
-    <!-- AI & Copilot Section -->
-    <section id="ai" class="section section-dark">
+    <!-- Topology Section -->
+    <section id="topology" class="section section-dark">
         <div class="container">
             <div class="section-header">
-                <span class="section-badge" style="background:rgba(244,114,182,0.1);border-color:rgba(244,114,182,0.25);color:#f472b6">AI & Copilot</span>
-                <h2>AI-powered development, built in</h2>
-                <p>From local LLMs to cloud APIs, Tlink Studio integrates AI at every level of your workflow.</p>
+                <span class="section-badge" style="background:rgba(6,182,212,0.1);border-color:rgba(6,182,212,0.25);color:#22d3ee">Topology</span>
+                <h2>Visual topology diagram editor</h2>
+                <p>Design and visualize network topologies, system architectures, and infrastructure layouts right inside your code editor.</p>
             </div>
 
             <div class="features-grid">
-                <div class="feature-card featured" style="border-color:rgba(139,92,246,0.3)">
-                    <div class="feature-icon" style="background:linear-gradient(135deg,#8b5cf6,#f472b6);color:white"><i class="fas fa-microchip"></i></div>
-                    <h3>Bundled Ollama LLM</h3>
-                    <p>Ships with Ollama support out of the box. Run llama3.1:8b locally with auto-start, model management, and zero API keys needed. Fully private AI on your machine.</p>
-                    <div class="feature-tag" style="background:linear-gradient(135deg,#8b5cf6,#f472b6)">Local AI</div>
+                <div class="feature-card featured" style="border-color:rgba(6,182,212,0.3);background:linear-gradient(135deg,rgba(6,182,212,0.05),rgba(139,92,246,0.05))">
+                    <div class="feature-icon" style="background:linear-gradient(135deg,#06b6d4,#22d3ee);color:white"><i class="fas fa-circle-nodes"></i></div>
+                    <h3>Nodes & Links</h3>
+                    <p>Create network nodes and connect them with directed or undirected links. Curved link rendering with customizable endpoints.</p>
                 </div>
-                <div class="feature-card featured" style="border-color:rgba(139,92,246,0.3)">
-                    <div class="feature-icon" style="background:linear-gradient(135deg,#8b5cf6,#f472b6);color:white"><i class="fas fa-rocket"></i></div>
-                    <h3>Copilot VSCode Agent</h3>
-                    <p>Integrated Copilot agent with MCP server support. Pair programming mode lets AI collaborate with you in real-time. Connect to VSCode extension ecosystem.</p>
-                    <div class="feature-tag" style="background:linear-gradient(135deg,#8b5cf6,#f472b6)">Agent</div>
+                <div class="feature-card featured" style="border-color:rgba(6,182,212,0.3);background:linear-gradient(135deg,rgba(6,182,212,0.05),rgba(139,92,246,0.05))">
+                    <div class="feature-icon" style="background:linear-gradient(135deg,#06b6d4,#22d3ee);color:white"><i class="fas fa-shapes"></i></div>
+                    <h3>Shapes & Annotations</h3>
+                    <p>Add shapes, text labels, and sticky notes to annotate your diagrams. Color palette customization for visual organization.</p>
                 </div>
-                <div class="feature-card">
-                    <div class="feature-icon"><i class="fas fa-cloud"></i></div>
-                    <h3>9+ AI Providers</h3>
-                    <p>OpenAI, Anthropic Claude, Deepseek, Groq, GLM/ChatGLM, Ollama, vLLM, OpenAI-compatible endpoints, and Tlink Agentic gateway.</p>
+                <div class="feature-card featured" style="border-color:rgba(6,182,212,0.3);background:linear-gradient(135deg,rgba(6,182,212,0.05),rgba(139,92,246,0.05))">
+                    <div class="feature-icon" style="background:linear-gradient(135deg,#06b6d4,#22d3ee);color:white"><i class="fas fa-expand"></i></div>
+                    <h3>Canvas Controls</h3>
+                    <p>Zoom, pan, and marquee multi-select. Free link placement mode for quick topology creation. Canvas mode toggle.</p>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-icon"><i class="fas fa-link"></i></div>
-                    <h3>MCP Tool Bridge</h3>
-                    <p>Model Context Protocol integration connects AI to external tools, databases, and APIs. Extensible tool bridge for custom integrations.</p>
+                    <div class="feature-icon"><i class="fas fa-palette"></i></div>
+                    <h3>Color Palettes</h3>
+                    <p>Customizable color palettes for nodes, links, shapes, and sticky notes. Consistent visual identity for your diagrams.</p>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-icon"><i class="fas fa-code-branch"></i></div>
-                    <h3>Continue AI Framework</h3>
-                    <p>Full Continue framework integration with LangChain orchestration, slash commands, and service container for advanced LLM workflows.</p>
+                    <div class="feature-icon"><i class="fas fa-file-export"></i></div>
+                    <h3>Data Export</h3>
+                    <p>Topology data stored as YAML/JSON in the editor. Edit visually or as code &mdash; both views stay in sync.</p>
                 </div>
                 <div class="feature-card">
-                    <div class="feature-icon"><i class="fas fa-users"></i></div>
-                    <h3>Pair Programming Mode</h3>
-                    <p>Enable collaborative AI features where the assistant can suggest edits, generate code, and help debug alongside you in real-time.</p>
+                    <div class="feature-icon"><i class="fas fa-mouse-pointer"></i></div>
+                    <h3>Interactive Editing</h3>
+                    <p>Click to select, drag to move, multi-select with marquee. Context menus for node and link properties.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- Architecture Section -->
-    <section id="architecture" class="section">
+    <!-- Comparison: Studio vs Terminal -->
+    <section id="compare" class="section">
         <div class="container">
             <div class="section-header">
-                <span class="section-badge" style="background:rgba(139,92,246,0.1);border-color:rgba(139,92,246,0.25);color:#a78bfa">Architecture</span>
-                <h2>Built on proven technology</h2>
-                <p>Production-grade stack trusted by millions of developers worldwide.</p>
+                <span class="section-badge" style="background:rgba(139,92,246,0.1);border-color:rgba(139,92,246,0.25);color:#a78bfa">Compare</span>
+                <h2>Tlink Studio vs Tlink Terminal</h2>
+                <p>Two products for different workflows. Use both, or pick the one that fits.</p>
             </div>
 
+            <div class="vs-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Feature</th>
+                            <th class="hl">Tlink Studio</th>
+                            <th>Tlink Terminal</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Monaco Code Editor</td><td class="hl"><i class="fas fa-check yes"></i></td><td><i class="fas fa-times no"></i></td></tr>
+                        <tr><td>Topology Diagram Editor</td><td class="hl"><i class="fas fa-check yes"></i></td><td><i class="fas fa-times no"></i></td></tr>
+                        <tr><td>Multi-Window (Editor + Terminal)</td><td class="hl"><i class="fas fa-check yes"></i></td><td><i class="fas fa-times no"></i></td></tr>
+                        <tr><td>Git Integration</td><td class="hl"><i class="fas fa-check yes"></i></td><td><i class="fas fa-times no"></i></td></tr>
+                        <tr><td>File Tree & Workspace Folders</td><td class="hl"><i class="fas fa-check yes"></i></td><td><i class="fas fa-times no"></i></td></tr>
+                        <tr><td>Local Terminal</td><td class="hl"><i class="fas fa-check yes"></i></td><td><i class="fas fa-check yes"></i></td></tr>
+                        <tr><td>Workspaces</td><td class="hl"><i class="fas fa-check yes"></i></td><td><i class="fas fa-check yes"></i></td></tr>
+                        <tr><td>Color Schemes</td><td class="hl"><i class="fas fa-check yes"></i></td><td><i class="fas fa-check yes"></i></td></tr>
+                        <tr><td>SSH Connections</td><td><i class="fas fa-times no"></i></td><td><i class="fas fa-check yes"></i></td></tr>
+                        <tr><td>RDP Connections</td><td><i class="fas fa-times no"></i></td><td><i class="fas fa-check yes"></i></td></tr>
+                        <tr><td>Serial / Telnet</td><td><i class="fas fa-times no"></i></td><td><i class="fas fa-check yes"></i></td></tr>
+                        <tr><td>SFTP File Transfer</td><td><i class="fas fa-times no"></i></td><td><i class="fas fa-check yes"></i></td></tr>
+                        <tr><td>AI Assistant</td><td><i class="fas fa-times no"></i></td><td><i class="fas fa-check yes"></i></td></tr>
+                        <tr><td>Session Recording</td><td><i class="fas fa-times no"></i></td><td><i class="fas fa-check yes"></i></td></tr>
+                        <tr><td>Bookmarks & Output Analyzer</td><td><i class="fas fa-times no"></i></td><td><i class="fas fa-check yes"></i></td></tr>
+                        <tr><td>Plugin Manager</td><td><i class="fas fa-times no"></i></td><td><i class="fas fa-check yes"></i></td></tr>
+                        <tr><td><strong>Best For</strong></td><td class="hl"><strong>Code & Diagrams</strong></td><td><strong>Remote Access & DevOps</strong></td></tr>
+                        <tr><td><strong>Price</strong></td><td class="hl"><strong>Free</strong></td><td><strong>Free</strong></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tech Stack -->
+    <section class="section section-dark">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge" style="background:rgba(139,92,246,0.1);border-color:rgba(139,92,246,0.25);color:#a78bfa">Technology</span>
+                <h2>Built on proven technology</h2>
+            </div>
             <div class="tech-stack">
                 <div class="tech-pill"><i class="fab fa-js-square"></i> Electron 38</div>
                 <div class="tech-pill"><i class="fab fa-angular"></i> Angular 15</div>
                 <div class="tech-pill"><i class="fas fa-code"></i> Monaco Editor</div>
                 <div class="tech-pill"><i class="fas fa-terminal"></i> xterm.js</div>
-                <div class="tech-pill"><i class="fas fa-robot"></i> Ollama</div>
-                <div class="tech-pill"><i class="fas fa-brain"></i> LangChain</div>
-                <div class="tech-pill"><i class="fas fa-plug"></i> MCP Protocol</div>
                 <div class="tech-pill"><i class="fas fa-shield-halved"></i> AES-256 Vault</div>
                 <div class="tech-pill"><i class="fab fa-node-js"></i> Node.js</div>
                 <div class="tech-pill"><i class="fas fa-lock"></i> OpenSSL</div>
-            </div>
-
-            <div class="features-grid" style="margin-top:48px">
-                <div class="feature-card">
-                    <div class="feature-icon"><i class="fas fa-folder-tree"></i></div>
-                    <h3>Workspace Management</h3>
-                    <p>Save and restore complete project workspaces with folder trees, open files, terminal sessions, and editor state. Import/export workspaces as URLs.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon"><i class="fas fa-shield-halved"></i></div>
-                    <h3>Encrypted Vault</h3>
-                    <p>AES-256-CBC encrypted storage with PBKDF2 key derivation for SSH keys, API tokens, and credentials. System keyring integration.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon"><i class="fas fa-cloud-arrow-up"></i></div>
-                    <h3>Backup & Restore</h3>
-                    <p>Automatic configuration backups with retention policies. Includes settings, workspaces, and profiles. One-click restore from any backup point.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon"><i class="fas fa-wand-magic-sparkles"></i></div>
-                    <h3>Script Generation</h3>
-                    <p>AI-powered script generation from natural language. Terminal output analysis with intelligent command suggestions and error detection.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon"><i class="fas fa-palette"></i></div>
-                    <h3>Theme Sync</h3>
-                    <p>Dark/light mode with automatic system detection. Theme colors sync across all windows including editor, terminal, and AI assistant.</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon"><i class="fas fa-globe"></i></div>
-                    <h3>Web Version</h3>
-                    <p>Browser-based deployment option alongside the native desktop app. Same features, accessible from any device with a modern browser.</p>
-                </div>
+                <div class="tech-pill"><i class="fab fa-git-alt"></i> Git</div>
             </div>
         </div>
     </section>
@@ -368,11 +362,11 @@
     <section class="cta-section">
         <div class="container">
             <h2>Ready to try Tlink Studio?</h2>
-            <p>Free, open source, and cross-platform. Download now or check the source on GitHub.</p>
+            <p>Free, open source, and cross-platform. A focused code editor with topology diagrams and integrated terminal.</p>
             <div class="cta-actions">
                 <a href="index.html#download" class="btn btn-primary btn-lg" style="background:linear-gradient(135deg,#8b5cf6,#f472b6)"><i class="fas fa-download"></i> Download Free</a>
                 <a href="https://github.com/amishagrawal2001-arch/tlink-studio" class="btn btn-outline btn-lg" target="_blank"><i class="fab fa-github"></i> Star on GitHub</a>
-                <a href="index.html" class="btn btn-outline btn-lg"><i class="fas fa-terminal"></i> Tlink Terminal</a>
+                <a href="index.html" class="btn btn-outline btn-lg"><i class="fas fa-terminal"></i> Need SSH/RDP? Get Tlink Terminal</a>
             </div>
         </div>
     </section>
@@ -386,7 +380,7 @@
                         <span class="brand-icon" style="background:linear-gradient(135deg,#8b5cf6,#f472b6)"><i class="fas fa-code"></i></span>
                         <span class="brand-text">Tlink Studio</span>
                     </div>
-                    <p>Code editor and terminal IDE with AI. Part of the Tlink product family.</p>
+                    <p>Code editor and terminal IDE with topology diagrams. Part of the Tlink product family.</p>
                 </div>
                 <div class="footer-links">
                     <h4>Products</h4>
@@ -396,15 +390,15 @@
                     <a href="index.html#download">Download</a>
                 </div>
                 <div class="footer-links">
-                    <h4>Features</h4>
+                    <h4>Studio Features</h4>
                     <a href="#features">Code Editor</a>
-                    <a href="#ai">AI & Copilot</a>
-                    <a href="#architecture">Architecture</a>
+                    <a href="#topology">Topology Editor</a>
+                    <a href="#compare">Studio vs Terminal</a>
                 </div>
                 <div class="footer-links">
                     <h4>Community</h4>
-                    <a href="https://github.com/amishagrawal2001-arch/tlink-studio" target="_blank">GitHub</a>
-                    <a href="https://github.com/amishagrawal2001-arch/tlink-dev" target="_blank">Tlink Terminal GitHub</a>
+                    <a href="https://github.com/amishagrawal2001-arch/tlink-studio" target="_blank">GitHub (Studio)</a>
+                    <a href="https://github.com/amishagrawal2001-arch/tlink-dev" target="_blank">GitHub (Terminal)</a>
                 </div>
             </div>
             <div class="footer-bottom">
