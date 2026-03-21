@@ -92,6 +92,7 @@
             <div class="nav-links">
                 <a href="index.html">Tlink Terminal</a>
                 <a href="#features">Features</a>
+                <a href="#diagnostics">Diagnostics</a>
                 <a href="#topology">Topology</a>
                 <a href="index.html#download">Download</a>
             </div>
@@ -99,7 +100,7 @@
                 <a href="https://github.com/amishagrawal2001-arch/tlink-studio" class="btn btn-ghost" target="_blank">
                     <i class="fab fa-github"></i> GitHub
                 </a>
-                <a href="index.html#download" class="btn btn-primary" style="background:linear-gradient(135deg,#8b5cf6,#f472b6)">Download Free</a>
+                <a href="index.html#download" class="btn btn-primary" style="background:linear-gradient(135deg,#8b5cf6,#f472b6)">Download</a>
             </div>
             <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open');document.querySelector('.nav-actions').classList.toggle('open')">
                 <i class="fas fa-bars"></i>
@@ -112,7 +113,7 @@
         <div class="hero-glow"></div>
         <div class="container">
             <div class="studio-badge">
-                <i class="fas fa-rocket"></i> Free & Open Source &middot; MIT Licensed &middot; Cross-Platform
+                <i class="fas fa-rocket"></i> Cross-Platform &middot; Code Editor &middot; Topology Diagrams
             </div>
             <h1 class="hero-title">
                 Code Editor & Terminal IDE<br>
@@ -120,11 +121,12 @@
             </h1>
             <p class="hero-subtitle">
                 Tlink Studio combines a full Monaco code editor, integrated local terminal,
-                and a visual topology diagram editor &mdash; all in one lightweight native desktop app.
+                and a visual topology diagram editor &mdash; with real-time diagnostics, smart indentation management,
+                and responsive toolbars &mdash; all in one lightweight native desktop app.
             </p>
             <div class="hero-actions">
                 <a href="index.html#download" class="btn btn-primary btn-lg" style="background:linear-gradient(135deg,#8b5cf6,#f472b6)">
-                    <i class="fas fa-download"></i> Download Free
+                    <i class="fas fa-download"></i> Download
                 </a>
                 <a href="https://github.com/amishagrawal2001-arch/tlink-studio" class="btn btn-outline btn-lg" target="_blank">
                     <i class="fab fa-github"></i> View Source
@@ -141,7 +143,7 @@
                 <div class="arch-card">
                     <div class="arch-icon editor"><i class="fas fa-code"></i></div>
                     <h3>Monaco Code Editor</h3>
-                    <p>Full-featured code editor with multi-document tabs, diff view, syntax highlighting, file tree, git status indicators, and session restore. 13K+ lines of editor code.</p>
+                    <p>Full-featured code editor with multi-document tabs, diff view, syntax highlighting, file tree, git status indicators, real-time diagnostics, smart indentation, and session restore.</p>
                 </div>
                 <div class="arch-card">
                     <div class="arch-icon topology"><i class="fas fa-project-diagram"></i></div>
@@ -167,7 +169,7 @@
         <div class="container">
             <div class="stats-grid">
                 <div class="stat">
-                    <div class="stat-number" style="background:linear-gradient(135deg,#8b5cf6,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent">13K+</div>
+                    <div class="stat-number" style="background:linear-gradient(135deg,#8b5cf6,#f472b6);-webkit-background-clip:text;-webkit-text-fill-color:transparent">14K+</div>
                     <div class="stat-label">Lines of Editor Code</div>
                 </div>
                 <div class="stat">
@@ -205,15 +207,17 @@
                         <li><i class="fas fa-check"></i> Side-by-side diff view for file comparisons</li>
                         <li><i class="fas fa-check"></i> File tree with full/opened file modes</li>
                         <li><i class="fas fa-check"></i> Git status indicators (modified, staged, untracked)</li>
+                        <li><i class="fas fa-check"></i> Real-time diagnostics panel with error/warning markers</li>
+                        <li><i class="fas fa-check"></i> Smart indentation: auto-detect, convert tabs/spaces, mixed indent warning</li>
                         <li><i class="fas fa-check"></i> Session restore with cursor &amp; scroll position</li>
                         <li><i class="fas fa-check"></i> External conflict detection when files change on disk</li>
                         <li><i class="fas fa-check"></i> Auto-save and state recovery on restart</li>
-                        <li><i class="fas fa-check"></i> Compact single-row toolbar with theme &amp; palette controls</li>
+                        <li><i class="fas fa-check"></i> Responsive flex-wrap toolbar with theme &amp; palette controls</li>
                         <li><i class="fas fa-check"></i> Run code in integrated terminal</li>
                     </ul>
                 </div>
                 <div class="feature-visual">
-                    <img src="tlink-studio-editor-Dark-theme.png" alt="Tlink Studio - Code Editor (Dark Theme)">
+                    <img src="tlink-studio-line-select.png" alt="Tlink Studio - Code Editor with Line Selection">
                 </div>
             </div>
 
@@ -253,6 +257,26 @@
                 </div>
                 <div class="feature-visual">
                     <img src="tlink-studio-colum-editor.png" alt="Tlink Studio - Column Editor">
+                </div>
+            </div>
+            <!-- Feature 4: Diagnostics & Indentation -->
+            <div id="diagnostics" class="features-detail reverse" style="margin-bottom:80px">
+                <div class="feature-detail-text">
+                    <h3><i class="fas fa-stethoscope"></i> Diagnostics & Indentation</h3>
+                    <p>Real-time code diagnostics powered by Monaco language services, and a full-featured indentation management panel for keeping your code clean and consistent.</p>
+                    <ul class="feature-detail-list">
+                        <li><i class="fas fa-check"></i> Live error &amp; warning markers with severity badges</li>
+                        <li><i class="fas fa-check"></i> Click-to-navigate &mdash; jump to exact error line/column</li>
+                        <li><i class="fas fa-check"></i> Tabbed panel: Problems tab + File Info tab</li>
+                        <li><i class="fas fa-check"></i> Auto-detect indentation style and size from file content</li>
+                        <li><i class="fas fa-check"></i> Convert between tabs and spaces in one click</li>
+                        <li><i class="fas fa-check"></i> Mixed indentation warning with visual indicator</li>
+                        <li><i class="fas fa-check"></i> Quick tab size presets (2, 4, 6, 8)</li>
+                        <li><i class="fas fa-check"></i> Trim trailing whitespace across entire file</li>
+                    </ul>
+                </div>
+                <div class="feature-visual">
+                    <img src="tlink-studio-toolbar-help.png" alt="Tlink Studio - Toolbar Help & Diagnostics">
                 </div>
             </div>
         </div>
@@ -357,9 +381,9 @@
     <section class="cta-section">
         <div class="container">
             <h2>Ready to try Tlink Studio?</h2>
-            <p>Free, open source, and cross-platform. A focused code editor with topology diagrams and integrated terminal.</p>
+            <p>A focused code editor with topology diagrams and integrated terminal. Available for macOS, Windows, and Linux.</p>
             <div class="cta-actions">
-                <a href="index.html#download" class="btn btn-primary btn-lg" style="background:linear-gradient(135deg,#8b5cf6,#f472b6)"><i class="fas fa-download"></i> Download Free</a>
+                <a href="index.html#download" class="btn btn-primary btn-lg" style="background:linear-gradient(135deg,#8b5cf6,#f472b6)"><i class="fas fa-download"></i> Download</a>
                 <a href="https://github.com/amishagrawal2001-arch/tlink-studio" class="btn btn-outline btn-lg" target="_blank"><i class="fab fa-github"></i> Star on GitHub</a>
                 <a href="index.html" class="btn btn-outline btn-lg"><i class="fas fa-terminal"></i> Need SSH/RDP? Get Tlink Terminal</a>
             </div>
@@ -387,6 +411,7 @@
                 <div class="footer-links">
                     <h4>Studio Features</h4>
                     <a href="#features">Code Editor</a>
+                    <a href="#diagnostics">Diagnostics & Indentation</a>
                     <a href="#topology">Topology Editor</a>
                     <a href="#compare">Studio vs Terminal</a>
                 </div>
