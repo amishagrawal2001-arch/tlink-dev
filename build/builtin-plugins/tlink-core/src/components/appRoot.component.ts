@@ -1337,11 +1337,11 @@ export class AppRootComponent implements OnInit {
         case 'ai-chat':
             return 'AI Chat'
         case 'ai-assistant':
-            return 'AI Assistant'
+            return 'AI Chat (Ollama / OpenAI / Claude)'
         case 'tabby-url':
             return this.tabbyUrlCommand?.label || 'Open Tabby URL'
         case 'copilot-chat':
-            return 'Open Copilot Chat'
+            return 'Copilot Agent (Code Assistant)'
         case 'share-all-sessions':
             return this.shareAllSessionsInProgress
                 ? 'Sharing open sessions...'
@@ -1862,11 +1862,22 @@ export class AppRootComponent implements OnInit {
     }
 
     openAIAssistant (): void {
-        // Find AI Assistant command from toolbar button provider and execute it
+        // Open AI Assistant window directly via IPC (not command search)
+        try {
+            const electron = (window as any).require?.('electron')
+                ?? (window as any).nodeRequire?.('electron')
+            const ipcRenderer = electron?.ipcRenderer
+            if (ipcRenderer) {
+                ipcRenderer.send('app:open-ai-assistant-window')
+                return
+            }
+        } catch {
+            // Fallback to command search
+        }
         this.commands.getCommands(this.buildCommandContext()).then(commands => {
-            const aiAssistantCmd = commands.find(cmd => 
+            const aiAssistantCmd = commands.find(cmd =>
                 cmd.label?.toLowerCase() === 'ai assistant' ||
-                cmd.label?.toLowerCase().includes('ai assistant')
+                cmd.label?.toLowerCase().includes('ai assistant'),
             )
             if (aiAssistantCmd) {
                 aiAssistantCmd.run()
@@ -1877,7 +1888,18 @@ export class AppRootComponent implements OnInit {
     }
 
     openCopilotChat (): void {
-        // Find Open Copilot Chat command from toolbar button provider and execute it
+        // Open Copilot/Code Editor window directly via IPC (not command search)
+        try {
+            const electron = (window as any).require?.('electron')
+                ?? (window as any).nodeRequire?.('electron')
+            const ipcRenderer = electron?.ipcRenderer
+            if (ipcRenderer) {
+                ipcRenderer.send('app:open-code-editor-window')
+                return
+            }
+        } catch {
+            // Fallback to command search
+        }
         this.commands.getCommands(this.buildCommandContext()).then(async commands => {
             const copilotCmd = commands.find(cmd => {
                 const label = cmd.label?.toLowerCase() ?? ''
