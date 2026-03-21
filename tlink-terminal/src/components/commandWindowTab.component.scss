@@ -138,20 +138,21 @@
 :host-context(.bottom-panel) .command-editor {
     flex: 1 1 auto;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 :host.command-window-bottom .command-editor textarea,
 :host-context(.bottom-panel) .command-editor textarea {
     flex: 1 1 auto;
-    min-height: 96px;
-    max-height: 100%;
-    height: auto;
+    min-height: 60px;
+    height: 100%;
     width: 100%;
     box-sizing: border-box;
     padding: 10px 12px 40px;
     border: 1px solid var(--theme-bg-less);
     overflow: auto;
-    resize: vertical !important;
+    resize: none;
 }
 
 :host.command-window-bottom .command-panel-footer,
@@ -209,8 +210,10 @@
     gap: 8px;
     flex: 1 1 auto;
     min-height: 0;
-    overflow: auto;
+    overflow: hidden;
     padding-bottom: 4px;
+    display: flex;
+    flex-direction: column;
 }
 
 :host.command-window-bottom .command-panel,
@@ -220,6 +223,8 @@
     padding: 6px 8px 6px;
     border: none;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 :host.command-window-bottom .command-footer,
