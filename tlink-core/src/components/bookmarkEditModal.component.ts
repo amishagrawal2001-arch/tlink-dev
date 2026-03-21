@@ -1,7 +1,7 @@
 import { Component } from '@angular/core'
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap'
 import { Observable, of } from 'rxjs'
-import { map, distinctUntilChanged, debounceTime, switchMap } from 'rxjs/operators'
+import { distinctUntilChanged, debounceTime, switchMap } from 'rxjs/operators'
 
 @Component({
     selector: 'bookmark-edit-modal',

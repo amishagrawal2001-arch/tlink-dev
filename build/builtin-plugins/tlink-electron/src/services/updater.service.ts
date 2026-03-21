@@ -22,7 +22,7 @@ export class ElectronUpdaterService extends UpdaterService {
 
     constructor (
         log: LogService,
-        config: ConfigService,
+        private config: ConfigService,
         private translate: TranslateService,
         private platform: PlatformService,
         private electron: ElectronService,

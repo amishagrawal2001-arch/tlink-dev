@@ -58,7 +58,7 @@ import { CoreCommandProvider, BookmarksCommandProvider } from './commands'
 import { BookmarksPanelComponent } from './components/bookmarksPanel.component'
 import { BookmarkEditModalComponent } from './components/bookmarkEditModal.component'
 import { CodeEditorTabComponent } from './components/codeEditorTab.component'
-import { CodeEditorRecoveryProvider } from './codeEditorRecoveryProvider'
+// import { CodeEditorRecoveryProvider } from './codeEditorRecoveryProvider' // Tlink Studio - deactivated
 
 export function TranslateMessageFormatCompilerFactory (): TranslateMessageFormatCompiler {
     return new TranslateMessageFormatCompiler()
