@@ -132,6 +132,9 @@
 :host-context(.bottom-panel) {
     background: var(--theme-bg);
     color: var(--theme-fg);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
 }
 
 :host.command-window-bottom .command-editor,
@@ -203,6 +206,9 @@
     min-height: 0;
     flex: 1 1 auto;
     box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
 }
 
 :host.command-window-bottom .command-content,
