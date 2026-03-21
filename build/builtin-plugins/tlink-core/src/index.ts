@@ -122,7 +122,7 @@ const PROVIDERS = [
     { provide: TabContextMenuItemProvider, useClass: TaskCompletionContextMenu, multi: true },
     { provide: TabContextMenuItemProvider, useClass: ProfilesContextMenu, multi: true },
     { provide: TabRecoveryProvider, useExisting: SplitTabRecoveryProvider, multi: true },
-    { provide: TabRecoveryProvider, useClass: CodeEditorRecoveryProvider, multi: true },
+    // { provide: TabRecoveryProvider, useClass: CodeEditorRecoveryProvider, multi: true }, // Tlink Studio - deactivated
     { provide: CLIHandler, useClass: ProfileCLIHandler, multi: true },
     { provide: CLIHandler, useClass: LastCLIHandler, multi: true },
     { provide: FileProvider, useClass: VaultFileProvider, multi: true },
