@@ -32,6 +32,17 @@
                 strong FreeRDP launched
                 div The RDP connection is running in an external FreeRDP window.
 
+        div(*ngIf='reconnectOffered && !connecting && !connectionError')
+            .alert.alert-warning.m-3
+                strong Session disconnected
+                div The remote desktop session has ended.
+                .mt-2
+                    button.btn.btn-warning.me-2((click)='reconnect()')
+                        i.fas.fa-redo.me-1
+                        span(translate) Reconnect
+                    button.btn.btn-outline-secondary((click)='destroy()')
+                        span(translate) Close Tab
+
         canvas(
             #canvas='',
             *ngIf='!connectionError',

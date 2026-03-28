@@ -1,7 +1,7 @@
-# Tlink AI
+# NexTerm
 
 <p align="center">
-  <strong>AI-Enhanced Terminal Emulator with Integrated Code Editor</strong>
+  <strong>AI-Enhanced Terminal for DevOps &amp; Network Engineers with Integrated Code Editor</strong>
 </p>
 
 <p align="center">
@@ -16,13 +16,13 @@
 
 ---
 
-> 👋 Managing remote environments? Check out [Warpgate, my smart SSH/HTTP/MySQL bastion server](https://github.com/warp-tech/warpgate), it works great with Tlink AI, you'll love it.
+> 👋 Managing remote environments? Check out [Warpgate, my smart SSH/HTTP/MySQL bastion server](https://github.com/warp-tech/warpgate), it works great with NexTerm, you'll love it.
 
 ----
 
-### About Tlink AI
+### About NexTerm
 
-Tlink AI is a fork of [Tlink](https://tlink.sh) with enhanced AI capabilities, integrated code editor, and business-focused features. See [BUSINESS_ENHANCEMENTS.md](./BUSINESS_ENHANCEMENTS.md) for detailed enhancement plans.
+NexTerm is a fork of [Tlink](https://tlink.sh) with enhanced AI capabilities, integrated code editor, and business-focused features. See [BUSINESS_ENHANCEMENTS.md](./BUSINESS_ENHANCEMENTS.md) for detailed enhancement plans.
 
 ### Install from Git (tlink-dev)
 
@@ -65,6 +65,7 @@ Notes:
 * **Workspace Management** - Save and restore workspaces, share via URL, team collaboration features
 * **Backup & Restore** - Automatic and manual local backups of configuration, workspaces, and profiles
 * **Enhanced Collaboration** - Real-time terminal sharing, workspace templates, and team workspaces
+* **Remote Desktop (RDP)** - Connect to Windows servers with bundled FreeRDP, embedded viewer, or system RDP client
 * **All Original Tlink Features** - SSH, serial terminal, theming, split panes, and more
 
 <br/>
@@ -74,10 +75,11 @@ This README is also available in: <a  href="./README.es-ES.md">:es: Spanish</a> 
 
 ----
 
-[**Tlink AI**](https://github.com/amishagrawal2001-arch/tlink-ai) is an enhanced version of Tlink with AI-powered features, integrated code editor, and advanced terminal capabilities for Windows 10, macOS and Linux
+[**NexTerm**](https://github.com/amishagrawal2001-arch/tlink-ai) is an enhanced version with AI-powered features, integrated code editor, and advanced terminal capabilities for Windows 10, macOS and Linux
 
 * Integrated SSH and Telnet client and connection manager
 * Integrated serial terminal
+* **Remote Desktop (RDP)** with bundled FreeRDP — NLA/TLS support, native rendering, no extra installs
 * **Real-time terminal session sharing** with embedded WebSocket server
 * **Workspace management** - Save, load, and share workspace configurations
 * **Backup & Restore** - Automatic and manual local backups with integrity verification
@@ -95,12 +97,13 @@ This README is also available in: <a  href="./README.es-ES.md">:es: Spanish</a> 
 
 # Contents <!-- omit in toc -->
 
-- [About Tlink AI](#about-tlink-ai)
+- [About NexTerm](#about-nexterm)
 - [Key Features](#key-features)
-- [What Tlink AI is and isn't](#what-tlink-ai-is-and-isnt)
+- [What NexTerm is and isn't](#what-nexterm-is-and-isnt)
 - [Terminal features](#terminal-features)
 - [SSH Client](#ssh-client)
 - [Serial Terminal](#serial-terminal)
+- [Remote Desktop (RDP)](#remote-desktop-rdp)
 - [Code Editor](#code-editor)
 - [Session Sharing](#session-sharing)
 - [Workspace Management](#workspace-management)
@@ -114,11 +117,11 @@ This README is also available in: <a  href="./README.es-ES.md">:es: Spanish</a> 
 
 <a name="about"></a>
 
-# What Tlink AI is and isn't
+# What NexTerm is and isn't
 
-* **Tlink AI is** an enhanced terminal emulator with AI integration, code editing capabilities, and advanced features - an alternative to Windows' standard terminal (conhost), PowerShell ISE, PuTTY, macOS Terminal.app and iTerm
+* **NexTerm is** an enhanced terminal emulator with AI integration, code editing capabilities, and advanced features - an alternative to Windows' standard terminal (conhost), PowerShell ISE, PuTTY, macOS Terminal.app and iTerm
 
-* **Tlink AI is not** a new shell or a MinGW or Cygwin replacement. Neither is it lightweight - if RAM usage is of importance, consider [Conemu](https://conemu.github.io) or [Alacritty](https://github.com/jwilm/alacritty)
+* **NexTerm is not** a new shell or a MinGW or Cygwin replacement. Neither is it lightweight - if RAM usage is of importance, consider [Conemu](https://conemu.github.io) or [Alacritty](https://github.com/jwilm/alacritty)
 
 <a name="terminal"></a>
 
@@ -351,13 +354,13 @@ Each backup includes:
 
 # Portable
 
-Tlink AI will run as a portable app on Windows, if you create a `data` folder in the same location where `Tlink.exe` lives.
+NexTerm will run as a portable app on Windows, if you create a `data` folder in the same location where `Tlink.exe` lives.
 
 <a name="plugins"></a>
 
 # Plugins
 
-Plugins and themes can be installed directly from the Settings view inside Tlink AI.
+Plugins and themes can be installed directly from the Settings view inside NexTerm.
 
 * [docker](https://github.com/Eugeny/tlink-docker) - connect to Docker containers
 * [title-control](https://github.com/kbjr/terminus-title-control) - allows modifying the title of the terminal tabs by providing a prefix, suffix, and/or strings to be removed
@@ -402,43 +405,41 @@ Plugins and themes can be installed directly from the Settings view inside Tlink
 
 <a name="rdp"></a>
 
-# RDP Client
+# Remote Desktop (RDP)
 
-Built-in RDP support with dual-client architecture:
+| Profile Configuration | Session Manager |
+|:---:|:---:|
+| ![Profile Config](docs/remote-desktop-profile-config.png) | ![Save & Connect](docs/remote-desktop-profile-save-and-connect.png) |
 
-* **Built-in client** (node-rdpjs) - embedded canvas-based, SSL-only
-* **FreeRDP client** (xfreerdp) - external window, full NLA/TLS support
-* **Auto-fallback** - automatically switches to FreeRDP when server requires NLA
-* **Secure credentials** - passwords passed via stdin, not visible in process list
-* **Keychain integration** - save/load passwords from macOS Keychain or Windows Credential Manager
-* **Connection status** - amber (connecting), green (connected), red (error) tab indicators
-* **Full keyboard** - complete XT scancode mapping (~100 keys)
-* **Auto-reconnect** - configurable reconnection with rate limiting
-* **Profile import/export** - JSON-based profile sharing
-* **Session logging** - JSONL event logging for audit trails
-* **Test Connection** - validate host/port before connecting
+Three client types for connecting to Windows remote desktops:
 
-### FreeRDP Setup
+### FreeRDP (Recommended)
+* **Native window** with full NLA, TLS, and RDP security support
+* **Bundled with the app** on macOS — no installation required
+* Native SDL3 rendering (no XQuartz needed)
+* RemoteFX graphics pipeline, hardware GDI, UDP multitransport for fast performance
+* Dynamic resolution — resize window to adjust remote desktop
 
-**macOS:**
-```bash
-brew install freerdp
-brew install --cask xquartz
-# Log out and back in, then:
-open -a XQuartz
-export DISPLAY=:0 && xhost +localhost
-```
+### Built-in Client (node-rdpjs)
+* Renders remote desktop **directly inside the Tlink tab** using HTML5 Canvas
+* SSL security only — may not work with servers requiring NLA
+* No external dependencies
 
-**Windows (MSYS2):**
-```bash
-pacman -S mingw-w64-ucrt-x86_64-freerdp
-# Add C:\msys64\ucrt64\bin to PATH
-```
+### System RDP Client
+* Generates `.rdp` file and opens with Microsoft Remote Desktop (Windows App), mstsc.exe, or Remmina
+* In-app install prompts if no handler detected
 
-**Linux:**
-```bash
-sudo apt install freerdp2-x11
-```
+### Features
+* **Keychain integration** — save/load passwords from macOS Keychain or Windows Credential Manager
+* **Connection status** — amber (connecting), green (connected), red (error) tab indicators
+* **Auto-reconnect** — configurable reconnection with rate limiting
+* **Profile import/export** — JSON-based profile sharing
+* **Session logging** — JSONL event logging for audit trails
+* **Test Connection** — validate host/port before connecting
+* **Full keyboard** — complete XT scancode mapping (~100 keys)
+* **Contextual help** — each client type shows prerequisites and description in settings
+
+See [tlink-rdp/README.md](./tlink-rdp/README.md) for full documentation.
 
 <a name="building-installers"></a>
 
@@ -492,7 +493,7 @@ See [HACKING.md](./HACKING.md) and [API docs](https://docs.tlink.sh/) for inform
 
 ## Business Enhancements
 
-Tlink AI includes a comprehensive roadmap for business-focused enhancements. See [BUSINESS_ENHANCEMENTS.md](./BUSINESS_ENHANCEMENTS.md) for detailed plans including:
+NexTerm includes a comprehensive roadmap for business-focused enhancements. See [BUSINESS_ENHANCEMENTS.md](./BUSINESS_ENHANCEMENTS.md) for detailed plans including:
 
 - ✅ **Real-time session sharing** - Implemented! Share terminal sessions with team members via WebSocket
 - ✅ **Workspace management** - Implemented! Save, load, and share workspace configurations

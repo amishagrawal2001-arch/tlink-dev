@@ -259,6 +259,109 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
         }
     }
 
+    private async promptInstallXQuartz (): Promise<void> {
+        this.connectionError = 'XQuartz (X11) is required for FreeRDP on macOS.'
+        this.setStatusError()
+
+        const result = await this.platform.showMessageBox({
+            type: 'warning',
+            message: this.translate.instant('XQuartz Required'),
+            detail: this.translate.instant(
+                'FreeRDP requires XQuartz (X11) to display the remote desktop on macOS.\n\n' +
+                'Would you like to install it now?\n\n' +
+                'Note: After installing, you must log out and back in (or reboot) for XQuartz to work.',
+            ),
+            buttons: [
+                this.translate.instant('Download XQuartz'),
+                this.translate.instant('Copy Homebrew Command'),
+                this.translate.instant('Cancel'),
+            ],
+            defaultId: 0,
+            cancelId: 2,
+        })
+
+        if (result.response === 0) {
+            (this.platform as any).openExternal?.('https://www.xquartz.org/') ||
+            (this.platform as any).openPath?.('https://www.xquartz.org/')
+            this.notifications.info(this.translate.instant('Opening XQuartz download page...'))
+        } else if (result.response === 1) {
+            const cmd = 'brew install --cask xquartz'
+            try { navigator.clipboard?.writeText(cmd) } catch { /* ignore */ }
+            this.notifications.info(this.translate.instant('Run in terminal: ') + cmd)
+        }
+    }
+
+    private async promptInstallRDPClient (): Promise<void> {
+        if (this.hostApp.platform === Platform.macOS) {
+            this.connectionError = 'Microsoft Remote Desktop is required for RDP connections on macOS.'
+            this.setStatusError()
+
+            const result = await this.platform.showMessageBox({
+                type: 'warning',
+                message: this.translate.instant('Microsoft Remote Desktop Required'),
+                detail: this.translate.instant(
+                    'RDP connections on macOS require Microsoft Remote Desktop.\n\n' +
+                    'Would you like to install it now?',
+                ),
+                buttons: [
+                    this.translate.instant('Open App Store'),
+                    this.translate.instant('Copy Homebrew Command'),
+                    this.translate.instant('Cancel'),
+                ],
+                defaultId: 0,
+                cancelId: 2,
+            })
+
+            if (result.response === 0) {
+                (this.platform as any).openExternal?.('macappstore://apps.apple.com/app/id1295203466') ||
+                (this.platform as any).openPath?.('macappstore://apps.apple.com/app/id1295203466')
+                this.notifications.info(this.translate.instant('Opening App Store...'))
+            } else if (result.response === 1) {
+                const cmd = 'brew install --cask microsoft-remote-desktop'
+                try { navigator.clipboard?.writeText(cmd) } catch { /* ignore */ }
+                this.notifications.info(this.translate.instant('Run in terminal: ') + cmd)
+            }
+        } else if (this.hostApp.platform === Platform.Windows) {
+            this.connectionError = 'mstsc.exe not found. Windows Remote Desktop should be built-in.'
+            this.setStatusError()
+            this.notifications.error(this.translate.instant('Windows Remote Desktop (mstsc.exe) not found. Check your Windows installation.'))
+        } else {
+            // Linux
+            this.connectionError = 'No RDP client found. Install Remmina, FreeRDP, or rdesktop.'
+            this.setStatusError()
+
+            const result = await this.platform.showMessageBox({
+                type: 'warning',
+                message: this.translate.instant('RDP Client Required'),
+                detail: this.translate.instant(
+                    'No RDP client found on this system.\n\n' +
+                    'Install one of the following:\n' +
+                    '  - Remmina (recommended)\n' +
+                    '  - FreeRDP (xfreerdp)\n' +
+                    '  - rdesktop',
+                ),
+                buttons: [
+                    this.translate.instant('Copy Install Command (Remmina)'),
+                    this.translate.instant('Copy Install Command (FreeRDP)'),
+                    this.translate.instant('Cancel'),
+                ],
+                defaultId: 0,
+                cancelId: 2,
+            })
+
+            let cmd = ''
+            if (result.response === 0) {
+                cmd = 'sudo apt install -y remmina remmina-plugin-rdp'
+            } else if (result.response === 1) {
+                cmd = 'sudo apt install -y freerdp2-x11'
+            }
+            if (cmd) {
+                try { navigator.clipboard?.writeText(cmd) } catch { /* ignore */ }
+                this.notifications.info(this.translate.instant('Run in terminal: ') + cmd)
+            }
+        }
+    }
+
     private setStatusConnecting (): void {
         this.setProgress(0.5)
         this.color = '#FFA500'
@@ -306,6 +409,35 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
 
         const clientType = this.profile.options.clientType ?? 'node-rdpjs'
 
+        if (clientType === 'rdp-file') {
+            this.connecting = true
+            this.connectionError = null
+            this.usingExternalClient = true
+
+            try {
+                const password = await this.resolvePassword()
+                await this.rdpService.launchRDPFile(this.profile, password)
+                this.connected = true
+                this.setStatusConnected()
+                this.startSessionLogging('rdp-file')
+                this.notifications.info(this.translate.instant('RDP launched via system handler'))
+                // Auto-close the placeholder tab for external clients
+                setTimeout(() => this.destroy(), 500)
+            } catch (error: any) {
+                if (error?.code === 'MISSING_RDP_CLIENT' || error?.message === 'MISSING_RDP_CLIENT') {
+                    await this.promptInstallRDPClient()
+                } else {
+                    this.connectionError = error?.message ?? 'Failed to launch RDP file'
+                    this.notifications.error(this.connectionError || 'Failed to launch RDP file')
+                }
+                this.connected = false
+                this.setStatusError()
+            } finally {
+                this.connecting = false
+            }
+            return
+        }
+
         if (clientType === 'xfreerdp') {
             this.connecting = true
             this.connectionError = null
@@ -318,15 +450,17 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
                 this.connected = true
                 this.setStatusConnected()
                 this.startSessionLogging('xfreerdp')
-                if (parentWindow && this.hostApp.platform !== Platform.macOS) {
-                    this.notifications.info(this.translate.instant('FreeRDP launched in embedded window'))
-                } else {
-                    this.notifications.info(this.translate.instant('FreeRDP launched in external window'))
-                }
+                this.notifications.info(this.translate.instant('FreeRDP launched'))
+                // Auto-close the placeholder tab for external clients
+                setTimeout(() => this.destroy(), 500)
             } catch (error: any) {
-                const rawMessage = error?.message ?? 'Failed to launch FreeRDP'
-                this.connectionError = this.summarizeExternalError(rawMessage)
-                this.notifications.error(this.connectionError || 'Failed to launch FreeRDP')
+                if (error?.code === 'MISSING_XQUARTZ' || error?.message === 'MISSING_XQUARTZ') {
+                    await this.promptInstallXQuartz()
+                } else {
+                    const rawMessage = error?.message ?? 'Failed to launch FreeRDP'
+                    this.connectionError = this.summarizeExternalError(rawMessage)
+                    this.notifications.error(this.connectionError || 'Failed to launch FreeRDP')
+                }
                 this.connected = false
                 this.setStatusError()
             } finally {
@@ -455,12 +589,38 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
                 this.notifications.info(this.translate.instant('Client type saved as FreeRDP for future connections'))
             }
 
-            if (parentWindow && this.hostApp.platform !== Platform.macOS) {
-                this.notifications.info(this.translate.instant('FreeRDP launched in embedded window'))
-            } else {
-                this.notifications.info(this.translate.instant('FreeRDP launched in external window'))
-            }
+            this.notifications.info(this.translate.instant('FreeRDP launched'))
+            // Auto-close the placeholder tab for external clients
+            setTimeout(() => this.destroy(), 500)
         } catch (error: any) {
+            // Check for missing XQuartz on macOS
+            if (error?.code === 'MISSING_XQUARTZ' || error?.message === 'MISSING_XQUARTZ') {
+                await this.promptInstallXQuartz()
+                this.connected = false
+                this.setStatusError()
+                this.connecting = false
+                return
+            }
+
+            // On macOS, fall back to .rdp file launch if FreeRDP fails
+            if (this.hostApp.platform === Platform.macOS) {
+                try {
+                    const password = await this.resolvePassword()
+                    await this.rdpService.launchRDPFile(this.profile, password)
+                    this.connected = true
+                    this.usingExternalClient = true
+                    this.setStatusConnected()
+                    this.startSessionLogging('rdp-file')
+                    this.notifications.info(this.translate.instant('RDP launched via system handler'))
+                    return
+                } catch (rdpFileError: any) {
+                    if (rdpFileError?.code === 'MISSING_RDP_CLIENT' || rdpFileError?.message === 'MISSING_RDP_CLIENT') {
+                        await this.promptInstallRDPClient()
+                        return
+                    }
+                }
+            }
+
             const rawMessage = error?.message ?? 'Failed to launch FreeRDP'
             this.connectionError = this.summarizeExternalError(rawMessage)
             this.notifications.error(this.connectionError || 'Failed to launch FreeRDP')

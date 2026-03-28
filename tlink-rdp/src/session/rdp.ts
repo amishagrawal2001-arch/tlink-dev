@@ -28,8 +28,10 @@ interface RDPClientOptions {
     domain?: string
     userName: string
     password?: string
+    targetHost?: string
     enablePerf?: boolean
     autoLogin?: boolean
+    enableNLA?: boolean
     decompress?: boolean
     screen: {
         width: number
@@ -84,8 +86,10 @@ export class RDPSession {
                 userName: this.profile.options.user,
                 password: this.profile.options.password,
                 domain: this.profile.options.domain,
+                targetHost: this.profile.options.host,
                 enablePerf: true,
                 autoLogin: true,
+                enableNLA: this.profile.options.enableNLA !== false,
                 decompress: false,
                 screen: {
                     width: this.profile.options.width ?? 1920,

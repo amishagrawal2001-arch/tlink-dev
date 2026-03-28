@@ -79,7 +79,29 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                 select.form-control([(ngModel)]='profile.options.clientType')
                     option([value]="'node-rdpjs'") node-rdpjs (Embedded, SSL-only)
                     option([value]="'xfreerdp'") FreeRDP (External, NLA/TLS support)
-                small.form-text.text-muted(translate) Choose the RDP client. FreeRDP supports modern servers but opens in a separate window.
+                    option([value]="'rdp-file'") System RDP Client (Microsoft Remote Desktop)
+                .alert.alert-info.mt-2.py-2.px-3.small(*ngIf="profile.options.clientType === 'node-rdpjs'")
+                    i.fas.fa-info-circle.me-1
+                    span(translate) Built-in client. Renders the remote desktop directly inside the tab. Supports SSL security only — may not work with servers that require NLA (Network Level Authentication). No additional software needed.
+
+                .alert.alert-info.mt-2.py-2.px-3.small(*ngIf="profile.options.clientType === 'xfreerdp'")
+                    i.fas.fa-info-circle.me-1
+                    span(translate) Opens the remote desktop in a native window. Supports NLA, TLS, and modern Windows servers. Bundled with the app — no additional installation required.
+
+                .alert.alert-info.mt-2.py-2.px-3.small(*ngIf="profile.options.clientType === 'rdp-file'")
+                    i.fas.fa-info-circle.me-1
+                    span(translate) Generates a .rdp file and opens it with your system's default RDP application. You will be prompted for the password by the external app.
+
+                .alert.alert-warning.mt-2.py-2.px-3.d-flex.align-items-center.gap-2(
+                    *ngIf="profile.options.clientType === 'rdp-file' && !rdpHandlerInstalled"
+                )
+                    i.fas.fa-exclamation-triangle
+                    span.flex-grow-1
+                        strong(translate) Prerequisite:&nbsp;
+                        span(translate) No system RDP client detected.
+                    button.btn.btn-sm.btn-warning((click)='installRDPClient()')
+                        i.fas.fa-download.me-1
+                        span(translate) Install
 
             .mb-3.d-flex.gap-2
                 button.btn.btn-sm.btn-outline-secondary(
@@ -254,5 +276,17 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                         (ngModelChange)='onSessionLogInputToggle($event)'
                     )
                     label.form-check-label(for='sessionLogInputEvents', translate) Log keyboard and mouse events
+
+    li(ngbNavItem)
+        a(ngbNavLink, translate) Advanced
+        ng-template(ngbNavContent)
+            .mb-3
+                label(translate) Custom FreeRDP Parameters
+                input.form-control(
+                    type='text',
+                    [(ngModel)]='profile.options.customParams',
+                    placeholder='/flag1 /flag2 +option',
+                )
+                small.form-text.text-muted(translate) Additional command-line arguments passed to FreeRDP. Space-separated. Only applies to FreeRDP client type.
 
 div([ngbNavOutlet]='nav')

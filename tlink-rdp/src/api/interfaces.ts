@@ -16,7 +16,7 @@ export interface RDPProfileOptions {
     user: string
     password?: string
     domain?: string
-    clientType?: 'node-rdpjs' | 'xfreerdp'
+    clientType?: 'node-rdpjs' | 'xfreerdp' | 'rdp-file'
     // Display settings
     width?: number
     height?: number

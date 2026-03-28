@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/explicit-module-boundary-types */
 import { Component, OnInit } from '@angular/core'
 
-import { ProfileSettingsComponent, NotificationsService } from 'tlink-core'
+import { ProfileSettingsComponent, NotificationsService, HostAppService, Platform, PlatformService } from 'tlink-core'
 import { RDPProfile } from '../api'
 import { RDPService } from '../services/rdp.service'
 import { RDPPasswordStorageService } from '../services/passwordStorage.service'
@@ -21,15 +21,48 @@ export class RDPProfileSettingsComponent implements ProfileSettingsComponent<RDP
     sessionLogEnabled = false
     sessionLogInputEvents = false
 
+    rdpHandlerInstalled = true
+    xquartzInstalled = true
+    currentPlatform: Platform
+
     constructor (
         private rdpService: RDPService,
         private passwordStorage: RDPPasswordStorageService,
         private notifications: NotificationsService,
-    ) { }
+        private hostApp: HostAppService,
+        private platform: PlatformService,
+    ) {
+        this.currentPlatform = this.hostApp.platform
+        this.rdpService.hasSystemRDPHandler().then(v => { this.rdpHandlerInstalled = v })
+        if (this.hostApp.platform === Platform.macOS) {
+            try {
+                const fs = require('fs')
+                this.xquartzInstalled = fs.existsSync('/Applications/Utilities/XQuartz.app')
+            } catch { /* ignore */ }
+        }
+    }
 
     ngOnInit (): void {
         this.sessionLogEnabled = !!this.profile?.options?.sessionLog?.enabled
         this.sessionLogInputEvents = !!this.profile?.options?.sessionLog?.logInputEvents
+    }
+
+    installXQuartz (): void {
+        (this.platform as any).openExternal?.('https://www.xquartz.org/') ||
+        (this.platform as any).openPath?.('https://www.xquartz.org/')
+        this.notifications.info('Opening XQuartz download page...')
+    }
+
+    installRDPClient (): void {
+        if (this.currentPlatform === Platform.macOS) {
+            (this.platform as any).openExternal?.('macappstore://apps.apple.com/app/id1295203466') ||
+            (this.platform as any).openPath?.('macappstore://apps.apple.com/app/id1295203466')
+            this.notifications.info('Opening App Store...')
+        } else if (this.currentPlatform === Platform.Linux) {
+            const cmd = 'sudo apt install -y remmina remmina-plugin-rdp'
+            try { navigator.clipboard?.writeText(cmd) } catch { /* ignore */ }
+            this.notifications.info('Run in terminal: ' + cmd)
+        }
     }
 
     async testConnection (): Promise<void> {
