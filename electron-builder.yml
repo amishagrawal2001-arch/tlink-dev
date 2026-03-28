@@ -35,7 +35,11 @@ extraResources:
   to: builtin-plugins
 - from: app/dist/assets/monaco
   to: assets/monaco
-- extras
+- from: extras
+  to: extras
+  filter:
+  - "**/*"
+  - "!freerdp/mac/**"
 - build/certs
 - from: app/node_modules
   to: node_modules
@@ -53,7 +57,7 @@ nsis:
   artifactName: tlink-${version}-setup-${arch}.${ext}
   installerIcon: "./build/windows/icon.ico"
   allowToChangeInstallationDirectory: true
-  shortcutName: Tlink Terminal
+  shortcutName: NexTerm
 mac:
   category: public.app-category.utilities
   icon: "./build/mac/icon.icns"
@@ -61,6 +65,9 @@ mac:
   hardenedRuntime: true
   entitlements: "./build/mac/entitlements.plist"
   entitlementsInherit: "./build/mac/entitlements.plist"
+  extraResources:
+  - from: extras/freerdp/mac
+    to: extras/freerdp/mac
   extendInfo:
     ElectronTeamID: ${teamId}
     NSRequiresAquaSystemAppearance: false
