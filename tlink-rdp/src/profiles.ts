@@ -19,7 +19,7 @@ export class RDPProfilesService extends QuickConnectProfileProvider<RDPProfile> 
             user: '',
             password: null,
             domain: '',
-            clientType: process.platform === 'darwin' ? 'rdp-file' : 'node-rdpjs',
+            clientType: process.platform === 'darwin' ? 'xfreerdp' : 'node-rdpjs',
             width: 1920,
             height: 1080,
             colorDepth: 24,

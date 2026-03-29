@@ -293,19 +293,21 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
 
     private async promptInstallRDPClient (): Promise<void> {
         if (this.hostApp.platform === Platform.macOS) {
-            this.connectionError = 'Microsoft Remote Desktop is required for RDP connections on macOS.'
+            this.connectionError = 'Microsoft Remote Desktop is not installed. You can switch to the bundled FreeRDP client in profile settings.'
             this.setStatusError()
 
             const result = await this.platform.showMessageBox({
                 type: 'warning',
-                message: this.translate.instant('Microsoft Remote Desktop Required'),
+                message: this.translate.instant('Microsoft Remote Desktop Not Found'),
                 detail: this.translate.instant(
-                    'RDP connections on macOS require Microsoft Remote Desktop.\n\n' +
-                    'Would you like to install it now?',
+                    'The system RDP client (Microsoft Remote Desktop) is not installed.\n\n' +
+                    'You can either:\n' +
+                    '• Switch to FreeRDP (bundled with the app, no install needed)\n' +
+                    '• Install Microsoft Remote Desktop from the App Store',
                 ),
                 buttons: [
+                    this.translate.instant('Switch to FreeRDP'),
                     this.translate.instant('Open App Store'),
-                    this.translate.instant('Copy Homebrew Command'),
                     this.translate.instant('Cancel'),
                 ],
                 defaultId: 0,
@@ -313,13 +315,13 @@ export class RDPTabComponent extends BaseTabComponent implements AfterViewInit, 
             })
 
             if (result.response === 0) {
+                this.profile.options.clientType = 'xfreerdp'
+                this.notifications.info(this.translate.instant('Switched to FreeRDP. Reconnecting...'))
+                setTimeout(() => this.reconnect(), 500)
+            } else if (result.response === 1) {
                 (this.platform as any).openExternal?.('macappstore://apps.apple.com/app/id1295203466') ||
                 (this.platform as any).openPath?.('macappstore://apps.apple.com/app/id1295203466')
                 this.notifications.info(this.translate.instant('Opening App Store...'))
-            } else if (result.response === 1) {
-                const cmd = 'brew install --cask microsoft-remote-desktop'
-                try { navigator.clipboard?.writeText(cmd) } catch { /* ignore */ }
-                this.notifications.info(this.translate.instant('Run in terminal: ') + cmd)
             }
         } else if (this.hostApp.platform === Platform.Windows) {
             this.connectionError = 'mstsc.exe not found. Windows Remote Desktop should be built-in.'
