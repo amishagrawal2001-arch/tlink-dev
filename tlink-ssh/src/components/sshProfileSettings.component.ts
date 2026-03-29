@@ -1,11 +1,12 @@
 /* eslint-disable @typescript-eslint/explicit-module-boundary-types */
-import { Component, ViewChild } from '@angular/core'
+import { Component, Injector, ViewChild } from '@angular/core'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import { firstBy } from 'thenby'
 
-import { FileProvidersService, Platform, HostAppService, PromptModalComponent, PartialProfile, ProfilesService } from 'tlink-core'
+import { FileProvidersService, Platform, HostAppService, PromptModalComponent, PartialProfile, ProfilesService, NotificationsService } from 'tlink-core'
 import { LoginScriptsSettingsComponent } from 'tlink-terminal'
 import { PasswordStorageService } from '../services/passwordStorage.service'
+import { SSHSession } from '../session/ssh'
 import { ForwardedPortConfig, SSHAlgorithmType, SSHProfile } from '../api'
 import { supportedAlgorithms } from '../algorithms'
 
@@ -18,6 +19,24 @@ export class SSHProfileSettingsComponent {
     Platform = Platform
     profile: SSHProfile
     hasSavedPassword: boolean
+    testingConnection = false
+    testResult: { success: boolean, message: string } | null = null
+    availableGroups: { id: string, name: string }[] = []
+    authMethodLabels: Record<string, string> = {
+        publicKey: 'Public Key',
+        agent: 'SSH Agent',
+        password: 'Password',
+        keyboardInteractive: 'Keyboard Interactive',
+    }
+    tabColors = [
+        { name: 'No color', value: null },
+        { name: 'Blue', value: '#0275d8' },
+        { name: 'Green', value: '#5cb85c' },
+        { name: 'Orange', value: '#f0ad4e' },
+        { name: 'Purple', value: '#613d7c' },
+        { name: 'Red', value: '#d9534f' },
+        { name: 'Yellow', value: '#ffd500' },
+    ]
     private originalUsername: string|null = null
 
     connectionMode: 'direct'|'proxyCommand'|'jumpHost'|'socksProxy'|'httpProxy' = 'direct'
@@ -33,6 +52,8 @@ export class SSHProfileSettingsComponent {
         private passwordStorage: PasswordStorageService,
         private ngbModal: NgbModal,
         private fileProviders: FileProvidersService,
+        private notifications: NotificationsService,
+        private injector: Injector,
     ) { }
 
     async ngOnInit () {
@@ -68,6 +89,8 @@ export class SSHProfileSettingsComponent {
         }
 
         this.originalUsername = this.profile.options.user ?? null
+
+        this.availableGroups = this.profilesService.getSyncProfileGroups().map(g => ({ id: g.id, name: g.name }))
     }
 
     getJumpHostLabel (p: PartialProfile<SSHProfile>) {
@@ -81,7 +104,9 @@ export class SSHProfileSettingsComponent {
         try {
             const result = await modal.result.catch(() => null)
             if (result?.value) {
-                this.passwordStorage.savePassword(this.profile, result.value)
+                await this.passwordStorage.savePassword(this.profile, result.value).catch(e => {
+                    this.notifications.error('Failed to save password')
+                })
                 this.hasSavedPassword = true
             }
         } catch { }
@@ -89,7 +114,42 @@ export class SSHProfileSettingsComponent {
 
     clearSavedPassword () {
         this.hasSavedPassword = false
-        this.passwordStorage.deletePassword(this.profile)
+        this.passwordStorage.deletePassword(this.profile).catch(e => {
+            this.notifications.error('Failed to remove saved password')
+        })
+    }
+
+    async testConnection () {
+        this.testingConnection = true
+        this.testResult = null
+        const t0 = Date.now()
+        let session: SSHSession | null = null
+        try {
+            session = new SSHSession(this.injector, this.profile)
+            await session.start()
+            const elapsed = Date.now() - t0
+            this.testResult = { success: true, message: `Connected in ${elapsed}ms` }
+        } catch (e) {
+            const elapsed = Date.now() - t0
+            const msg = e?.message ?? e?.toString() ?? 'Unknown error'
+            this.testResult = { success: false, message: `${msg} (${elapsed}ms)` }
+        } finally {
+            if (session) {
+                await session.destroy()
+            }
+            this.testingConnection = false
+        }
+    }
+
+    moveAuthMethod (index: number, direction: number): void {
+        const order = this.profile.options.authMethodOrder
+        if (!order) { return }
+        const newIndex = index + direction
+        if (newIndex < 0 || newIndex >= order.length) { return }
+        const temp = order[index]
+        order[index] = order[newIndex]
+        order[newIndex] = temp
+        this.profile.options.authMethodOrder = [...order]
     }
 
     async addPrivateKey () {

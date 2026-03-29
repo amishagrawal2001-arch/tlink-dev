@@ -711,8 +711,7 @@ export class SessionManagerTabComponent extends BaseTabComponentRuntime {
         if (panelState.component === SessionManagerTabComponent && panelState.id) {
             this.activePanelId = panelState.id
         }
-        const includeBuiltIn = this.isBuiltInPanel() || this.isRemoteDesktopPanel()
-        const groups = await this.profiles.getProfileGroups({ includeProfiles: true, includeNonUserGroup: includeBuiltIn })
+        const groups = await this.profiles.getProfileGroups({ includeProfiles: true, includeNonUserGroup: true })
         const normalized = groups.map(group => ({
             ...group,
             name: group.id === 'built-in' ? 'Built-in Connections' : group.name,

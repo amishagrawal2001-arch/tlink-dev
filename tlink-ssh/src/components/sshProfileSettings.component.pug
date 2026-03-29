@@ -104,6 +104,26 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                     [(ngModel)]='profile.options.user',
                 )
 
+            .mb-3(*ngIf='availableGroups.length > 0')
+                label(translate) Group
+                select.form-control(
+                    [(ngModel)]='profile.group',
+                )
+                    option([ngValue]='undefined', translate) Ungrouped
+                    option(*ngFor='let g of availableGroups', [ngValue]='g.id') {{g.name}}
+
+            .mb-3
+                label(translate) Tab color
+                .d-flex.gap-2.mt-1
+                    span.d-inline-block(
+                        *ngFor='let c of tabColors',
+                        [style.background-color]='c.value || "transparent"',
+                        [style.border]='profile.color === c.value ? "2px solid white" : (c.value ? "2px solid transparent" : "2px dashed #666")',
+                        [title]='c.name',
+                        (click)='profile.color = c.value',
+                        style='width: 24px; height: 24px; border-radius: 50%; cursor: pointer;'
+                    )
+
             .mb-3
                 label(translate) Authentication method
 
@@ -181,6 +201,24 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                     i.fas.fa-trash-alt
                     span(translate) Forget
 
+            .form-line(*ngIf='profile.options.host')
+                .header
+                    .title(translate) Test Connection
+                    .description(translate) Verify connection and authentication without opening a tab
+                button.btn.btn-outline-primary.ms-4(
+                    (click)='testConnection()',
+                    [disabled]='testingConnection'
+                )
+                    i.fas.fa-spinner.fa-spin.me-1(*ngIf='testingConnection')
+                    i.fas.fa-plug.me-1(*ngIf='!testingConnection')
+                    span(translate) {{ testingConnection ? 'Testing...' : 'Test' }}
+                small.ms-3.text-success(*ngIf='testResult?.success')
+                    i.fas.fa-check.me-1
+                    | {{testResult.message}}
+                small.ms-3.text-danger(*ngIf='testResult && !testResult.success')
+                    i.fas.fa-times.me-1
+                    | {{testResult.message}}
+
             .mb-3(*ngIf='!profile.options.auth || profile.options.auth === "publicKey"')
                 label(translate) Private keys
                 .list-group.mb-2
@@ -227,6 +265,25 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                     .title(translate) Reuse session for multiple tabs
                     .description Multiplex multiple shells through the same connection
                 toggle([(ngModel)]='profile.options.reuseSession')
+
+            .form-line.align-items-start(*ngIf='!profile.options.auth')
+                .header
+                    .title(translate) Authentication Order
+                    .description(translate) Priority order when auto-detecting auth method
+                .w-75
+                    .list-group
+                        .list-group-item.d-flex.align-items-center.py-1(*ngFor='let method of profile.options.authMethodOrder; let i = index')
+                            span.me-auto {{authMethodLabels[method] || method}}
+                            button.btn.btn-sm.btn-link(
+                                (click)='moveAuthMethod(i, -1)',
+                                [disabled]='i === 0'
+                            )
+                                i.fas.fa-arrow-up
+                            button.btn.btn-sm.btn-link(
+                                (click)='moveAuthMethod(i, 1)',
+                                [disabled]='i === profile.options.authMethodOrder.length - 1'
+                            )
+                                i.fas.fa-arrow-down
 
             .form-line
                 .header

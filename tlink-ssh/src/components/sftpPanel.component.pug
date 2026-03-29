@@ -50,6 +50,30 @@
         i.fas.fa-upload.me-1
         div(translate) Upload folder
 
+    button.btn.btn-link.btn-sm.flex-shrink-0.d-flex(
+        (click)='toggleBookmark()',
+        [title]='isBookmarked ? "Remove bookmark" : "Bookmark this path"'
+    )
+        i.fas.fa-star.me-1([class.text-warning]='isBookmarked')
+        div(translate) {{ isBookmarked ? 'Saved' : 'Save' }}
+
+    .btn-group.flex-shrink-0(*ngIf='bookmarks.length > 0', ngbDropdown)
+        button.btn.btn-link.btn-sm.d-flex(ngbDropdownToggle)
+            i.fas.fa-bookmark.me-1
+            div(translate) Bookmarks
+        .dropdown-menu(ngbDropdownMenu)
+            button.dropdown-item.d-flex.align-items-center(
+                *ngFor='let bm of bookmarks',
+                (click)='navigateToBookmark(bm)'
+            )
+                i.fas.fa-folder.me-2.text-muted
+                span.me-auto {{bm}}
+                button.btn.btn-sm.btn-link.text-danger.p-0.ms-2(
+                    (click)='removeBookmark(bm, $event)',
+                    title='Remove'
+                )
+                    i.fas.fa-times
+
     button.btn.btn-link.text-decoration-none((click)='close()') !{require('../../../tlink-core/src/icons/times.svg')}
 
 .filter-bar.px-3.py-2.border-bottom(*ngIf='showFilter')
@@ -92,7 +116,8 @@
             .list-group-item.list-group-item-action.d-flex.align-items-center(
                 *ngFor='let item of filteredFileList',
                 (contextmenu)='showContextMenu(item, $event)',
-                (click)='open(item)'
+                (click)='open(item)',
+                (dblclick)='onDoubleClick(item, $event)'
             )
                 i.fa-fw([class]='getIcon(item)')
                 div {{item.name}}
@@ -103,3 +128,21 @@
         .alert.alert-info.text-center.mt-3(*ngIf='fileList !== null && filteredFileList.length === 0 && showFilter && filterText.trim() !== ""')
             i.fas.fa-search.me-2
             span(translate) No files match the filter "{{filterText}}"
+
+.transfer-progress.px-3.py-2.border-top(*ngIf='activeTransfers.length > 0')
+    .d-flex.align-items-center.mb-1(*ngFor='let t of activeTransfers')
+        i.fas.fa-file.text-muted.me-2
+        small.me-2.text-truncate(style='max-width: 150px') {{t.getStatus() || 'Transferring...'}}
+        ngb-progressbar.flex-grow-1.me-2(
+            [value]='t.getTotalSize() > 0 ? (t.getCompletedBytes() / t.getTotalSize() * 100) : 0',
+            [striped]='!t.isComplete()',
+            [animated]='!t.isComplete()',
+            type='success',
+            height='8px'
+        )
+        small.text-muted.me-2(*ngIf='t.getSpeed() > 0') {{(t.getSpeed() / 1024 / 1024).toFixed(1)}} MB/s
+        button.btn.btn-sm.btn-link.text-danger.p-0(
+            *ngIf='!t.isComplete()',
+            (click)='cancelTransfer(t)'
+        )
+            i.fas.fa-times

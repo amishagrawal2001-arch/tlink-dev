@@ -10,6 +10,7 @@ import * as russh from 'russh'
 
 export class SSHShellSession extends BaseSession {
     shell?: russh.Channel
+    lastDataTime = Date.now()
     get serviceMessage$ (): Observable<string> { return this.serviceMessage }
     private serviceMessage = new Subject<string>()
     private ssh: SSHSession|null
@@ -54,6 +55,7 @@ export class SSHShellSession extends BaseSession {
         this.loginScriptProcessor?.executeUnconditionalScripts()
 
         this.shell.data$.subscribe(data => {
+            this.lastDataTime = Date.now()
             this.emitOutput(Buffer.from(data))
         })
 

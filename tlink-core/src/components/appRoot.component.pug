@@ -1,3 +1,5 @@
+tlink-splash-screen
+
 title-bar(
   *ngIf='ready && !isCodeEditorOnlyWindow && !hostWindow.isFullscreen && config.store.appearance.dock == "off" && isTitleBarNeeded()',
   (dblclick)='toggleMaximize()',
@@ -276,4 +278,5 @@ title-bar(
                     [ngbTooltip]='"Update available - Click to install"|translate',
                     (click)='updater.update()'
                 ) !{require('../icons/gift.svg')}
+tlink-server-settings([visible]='showServerSettings', (closed)='showServerSettings = false')
 ng-template(ngbModalContainer)

@@ -20,4 +20,14 @@ export class NotificationsService {
     error (text: string, details?: string): void {
         this.toastr.error(text, details)
     }
+
+    /** Show a toast that triggers a callback when clicked. */
+    actionable (text: string, actionHint: string, callback: () => void, timeOut = 15000): void {
+        const toast = this.toastr.info(text, actionHint, {
+            timeOut,
+            closeButton: true,
+            tapToDismiss: true,
+        })
+        toast.onTap.subscribe(() => callback())
+    }
 }

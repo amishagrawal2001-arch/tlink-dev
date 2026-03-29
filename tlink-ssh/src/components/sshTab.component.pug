@@ -1,10 +1,11 @@
 terminal-toolbar([tab]='this')
-    i.fas.fa-xs.fa-circle.text-success.me-2(*ngIf='session && session.open')
+    i.fas.fa-xs.fa-circle.text-success.me-2(*ngIf='session && session.open && !connectionStale')
+    i.fas.fa-xs.fa-circle.text-warning.me-2(*ngIf='session && session.open && connectionStale')
     i.fas.fa-xs.fa-circle.text-danger.me-2(*ngIf='!session || !session.open')
     strong.me-auto(
         style='user-select: text; cursor: text;'
         onclick='event.stopPropagation()'
-    ) {{profile.options.user}}@{{profile.options.host}}:{{profile.options.port}}
+    ) {{profile.options.user?.trim()}}@{{profile.options.host?.trim()}}:{{profile.options.port}}
 
     small.text-muted.me-2(*ngIf='session && session.open && sessionStartTime')
         i.fas.fa-clock.me-1
@@ -49,6 +50,14 @@ terminal-toolbar([tab]='this')
         container='body'
     )
         i.fas.fa-plug
+
+    button.btn.btn-sm.btn-link(
+        *ngIf='aiAvailable && session && session.open',
+        (click)='askAI()',
+        [ngbTooltip]='"Ask AI"|translate',
+        container='body'
+    )
+        i.fas.fa-robot
 
 
 sftp-panel.bg-dark(

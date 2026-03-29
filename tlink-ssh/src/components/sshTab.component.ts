@@ -5,7 +5,7 @@ import { marker as _ } from '@biesbjerg/ngx-translate-extract-marker'
 import colors from 'ansi-colors'
 import { Component, HostBinding, Injector } from '@angular/core'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
-import { Platform, ProfilesService } from 'tlink-core'
+import { Platform, ProfilesService, NotificationsService } from 'tlink-core'
 import { BaseTerminalTabComponent, ConnectableTerminalTabComponent } from 'tlink-terminal'
 import { SSHService } from '../services/ssh.service'
 import { KeyboardInteractivePrompt, SSHSession } from '../session/ssh'
@@ -36,11 +36,16 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
     activeKIPrompt: KeyboardInteractivePrompt|null = null
     openingLogDir = false
     openingLogFile = false
+    aiAvailable = false
+    private aiSidebarService: any = null
+    private aiChatSessionService: any = null
     private suppressAutoReconnect = false
     private sftpAutostarted = false
     private initializationPromise: Promise<void>|null = null
     sessionStartTime: Date | null = null
     private durationTimer: ReturnType<typeof setInterval> | null = null
+    private healthCheckTimer: ReturnType<typeof setInterval> | null = null
+    connectionStale = false
     bytesReceived = 0
     bytesSent = 0
 
@@ -50,16 +55,20 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
         private ngbModal: NgbModal,
         private profilesService: ProfilesService,
         private sshMultiplexer: SSHMultiplexerService,
+        private sshNotifications: NotificationsService,
     ) {
         super(injector)
         this.sessionChanged$.subscribe(() => {
             this.activeKIPrompt = null
             if (this.session?.open) {
                 this.startDurationTracking()
+                this.startHealthCheck()
                 // Track bandwidth
                 this.session.binaryOutput$?.subscribe(data => {
                     this.bytesReceived += data?.length ?? 0
                 })
+            } else {
+                this.stopHealthCheck()
             }
             if (this.startInSFTP && this.session?.open && !this.sftpAutostarted) {
                 this.sftpAutostarted = true
@@ -94,9 +103,81 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
         this.sftpOnly = this.startInSFTP
         super.ngOnInit()
 
+        // Try to detect AI assistant plugin
+        try {
+            this.aiSidebarService = this.injector.get('AiSidebarService' as any, null)
+            this.aiChatSessionService = this.injector.get('ChatSessionService' as any, null)
+            this.aiAvailable = !!(this.aiSidebarService && this.aiChatSessionService)
+        } catch {
+            this.aiAvailable = false
+        }
+
+        // Monitor terminal output for error patterns
+        if (this.aiAvailable) {
+            this.setupErrorDetection()
+        }
+
         if (!this.session?.open) {
             void this.initializeSession()
         }
+    }
+
+    askAI (): void {
+        if (!this.aiSidebarService || !this.aiChatSessionService) {
+            return
+        }
+        const selection = this.frontend?.getSelection?.() ?? ''
+        const lastLines = selection.trim() || 'No text selected. Please select terminal output first.'
+        const host = this.profile.options.host?.trim()
+        if (lastLines) {
+            this.aiSidebarService.show()
+            this.aiChatSessionService.sendMessage(
+                `Analyze this SSH terminal output from ${host}:\n\`\`\`\n${lastLines}\n\`\`\``,
+            )
+        } else {
+            this.aiSidebarService.toggle()
+        }
+    }
+
+    private setupErrorDetection (): void {
+        const errorPatterns = [
+            /command not found/i,
+            /permission denied/i,
+            /no such file or directory/i,
+            /connection refused/i,
+            /traceback \(most recent/i,
+            /fatal:/i,
+            /segmentation fault/i,
+        ]
+        let lastErrorTime = 0
+        let outputSub: any = null
+
+        this.subscribeUntilDestroyed(this.sessionChanged$, () => {
+            outputSub?.unsubscribe()
+            outputSub = null
+            if (!this.session) {
+                return
+            }
+            outputSub = this.session.output$.subscribe(data => {
+                const text = String(data)
+                const now = Date.now()
+                if (now - lastErrorTime < 10000) {
+                    return
+                }
+                for (const pattern of errorPatterns) {
+                    if (pattern.test(text)) {
+                        lastErrorTime = now
+                        this.sshNotifications.actionable(
+                            'Error detected in terminal output',
+                            'Click to ask AI',
+                            () => this.askAI(),
+                            8000,
+                        )
+                        break
+                    }
+                }
+            })
+        })
     }
 
     async openSessionLogDirectory (): Promise<void> {
@@ -230,6 +311,13 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
             }
         })
 
+        this.attachSessionHandler(session.banner$, banner => {
+            const trimmed = banner.trim()
+            if (trimmed) {
+                this.sshNotifications.info(trimmed, `${this.profile.options.host} banner`)
+            }
+        })
+
         this.attachSessionHandler(session.willDestroy$, () => {
             this.activeKIPrompt = null
         })
@@ -274,8 +362,14 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
         return session
     }
 
+    async destroy (): Promise<void> {
+        this.isDisconnectedByHand = true
+        await super.destroy()
+    }
+
     protected onSessionDestroyed (): void {
         this.stopDurationTracking()
+        this.stopHealthCheck()
 
         if (this.reconnecting) {
             this.setSession(null)
@@ -292,9 +386,11 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
             !passwordPromptDismissed &&
             (this.profile.behaviorOnSessionEnd === 'auto' || this.profile.behaviorOnSessionEnd === 'reconnect')
 
+        const disconnectedHost = this.sshSession?.profile.options.host ?? this.profile.options.host
+
         if (this.frontendIsReady) {
             // Session was closed abruptly
-            this.write('\r\n' + colors.black.bgWhite(' SSH ') + ` ${this.sshSession?.profile.options.host}: session closed\r\n`)
+            this.write('\r\n' + colors.black.bgWhite(' SSH ') + ` ${disconnectedHost}: session closed\r\n`)
         }
 
         this.setSession(null)
@@ -317,6 +413,12 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
                 this.reconnect()
             }, 1000)
         } else if (this.profile.behaviorOnSessionEnd === 'keep' && this.frontendIsReady) {
+            this.sshNotifications.actionable(
+                `SSH disconnected from ${disconnectedHost}`,
+                'Click to reconnect',
+                () => this.reconnect(),
+                15000,
+            )
             this.offerReconnection()
         }
     }
@@ -445,7 +547,7 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
                 const m = Math.floor((elapsed % 3600000) / 60000)
                 const s = Math.floor((elapsed % 60000) / 1000)
                 const duration = h > 0 ? `${h}h${m}m` : `${m}m${s}s`
-                this.setTitle(`SSH: ${this.profile.options.user}@${this.profile.options.host} [${duration}]`)
+                this.setTitle(`SSH: ${this.profile.options.user?.trim()}@${this.profile.options.host?.trim()} [${duration}]`)
             }
         }, 10000) // Update every 10 seconds
     }
@@ -454,6 +556,28 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
         if (this.durationTimer) {
             clearInterval(this.durationTimer)
             this.durationTimer = null
+        }
+    }
+
+    private startHealthCheck (): void {
+        this.connectionStale = false
+        this.stopHealthCheck()
+        const keepaliveMs = Math.min(Math.max(this.profile.options.keepaliveInterval ?? 5000, 1000), 60000)
+        const staleThresholdMs = keepaliveMs * 3
+        this.healthCheckTimer = setInterval(() => {
+            if (this.session instanceof SSHShellSession && this.session.open) {
+                this.connectionStale = Date.now() - this.session.lastDataTime > staleThresholdMs
+            } else {
+                this.connectionStale = false
+            }
+        }, 5000)
+    }
+
+    private stopHealthCheck (): void {
+        this.connectionStale = false
+        if (this.healthCheckTimer) {
+            clearInterval(this.healthCheckTimer)
+            this.healthCheckTimer = null
         }
     }
 

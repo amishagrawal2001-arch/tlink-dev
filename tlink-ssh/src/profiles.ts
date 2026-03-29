@@ -44,6 +44,8 @@ export class SSHProfilesService extends QuickConnectProfileProvider<SSHProfile> 
             httpProxyHost: null,
             httpProxyPort: null,
             reuseSession: true,
+            authMethodOrder: ['publicKey', 'agent', 'password', 'keyboardInteractive'],
+            sftpBookmarks: [],
             input: { backspace: 'backspace' },
         },
         clearServiceMessagesOnConnect: true,
@@ -200,23 +202,23 @@ export class SSHProfilesService extends QuickConnectProfileProvider<SSHProfile> 
 
     quickConnect (query: string): PartialProfile<SSHProfile> {
         let user: string|undefined = undefined
-        let host = query
+        let host = query.trim()
         let port = 22
         if (host.includes('@')) {
             const parts = host.split(/@/g)
-            host = parts[parts.length - 1]
-            user = parts.slice(0, parts.length - 1).join('@')
+            host = parts[parts.length - 1].trim()
+            user = parts.slice(0, parts.length - 1).join('@').trim()
         }
         if (host.includes('[')) {
             port = parseInt(host.split(']')[1].substring(1))
-            host = host.split(']')[0].substring(1)
+            host = host.split(']')[0].substring(1).trim()
         } else if (host.includes(':')) {
             port = parseInt(host.split(/:/g)[1])
-            host = host.split(':')[0]
+            host = host.split(':')[0].trim()
         }
 
         return {
-            name: query,
+            name: `${user ? user + '@' : ''}${host}${port !== 22 ? ':' + port : ''}`,
             type: 'ssh',
             options: {
                 host,

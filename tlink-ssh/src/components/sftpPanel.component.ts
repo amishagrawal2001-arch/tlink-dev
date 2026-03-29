@@ -1,7 +1,7 @@
 import * as C from 'constants'
 import { posix as path } from 'path'
 import { Component, Input, Output, EventEmitter, Inject, Optional, ElementRef, OnDestroy, ViewChild, AfterViewChecked } from '@angular/core'
-import { FileUpload, DirectoryUpload, DirectoryDownload, MenuItemOptions, NotificationsService, PlatformService } from 'tlink-core'
+import { FileUpload, DirectoryUpload, DirectoryDownload, FileTransfer, MenuItemOptions, NotificationsService, PlatformService, ConfigService } from 'tlink-core'
 import { SFTPSession, SFTPFile } from '../session/sftp'
 import { SSHSession } from '../session/ssh'
 import { SFTPContextMenuItemProvider } from '../api'
@@ -45,14 +45,55 @@ export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
     private hardTimeoutId: NodeJS.Timeout|null = null
     private pendingPathFocus = false
 
+    activeTransfers: FileTransfer[] = []
+    private transferPollTimer: ReturnType<typeof setInterval> | null = null
+
     constructor (
         private ngbModal: NgbModal,
         private notifications: NotificationsService,
         public platform: PlatformService,
         private host: ElementRef<HTMLElement>,
+        private config: ConfigService,
         @Optional() @Inject(SFTPContextMenuItemProvider) protected contextMenuProviders: SFTPContextMenuItemProvider[],
     ) {
         this.contextMenuProviders.sort((a, b) => a.weight - b.weight)
+    }
+
+    get bookmarks (): string[] {
+        return this.session?.profile?.options?.sftpBookmarks ?? []
+    }
+
+    get isBookmarked (): boolean {
+        return this.bookmarks.includes(this.path)
+    }
+
+    toggleBookmark (): void {
+        if (!this.session?.profile?.options) {
+            return
+        }
+        const bookmarks = [...(this.session.profile.options.sftpBookmarks ?? [])]
+        const idx = bookmarks.indexOf(this.path)
+        if (idx >= 0) {
+            bookmarks.splice(idx, 1)
+        } else {
+            bookmarks.push(this.path)
+        }
+        this.session.profile.options.sftpBookmarks = bookmarks
+        this.config.save()
+    }
+
+    navigateToBookmark (bm: string): void {
+        this.navigate(bm)
+    }
+
+    removeBookmark (bm: string, event: Event): void {
+        event.stopPropagation()
+        if (!this.session?.profile?.options) {
+            return
+        }
+        const bookmarks = (this.session.profile.options.sftpBookmarks ?? []).filter(b => b !== bm)
+        this.session.profile.options.sftpBookmarks = bookmarks
+        this.config.save()
     }
 
     async ngOnInit (): Promise<void> {
@@ -129,6 +170,11 @@ export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
         if (this.sftpClosedSubscription) {
             this.sftpClosedSubscription.unsubscribe()
             this.sftpClosedSubscription = null
+        }
+        // Clean up transfer polling
+        if (this.transferPollTimer) {
+            clearInterval(this.transferPollTimer)
+            this.transferPollTimer = null
         }
     }
 
@@ -602,7 +648,12 @@ export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
 
     async uploadOne (transfer: FileUpload): Promise<void> {
         const savedPath = this.path
-        await this.sftp.upload(path.join(this.path, transfer.getName()), transfer)
+        this.trackTransfer(transfer)
+        try {
+            await this.sftp.upload(path.join(this.path, transfer.getName()), transfer)
+        } finally {
+            this.untrackTransfer(transfer)
+        }
         if (this.path === savedPath) {
             await this.navigate(this.path)
         }
@@ -613,7 +664,41 @@ export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
         if (!transfer) {
             return
         }
-        this.sftp.download(itemPath, transfer)
+        this.trackTransfer(transfer)
+        try {
+            await this.sftp.download(itemPath, transfer)
+        } finally {
+            this.untrackTransfer(transfer)
+        }
+    }
+
+    onDoubleClick (item: SFTPFile, event: Event): void {
+        event.stopPropagation()
+        if (!item.isDirectory) {
+            this.download(item.fullPath, item.mode, item.size)
+        }
+    }
+
+    cancelTransfer (transfer: FileTransfer): void {
+        transfer.cancel()
+        this.untrackTransfer(transfer)
+    }
+
+    private trackTransfer (transfer: FileTransfer): void {
+        this.activeTransfers = [...this.activeTransfers, transfer]
+        if (!this.transferPollTimer) {
+            this.transferPollTimer = setInterval(() => {
+                this.activeTransfers = [...this.activeTransfers]
+            }, 500)
+        }
+    }
+
+    private untrackTransfer (transfer: FileTransfer): void {
+        this.activeTransfers = this.activeTransfers.filter(t => t !== transfer)
+        if (this.activeTransfers.length === 0 && this.transferPollTimer) {
+            clearInterval(this.transferPollTimer)
+            this.transferPollTimer = null
+        }
     }
 
     async downloadFolder (folder: SFTPFile): Promise<void> {

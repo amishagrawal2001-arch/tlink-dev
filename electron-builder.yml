@@ -1,6 +1,6 @@
 ---
 appId: org.tlink
-productName: Tlink
+productName: NexTerm
 directories:
   app: app
 compression: normal

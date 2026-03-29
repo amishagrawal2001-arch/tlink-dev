@@ -632,7 +632,7 @@ export class Application {
         window.webContents.once('did-finish-load', () => {
             window.webContents.executeJavaScript(`
                 if (document.title) {
-                    document.title = 'AI Assistant - Tlink';
+                    document.title = 'AI Assistant - NexTerm';
                 }
             `)
         })

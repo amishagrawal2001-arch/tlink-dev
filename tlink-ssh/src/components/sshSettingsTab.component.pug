@@ -64,10 +64,10 @@ h3 SSH
 .form-line
     .header
         .title(translate) Auto-import from ~/.ssh/config
-        .description(translate) Automatically re-import SSH profiles when your SSH config file changes.
+        .description(translate) Automatically re-import SSH profiles when your SSH config file changes (checks every 30s).
     toggle(
         [(ngModel)]='config.store.ssh.autoImportConfig',
-        (ngModelChange)='config.save()',
+        (ngModelChange)='onAutoImportChanged()',
     )
 
 .form-line
@@ -82,5 +82,76 @@ h3 SSH
         i.fas.fa-sync.me-1(*ngIf='!reimporting')
         i.fas.fa-spinner.fa-spin.me-1(*ngIf='reimporting')
         span(translate) Re-import Now
+
+h3.mt-4(translate) Saved Credentials
+.text-muted.mb-3(translate) Storage backend: {{storageBackend}}
+
+.form-line(*ngIf='loadingCredentials')
+    .header
+        .title
+            i.fas.fa-spinner.fa-spin.me-2
+            span(translate) Loading saved credentials...
+
+.form-line(*ngIf='!loadingCredentials && savedCredentials.length === 0')
+    .header
+        .title(translate) No saved passwords
+        .description(translate) Passwords will appear here when you check "Remember" during connection.
+
+.list-group.mb-3(*ngIf='!loadingCredentials && savedCredentials.length > 0')
+    .list-group-item.d-flex.align-items-center(*ngFor='let entry of savedCredentials')
+        i.fas.fa-key.text-muted.me-3
+        .me-auto
+            strong {{entry.name}}
+        button.btn.btn-sm.btn-outline-danger((click)='forgetCredential(entry)')
+            i.fas.fa-trash-alt.me-1
+            span(translate) Forget
+
+.form-line(*ngIf='vaultEnabled')
+    .header
+        .title(translate) Migrate Passwords to Vault
+        .description(translate) Move all passwords from the system keychain to the encrypted vault.
+    button.btn.btn-outline-primary(
+        (click)='migrateToVault()',
+        [disabled]='migrating',
+    )
+        i.fas.fa-spinner.fa-spin.me-1(*ngIf='migrating')
+        i.fas.fa-lock.me-1(*ngIf='!migrating')
+        span(translate) {{ migrating ? 'Migrating...' : 'Migrate Now' }}
+    small.ms-3.text-muted(*ngIf='migrationResult') {{migrationResult}}
+
+h3.mt-4(translate) Profile Cleanup
+
+.form-line(*ngIf='scanningDuplicates')
+    .header
+        .title
+            i.fas.fa-spinner.fa-spin.me-2
+            span(translate) Scanning for duplicates...
+
+.form-line(*ngIf='!scanningDuplicates && duplicateGroups.length === 0')
+    .header
+        .title(translate) No duplicate profiles found
+        .description(translate) All SSH profiles have unique host/user/port combinations.
+
+.mb-3(*ngFor='let group of duplicateGroups')
+    .text-muted.mb-1 {{group.key}}
+    .list-group
+        .list-group-item.d-flex.align-items-center(*ngFor='let profile of group.profiles')
+            i.fas.fa-server.text-muted.me-3
+            .me-auto
+                strong {{profile.name}}
+                small.text-muted.ms-2 {{profile.group ? profile.group : 'Ungrouped'}}
+            button.btn.btn-sm.btn-outline-danger(
+                (click)='removeDuplicate(group, profile)',
+                *ngIf='group.profiles.length > 1'
+            )
+                i.fas.fa-trash-alt.me-1
+                span(translate) Remove
+
+button.btn.btn-outline-secondary.mb-3(
+    (click)='scanForDuplicates()',
+    [disabled]='scanningDuplicates',
+)
+    i.fas.fa-search.me-1
+    span(translate) Rescan
 
 .alert.alert-info(translate) SSH connection management is now done through the "Profiles & connections" tab

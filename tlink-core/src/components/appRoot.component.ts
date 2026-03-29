@@ -100,6 +100,7 @@ export class AppRootComponent implements OnInit {
     updatesAvailable = false
     activeTransfers: FileTransfer[] = []
     transfersFloating = window.localStorage['transfersFloating'] === '1'
+    showServerSettings = false
     sidePanelVisible = false
     sidePanelComponent: Type<any> | null = null
     sidePanelWidth = 240
@@ -648,6 +649,7 @@ export class AppRootComponent implements OnInit {
         this.config.ready$.toPromise().then(() => {
             this.ready = true
             this.app.emitReady()
+
         })
 
         // Check initial WebSocket server status
@@ -686,7 +688,7 @@ export class AppRootComponent implements OnInit {
         if (this.hasVerticalTabs()) {
             return '*'
         }
-        return this.config.store.appearance.flexTabs ? '*' : '200px'
+        return (this.config.store.appearance.flexTabs ?? true) ? '*' : '200px'
     }
 
     onTabsReordered (event: CdkDragDrop<BaseTabComponent[]>) {

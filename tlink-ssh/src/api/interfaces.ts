@@ -37,6 +37,8 @@ export interface SSHProfileOptions extends LoginScriptsOptions {
     httpProxyHost?: string
     httpProxyPort?: number
     reuseSession?: boolean
+    authMethodOrder?: string[]
+    sftpBookmarks?: string[]
     input: InputProcessingOptions,
 }
 

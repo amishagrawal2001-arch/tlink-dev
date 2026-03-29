@@ -42,7 +42,7 @@ if (npmStrictSSL && !process.env.NPM_CONFIG_STRICT_SSL) {
     process.env.NPM_CONFIG_STRICT_SSL = npmStrictSSL
 }
 
-const appName = 'Tlink'
+const appName = 'NexTerm'
 app.setName(appName)
 if (process.platform === 'darwin') {
     app.setAboutPanelOptions({ applicationName: appName })
@@ -88,7 +88,7 @@ const shouldIsolateSecondaryPackagedProfile = (): boolean => {
         return true
     }
     const executablePath = path.resolve(app.getPath('exe'))
-    return process.platform === 'darwin' && !executablePath.startsWith('/Applications/Tlink.app/')
+    return process.platform === 'darwin' && !executablePath.startsWith('/Applications/NexTerm.app/')
 }
 
 if (shouldIsolateDevProfile()) {

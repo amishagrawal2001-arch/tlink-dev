@@ -176,6 +176,13 @@
     .date {
         width: 200px;
     }
+
+    .transfer-progress {
+        flex: none;
+        max-height: 120px;
+        overflow-y: auto;
+        background: rgba(0, 0, 0, 0.15);
+    }
 }
 
 .btn-link svg {
