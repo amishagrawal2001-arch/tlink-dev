@@ -97,8 +97,66 @@ export default async function afterPack (context) {
         }
     }
 
+    // Sign bundled extras (FreeRDP, fish) before the app-level signature
+    await signBundledExtras(appPath)
+
     if (!await isSignatureValid(appPath)) {
         console.log('No valid signing identity found, applying ad-hoc signature')
         await execFileAsync('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', appPath])
     }
+}
+
+async function signBundledExtras (appPath) {
+    const resourcesPath = path.join(appPath, 'Contents', 'Resources')
+    const extrasPath = path.join(resourcesPath, 'extras')
+    if (!fs.existsSync(extrasPath)) {
+        return
+    }
+
+    console.log('Signing bundled extras...')
+
+    // Sign all dylibs first (dependencies must be signed before the binary)
+    const dylibs = findFiles(extrasPath, '.dylib')
+    for (const dylib of dylibs) {
+        try {
+            await execFileAsync('/usr/bin/codesign', ['--force', '--sign', '-', dylib])
+            console.log(`  Signed: ${path.relative(resourcesPath, dylib)}`)
+        } catch (e) {
+            console.warn(`  Warning: failed to sign ${dylib}: ${e.message}`)
+        }
+    }
+
+    // Sign executables
+    const executables = [
+        path.join(extrasPath, 'freerdp', 'mac', 'sdl-freerdp'),
+        path.join(extrasPath, 'freerdp', 'mac', 'xfreerdp'),
+        path.join(extrasPath, 'fish', 'mac', 'fish'),
+    ]
+    for (const exe of executables) {
+        if (fs.existsSync(exe)) {
+            try {
+                await execFileAsync('/usr/bin/codesign', ['--force', '--sign', '-', exe])
+                console.log(`  Signed: ${path.relative(resourcesPath, exe)}`)
+            } catch (e) {
+                console.warn(`  Warning: failed to sign ${exe}: ${e.message}`)
+            }
+        }
+    }
+}
+
+function findFiles (dir, ext) {
+    const results = []
+    try {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const fullPath = path.join(dir, entry.name)
+            if (entry.isDirectory()) {
+                results.push(...findFiles(fullPath, ext))
+            } else if (entry.name.endsWith(ext)) {
+                results.push(fullPath)
+            }
+        }
+    } catch {
+        // skip inaccessible directories
+    }
+    return results
 }
