@@ -688,7 +688,7 @@ export class AppRootComponent implements OnInit {
         if (this.hasVerticalTabs()) {
             return '*'
         }
-        return (this.config.store.appearance.flexTabs ?? true) ? '*' : '200px'
+        return this.config.store.appearance.flexTabs ? '*' : '200px'
     }
 
     onTabsReordered (event: CdkDragDrop<BaseTabComponent[]>) {
