@@ -7,4 +7,7 @@ import config from '../webpack.plugin.config.mjs'
 export default () => config({
     name: 'core',
     dirname: __dirname,
+    alias: {
+        '../../tlink-license-client': path.resolve(__dirname, '..', 'tlink-license-client'),
+    },
 })
