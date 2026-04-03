@@ -131,7 +131,7 @@ export class Window {
 
         // Allow license server connections by relaxing CSP
         this.window.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-            const csp = "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src 'self' http://localhost:* https://* ws: wss:; img-src 'self' data: blob: https:; font-src 'self' data:; media-src 'self' data: blob:;"
+            const csp = 'default-src \'self\' \'unsafe-inline\' \'unsafe-eval\' data: blob:; connect-src \'self\' http://localhost:* https://* ws: wss:; img-src \'self\' data: blob: https:; font-src \'self\' data:; media-src \'self\' data: blob:;'
             callback({
                 responseHeaders: {
                     ...details.responseHeaders,
