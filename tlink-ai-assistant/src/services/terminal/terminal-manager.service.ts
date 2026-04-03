@@ -150,7 +150,7 @@ export class TerminalManagerService {
         this.logger.info('Getting all terminals', {
             topLevelTabs: allTabs.length,
             foundTerminals: terminals.length,
-            terminalTitles: terminals.map(t => t.title)
+            terminalTitles: terminals.map(t => (t as any).title)
         });
 
         return terminals;
@@ -163,7 +163,7 @@ export class TerminalManagerService {
         const activeTerminal = this.getActiveTerminal();
         return this.getAllTerminals().map((terminal, index) => ({
             id: `terminal-${index}`,
-            title: terminal.title || `Terminal ${index + 1}`,
+            title: (terminal as any).title || `Terminal ${index + 1}`,
             isActive: terminal === activeTerminal,
             cwd: this.getTerminalCwd(terminal)
         }));
@@ -194,7 +194,7 @@ export class TerminalManagerService {
                 hasSession: !!(terminal as any).session,
                 hasFrontend: !!(terminal as any).frontend,
                 hasSendInput: typeof terminal.sendInput === 'function',
-                terminalTitle: terminal.title
+                terminalTitle: (terminal as any).title
             });
 
             // Prefer using sendInput (standard API)
@@ -464,7 +464,7 @@ export class TerminalManagerService {
 
             this.logger.info('Focused terminal', {
                 index,
-                title: targetTerminal.title,
+                title: (targetTerminal as any).title,
                 isInSplitTab: !!splitTabRef
             });
 
@@ -886,7 +886,7 @@ export class TerminalManagerService {
     // ==================== 私有辅助方法 ====================
 
     private getTerminalId(terminal: TerminalTab): string {
-        return terminal.title || `terminal-${Math.random().toString(36).substr(2, 9)}`;
+        return (terminal as any).title || `terminal-${Math.random().toString(36).substr(2, 9)}`;
     }
 
     private detectOutputType(data: string): 'output' | 'command' | 'error' | 'prompt' {
