@@ -264,6 +264,18 @@ title-bar(
                         rect(x='3.5', y='8.5', width='3', height='2.5', rx='0.5', fill='currentColor')
                         rect(x='8', y='8.5', width='3', height='2.5', rx='0.5', fill='currentColor')
             .shortcut-spacer
+                .license-dock-banner(
+                    *ngIf='licenseSvc.licenseStatus === "trial" || licenseSvc.licenseStatus === "active"',
+                    (click)='showLicenseActivation = true'
+                )
+                    span.license-dock-badge(
+                        [class.dock-trial]='licenseSvc.licenseStatus === "trial"',
+                        [class.dock-pro]='licenseSvc.licenseTier === "pro" && licenseSvc.licenseStatus === "active"',
+                        [class.dock-enterprise]='licenseSvc.licenseTier === "enterprise" && licenseSvc.licenseStatus === "active"'
+                    )
+                        ng-container(*ngIf='licenseSvc.licenseStatus === "trial"') Trial: {{ licenseSvc.trialDaysRemaining }}d
+                        ng-container(*ngIf='licenseSvc.licenseStatus === "active"') {{ licenseSvc.tierDisplayName }}
+                    span.license-dock-action(*ngIf='licenseSvc.licenseStatus === "trial"')  Upgrade
             .shortcut-toolbar(*ngIf='rightToolbarButtons?.length || updatesAvailable')
                 button.btn.btn-sm.btn-icon.shortcut-icon-button.toolbar-icon-button(
                     *ngFor='let button of rightToolbarButtons',
@@ -278,5 +290,7 @@ title-bar(
                     [ngbTooltip]='"Update available - Click to install"|translate',
                     (click)='updater.update()'
                 ) !{require('../icons/gift.svg')}
+tlink-activation-dialog([visible]='showLicenseActivation', (activated)='showLicenseActivation = false', (closed)='showLicenseActivation = false')
+tlink-admin-panel([visible]='showLicenseAdmin', (closed)='showLicenseAdmin = false')
 tlink-server-settings([visible]='showServerSettings', (closed)='showServerSettings = false')
 ng-template(ngbModalContainer)

@@ -19,6 +19,7 @@ import {
 
 import { SettingsTabProvider } from '../api'
 import { ReleaseNotesComponent } from './releaseNotesTab.component'
+import { TlinkLicenseService } from '../../../tlink-license-client/src/lib/tlink-license.service'
 
 // Guard against missing core export to avoid runtime crashes
 const BaseTabComponent: any = CoreBaseTabComponent ?? class {}
@@ -40,6 +41,11 @@ export class SettingsTabComponent extends BaseTabComponent {
     checkingForUpdate = false
     updateAvailable = false
     showConfigDefaults = false
+    licenseKeyInput = ''
+    licenseError = ''
+    licenseSuccess = ''
+    serverUrl = ''
+    serverTestResult = ''
     allLanguages = LocaleService.allLanguages
     @HostBinding('class.pad-window-controls') padWindowControls = false
 
@@ -53,11 +59,13 @@ export class SettingsTabComponent extends BaseTabComponent {
         public updater: UpdaterService,
         private app: AppService,
         @Inject(SettingsTabProvider) public settingsProviders: SettingsTabProvider[],
+        public licenseSvc: TlinkLicenseService,
         translate: TranslateService,
         injector: Injector,
     ) {
         super(injector)
         this.setTitle(translate.instant(_('Settings')))
+        this.serverUrl = licenseSvc.serverUrl
         this.settingsProviders = config.enabledServices(this.settingsProviders)
         this.settingsProviders = this.settingsProviders.filter(x => {
             const componentType = x.getComponentType()
@@ -139,5 +147,42 @@ export class SettingsTabComponent extends BaseTabComponent {
         this.app.openNewTabRaw({
             type: ReleaseNotesComponent as any,
         })
+    }
+
+    async activateLicense () {
+        this.licenseError = ''
+        this.licenseSuccess = ''
+        if (!this.licenseKeyInput.trim()) {
+            this.licenseError = 'Please enter a license key'
+            return
+        }
+        const result = await this.licenseSvc.activateLicense(this.licenseKeyInput.trim())
+        if (result.success) {
+            this.licenseSuccess = result.message || 'License activated successfully!'
+            this.licenseKeyInput = ''
+        } else {
+            this.licenseError = result.message || 'Activation failed'
+        }
+    }
+
+    deactivateLicense () {
+        this.licenseSvc.deactivateLicense()
+        this.licenseSuccess = ''
+        this.licenseError = ''
+    }
+
+    async testServerConnection () {
+        this.serverTestResult = 'Testing...'
+        try {
+            const result = await this.licenseSvc.testServerConnection(this.serverUrl)
+            this.serverTestResult = result.reachable ? `connected (${result.latencyMs}ms)` : `failed: ${result.message}`
+        } catch {
+            this.serverTestResult = 'Connection failed'
+        }
+    }
+
+    saveServerUrl () {
+        this.licenseSvc.serverUrl = this.serverUrl
+        localStorage.setItem('tlink-license-server-url', this.serverUrl)
     }
 }

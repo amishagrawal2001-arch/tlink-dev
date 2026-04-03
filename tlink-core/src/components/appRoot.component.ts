@@ -25,6 +25,7 @@ import { AppService, BottomPanelRegistration, BottomPanelService, Command, Comma
 import { TabsService } from '../services/tabs.service'
 import { SessionSharingService } from '../services/sessionSharing.service'
 import { CodeEditorTabComponent } from './codeEditorTab.component'
+import { TlinkLicenseService } from '../../../tlink-license-client/src/lib/tlink-license.service'
 
 type SplitDirection = 'r' | 'l' | 't' | 'b'
 type LeftDockDropTarget = {
@@ -100,6 +101,8 @@ export class AppRootComponent implements OnInit {
     updatesAvailable = false
     activeTransfers: FileTransfer[] = []
     transfersFloating = window.localStorage['transfersFloating'] === '1'
+    showLicenseActivation = false
+    showLicenseAdmin = false
     showServerSettings = false
     sidePanelVisible = false
     sidePanelComponent: Type<any> | null = null
@@ -200,6 +203,7 @@ export class AppRootComponent implements OnInit {
         private notifications: NotificationsService,
         private sessionSharing: SessionSharingService,
         @Inject(CLIHandler) @Optional() private cliHandlers: CLIHandler[] = [],
+        public licenseSvc: TlinkLicenseService,
         log: LogService,
         private ngbModal: NgbModal,
         _themes: ThemesService,
@@ -650,6 +654,21 @@ export class AppRootComponent implements OnInit {
             this.ready = true
             this.app.emitReady()
 
+            // Check license on first launch
+            setTimeout(() => {
+                const status = this.licenseSvc.checkLicense()
+                if (status === 'expired' || status === 'invalid') {
+                    this.showLicenseActivation = true
+                } else if (!localStorage.getItem('tlink_trial_start') && !localStorage.getItem('tlink_license_key')) {
+                    this.showLicenseActivation = true
+                }
+            }, 2500)
+
+            this.licenseSvc.licenseInfo$.subscribe(() => {
+                setTimeout(() => {
+                    this.showLicenseActivation = this.licenseSvc.licenseStatus === 'expired' || this.licenseSvc.licenseStatus === 'invalid'
+                }, 0)
+            })
         })
 
         // Check initial WebSocket server status
@@ -668,6 +687,18 @@ export class AppRootComponent implements OnInit {
 
         // Backup service will auto-initialize when config is ready
         // No need to manually start it here as it's handled in the constructor
+    }
+
+    @HostListener('document:keydown', ['$event'])
+    onLicenseKeydown (ev: KeyboardEvent) {
+        if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && ev.key === 'L') {
+            ev.preventDefault()
+            this.showLicenseAdmin = !this.showLicenseAdmin
+        }
+    }
+
+    openBuyLicense () {
+        window.open('https://tlink.io/buy', '_blank')
     }
 
     @HostListener('dragover')

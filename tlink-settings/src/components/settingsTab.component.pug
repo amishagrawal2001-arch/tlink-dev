@@ -138,6 +138,102 @@
                 ng-template(ngbNavContent)
                     settings-tab-body([provider]='provider')
 
+        li(ngbNavItem='license')
+            a.d-flex.align-items-center(ngbNavLink)
+                i.fas.fa-fw.fa-key.me-2
+                span(translate) License
+            ng-template(ngbNavContent)
+                .content-box
+                    h3(translate) License Management
+
+                    .license-status-card.mb-4(
+                        [class.card-trial]='licenseSvc.licenseStatus === "trial"',
+                        [class.card-pro]='licenseSvc.licenseTier === "pro" && licenseSvc.licenseStatus === "active"',
+                        [class.card-enterprise]='licenseSvc.licenseTier === "enterprise" && licenseSvc.licenseStatus === "active"',
+                        [class.card-expired]='licenseSvc.licenseStatus !== "trial" && licenseSvc.licenseStatus !== "active"'
+                    )
+                        .d-flex.align-items-center
+                            span.license-tier-badge(
+                                [class.badge-trial]='licenseSvc.licenseStatus === "trial"',
+                                [class.badge-pro]='licenseSvc.licenseTier === "pro" && licenseSvc.licenseStatus === "active"',
+                                [class.badge-enterprise]='licenseSvc.licenseTier === "enterprise" && licenseSvc.licenseStatus === "active"',
+                                [class.badge-expired]='licenseSvc.licenseStatus !== "trial" && licenseSvc.licenseStatus !== "active"'
+                            )
+                                ng-container(*ngIf='licenseSvc.licenseStatus === "active"') {{ licenseSvc.tierDisplayName || 'PRO' }}
+                                ng-container(*ngIf='licenseSvc.licenseStatus === "trial"') TRIAL
+                                ng-container(*ngIf='licenseSvc.licenseStatus !== "trial" && licenseSvc.licenseStatus !== "active"') EXPIRED
+                            span.license-status-text(*ngIf='licenseSvc.licenseStatus === "trial"') ⏱ {{ licenseSvc.trialDaysRemaining }} days remaining
+                            span.license-status-text(*ngIf='licenseSvc.licenseStatus === "active"') Expires: {{ licenseSvc.formattedExpiry }}
+                            span.license-status-text(*ngIf='licenseSvc.licenseStatus !== "trial" && licenseSvc.licenseStatus !== "active"') License expired — please activate
+
+                    h5.mt-4(translate) Activate License
+                    .form-line
+                        .header
+                            .title(translate) License Key
+                            .description(translate) Enter your license key
+                        .license-input-row
+                            input.form-control.license-key-input(
+                                type='text',
+                                [(ngModel)]='licenseKeyInput',
+                                placeholder='TLINK-XX-XXXX-XXXX-XXXX-XXXX'
+                            )
+                            button.btn.btn-primary.license-btn((click)='activateLicense()') Activate
+                    .text-danger.mt-1.small(*ngIf='licenseError') {{ licenseError }}
+                    .text-success.mt-1.small(*ngIf='licenseSuccess') {{ licenseSuccess }}
+
+                    h5.mt-4(translate) License Details
+                    .form-line
+                        .header
+                            .title(translate) Status
+                        span.license-detail-badge(
+                            [class.detail-active]='licenseSvc.licenseStatus === "active"',
+                            [class.detail-trial]='licenseSvc.licenseStatus === "trial"',
+                            [class.detail-expired]='licenseSvc.licenseStatus === "expired"'
+                        ) {{ licenseSvc.licenseStatus | uppercase }}
+
+                    .form-line(*ngIf='licenseSvc.licenseStatus === "active"')
+                        .header
+                            .title(translate) License Key
+                        code.license-code {{ licenseSvc.maskedKey }}
+
+                    .form-line(*ngIf='licenseSvc.licenseStatus === "active"')
+                        .header
+                            .title(translate) Tier
+                        span {{ licenseSvc.tierDisplayName }}
+
+                    .form-line(*ngIf='licenseSvc.licenseStatus === "active"')
+                        .header
+                            .title(translate) Expires
+                        span {{ licenseSvc.formattedExpiry }}
+
+                    .form-line
+                        .header
+                            .title(translate) Machine ID
+                        code.license-code {{ licenseSvc.getMachineId() }}
+
+                    h5.mt-4(translate) License Server
+                    .form-line
+                        .header
+                            .title(translate) Server URL
+                            .description(translate) License server for key validation
+                        .license-input-row
+                            input.form-control(
+                                type='text',
+                                [(ngModel)]='serverUrl',
+                                placeholder='http://localhost:4000'
+                            )
+                            button.btn.btn-secondary.license-btn((click)='testServerConnection()') Test
+                            button.btn.btn-primary.license-btn((click)='saveServerUrl()') Save
+                    .small.mt-1(*ngIf='serverTestResult')
+                        span([class.text-success]='serverTestResult.startsWith("connected")', [class.text-danger]='!serverTestResult.startsWith("connected")') {{ serverTestResult }}
+
+                    .d-flex.gap-3.mt-4
+                        button.btn.btn-outline-danger(
+                            *ngIf='licenseSvc.licenseStatus === "active"',
+                            (click)='deactivateLicense()'
+                        ) Deactivate License
+                        a.btn.btn-outline-primary(href='https://tlink.io/buy', target='_blank') Buy License
+
         li(ngbNavItem='config-file')
             a.d-flex.align-items-center(ngbNavLink)
                 i.fas.fa-fw.fa-code.me-2

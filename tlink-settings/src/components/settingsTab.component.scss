@@ -73,3 +73,115 @@ textarea {
     font-size: 12px;
     min-height: 120px;
 }
+
+.license-status-card {
+    padding: 16px 20px;
+    border-radius: 8px;
+    background: rgba(102, 126, 234, 0.1);
+    border: 1px solid rgba(102, 126, 234, 0.25);
+
+    &.card-trial {
+        background: rgba(217, 119, 6, 0.12);
+        border-color: rgba(217, 119, 6, 0.3);
+    }
+    &.card-pro {
+        background: rgba(37, 99, 235, 0.12);
+        border-color: rgba(37, 99, 235, 0.3);
+    }
+    &.card-enterprise {
+        background: rgba(124, 58, 237, 0.12);
+        border-color: rgba(124, 58, 237, 0.3);
+    }
+    &.card-expired {
+        background: rgba(220, 38, 38, 0.12);
+        border-color: rgba(220, 38, 38, 0.3);
+    }
+}
+
+.license-tier-badge {
+    display: inline-block;
+    padding: 5px 14px;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #fff;
+    &.badge-trial { background: #d97706; }
+    &.badge-pro { background: #2563eb; }
+    &.badge-enterprise { background: #7c3aed; }
+    &.badge-expired { background: #dc2626; }
+}
+
+.license-status-text {
+    margin-left: 12px;
+    font-size: 14px;
+    opacity: 0.8;
+}
+
+.license-input-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.license-key-input {
+    font-family: 'Source Code Pro', monospace;
+    letter-spacing: 1px;
+    flex: 1;
+}
+
+.license-btn {
+    white-space: nowrap;
+    min-width: 80px;
+}
+
+.license-detail-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: #fff;
+    &.detail-active { background: #16a34a; }
+    &.detail-trial { background: #d97706; }
+    &.detail-expired { background: #dc2626; }
+}
+
+.license-code {
+    font-family: 'Source Code Pro', monospace;
+    font-size: 13px;
+    color: #e879a0;
+}
+
+// License form inputs — visible in both light and dark themes
+// Uses currentColor and contrasting background that adapts to any theme
+.license-input-row .form-control,
+.license-key-input {
+    background: var(--bs-tertiary-bg, rgba(128, 128, 128, 0.12)) !important;
+    border: 1.5px solid var(--bs-border-color, rgba(128, 128, 128, 0.3)) !important;
+    color: var(--bs-body-color, currentColor) !important;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+
+    &::placeholder {
+        color: var(--bs-secondary-color, rgba(128, 128, 128, 0.6)) !important;
+        opacity: 1;
+    }
+
+    &:focus {
+        border-color: #667eea !important;
+        box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.25) !important;
+        outline: none;
+    }
+}
+
+// Ensure buttons don't shrink
+.license-btn {
+    flex-shrink: 0;
+}
+
+.license-status-text {
+    color: var(--bs-secondary-color, rgba(128, 128, 128, 0.8));
+}
