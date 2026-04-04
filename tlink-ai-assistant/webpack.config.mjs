@@ -20,5 +20,7 @@ export default () => {
             },
         ],
     })
+    // Ensure tlink-core/tlink-settings typings are resolvable during CI prepackage rebuild
+    cfg.resolve.modules.push(path.resolve(__dirname, '..', 'node_modules'))
     return cfg
 }
