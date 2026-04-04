@@ -1,49 +1,26 @@
 {
+    "extends": "../tsconfig.json",
+    "exclude": ["node_modules", "dist", "typings", "**/*.spec.ts"],
     "compilerOptions": {
-        "target": "ES2020",
-        "module": "commonjs",
-        "lib": ["ES2020", "DOM"],
+        "baseUrl": "src",
         "declaration": true,
         "outDir": "./dist",
         "rootDir": "./src",
-        "strict": true,
-        "esModuleInterop": true,
-        "skipLibCheck": true,
-        "forceConsistentCasingInFileNames": true,
         "noImplicitAny": false,
-        "noImplicitReturns": true,
-        "noImplicitThis": true,
         "noUnusedLocals": false,
         "noUnusedParameters": false,
-        "strictNullChecks": true,
-        "strictFunctionTypes": true,
-        "strictBindCallApply": true,
-        "strictPropertyInitialization": true,
-        "noFallthroughCasesInSwitch": true,
-        "moduleResolution": "node",
-        "experimentalDecorators": true,
-        "emitDecoratorMetadata": true,
         "resolveJsonModule": true,
-        "sourceMap": true,
-        "baseUrl": "./",
         "paths": {
-            "@/*": ["src/*"],
-            "tlink-core": ["../tlink-core/typings"],
-            "tlink-terminal": ["../tlink-terminal/typings"],
-            "tlink-settings": ["../tlink-settings/typings"]
+            "@/*": ["*"]
         },
         "typeRoots": [
             "../types",
+            "../node_modules/@types",
             "node_modules/@types",
             "src/types"
         ]
     },
     "include": [
         "src/index.ts"
-    ],
-    "exclude": [
-        "node_modules",
-        "dist",
-        "**/*.spec.ts"
     ]
 }
