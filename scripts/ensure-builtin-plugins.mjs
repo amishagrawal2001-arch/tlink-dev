@@ -15,7 +15,6 @@ const criticalMainPlugins = new Set([
     'tlink-terminal',
     'tlink-electron',
     'tlink-intellij-bridge',
-    'tlink-ai-assistant',
     'tabby-vscode-agent',
 ])
 
