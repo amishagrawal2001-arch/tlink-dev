@@ -11,7 +11,10 @@
         "noUnusedParameters": false,
         "resolveJsonModule": true,
         "paths": {
-            "@/*": ["*"]
+            "@/*": ["*"],
+            "tlink-core": ["../../tlink-core/typings"],
+            "tlink-terminal": ["../../tlink-terminal/typings"],
+            "tlink-settings": ["../../tlink-settings/typings"]
         },
         "typeRoots": [
             "../types",
