@@ -7,8 +7,9 @@ import { TlinkLicenseConfig, TLINK_LICENSE_CONFIG, DEFAULT_LICENSE_CONFIG } from
   template: `
     <div class="tlink-overlay" *ngIf="visible" (click)="onOverlayClick($event)">
       <div class="tlink-dialog">
-        <button class="tlink-dialog__close" (click)="close()">&times;</button>
-        <h2 class="tlink-dialog__title">Activate License</h2>
+        <button class="tlink-dialog__close" (click)="close()" *ngIf="!blocking">&times;</button>
+        <h2 class="tlink-dialog__title">{{ blocking ? 'License Required' : 'Activate License' }}</h2>
+        <p class="tlink-dialog__subtitle" *ngIf="blocking" style="color: #dc2626; font-size: 13px; margin: -12px 0 16px;">Your license has expired or is invalid. Activate a license or start a trial to continue.</p>
 
         <div class="tlink-dialog__body">
           <label class="tlink-dialog__label">License Key</label>
@@ -200,6 +201,7 @@ import { TlinkLicenseConfig, TLINK_LICENSE_CONFIG, DEFAULT_LICENSE_CONFIG } from
 })
 export class ActivationDialogComponent {
   @Input() visible = false;
+  @Input() blocking = false;
   @Output() activated = new EventEmitter<void>();
   @Output() closed = new EventEmitter<void>();
 
@@ -240,12 +242,18 @@ export class ActivationDialogComponent {
   }
 
   close(): void {
+    if (this.blocking) {
+      return;
+    }
     this.message = '';
     this.keyInput = '';
     this.closed.emit();
   }
 
   onOverlayClick(event: MouseEvent): void {
+    if (this.blocking) {
+      return;
+    }
     if ((event.target as HTMLElement).classList.contains('tlink-overlay')) {
       this.close();
     }

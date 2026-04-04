@@ -290,7 +290,12 @@ title-bar(
                     [ngbTooltip]='"Update available - Click to install"|translate',
                     (click)='updater.update()'
                 ) !{require('../icons/gift.svg')}
-tlink-activation-dialog([visible]='showLicenseActivation', (activated)='showLicenseActivation = false', (closed)='showLicenseActivation = false')
+tlink-activation-dialog(
+    [visible]='showLicenseActivation',
+    [blocking]='licenseSvc.licenseStatus === "expired" || licenseSvc.licenseStatus === "invalid"',
+    (activated)='showLicenseActivation = false',
+    (closed)='showLicenseActivation = false'
+)
 tlink-admin-panel([visible]='showLicenseAdmin', (closed)='showLicenseAdmin = false')
 tlink-server-settings([visible]='showServerSettings', (closed)='showServerSettings = false')
 ng-template(ngbModalContainer)
