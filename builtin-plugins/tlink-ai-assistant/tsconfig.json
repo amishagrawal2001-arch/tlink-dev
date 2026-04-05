@@ -1,0 +1,29 @@
+{
+    "extends": "../tsconfig.json",
+    "exclude": ["node_modules", "dist", "typings", "**/*.spec.ts"],
+    "compilerOptions": {
+        "baseUrl": "src",
+        "declaration": true,
+        "outDir": "./dist",
+        "rootDir": "./src",
+        "noImplicitAny": false,
+        "noUnusedLocals": false,
+        "noUnusedParameters": false,
+        "resolveJsonModule": true,
+        "paths": {
+            "@/*": ["*"],
+            "tlink-core": ["../../tlink-core/typings"],
+            "tlink-terminal": ["../../tlink-terminal/typings"],
+            "tlink-settings": ["../../tlink-settings/typings"]
+        },
+        "typeRoots": [
+            "../types",
+            "../node_modules/@types",
+            "node_modules/@types",
+            "src/types"
+        ]
+    },
+    "include": [
+        "src/index.ts"
+    ]
+}
