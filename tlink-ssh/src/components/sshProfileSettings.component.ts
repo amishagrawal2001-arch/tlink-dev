@@ -36,6 +36,7 @@ export class SSHProfileSettingsComponent {
         { name: 'Purple', value: '#613d7c' },
         { name: 'Red', value: '#d9534f' },
         { name: 'Yellow', value: '#ffd500' },
+        { name: 'Cream', value: '#fdf6e3' },
     ]
     private originalUsername: string|null = null
 

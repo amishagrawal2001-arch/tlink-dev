@@ -1,0 +1,38 @@
+!
+! Cream - A warm, light terminal color scheme
+!
+*.foreground:  #5c5040
+*.background:  #fdf6e3
+*.cursorColor: #5c5040
+!
+! Black
+*.color0:      #3c3226
+*.color8:      #6b5e4e
+!
+! Red
+*.color1:      #c94234
+*.color9:      #e05a4f
+!
+! Green
+*.color2:      #6a8f3c
+*.color10:     #7fac4e
+!
+! Yellow
+*.color3:      #c4960a
+*.color11:     #d4a520
+!
+! Blue
+*.color4:      #3b78a0
+*.color12:     #5096c0
+!
+! Magenta
+*.color5:      #9b59b6
+*.color13:     #b07cc6
+!
+! Cyan
+*.color6:      #2a9d8f
+*.color14:     #45b5a7
+!
+! White
+*.color7:      #eee5d0
+*.color15:     #fdf6e3

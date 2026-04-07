@@ -83,7 +83,7 @@ function makeTabAnimation (dimension: string, size: number) {
     templateUrl: './appRoot.component.pug',
     styleUrls: ['./appRoot.component.scss'],
     animations: [
-        trigger('animateTab', makeTabAnimation('width', 200)),
+        trigger('animateTab', makeTabAnimation('width', 160)),
     ],
 })
 export class AppRootComponent implements OnInit {
@@ -719,7 +719,7 @@ export class AppRootComponent implements OnInit {
         if (this.hasVerticalTabs()) {
             return '*'
         }
-        return this.config.store.appearance.flexTabs ? '*' : '200px'
+        return this.config.store.appearance.flexTabs ? '*' : '160px'
     }
 
     onTabsReordered (event: CdkDragDrop<BaseTabComponent[]>) {

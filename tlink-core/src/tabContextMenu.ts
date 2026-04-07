@@ -157,6 +157,42 @@ export class CommonOptionsContextMenu extends TabContextMenuItemProvider {
                     },
                 })
             }
+
+            items.push({ type: 'separator' })
+
+            const tabIndex = this.app.tabs.indexOf(tab)
+            const tabsToRight = this.app.tabs.length - tabIndex - 1
+
+            items.push({
+                label: this.translate.instant('Close'),
+                click: () => this.app.closeTab(tab, true),
+            })
+
+            if (this.app.tabs.length > 1) {
+                items.push({
+                    label: this.translate.instant('Close Other Tabs'),
+                    click: () => {
+                        for (const t of [...this.app.tabs]) {
+                            if (t !== tab) {
+                                this.app.closeTab(t, true)
+                            }
+                        }
+                    },
+                })
+            }
+
+            if (tabsToRight > 0) {
+                items.push({
+                    label: this.translate.instant('Close Tabs to the Right'),
+                    sublabel: `${tabsToRight}`,
+                    click: () => {
+                        const idx = this.app.tabs.indexOf(tab)
+                        for (const t of [...this.app.tabs.slice(idx + 1)]) {
+                            this.app.closeTab(t, true)
+                        }
+                    },
+                })
+            }
         }
         return items
     }

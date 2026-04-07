@@ -63,6 +63,7 @@ export const TAB_COLORS = [
     { name: _('Purple'), value: '#613d7c' },
     { name: _('Red'), value: '#d9534f' },
     { name: _('Yellow'), value: '#ffd500' },
+    { name: _('Cream'), value: '#fdf6e3' },
 ]
 
 export function serializeFunction <T extends () => Promise<any>> (fn: T): T {
