@@ -62,7 +62,7 @@
     "cross-env": "7.0.3",
     "crypto-js": "^4.2.0",
     "css-loader": "^6.7.3",
-    "deep-equal": "2.0.5",
+    "deep-equal": "2.2.3",
     "deepmerge": "^4.3.1",
     "electron": "38",
     "electron-builder": "^26.0",
