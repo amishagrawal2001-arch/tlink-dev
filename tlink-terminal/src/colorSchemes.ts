@@ -5,7 +5,7 @@ import { TerminalColorSchemeProvider } from './api/colorSchemeProvider'
 @Injectable({ providedIn: 'root' })
 export class DefaultColorSchemes extends TerminalColorSchemeProvider {
     static defaultColorScheme: TerminalColorScheme = {
-        name: 'Tlink Default',
+        name: 'NexTerm Default',
         foreground: '#cacaca',
         background: '#171717',
         cursor: '#bbbbbb',
@@ -32,7 +32,7 @@ export class DefaultColorSchemes extends TerminalColorSchemeProvider {
     }
 
     static defaultLightColorScheme: TerminalColorScheme = {
-        name: 'Tlink Default Light',
+        name: 'NexTerm Default Light',
         foreground: '#4d4d4c',
         background: '#ffffff',
         cursor: '#4d4d4c',
