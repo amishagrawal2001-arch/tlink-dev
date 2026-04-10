@@ -434,6 +434,14 @@ jobs:
       run: node scripts/build-windows.mjs
       env:
         ARCH: ${{matrix.arch}}
+        WIN_CSC_LINK: ""
+        WIN_CSC_KEY_PASSWORD: ""
+        CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        SM_KEYPAIR_ALIAS: ""
+        SM_CODE_SIGNING_CERT_SHA1_HASH: ""
+        SM_PUBLISHER_NAME: ""
+        SM_API_KEY: ""
+        SM_HOST: ""
 
     - name: Upload symbols
       run: |
