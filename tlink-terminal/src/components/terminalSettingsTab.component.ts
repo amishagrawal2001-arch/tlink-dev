@@ -1,6 +1,7 @@
 import { Component, HostBinding } from '@angular/core'
 import { ConfigService, HostAppService, Platform, PlatformService, altKeyName, metaKeyName } from 'tlink-core'
 import type { TerminalButtonBarButton } from '../api/interfaces'
+import { DEFAULT_OUTPUT_HIGHLIGHT_RULES } from '../outputHighlighting'
 
 /** @hidden */
 @Component({
@@ -96,5 +97,24 @@ export class TerminalSettingsTabComponent {
         if (changed) {
             this.config.save()
         }
+    }
+
+    addHighlightRule (): void {
+        this.config.store.terminal.outputHighlighting.rules.push({
+            pattern: '',
+            flags: 'gi',
+            color: '#ff0000',
+        })
+        this.config.save()
+    }
+
+    removeHighlightRule (index: number): void {
+        this.config.store.terminal.outputHighlighting.rules.splice(index, 1)
+        this.config.save()
+    }
+
+    resetHighlightRules (): void {
+        this.config.store.terminal.outputHighlighting.rules = [...DEFAULT_OUTPUT_HIGHLIGHT_RULES]
+        this.config.save()
     }
 }

@@ -246,29 +246,57 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
         ng-template(ngbNavContent)
             .form-line(ng:if='hostApp.platform !== Platform.Web')
                 .header
-                    .title(translate) X11 forwarding
+                    .title(translate)
+                        | X11 forwarding
+                        i.fas.fa-question-circle.ms-2(
+                            [ngbTooltip]='"Forward graphical (X11) applications from the remote server to your local display. Requires an X server (XQuartz on macOS)."',
+                            container='body',
+                            style='font-size: 10px; opacity: 0.4; cursor: help;'
+                        )
                 toggle([(ngModel)]='profile.options.x11')
 
             .form-line(ng:if='hostApp.platform !== Platform.Web')
                 .header
-                    .title(translate) Agent forwarding
+                    .title(translate)
+                        | Agent forwarding
+                        i.fas.fa-question-circle.ms-2(
+                            [ngbTooltip]='"Forwards your local SSH agent to the remote server, allowing you to use your local SSH keys on the remote host (e.g. for git operations or jumping to other servers)."',
+                            container='body',
+                            style='font-size: 10px; opacity: 0.4; cursor: help;'
+                        )
                 toggle([(ngModel)]='profile.options.agentForward')
 
             .form-line
                 .header
-                    .title(translate) Skip MoTD/banner
-                    .description(translate) Will prevent the SSH greeting from showing up
+                    .title(translate)
+                        | Skip MoTD/banner
+                        i.fas.fa-question-circle.ms-2(
+                            [ngbTooltip]='"Hides the Message of the Day or login banner that the SSH server sends before the shell prompt."',
+                            container='body',
+                            style='font-size: 10px; opacity: 0.4; cursor: help;'
+                        )
                 toggle([(ngModel)]='profile.options.skipBanner')
 
             .form-line
                 .header
-                    .title(translate) Reuse session for multiple tabs
-                    .description Multiplex multiple shells through the same connection
+                    .title(translate)
+                        | Reuse session for multiple tabs
+                        i.fas.fa-question-circle.ms-2(
+                            [ngbTooltip]='"Opens multiple shell tabs over a single SSH connection (multiplexing). Faster tab opening but all tabs share one connection."',
+                            container='body',
+                            style='font-size: 10px; opacity: 0.4; cursor: help;'
+                        )
                 toggle([(ngModel)]='profile.options.reuseSession')
 
             .form-line.align-items-start(*ngIf='!profile.options.auth')
                 .header
-                    .title(translate) Authentication Order
+                    .title(translate)
+                        | Authentication Order
+                        i.fas.fa-question-circle.ms-2(
+                            [ngbTooltip]='"The order in which authentication methods are tried when connecting. Move methods up/down to change priority. Only used when auth method is set to Auto."',
+                            container='body',
+                            style='font-size: 10px; opacity: 0.4; cursor: help;'
+                        )
                     .description(translate) Priority order when auto-detecting auth method
                 .w-75
                     .list-group

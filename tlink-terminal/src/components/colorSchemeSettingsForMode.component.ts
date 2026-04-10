@@ -71,9 +71,13 @@ export class ColorSchemeSettingsForModeComponent {
     }
 
     saveScheme () {
-        this.customColorSchemes = this.customColorSchemes.filter(x => x.name !== this.config.store.terminal[this.configKey].name)
-        this.customColorSchemes.push(this.config.store.terminal[this.configKey])
-        this.config.store.terminal.customColorSchemes = this.customColorSchemes
+        // Deep clone and mark as custom so ConfigProxy doesn't clean it up
+        const scheme = JSON.parse(JSON.stringify(this.config.store.terminal[this.configKey]))
+        scheme.__saved = Date.now()
+        this.config.store.terminal[this.configKey] = scheme
+        this.customColorSchemes = this.customColorSchemes.filter(x => x.name !== scheme.name)
+        this.customColorSchemes.push(scheme)
+        this.config.store.terminal.customColorSchemes = [...this.customColorSchemes]
         this.config.save()
         this.cancelEditing()
         this.update()

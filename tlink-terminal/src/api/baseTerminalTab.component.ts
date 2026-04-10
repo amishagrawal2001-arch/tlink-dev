@@ -400,6 +400,14 @@ export class BaseTerminalTabComponent<P extends BaseTerminalProfile> extends Bas
             this.configure()
         })
 
+        this.subscribeUntilDestroyed(this.config.changed$, () => {
+            if (this.frontend) {
+                // Force full re-configure including color scheme
+                (this.frontend as any).configuredTheme = null
+                this.frontend.configure(this.profile)
+            }
+        })
+
         // Check if the the WebGL renderer is compatible with xterm.js:
         // - https://github.com/Eugeny/tlink/issues/8884
         // - https://github.com/microsoft/vscode/issues/190195

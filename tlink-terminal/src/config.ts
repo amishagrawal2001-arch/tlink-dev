@@ -58,7 +58,7 @@ export class TerminalConfigProvider extends ConfigProvider {
             disableAlternateScreen: true,
             drawBoldTextInBrightColors: true,
             outputHighlighting: {
-                enabled: false,
+                enabled: true,
                 skipIfAnsiPresent: true,
                 rules: DEFAULT_OUTPUT_HIGHLIGHT_RULES,
             },

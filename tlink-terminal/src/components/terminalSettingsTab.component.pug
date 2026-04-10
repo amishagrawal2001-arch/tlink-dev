@@ -3,7 +3,13 @@ div
 
     .form-line(*ngIf='hostApp.platform !== Platform.Web')
         .header
-            .title(translate) Frontend
+            .title(translate)
+                | Frontend
+                i.fas.fa-question-circle.ms-2(
+                    [ngbTooltip]='"WebGL is faster but may not work on all systems. Canvas is the fallback."',
+                    container='body',
+                    style='font-size: 10px; opacity: 0.4; cursor: help;'
+                )
             .description(translate) Switches terminal frontend implementation (experimental)
 
         select.form-control(
@@ -15,7 +21,13 @@ div
 
     .form-line
         .header
-            .title(translate) Scrollback
+            .title(translate)
+                | Scrollback
+                i.fas.fa-question-circle.ms-2(
+                    [ngbTooltip]='"How many lines of terminal output to keep in memory. Higher values use more RAM. Default: 25000"',
+                    container='body',
+                    style='font-size: 10px; opacity: 0.4; cursor: help;'
+                )
             .description(translate) Number of lines kept in the buffer
         input.form-control(
             type='number',
@@ -70,7 +82,13 @@ div
 
     .form-line
         .header
-            .title(translate) Draw bold text in bright colors
+            .title(translate)
+                | Draw bold text in bright colors
+                i.fas.fa-question-circle.ms-2(
+                    [ngbTooltip]='"When enabled, bold text uses the bright variant of its ANSI color (colors 8-15) instead of the normal variant (colors 0-7)."',
+                    container='body',
+                    style='font-size: 10px; opacity: 0.4; cursor: help;'
+                )
         toggle(
             [(ngModel)]='config.store.terminal.drawBoldTextInBrightColors',
             (ngModelChange)='config.save()'
@@ -78,12 +96,70 @@ div
 
     .form-line
         .header
-            .title(translate) Output keyword highlighting
-            .description(translate) Apply client-side colors to matched words when output has no ANSI colors
+            .title(translate)
+                | Output keyword highlighting
+                i.fas.fa-question-circle.ms-2(
+                    [ngbTooltip]='"Applies color to keywords like UP, DOWN, ERROR in terminal output using regex patterns. Colors are applied client-side and do not affect the actual data."',
+                    container='body',
+                    style='font-size: 10px; opacity: 0.4; cursor: help;'
+                )
+            .description(translate) Apply client-side colors to matched words in terminal output
         toggle(
             [(ngModel)]='config.store.terminal.outputHighlighting.enabled',
             (ngModelChange)='config.save()'
         )
+
+    div(*ngIf='config.store.terminal.outputHighlighting.enabled', style='padding: 0 16px;')
+        .d-flex.align-items-center.mb-2
+            span(style='font-size: 12px; font-weight: 600; opacity: 0.7;', translate) Highlighting Rules
+            .ms-auto
+                button.btn.btn-link.btn-sm.p-0.me-3((click)='resetHighlightRules()', style='font-size: 11px; opacity: 0.5;')
+                    span(translate) Reset
+                button.btn.btn-link.btn-sm.p-0((click)='addHighlightRule()', style='font-size: 11px;')
+                    i.fas.fa-plus.me-1
+                    span(translate) Add
+
+        div(style='display: flex; flex-direction: column; gap: 2px;')
+            .d-flex.align-items-center(
+                *ngFor='let rule of config.store.terminal.outputHighlighting.rules; let i = index',
+                style='gap: 6px; padding: 3px 0;'
+            )
+                .color-swatch-wrapper(style='position: relative; width: 20px; height: 20px; flex-shrink: 0;')
+                    div(
+                        [style.background-color]='rule.color',
+                        style='width: 100%; height: 100%; border-radius: 4px; border: 1px solid rgba(255,255,255,0.15);'
+                    )
+                    input(
+                        type='color',
+                        [(ngModel)]='rule.color',
+                        (ngModelChange)='config.save()',
+                        style='position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;'
+                    )
+                input.form-control.form-control-sm(
+                    type='text',
+                    [(ngModel)]='rule.pattern',
+                    (ngModelChange)='config.save()',
+                    style='flex: 1; font-family: "SF Mono", monospace; font-size: 11px; padding: 2px 6px; height: 24px; background: rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.08); border-radius: 3px;'
+                )
+                input.form-control.form-control-sm(
+                    type='text',
+                    [(ngModel)]='rule.flags',
+                    (ngModelChange)='config.save()',
+                    [ngbTooltip]='"g = all matches, i = case insensitive, m = multiline"',
+                    container='body',
+                    style='width: 32px; font-family: monospace; font-size: 11px; padding: 2px 4px; height: 24px; text-align: center; background: rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.08); border-radius: 3px;'
+                )
+                span(
+                    [style.color]='rule.color',
+                    style='font-size: 10px; font-weight: 700; font-family: monospace; width: 16px; text-align: center;'
+                ) Aa
+                button.btn.btn-sm.p-0(
+                    (click)='removeHighlightRule(i)',
+                    style='width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; background: transparent; border: none; color: inherit; opacity: 0.2; font-size: 10px;',
+                    onmouseenter='this.style.opacity="1"; this.style.color="#dc3545"',
+                    onmouseleave='this.style.opacity="0.2"; this.style.color="inherit"'
+                )
+                    i.fas.fa-times
 
     .form-line
         .header
@@ -254,7 +330,13 @@ div.mt-4
 
     .form-line
         .header
-            .title(translate) Copy on select
+            .title(translate)
+                | Copy on select
+                i.fas.fa-question-circle.ms-2(
+                    [ngbTooltip]='"Automatically copies selected text to clipboard without pressing Cmd+C / Ctrl+C"',
+                    container='body',
+                    style='font-size: 10px; opacity: 0.4; cursor: help;'
+                )
         toggle(
             [(ngModel)]='config.store.terminal.copyOnSelect',
             (ngModelChange)='config.save()',
@@ -270,7 +352,13 @@ div.mt-4
 
     .form-line
         .header
-            .title(translate) Bracketed paste (requires shell support)
+            .title(translate)
+                | Bracketed paste
+                i.fas.fa-question-circle.ms-2(
+                    [ngbTooltip]='"Wraps pasted text in escape sequences so the shell knows it was pasted, not typed. Prevents accidental execution of multi-line commands. Requires shell support (bash 4.4+, zsh, fish)."',
+                    container='body',
+                    style='font-size: 10px; opacity: 0.4; cursor: help;'
+                )
             .description(translate) Prevents accidental execution of pasted commands
         toggle(
             [(ngModel)]='config.store.terminal.bracketedPaste',
