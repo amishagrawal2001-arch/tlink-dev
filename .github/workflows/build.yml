@@ -141,6 +141,17 @@ jobs:
         name: macOS .zip (${{matrix.arch}})
         path: artifact-zip
 
+    - name: Upload to GitHub Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      with:
+        draft: true
+        files: |
+          artifact-dmg/*
+          artifact-zip/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   Linux-Build:
     runs-on: ${{matrix.os}}
     needs: Lint
@@ -309,6 +320,20 @@ jobs:
         path: tlink-web.tar.gz
       if: matrix.build-arch == 'x64'
 
+    - name: Upload to GitHub Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      with:
+        draft: true
+        files: |
+          dist/*.AppImage
+          dist/*.deb
+          dist/*.rpm
+          dist/*.pacman
+          dist/*.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   Windows-Build:
     runs-on: windows-latest
     needs: Lint
@@ -434,3 +459,14 @@ jobs:
       with:
         name: Windows portable build (${{matrix.arch}})
         path: artifact-portable
+
+    - name: Upload to GitHub Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      with:
+        draft: true
+        files: |
+          artifact-setup/*
+          artifact-portable/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
