@@ -9,6 +9,9 @@ on:
       - '**/*.md'
       - 'docs/**'
 
+permissions:
+  contents: write
+
 concurrency:
   group: package-build-${{ github.ref }}
   cancel-in-progress: true
