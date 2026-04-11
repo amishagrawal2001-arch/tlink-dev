@@ -1,0 +1,23 @@
+!
+! GitHub Dark - GitHub's official dark theme
+!
+*.foreground:  #c9d1d9
+*.background:  #0d1117
+*.cursorColor: #58a6ff
+!
+*.color0:      #484f58
+*.color8:      #6e7681
+*.color1:      #ff7b72
+*.color9:      #ffa198
+*.color2:      #3fb950
+*.color10:     #56d364
+*.color3:      #d29922
+*.color11:     #e3b341
+*.color4:      #58a6ff
+*.color12:     #79c0ff
+*.color5:      #bc8cff
+*.color13:     #d2a8ff
+*.color6:      #39d353
+*.color14:     #56d364
+*.color7:      #b1bac4
+*.color15:     #f0f6fc

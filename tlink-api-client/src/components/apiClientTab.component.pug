@@ -1,0 +1,186 @@
+.api-client-container
+    //- URL Bar
+    .url-bar
+        .method-wrapper
+            select.method-select(
+                [(ngModel)]='method',
+                [class]='method.toLowerCase()'
+            )
+                option(*ngFor='let m of methods', [value]='m') {{m}}
+        input.url-input(
+            type='text',
+            placeholder='Enter request URL...',
+            [(ngModel)]='url',
+            (keydown.enter)='send()'
+        )
+        button.send-btn(
+            (click)='send()',
+            [disabled]='sending || !url.trim()',
+            [class.sending]='sending'
+        )
+            i.fas.fa-spinner.fa-spin(*ngIf='sending')
+            span {{ sending ? 'Sending...' : 'Send' }}
+
+    //- Main Content — Split Pane
+    .main-content
+        //- Request Panel
+        .request-panel
+            .panel-tabs
+                button.panel-tab(
+                    *ngFor='let tab of ["headers", "body", "auth", "collections"]',
+                    [class.active]='activeRequestTab === tab',
+                    (click)='activeRequestTab = tab'
+                )
+                    | {{tab === 'headers' ? 'Headers' : tab === 'body' ? 'Body' : tab === 'auth' ? 'Auth' : 'Collections'}}
+                    span.tab-count(*ngIf='tab === "headers" && activeHeaderCount > 0') {{activeHeaderCount}}
+                    span.tab-count(*ngIf='tab === "collections" && collections.length > 0') {{collections.length}}
+
+            //- Headers
+            .panel-body(*ngIf='activeRequestTab === "headers"')
+                .kv-table
+                    .kv-header
+                        .kv-cell.kv-check
+                        .kv-cell.kv-key Key
+                        .kv-cell.kv-val Value
+                        .kv-cell.kv-action
+                    .kv-row(*ngFor='let h of headers; let i = index')
+                        .kv-cell.kv-check
+                            input(type='checkbox', [(ngModel)]='h.enabled')
+                        .kv-cell.kv-key
+                            input(type='text', placeholder='Header name', [(ngModel)]='h.key')
+                        .kv-cell.kv-val
+                            input(type='text', placeholder='Value', [(ngModel)]='h.value')
+                        .kv-cell.kv-action
+                            button.icon-btn((click)='removeHeader(i)')
+                                i.fas.fa-times
+                .add-row((click)='addHeader()')
+                    i.fas.fa-plus.me-1
+                    | Add header
+
+            //- Body
+            .panel-body(*ngIf='activeRequestTab === "body"')
+                .body-toolbar
+                    button.body-type-btn(
+                        *ngFor='let bt of bodyTypes',
+                        [class.active]='bodyType === bt',
+                        (click)='bodyType = bt'
+                    ) {{bt}}
+                textarea.code-editor(
+                    *ngIf='bodyType !== "none"',
+                    [(ngModel)]='body',
+                    placeholder='{\n  "key": "value"\n}',
+                    spellcheck='false'
+                )
+                .empty-state(*ngIf='bodyType === "none"')
+                    i.fas.fa-ban(style='font-size: 20px; opacity: 0.2;')
+                    .mt-1 This request does not have a body
+
+            //- Auth
+            .panel-body(*ngIf='activeRequestTab === "auth"')
+                .auth-selector
+                    button.body-type-btn(
+                        *ngFor='let at of authTypes',
+                        [class.active]='auth.type === at',
+                        (click)='auth.type = at'
+                    ) {{at === 'none' ? 'No Auth' : at === 'bearer' ? 'Bearer Token' : 'Basic Auth'}}
+                .auth-form(*ngIf='auth.type === "bearer"')
+                    label.field-label Token
+                    input.field-input(type='text', placeholder='Enter bearer token', [(ngModel)]='auth.token')
+                .auth-form(*ngIf='auth.type === "basic"')
+                    .field-group
+                        label.field-label Username
+                        input.field-input(type='text', placeholder='Username', [(ngModel)]='auth.username')
+                    .field-group
+                        label.field-label Password
+                        input.field-input(type='password', placeholder='Password', [(ngModel)]='auth.password')
+                .empty-state(*ngIf='auth.type === "none"')
+                    i.fas.fa-unlock(style='font-size: 20px; opacity: 0.2;')
+                    .mt-1 No authentication required
+
+            //- Collections
+            .panel-body(*ngIf='activeRequestTab === "collections"')
+                .collection-create
+                    input.field-input(
+                        type='text',
+                        placeholder='New collection name...',
+                        [(ngModel)]='newCollectionName',
+                        (keydown.enter)='createCollection()'
+                    )
+                    button.create-btn((click)='createCollection()', [disabled]='!newCollectionName.trim()')
+                        i.fas.fa-plus
+                .collection-list(*ngIf='collections.length > 0')
+                    .collection-group(*ngFor='let col of collections')
+                        .collection-title
+                            i.fas.fa-folder-open.me-2
+                            span {{col.name}}
+                            .ms-auto.d-flex.gap-1
+                                button.icon-btn.save-btn(
+                                    (click)='saveRequestToCollection(col)',
+                                    title='Save current request here'
+                                )
+                                    i.fas.fa-plus-circle
+                                button.icon-btn.del-btn(
+                                    (click)='deleteCollection(col)',
+                                    title='Delete collection'
+                                )
+                                    i.fas.fa-trash
+                        .saved-request(
+                            *ngFor='let req of col.requests',
+                            (click)='loadRequest(req)'
+                        )
+                            span.req-method([class]='req.options.method.toLowerCase()') {{req.options.method}}
+                            span.req-name {{req.name}}
+                            button.icon-btn.del-btn.ms-auto(
+                                (click)='deleteRequest(col, req); $event.stopPropagation()'
+                            )
+                                i.fas.fa-times
+                        .no-requests(*ngIf='col.requests.length === 0') No saved requests
+                .empty-state(*ngIf='collections.length === 0')
+                    i.fas.fa-folder-open(style='font-size: 20px; opacity: 0.2;')
+                    .mt-1 Create a collection to save requests
+
+        //- Response Panel
+        .response-panel
+            .panel-label Response
+            div(*ngIf='response')
+                .response-status
+                    span.status-pill([class]='getStatusClass()') {{response.status}} {{response.statusText}}
+                    span.meta-pill
+                        i.fas.fa-clock.me-1
+                        | {{response.time}}ms
+                    span.meta-pill
+                        i.fas.fa-database.me-1
+                        | {{getResponseSize()}}
+                    span.error-pill(*ngIf='response.error')
+                        i.fas.fa-exclamation-triangle.me-1
+                        | {{response.error}}
+                .panel-tabs.response-tabs
+                    button.panel-tab(
+                        [class.active]='activeResponseTab === "body"',
+                        (click)='activeResponseTab = "body"'
+                    ) Body
+                    button.panel-tab(
+                        [class.active]='activeResponseTab === "headers"',
+                        (click)='activeResponseTab = "headers"'
+                    ) Headers
+                        span.tab-count {{getResponseHeaders().length}}
+                    button.panel-tab(
+                        [class.active]='activeResponseTab === "raw"',
+                        (click)='activeResponseTab = "raw"'
+                    ) Raw
+                .response-content
+                    pre.response-json(*ngIf='activeResponseTab === "body"') {{getFormattedBody()}}
+                    .response-header-list(*ngIf='activeResponseTab === "headers"')
+                        .resp-header-row(*ngFor='let h of getResponseHeaders()')
+                            span.resp-header-key {{h.key}}
+                            span.resp-header-val {{h.value}}
+                    pre.response-json(*ngIf='activeResponseTab === "raw"') {{response.body}}
+
+            .empty-state.response-empty(*ngIf='!response && !sending')
+                i.fas.fa-paper-plane(style='font-size: 28px; opacity: 0.12;')
+                .mt-2 Click Send to make a request
+                .mt-1(style='font-size: 10px; opacity: 0.3;') Or press Enter in the URL bar
+
+            .empty-state.response-empty(*ngIf='sending')
+                i.fas.fa-spinner.fa-spin(style='font-size: 28px; opacity: 0.3;')
+                .mt-2 Sending request...

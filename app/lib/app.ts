@@ -38,6 +38,10 @@ export class Application {
         this.ptyManager.init(this)
         this.initSessionSharing()
 
+        ipcMain.on('open-help-window', () => {
+            this.openHelpWindow()
+        })
+
         ipcMain.handle('app:save-config', async (event, config) => {
             await saveConfig(config)
             this.updateConfigStoreFromSerialized(config)
@@ -607,6 +611,25 @@ export class Application {
         }
         await window.ready
         return window
+    }
+
+    openHelpWindow (): void {
+        const { BrowserWindow } = require('electron')
+        const path = require('path')
+
+        const helpPath = path.join(app.getAppPath(), 'assets', 'help.html')
+
+        const win = new BrowserWindow({
+            width: 900,
+            height: 700,
+            title: 'NexTerm - User Guide',
+            webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true,
+            },
+        })
+        win.loadFile(helpPath)
+        win.setMenuBarVisibility(false)
     }
 
     async openAIAssistantWindow (): Promise<void> {

@@ -104,6 +104,18 @@ title-bar(
         .left-dock-section.left-dock-bottom
             button.left-dock-button(
                 type='button',
+                (click)='openAPIClient()',
+                ngbTooltip='API Client'
+            )
+                i.fas.fa-globe
+            button.left-dock-button(
+                type='button',
+                (click)='openHelpGuide()',
+                ngbTooltip='Help & User Guide'
+            )
+                i.fas.fa-question-circle
+            button.left-dock-button(
+                type='button',
                 (click)='openSettingsFromDock()',
                 ngbTooltip='Settings'
             )

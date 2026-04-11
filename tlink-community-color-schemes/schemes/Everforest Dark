@@ -1,0 +1,23 @@
+!
+! Everforest Dark - Comfortable green-based dark theme
+!
+*.foreground:  #d3c6aa
+*.background:  #2d353b
+*.cursorColor: #d3c6aa
+!
+*.color0:      #475258
+*.color8:      #636f76
+*.color1:      #e67e80
+*.color9:      #e67e80
+*.color2:      #a7c080
+*.color10:     #a7c080
+*.color3:      #dbbc7f
+*.color11:     #dbbc7f
+*.color4:      #7fbbb3
+*.color12:     #7fbbb3
+*.color5:      #d699b6
+*.color13:     #d699b6
+*.color6:      #83c092
+*.color14:     #83c092
+*.color7:      #d3c6aa
+*.color15:     #d3c6aa

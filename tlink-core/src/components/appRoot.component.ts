@@ -387,6 +387,56 @@ export class AppRootComponent implements OnInit {
         this.config.save()
     }
 
+    private _colorModes = ['auto', 'dark', 'light']
+    private _colorModeLabels: Record<string, string> = {
+        auto: 'From System',
+        dark: 'Dark Mode',
+        light: 'Light Mode',
+    }
+
+    get currentSchemeName (): string {
+        const mode = this.config.store.appearance?.colorSchemeMode ?? 'auto'
+        return this._colorModeLabels[mode] ?? mode
+    }
+
+    cycleColorScheme (): void {
+        const current = this.config.store.appearance?.colorSchemeMode ?? 'auto'
+        const idx = this._colorModes.indexOf(current)
+        const next = this._colorModes[(idx + 1) % this._colorModes.length]
+        this.config.store.appearance.colorSchemeMode = next
+        this.config.save()
+        this.notifications.notice(this._colorModeLabels[next])
+    }
+
+    openAPIClient (): void {
+        this.profiles.openNewTabForProfile({
+            type: 'api-client',
+            name: 'API Client',
+            options: {
+                url: 'https://httpbin.org/get',
+                method: 'GET',
+                headers: [],
+                body: '',
+                bodyType: 'none',
+                timeout: 30000,
+                auth: { type: 'none' },
+            },
+        } as any)
+    }
+
+    openHelpGuide (): void {
+        try {
+            const electron = require('electron')
+            const ipcRenderer = electron.ipcRenderer
+            if (ipcRenderer) {
+                ipcRenderer.send('open-help-window')
+            }
+        } catch {
+            // Fallback for web
+            this.platform.openExternal('https://github.com/amishagrawal2001-arch/tlink-dev/wiki')
+        }
+    }
+
     openSettingsFromDock (): void {
         this.hostApp.openSettingsUI()
     }

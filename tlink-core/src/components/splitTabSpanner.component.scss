@@ -2,7 +2,7 @@
     display: block;
     position: absolute;
     z-index: 5;
-    transition: 0.125s background;
+    transition: 0.15s background;
 
     &.v {
         cursor: ns-resize;
@@ -11,12 +11,24 @@
         background: linear-gradient(
             to bottom,
             transparent 0,
-            transparent calc(50% - 0.5px),
-            var(--theme-bg-less) calc(50% - 0.5px),
-            var(--theme-bg-less) calc(50% + 0.5px),
-            transparent calc(50% + 0.5px),
+            transparent calc(50% - 1px),
+            var(--theme-bg-more-2, rgba(128,128,128,0.2)) calc(50% - 1px),
+            var(--theme-bg-more-2, rgba(128,128,128,0.2)) calc(50% + 1px),
+            transparent calc(50% + 1px),
             transparent 100%
         );
+
+        &:hover {
+            background: linear-gradient(
+                to bottom,
+                transparent 0,
+                transparent calc(50% - 2px),
+                rgba(59,130,246,0.5) calc(50% - 2px),
+                rgba(59,130,246,0.5) calc(50% + 2px),
+                transparent calc(50% + 2px),
+                transparent 100%
+            );
+        }
     }
 
     &.h {
@@ -26,11 +38,23 @@
         background: linear-gradient(
             to right,
             transparent 0,
-            transparent calc(50% - 0.5px),
-            var(--theme-bg-less) calc(50% - 0.5px),
-            var(--theme-bg-less) calc(50% + 0.5px),
-            transparent calc(50% + 0.5px),
+            transparent calc(50% - 1px),
+            var(--theme-bg-more-2, rgba(128,128,128,0.2)) calc(50% - 1px),
+            var(--theme-bg-more-2, rgba(128,128,128,0.2)) calc(50% + 1px),
+            transparent calc(50% + 1px),
             transparent 100%
         );
+
+        &:hover {
+            background: linear-gradient(
+                to right,
+                transparent 0,
+                transparent calc(50% - 2px),
+                rgba(59,130,246,0.5) calc(50% - 2px),
+                rgba(59,130,246,0.5) calc(50% + 2px),
+                transparent calc(50% + 2px),
+                transparent 100%
+            );
+        }
     }
 }

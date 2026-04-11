@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>NexTerm - User Guide</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    padding: 24px 32px;
+    line-height: 1.6;
+}
+h1 { color: #a5c7ff; font-size: 28px; margin-bottom: 8px; }
+h2 { color: #82fff7; font-size: 18px; margin: 24px 0 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px; }
+h3 { color: #b1e969; font-size: 14px; margin: 16px 0 6px; }
+.subtitle { color: #888; font-size: 13px; margin-bottom: 24px; }
+p { margin: 6px 0; font-size: 13px; }
+code {
+    background: rgba(255,255,255,0.08);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-family: 'SF Mono', monospace;
+    font-size: 12px;
+}
+kbd {
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: 'SF Mono', monospace;
+    font-size: 11px;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0;
+    font-size: 13px;
+}
+th, td {
+    text-align: left;
+    padding: 6px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+th { color: #a5c7ff; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+.section { margin-bottom: 16px; }
+.badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+}
+.badge-green { background: #16a34a; color: white; }
+.badge-blue { background: #3b82f6; color: white; }
+.badge-orange { background: #d97706; color: white; }
+.badge-red { background: #dc2626; color: white; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+@media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+a { color: #5da9f6; text-decoration: none; }
+a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<h1>NexTerm User Guide</h1>
+<p class="subtitle">Version 1.0.2 — AI-Enhanced Terminal for DevOps & Network Engineers</p>
+
+<div class="two-col">
+<div>
+
+<h2>Getting Started</h2>
+<div class="section">
+<h3>Opening a Connection</h3>
+<p>Click the <kbd>+</kbd> button in the tab bar, or use the <b>Session Manager</b> panel on the right side.</p>
+<p>You can also quick-connect by typing <code>user@hostname</code> in the command palette (<kbd>Ctrl+Shift+P</kbd>).</p>
+</div>
+
+<div class="section">
+<h3>Tab Management</h3>
+<table>
+<tr><th>Action</th><th>How</th></tr>
+<tr><td>New tab</td><td>Click <kbd>+</kbd> or <kbd>Cmd+T</kbd></td></tr>
+<tr><td>Close tab</td><td>Click <kbd>×</kbd> or middle-click tab</td></tr>
+<tr><td>Close other tabs</td><td>Right-click tab → Close Other Tabs</td></tr>
+<tr><td>Rename tab</td><td>Double-click tab name</td></tr>
+<tr><td>Tab color</td><td>Right-click tab → Color</td></tr>
+<tr><td>Reorder tabs</td><td>Drag tabs left/right</td></tr>
+</table>
+</div>
+
+<h2>SSH</h2>
+<div class="section">
+<h3>Connection</h3>
+<p>Create SSH profiles in <b>Settings → Profiles & connections</b>. Each profile stores host, port, username, auth method, and optional settings.</p>
+<p>The connection shows 4-phase progress: <span class="badge badge-blue">1/4</span> Connect → <span class="badge badge-blue">2/4</span> Key Exchange → <span class="badge badge-blue">3/4</span> Auth → <span class="badge badge-green">4/4</span> Ready</p>
+
+<h3>Connection Health</h3>
+<p>The tab dot indicates connection status:</p>
+<table>
+<tr><td><span class="badge badge-green">●</span> Green</td><td>Connected and healthy</td></tr>
+<tr><td><span class="badge badge-orange">●</span> Yellow</td><td>Connected but no data received (stale)</td></tr>
+<tr><td><span class="badge badge-red">●</span> Red</td><td>Disconnected</td></tr>
+</table>
+
+<h3>SFTP</h3>
+<p>Click the <b>folder icon</b> in the SSH tab toolbar to open the SFTP panel.</p>
+<p>Features: file upload/download, drag-and-drop, bookmarked paths, transfer progress, directory creation.</p>
+<p>Double-click a file to download it. Star a path to bookmark it for quick navigation.</p>
+
+<h3>Port Forwarding</h3>
+<p>Click the <b>plug icon</b> in the SSH tab toolbar to manage port forwards (local, remote, dynamic SOCKS).</p>
+
+<h3>Auth Methods</h3>
+<p>Supported: Password, Public Key, SSH Agent, Keyboard Interactive. Set priority order in profile settings → Advanced → Authentication Order.</p>
+</div>
+
+</div>
+<div>
+
+<h2>API Client</h2>
+<div class="section">
+<p>Click the <b>API icon</b> in the tab bar toolbar to open a new API request tab.</p>
+<h3>Making Requests</h3>
+<p>1. Select method (GET, POST, PUT, DELETE, etc.)</p>
+<p>2. Enter the URL</p>
+<p>3. Add headers, body, or auth as needed</p>
+<p>4. Click <b>Send</b> or press <kbd>Enter</kbd></p>
+
+<h3>Collections</h3>
+<p>Save requests to named collections for reuse. Click the <b>Collections</b> tab → create a collection → click the save icon to store the current request.</p>
+</div>
+
+<h2>RDP</h2>
+<div class="section">
+<p>Create RDP profiles to connect to Windows Remote Desktop. NexTerm bundles FreeRDP — no additional software needed on macOS.</p>
+<p>If FreeRDP fails, the app offers to switch to the system RDP client (Microsoft Remote Desktop).</p>
+</div>
+
+<h2>Terminal Settings</h2>
+<div class="section">
+<h3>Color Scheme</h3>
+<p><b>Settings → Color scheme</b> — Choose from built-in themes or customize all 16 ANSI colors.</p>
+
+<h3>Output Highlighting</h3>
+<p><b>Settings → Terminal → Output keyword highlighting</b></p>
+<p>Color-codes keywords in terminal output (UP=green, DOWN=red, ERROR=red, etc.). Add custom regex rules with any color.</p>
+
+<h3>Button Bar</h3>
+<p><b>Settings → Terminal → Button bar</b> — Create custom command buttons displayed above the terminal.</p>
+</div>
+
+<h2>Keyboard Shortcuts</h2>
+<div class="section">
+<table>
+<tr><th>Shortcut</th><th>Action</th></tr>
+<tr><td><kbd>Cmd+T</kbd></td><td>New terminal tab</td></tr>
+<tr><td><kbd>Cmd+W</kbd></td><td>Close current tab</td></tr>
+<tr><td><kbd>Cmd+1-9</kbd></td><td>Switch to tab 1-9</td></tr>
+<tr><td><kbd>Cmd+Shift+←→</kbd></td><td>Previous/next tab</td></tr>
+<tr><td><kbd>Cmd+,</kbd></td><td>Open settings</td></tr>
+<tr><td><kbd>Cmd+Shift+P</kbd></td><td>Command palette</td></tr>
+<tr><td><kbd>Cmd+C</kbd></td><td>Copy</td></tr>
+<tr><td><kbd>Cmd+V</kbd></td><td>Paste</td></tr>
+</table>
+</div>
+
+<h2>AI Assistant</h2>
+<div class="section">
+<p>Click the <b>robot icon</b> in the SSH tab toolbar to send terminal output to the AI assistant for analysis.</p>
+<p>The AI also detects common errors (command not found, permission denied, etc.) and offers to help via a toast notification.</p>
+<p>Configure AI providers in <b>Settings → AI Assistant</b>.</p>
+</div>
+
+<h2>License</h2>
+<div class="section">
+<p>NexTerm requires a license for continued use. On first launch, you'll see the activation dialog.</p>
+<p>Options: Enter a license key, or click <b>Start Free Trial</b> for a 30-day trial.</p>
+<p>Manage your license in <b>Settings → License Management</b>.</p>
+</div>
+
+</div>
+</div>
+
+</body>
+</html>

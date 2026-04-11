@@ -1,25 +1,29 @@
 :host {
     position: absolute;
-    background: rgba(0, 0, 0, .5);
+    background: rgba(0, 0, 0, .4);
+    backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
     justify-content: center;
     pointer-events: none;
     z-index: 10;
     opacity: 0;
-    transition: .125s opacity cubic-bezier(0.86, 0, 0.07, 1);
+    transition: .2s opacity cubic-bezier(0.86, 0, 0.07, 1);
 }
 
 div {
-    background: rgba(0, 0, 0, .7);
-    padding: 20px 30px;
-    margin: 20px;
-    font-size: 16px;
+    background: rgba(0, 0, 0, .6);
+    padding: 14px 24px;
+    margin: 16px;
+    font-size: 14px;
+    font-weight: 600;
     color: #fff;
     display: flex;
     align-items: center;
-    border-radius: 5px;
+    border-radius: 8px;
     cursor: move;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.1);
 }
 
 :host.active {
@@ -33,4 +37,5 @@ div {
 label {
     margin: 0;
     cursor: move;
+    font-weight: 500;
 }

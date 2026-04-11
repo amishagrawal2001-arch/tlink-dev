@@ -43,6 +43,7 @@ export const builtinPlugins = [
     'tlink-intellij-bridge',
     'tlink-chatgpt',
     'tlink-ai-assistant',
+    'tlink-api-client',
 ]
 
 export const packagesWithDocs = [
