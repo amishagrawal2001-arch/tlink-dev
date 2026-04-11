@@ -1,6 +1,6 @@
 import * as keytar from 'keytar'
 import { Injectable } from '@angular/core'
-import { VaultService, NotificationsService, LogService, Logger } from 'tlink-core'
+import { VaultService, NotificationsService, LogService, Logger, ConfigService } from 'tlink-core'
 import { SSHProfile } from '../api'
 
 export const VAULT_SECRET_TYPE_PASSWORD = 'ssh:password'
@@ -17,6 +17,7 @@ export class PasswordStorageService {
     constructor (
         private vault: VaultService,
         private notifications: NotificationsService,
+        private configService: ConfigService,
         log: LogService,
     ) {
         this.logger = log.create('password-storage')
@@ -123,9 +124,11 @@ export class PasswordStorageService {
             }
         } else if (this.useVaultFallback()) {
             // Vault not enabled and keytar unavailable (production mode).
-            // Store password in profile options as fallback.
+            // Store password in profile options and persist to config file.
             if (profile.options) {
                 profile.options.password = password
+                this.configService.save()
+                this.logger.info('Password saved to profile options (fallback storage)')
             }
             return
         } else {
