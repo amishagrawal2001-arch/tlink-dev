@@ -6,7 +6,7 @@
 
 ::ng-deep split-tab > .child {
     position: absolute;
-    transition: 0.15s all;
+    transition: 0.15s opacity, 0.15s border-color;
     opacity: .7;
 
     // Subtle border to show pane boundaries
@@ -47,4 +47,9 @@
 
 ::ng-deep .no-animations split-tab > .child {
     transition: none;
+}
+
+// Disable all transitions during active resize for smooth dragging
+:host.resizing ::ng-deep > .child {
+    transition: none !important;
 }
