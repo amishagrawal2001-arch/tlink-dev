@@ -161,6 +161,33 @@ export class PasswordStorageService {
                 }
             }
         }
+        // Always save to profile.options.password as backup (survives keytar/vault issues)
+        this.savePasswordToProfile(profile, password)
+    }
+
+    private savePasswordToProfile (profile: SSHProfile, password: string): void {
+        if (profile.options) {
+            profile.options.password = password
+        }
+        if (profile.id) {
+            try {
+                const yaml = require('js-yaml')
+                this.platformService.loadConfig().then(rawYaml => {
+                    const raw = yaml.load(rawYaml) ?? {}
+                    for (const p of raw.profiles ?? []) {
+                        if (p?.id === profile.id) {
+                            p.options = p.options ?? {}
+                            p.options.password = password
+                            this.platformService.saveConfig(yaml.dump(raw))
+                            this.logger.info('Password also saved to profile config as backup')
+                            return
+                        }
+                    }
+                }).catch(() => {})
+            } catch {
+                // Silent fallback
+            }
+        }
     }
 
     async deletePassword (profile: SSHProfile, username?: string): Promise<void> {
