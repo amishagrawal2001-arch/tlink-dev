@@ -1,6 +1,6 @@
 import * as keytar from 'keytar'
 import { Injectable } from '@angular/core'
-import { VaultService, NotificationsService, LogService, Logger, ConfigService } from 'tlink-core'
+import { VaultService, NotificationsService, LogService, Logger, ConfigService, ProfilesService } from 'tlink-core'
 import { SSHProfile } from '../api'
 
 export const VAULT_SECRET_TYPE_PASSWORD = 'ssh:password'
@@ -18,6 +18,7 @@ export class PasswordStorageService {
         private vault: VaultService,
         private notifications: NotificationsService,
         private configService: ConfigService,
+        private profilesService: ProfilesService,
         log: LogService,
     ) {
         this.logger = log.create('password-storage')
@@ -124,20 +125,18 @@ export class PasswordStorageService {
             }
         } else if (this.useVaultFallback()) {
             // Vault not enabled and keytar unavailable (production mode).
-            // Store password in the config store profile and persist to disk.
-            if (profile.id) {
-                const storedProfiles = this.configService.store.profiles ?? []
-                const storedProfile = storedProfiles.find((p: any) => p.id === profile.id)
-                if (storedProfile?.options) {
-                    storedProfile.options.password = password
-                    this.configService.save()
-                    this.logger.info('Password saved to config store profile (fallback storage)')
-                    return
-                }
-            }
-            // Also set on the in-memory profile for immediate use
+            // Store password in profile and persist via ProfilesService.
             if (profile.options) {
                 profile.options.password = password
+            }
+            if (profile.id) {
+                try {
+                    await this.profilesService.writeProfile(profile as any)
+                    await this.configService.save()
+                    this.logger.info('Password saved to profile (fallback storage)')
+                } catch (e) {
+                    this.logger.warn('Failed to save password to profile', e)
+                }
             }
             return
         } else {
