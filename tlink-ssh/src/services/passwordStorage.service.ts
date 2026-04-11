@@ -1,6 +1,6 @@
 import * as keytar from 'keytar'
 import { Injectable } from '@angular/core'
-import { VaultService, NotificationsService, LogService, Logger, ConfigService, ProfilesService } from 'tlink-core'
+import { VaultService, NotificationsService, LogService, Logger, ConfigService } from 'tlink-core'
 import { SSHProfile } from '../api'
 
 export const VAULT_SECRET_TYPE_PASSWORD = 'ssh:password'
@@ -18,7 +18,6 @@ export class PasswordStorageService {
         private vault: VaultService,
         private notifications: NotificationsService,
         private configService: ConfigService,
-        private profilesService: ProfilesService,
         log: LogService,
     ) {
         this.logger = log.create('password-storage')
@@ -125,17 +124,28 @@ export class PasswordStorageService {
             }
         } else if (this.useVaultFallback()) {
             // Vault not enabled and keytar unavailable (production mode).
-            // Store password in profile and persist via ProfilesService.
+            // Modify the raw YAML config directly to bypass ConfigProxy.
             if (profile.options) {
                 profile.options.password = password
             }
             if (profile.id) {
                 try {
-                    await this.profilesService.writeProfile(profile as any)
-                    await this.configService.save()
-                    this.logger.info('Password saved to profile (fallback storage)')
+                    const yaml = require('js-yaml')
+                    const rawYaml = this.configService.readRaw()
+                    const rawConfig = yaml.load(rawYaml)
+                    if (Array.isArray(rawConfig?.profiles)) {
+                        for (const p of rawConfig.profiles) {
+                            if (p.id === profile.id) {
+                                if (!p.options) { p.options = {} }
+                                p.options.password = password
+                                break
+                            }
+                        }
+                        await this.configService.writeRaw(yaml.dump(rawConfig))
+                        this.logger.info('Password saved to raw config (fallback storage)')
+                    }
                 } catch (e) {
-                    this.logger.warn('Failed to save password to profile', e)
+                    this.logger.warn('Failed to save password to raw config', e)
                 }
             }
             return
