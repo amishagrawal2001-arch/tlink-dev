@@ -162,10 +162,10 @@ export class PasswordStorageService {
             }
         }
         // Always save to profile.options.password as backup (survives keytar/vault issues)
-        this.savePasswordToProfile(profile, password)
+        await this.savePasswordToProfile(profile, password)
     }
 
-    private savePasswordToProfile (profile: SSHProfile, password: string): void {
+    private async savePasswordToProfile (profile: SSHProfile, password: string): Promise<void> {
         if (profile.options) {
             profile.options.password = password
         }
@@ -173,33 +173,34 @@ export class PasswordStorageService {
             return
         }
         try {
-            const configPath = (this.platformService as any).getConfigPath?.()
-                ?? (this.platformService as any).configPath
-            if (!configPath) {
-                this.logger.warn('No config path for password backup')
+            const yaml = require('js-yaml')
+            const rawYaml = await this.platformService.loadConfig()
+            if (!rawYaml) {
+                this.logger.warn('Empty config, cannot save password backup')
                 return
             }
-            const fs = require('fs')
-            const yaml = require('js-yaml')
-            const rawYaml = fs.readFileSync(configPath, 'utf8')
-            const raw = yaml.load(rawYaml) ?? {}
+            const raw = yaml.load(rawYaml)
+            if (!raw || !Array.isArray(raw.profiles)) {
+                this.logger.warn('No profiles array in config')
+                return
+            }
             let saved = false
-            for (const p of raw.profiles ?? []) {
+            for (const p of raw.profiles) {
                 if (p?.id === profile.id) {
-                    p.options = p.options ?? {}
+                    if (!p.options) { p.options = {} }
                     p.options.password = password
                     saved = true
                     break
                 }
             }
             if (saved) {
-                fs.writeFileSync(configPath, yaml.dump(raw), 'utf8')
-                this.logger.info(`Password backup written to ${configPath}`)
+                await this.platformService.saveConfig(yaml.dump(raw))
+                this.logger.info('Password backup saved to config via platformService')
             } else {
-                this.logger.warn(`Profile ${profile.id} not found in ${configPath}`)
+                this.logger.warn(`Profile ${profile.id} not found in config`)
             }
         } catch (e) {
-            this.logger.warn('Failed to backup password to config', e)
+            this.logger.warn('Failed to save password backup', e)
         }
     }
 
