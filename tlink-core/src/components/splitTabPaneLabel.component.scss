@@ -1,29 +1,50 @@
 :host {
     position: absolute;
-    background: rgba(0, 0, 0, .4);
-    backdrop-filter: blur(4px);
+    background: rgba(0, 0, 0, .35);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     display: flex;
     align-items: center;
     justify-content: center;
     pointer-events: none;
     z-index: 10;
     opacity: 0;
-    transition: .2s opacity cubic-bezier(0.86, 0, 0.07, 1);
+    transition: .2s opacity ease-out;
 }
 
 div {
-    background: rgba(0, 0, 0, .6);
-    padding: 14px 24px;
-    margin: 16px;
-    font-size: 14px;
-    font-weight: 600;
+    background: rgba(30, 30, 50, .85);
+    padding: 10px 20px;
+    margin: 12px;
+    font-size: 13px;
+    font-weight: 500;
     color: #fff;
     display: flex;
     align-items: center;
+    gap: 10px;
     border-radius: 8px;
-    cursor: move;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-    border: 1px solid rgba(255,255,255,0.1);
+    cursor: grab;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2);
+    border: 1px solid rgba(255,255,255,0.12);
+    transition: transform 0.15s, box-shadow 0.15s;
+    user-select: none;
+    -webkit-user-select: none;
+
+    &:active {
+        cursor: grabbing;
+        transform: scale(1.03);
+        box-shadow: 0 12px 32px rgba(0,0,0,0.5), 0 4px 12px rgba(0,0,0,0.3);
+    }
+}
+
+.drag-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255,255,255,0.4);
+    font-size: 14px;
+    width: 16px;
+    flex-shrink: 0;
 }
 
 :host.active {
@@ -36,6 +57,31 @@ div {
 
 label {
     margin: 0;
-    cursor: move;
+    cursor: inherit;
     font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 200px;
+}
+
+// CDK drag preview (the floating copy while dragging)
+::ng-deep .cdk-drag-preview {
+    background: rgba(30, 30, 50, .9);
+    padding: 10px 20px;
+    font-size: 13px;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-radius: 8px;
+    cursor: grabbing;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.5), 0 4px 16px rgba(0,0,0,0.3);
+    border: 1px solid rgba(59,130,246,0.3);
+    z-index: 1000;
+}
+
+// Placeholder where the item was
+::ng-deep .cdk-drag-placeholder {
+    opacity: 0.3;
 }
