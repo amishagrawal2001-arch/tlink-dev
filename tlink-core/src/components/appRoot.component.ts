@@ -559,24 +559,54 @@ export class AppRootComponent implements OnInit {
         event.preventDefault()
         event.stopPropagation()
 
-        const items = [
+        const active = this.app.activeTab
+        const isSplit = active instanceof SplitTabComponent
+        const paneCount = isSplit ? active.getAllTabs().length : 0
+
+        const items: MenuItemOptions[] = [
             {
                 label: this.translate.instant('Split right'),
+                sublabel: '⌘⇧D',
                 click: () => { void this.splitActiveTabShortcut('r') },
+            },
+            {
+                label: this.translate.instant('Split down'),
+                sublabel: '⌘D',
+                click: () => { void this.splitActiveTabShortcut('b') },
             },
             {
                 label: this.translate.instant('Split left'),
                 click: () => { void this.splitActiveTabShortcut('l') },
             },
             {
-                label: this.translate.instant('Split down'),
-                click: () => { void this.splitActiveTabShortcut('b') },
-            },
-            {
                 label: this.translate.instant('Split up'),
                 click: () => { void this.splitActiveTabShortcut('t') },
             },
         ]
+
+        if (isSplit && paneCount > 1) {
+            items.push({ type: 'separator' })
+            items.push({
+                label: this.translate.instant('Equalize pane sizes'),
+                click: () => {
+                    if (active instanceof SplitTabComponent) {
+                        active.equalize()
+                    }
+                },
+            })
+            items.push({
+                label: this.translate.instant('Close focused pane'),
+                click: () => {
+                    if (active instanceof SplitTabComponent) {
+                        const focused = active.getFocusedTab()
+                        if (focused) {
+                            active.removeTab(focused)
+                            focused.destroy()
+                        }
+                    }
+                },
+            })
+        }
 
         this.platform.popupContextMenu(items, event)
     }
