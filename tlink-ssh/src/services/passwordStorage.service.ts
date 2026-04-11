@@ -165,43 +165,35 @@ export class PasswordStorageService {
         await this.savePasswordToProfile(profile, password)
     }
 
-    private async savePasswordToProfile (profile: SSHProfile, password: string): Promise<void> {
+    private savePasswordToProfile (profile: SSHProfile, password: string): void {
         if (profile.options) {
             profile.options.password = password
         }
         if (!profile.id) {
             return
         }
-        try {
-            const yaml = require('js-yaml')
-            const rawYaml = await this.platformService.loadConfig()
-            if (!rawYaml) {
-                this.logger.warn('Empty config, cannot save password backup')
-                return
-            }
-            const raw = yaml.load(rawYaml)
-            if (!raw || !Array.isArray(raw.profiles)) {
-                this.logger.warn('No profiles array in config')
-                return
-            }
-            let saved = false
-            for (const p of raw.profiles) {
-                if (p?.id === profile.id) {
-                    if (!p.options) { p.options = {} }
-                    p.options.password = password
-                    saved = true
-                    break
+        // Delay the file write to avoid race with config.save()
+        // which might overwrite the file without the password
+        setTimeout(async () => {
+            try {
+                const yaml = require('js-yaml')
+                const rawYaml = await this.platformService.loadConfig()
+                if (!rawYaml) { return }
+                const raw = yaml.load(rawYaml)
+                if (!raw?.profiles) { return }
+                for (const p of raw.profiles) {
+                    if (p?.id === profile.id) {
+                        if (!p.options) { p.options = {} }
+                        p.options.password = password
+                        await this.platformService.saveConfig(yaml.dump(raw))
+                        this.logger.info('Password saved to config (delayed write)')
+                        return
+                    }
                 }
+            } catch (e) {
+                this.logger.warn('Failed to save password to config', e)
             }
-            if (saved) {
-                await this.platformService.saveConfig(yaml.dump(raw))
-                this.logger.info('Password backup saved to config via platformService')
-            } else {
-                this.logger.warn(`Profile ${profile.id} not found in config`)
-            }
-        } catch (e) {
-            this.logger.warn('Failed to save password backup', e)
-        }
+        }, 3000) // 3 second delay to ensure config.save() finishes first
     }
 
     async deletePassword (profile: SSHProfile, username?: string): Promise<void> {
