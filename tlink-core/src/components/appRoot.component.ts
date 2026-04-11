@@ -387,27 +387,6 @@ export class AppRootComponent implements OnInit {
         this.config.save()
     }
 
-    private _colorModes = ['auto', 'dark', 'light']
-    private _colorModeLabels: Record<string, string> = {
-        auto: 'From System',
-        dark: 'Dark Mode',
-        light: 'Light Mode',
-    }
-
-    get currentSchemeName (): string {
-        const mode = this.config.store.appearance?.colorSchemeMode ?? 'auto'
-        return this._colorModeLabels[mode] ?? mode
-    }
-
-    cycleColorScheme (): void {
-        const current = this.config.store.appearance?.colorSchemeMode ?? 'auto'
-        const idx = this._colorModes.indexOf(current)
-        const next = this._colorModes[(idx + 1) % this._colorModes.length]
-        this.config.store.appearance.colorSchemeMode = next
-        this.config.save()
-        this.notifications.notice(this._colorModeLabels[next])
-    }
-
     openAPIClient (): void {
         this.profiles.openNewTabForProfile({
             type: 'api-client',
@@ -692,11 +671,13 @@ export class AppRootComponent implements OnInit {
 
     private cycleColorSchemeMode (): void {
         const order: Array<'auto'|'dark'|'light'> = ['auto', 'dark', 'light']
+        const labels: Record<string, string> = { auto: 'From System', dark: 'Dark Mode', light: 'Light Mode' }
         const current = this.config.store.appearance.colorSchemeMode as 'auto'|'dark'|'light'|undefined
         const currentIndex = Math.max(0, order.indexOf(current ?? 'dark'))
         const next = order[(currentIndex + 1) % order.length]
         this.config.store.appearance.colorSchemeMode = next
         this.config.save()
+        this.notifications.notice(labels[next] ?? next)
     }
 
     async ngOnInit () {

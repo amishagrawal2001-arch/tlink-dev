@@ -51,7 +51,20 @@ export class HttpClientService {
                 responseHeaders[key] = value
             })
 
-            const responseBody = await response.text()
+            let responseBody = ''
+            try {
+                responseBody = await response.text()
+            } catch (e: any) {
+                return {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: responseHeaders,
+                    body: '',
+                    size: 0,
+                    time: Math.round(elapsed),
+                    error: `Failed to read response body: ${e.message}`,
+                }
+            }
 
             return {
                 status: response.status,

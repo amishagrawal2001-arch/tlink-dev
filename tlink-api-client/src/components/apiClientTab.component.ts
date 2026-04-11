@@ -223,14 +223,15 @@ export class APIClientTabComponent extends BaseTabComponent {
         return {
             type: 'app:api-client-tab',
             profile: this.profile,
-            savedState: {
+            savedState: JSON.parse(JSON.stringify({
                 url: this.url,
                 method: this.method,
-                headers: this.headers,
+                headers: this.headers.filter(h => h.key.trim()),
                 body: this.body,
                 bodyType: this.bodyType,
                 auth: this.auth,
-            },
+                timeout: this.timeout,
+            })),
         }
     }
 }

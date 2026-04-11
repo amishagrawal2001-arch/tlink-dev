@@ -114,7 +114,7 @@ export class TerminalSettingsTabComponent {
     }
 
     resetHighlightRules (): void {
-        this.config.store.terminal.outputHighlighting.rules = [...DEFAULT_OUTPUT_HIGHLIGHT_RULES]
+        this.config.store.terminal.outputHighlighting.rules = JSON.parse(JSON.stringify(DEFAULT_OUTPUT_HIGHLIGHT_RULES))
         this.config.save()
     }
 }

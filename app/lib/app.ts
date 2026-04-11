@@ -25,6 +25,7 @@ export class Application {
     private ptyManager = new PTYManager()
     private sessionSharingServer = getSessionSharingServer()
     private windows: Window[] = []
+    private helpWindow: any = null
     private aiAssistantWindow: Window | null = null
     private codeEditorWindow: Window | null = null
     private globalHotkey$ = new Subject<void>()
@@ -39,6 +40,10 @@ export class Application {
         this.initSessionSharing()
 
         ipcMain.on('open-help-window', () => {
+            if (this.helpWindow && !this.helpWindow.isDestroyed()) {
+                this.helpWindow.focus()
+                return
+            }
             this.openHelpWindow()
         })
 
@@ -628,8 +633,14 @@ export class Application {
                 contextIsolation: true,
             },
         })
-        win.loadFile(helpPath)
+        win.loadFile(helpPath).catch(() => {
+            console.warn('Failed to load help file:', helpPath)
+        })
         win.setMenuBarVisibility(false)
+        this.helpWindow = win
+        win.on('closed', () => {
+            this.helpWindow = null
+        })
     }
 
     async openAIAssistantWindow (): Promise<void> {
