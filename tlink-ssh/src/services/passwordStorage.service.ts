@@ -29,15 +29,6 @@ export class PasswordStorageService {
         }
         this.keytarHealthChecked = true
 
-        // Skip keytar in production to avoid macOS Keychain access prompts.
-        // Use vault storage instead which doesn't require OS keychain access.
-        const isPackaged = !(process.env.TLINK_DEV === '1')
-        if (isPackaged) {
-            this.keytarAvailable = false
-            this.logger.info('Production mode: using vault for password storage (skipping keychain)')
-            return false
-        }
-
         try {
             await keytar.setPassword('tlink-health-check', 'canary', 'test')
             const value = await keytar.getPassword('tlink-health-check', 'canary')
