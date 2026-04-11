@@ -117,10 +117,17 @@ export class PasswordStorageService {
 
     async savePassword (profile: SSHProfile, password: string, username?: string): Promise<void> {
         const account = this.normalizeAccount(username ?? profile.options.user)
-        if (this.vault.isEnabled() || this.useVaultFallback()) {
+        if (this.vault.isEnabled()) {
             for (const key of this.getVaultKeysForConnection(profile, account)) {
                 await this.vault.addSecret({ type: VAULT_SECRET_TYPE_PASSWORD, key, value: password })
             }
+        } else if (this.useVaultFallback()) {
+            // Vault not enabled and keytar unavailable (production mode).
+            // Store password in profile options as fallback.
+            if (profile.options) {
+                profile.options.password = password
+            }
+            return
         } else {
             if (!account) {
                 return
@@ -164,7 +171,13 @@ export class PasswordStorageService {
 
     async loadPassword (profile: SSHProfile, username?: string): Promise<string|null> {
         const account = this.normalizeAccount(username ?? profile.options.user)
-        if (this.vault.isEnabled() || this.useVaultFallback()) {
+
+        // Check profile options first (production fallback storage)
+        if (profile.options?.password) {
+            return profile.options.password
+        }
+
+        if (this.vault.isEnabled()) {
             for (const key of this.getVaultKeysForConnection(profile, account)) {
                 const password = (await this.vault.getSecret(VAULT_SECRET_TYPE_PASSWORD, key))?.value
                 if (password) {
