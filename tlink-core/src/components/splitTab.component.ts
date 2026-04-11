@@ -1028,7 +1028,7 @@ export class SplitTabComponent extends BaseTabComponent implements AfterViewInit
     private layoutInternal (root: SplitContainer, x: number, y: number, w: number, h: number) {
         const size = root.orientation === 'v' ? h : w
         const sizes = root.ratios.map(ratio => ratio * size)
-        const thickness = 10
+        const thickness = 15
 
         if (root === this.root) {
             this._dropZones.push({
