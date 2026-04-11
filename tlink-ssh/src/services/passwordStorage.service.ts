@@ -1,6 +1,6 @@
 import * as keytar from 'keytar'
 import { Injectable } from '@angular/core'
-import { VaultService, NotificationsService, LogService, Logger, ConfigService } from 'tlink-core'
+import { VaultService, NotificationsService, LogService, Logger, PlatformService } from 'tlink-core'
 import { SSHProfile } from '../api'
 
 export const VAULT_SECRET_TYPE_PASSWORD = 'ssh:password'
@@ -17,7 +17,7 @@ export class PasswordStorageService {
     constructor (
         private vault: VaultService,
         private notifications: NotificationsService,
-        private configService: ConfigService,
+        private platformService: PlatformService,
         log: LogService,
     ) {
         this.logger = log.create('password-storage')
@@ -124,40 +124,33 @@ export class PasswordStorageService {
             }
         } else if (this.useVaultFallback()) {
             // Vault not enabled and keytar unavailable (production mode).
-            // Store password in profile.options.password and force config save.
+            // Read raw config, inject password, save via platform.
             if (profile.options) {
                 profile.options.password = password
-                this.logger.info(`Fallback: set password on profile ${profile.id ?? 'ephemeral'}`)
             }
-            // Force save by writing the password into the raw config YAML
             try {
-                const rawYaml = this.configService.readRaw()
-                if (profile.id && rawYaml) {
-                    const yaml = require('js-yaml')
-                    const raw = yaml.load(rawYaml) ?? {}
-                    const profiles = raw.profiles ?? []
-                    let found = false
-                    for (const p of profiles) {
-                        if (p?.id === profile.id) {
-                            p.options = p.options ?? {}
-                            p.options.password = password
-                            found = true
-                            break
-                        }
-                    }
-                    if (found) {
-                        const fs = require('fs')
-                        const path = require('path')
-                        const configDir = process.env.TLINK_CONFIG_DIRECTORY
-                        if (configDir) {
-                            const configPath = path.join(configDir, 'config.yaml')
-                            fs.writeFileSync(configPath, yaml.dump(raw), 'utf8')
-                            this.logger.info('Password written directly to config file')
-                        }
+                const yaml = require('js-yaml')
+                const rawYaml = await this.platformService.loadConfig()
+                const raw = yaml.load(rawYaml) ?? {}
+                const profiles = raw.profiles ?? []
+                let found = false
+                for (const p of profiles) {
+                    if (p?.id === profile.id) {
+                        p.options = p.options ?? {}
+                        p.options.password = password
+                        found = true
+                        this.logger.info(`Password injected for profile ${profile.id}`)
+                        break
                     }
                 }
+                if (found) {
+                    await this.platformService.saveConfig(yaml.dump(raw))
+                    this.logger.info('Config saved with password via platform')
+                } else {
+                    this.logger.warn(`Profile ${profile.id} not found in config for password save`)
+                }
             } catch (e) {
-                this.logger.warn('Failed to write password to config file', e)
+                this.logger.warn('Failed to save password via platform', e)
             }
             return
         } else {
