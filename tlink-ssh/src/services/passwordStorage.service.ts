@@ -169,24 +169,37 @@ export class PasswordStorageService {
         if (profile.options) {
             profile.options.password = password
         }
-        if (profile.id) {
-            try {
-                const yaml = require('js-yaml')
-                this.platformService.loadConfig().then(rawYaml => {
-                    const raw = yaml.load(rawYaml) ?? {}
-                    for (const p of raw.profiles ?? []) {
-                        if (p?.id === profile.id) {
-                            p.options = p.options ?? {}
-                            p.options.password = password
-                            this.platformService.saveConfig(yaml.dump(raw))
-                            this.logger.info('Password also saved to profile config as backup')
-                            return
-                        }
-                    }
-                }).catch(() => {})
-            } catch {
-                // Silent fallback
+        if (!profile.id) {
+            return
+        }
+        try {
+            const configPath = (this.platformService as any).getConfigPath?.()
+                ?? (this.platformService as any).configPath
+            if (!configPath) {
+                this.logger.warn('No config path for password backup')
+                return
             }
+            const fs = require('fs')
+            const yaml = require('js-yaml')
+            const rawYaml = fs.readFileSync(configPath, 'utf8')
+            const raw = yaml.load(rawYaml) ?? {}
+            let saved = false
+            for (const p of raw.profiles ?? []) {
+                if (p?.id === profile.id) {
+                    p.options = p.options ?? {}
+                    p.options.password = password
+                    saved = true
+                    break
+                }
+            }
+            if (saved) {
+                fs.writeFileSync(configPath, yaml.dump(raw), 'utf8')
+                this.logger.info(`Password backup written to ${configPath}`)
+            } else {
+                this.logger.warn(`Profile ${profile.id} not found in ${configPath}`)
+            }
+        } catch (e) {
+            this.logger.warn('Failed to backup password to config', e)
         }
     }
 
