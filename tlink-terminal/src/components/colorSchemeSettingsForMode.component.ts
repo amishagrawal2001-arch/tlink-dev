@@ -53,7 +53,10 @@ export class ColorSchemeSettingsForModeComponent {
     }
 
     selectScheme (scheme: TerminalColorScheme) {
-        this.config.store.terminal[this.configKey] = { ...scheme }
+        // Deep clone and mark to survive ConfigProxy cleanup
+        const cloned = JSON.parse(JSON.stringify(scheme))
+        cloned.__selected = Date.now()
+        this.config.store.terminal[this.configKey] = cloned
         this.config.save()
         this.cancelEditing()
         this.update()
