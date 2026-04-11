@@ -124,29 +124,40 @@ export class PasswordStorageService {
             }
         } else if (this.useVaultFallback()) {
             // Vault not enabled and keytar unavailable (production mode).
-            // Modify the raw YAML config directly to bypass ConfigProxy.
+            // Store password in profile.options.password and force config save.
             if (profile.options) {
                 profile.options.password = password
+                this.logger.info(`Fallback: set password on profile ${profile.id ?? 'ephemeral'}`)
             }
-            if (profile.id) {
-                try {
+            // Force save by writing the password into the raw config YAML
+            try {
+                const rawYaml = this.configService.readRaw()
+                if (profile.id && rawYaml) {
                     const yaml = require('js-yaml')
-                    const rawYaml = this.configService.readRaw()
-                    const rawConfig = yaml.load(rawYaml)
-                    if (Array.isArray(rawConfig?.profiles)) {
-                        for (const p of rawConfig.profiles) {
-                            if (p.id === profile.id) {
-                                if (!p.options) { p.options = {} }
-                                p.options.password = password
-                                break
-                            }
+                    const raw = yaml.load(rawYaml) ?? {}
+                    const profiles = raw.profiles ?? []
+                    let found = false
+                    for (const p of profiles) {
+                        if (p?.id === profile.id) {
+                            p.options = p.options ?? {}
+                            p.options.password = password
+                            found = true
+                            break
                         }
-                        await this.configService.writeRaw(yaml.dump(rawConfig))
-                        this.logger.info('Password saved to raw config (fallback storage)')
                     }
-                } catch (e) {
-                    this.logger.warn('Failed to save password to raw config', e)
+                    if (found) {
+                        const fs = require('fs')
+                        const path = require('path')
+                        const configDir = process.env.TLINK_CONFIG_DIRECTORY
+                        if (configDir) {
+                            const configPath = path.join(configDir, 'config.yaml')
+                            fs.writeFileSync(configPath, yaml.dump(raw), 'utf8')
+                            this.logger.info('Password written directly to config file')
+                        }
+                    }
                 }
+            } catch (e) {
+                this.logger.warn('Failed to write password to config file', e)
             }
             return
         } else {
