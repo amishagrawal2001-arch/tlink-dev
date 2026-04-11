@@ -124,11 +124,20 @@ export class PasswordStorageService {
             }
         } else if (this.useVaultFallback()) {
             // Vault not enabled and keytar unavailable (production mode).
-            // Store password in profile options and persist to config file.
+            // Store password in the config store profile and persist to disk.
+            if (profile.id) {
+                const storedProfiles = this.configService.store.profiles ?? []
+                const storedProfile = storedProfiles.find((p: any) => p.id === profile.id)
+                if (storedProfile?.options) {
+                    storedProfile.options.password = password
+                    this.configService.save()
+                    this.logger.info('Password saved to config store profile (fallback storage)')
+                    return
+                }
+            }
+            // Also set on the in-memory profile for immediate use
             if (profile.options) {
                 profile.options.password = password
-                this.configService.save()
-                this.logger.info('Password saved to profile options (fallback storage)')
             }
             return
         } else {
