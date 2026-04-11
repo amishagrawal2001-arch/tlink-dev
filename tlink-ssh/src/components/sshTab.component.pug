@@ -20,13 +20,13 @@ terminal-toolbar([tab]='this')
             [ngbTooltip]='"Session log directory"|translate',
             container='body'
         )
-            i.far.fa-lightbulb.text-primary
+            i.far.fa-folder-open
         button.btn.btn-sm.btn-link(
             (click)='openSessionLogFile()',
             [ngbTooltip]='"Session log file"|translate',
             container='body'
         )
-            i.far.fa-file-alt.text-primary
+            i.far.fa-file-alt
 
     button.btn.btn-sm.btn-link.me-2(
         (click)='reconnect()',

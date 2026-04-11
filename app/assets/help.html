@@ -9,14 +9,62 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: #1a1a2e;
     color: #e0e0e0;
-    padding: 24px 32px;
+    padding: 0;
     line-height: 1.6;
+    display: flex;
 }
-h1 { color: #a5c7ff; font-size: 28px; margin-bottom: 8px; }
-h2 { color: #82fff7; font-size: 18px; margin: 24px 0 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px; }
-h3 { color: #b1e969; font-size: 14px; margin: 16px 0 6px; }
-.subtitle { color: #888; font-size: 13px; margin-bottom: 24px; }
-p { margin: 6px 0; font-size: 13px; }
+/* Sidebar TOC */
+.sidebar {
+    width: 200px;
+    flex-shrink: 0;
+    background: #151525;
+    border-right: 1px solid rgba(255,255,255,0.06);
+    padding: 20px 0;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    overflow-y: auto;
+}
+.sidebar h3 {
+    color: #a5c7ff;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 0 16px;
+    margin-bottom: 12px;
+}
+.sidebar a {
+    display: block;
+    padding: 5px 16px;
+    color: rgba(255,255,255,0.5);
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 500;
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+}
+.sidebar a:hover {
+    color: #e0e0e0;
+    background: rgba(255,255,255,0.03);
+    border-left-color: rgba(59,130,246,0.3);
+}
+.sidebar a.active {
+    color: #a5c7ff;
+    border-left-color: #3b82f6;
+}
+/* Main Content */
+.content {
+    margin-left: 200px;
+    padding: 24px 32px;
+    flex: 1;
+    max-width: 900px;
+}
+h1 { color: #a5c7ff; font-size: 26px; margin-bottom: 4px; }
+h2 { color: #82fff7; font-size: 17px; margin: 28px 0 8px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 6px; scroll-margin-top: 16px; }
+h3 { color: #b1e969; font-size: 13px; margin: 14px 0 4px; }
+.subtitle { color: #666; font-size: 12px; margin-bottom: 20px; }
+p { margin: 5px 0; font-size: 13px; line-height: 1.7; }
 code {
     background: rgba(255,255,255,0.08);
     padding: 1px 6px;
@@ -25,8 +73,8 @@ code {
     font-size: 12px;
 }
 kbd {
-    background: rgba(255,255,255,0.12);
-    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.15);
     padding: 1px 6px;
     border-radius: 4px;
     font-family: 'SF Mono', monospace;
@@ -36,15 +84,15 @@ table {
     width: 100%;
     border-collapse: collapse;
     margin: 8px 0;
-    font-size: 13px;
+    font-size: 12px;
 }
 th, td {
     text-align: left;
-    padding: 6px 12px;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    padding: 5px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
 }
-th { color: #a5c7ff; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
-.section { margin-bottom: 16px; }
+th { color: #82fff7; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+.section { margin-bottom: 12px; }
 .badge {
     display: inline-block;
     padding: 2px 8px;
@@ -52,136 +100,187 @@ th { color: #a5c7ff; font-size: 11px; text-transform: uppercase; letter-spacing:
     font-size: 11px;
     font-weight: 600;
 }
-.badge-green { background: #16a34a; color: white; }
-.badge-blue { background: #3b82f6; color: white; }
-.badge-orange { background: #d97706; color: white; }
-.badge-red { background: #dc2626; color: white; }
-.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-@media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+.badge-green { background: rgba(34,197,94,0.15); color: #22c55e; }
+.badge-blue { background: rgba(59,130,246,0.15); color: #5da9f6; }
+.badge-orange { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.badge-red { background: rgba(239,68,68,0.15); color: #ef4444; }
 a { color: #5da9f6; text-decoration: none; }
 a:hover { text-decoration: underline; }
+.back-top { font-size: 11px; opacity: 0.3; margin-top: 12px; }
+.back-top:hover { opacity: 0.7; }
 </style>
 </head>
 <body>
 
+<nav class="sidebar">
+    <h3>User Guide</h3>
+    <a href="#getting-started">Getting Started</a>
+    <a href="#tabs">Tab Management</a>
+    <a href="#ssh">SSH</a>
+    <a href="#sftp">SFTP</a>
+    <a href="#api-client">API Client</a>
+    <a href="#rdp">RDP</a>
+    <a href="#terminal">Terminal Settings</a>
+    <a href="#highlighting">Output Highlighting</a>
+    <a href="#shortcuts">Keyboard Shortcuts</a>
+    <a href="#ai">AI Assistant</a>
+    <a href="#license">License</a>
+</nav>
+
+<div class="content">
+
 <h1>NexTerm User Guide</h1>
-<p class="subtitle">Version 1.0.2 — AI-Enhanced Terminal for DevOps & Network Engineers</p>
+<p class="subtitle">AI-Enhanced Terminal for DevOps & Network Engineers</p>
 
-<div class="two-col">
-<div>
-
-<h2>Getting Started</h2>
+<h2 id="getting-started">Getting Started</h2>
 <div class="section">
-<h3>Opening a Connection</h3>
-<p>Click the <kbd>+</kbd> button in the tab bar, or use the <b>Session Manager</b> panel on the right side.</p>
-<p>You can also quick-connect by typing <code>user@hostname</code> in the command palette (<kbd>Ctrl+Shift+P</kbd>).</p>
+<p>Click the <kbd>+</kbd> button in the tab bar to open a new connection. Use the <b>Session Manager</b> panel (right sidebar) to browse saved profiles.</p>
+<p>Quick-connect: type <code>user@hostname</code> in the command palette (<kbd>Cmd+Shift+P</kbd>).</p>
+<p>The left dock bar provides quick access to: <b>API Client</b>, <b>Help</b>, and <b>Settings</b>.</p>
 </div>
 
+<h2 id="tabs">Tab Management</h2>
 <div class="section">
-<h3>Tab Management</h3>
 <table>
 <tr><th>Action</th><th>How</th></tr>
 <tr><td>New tab</td><td>Click <kbd>+</kbd> or <kbd>Cmd+T</kbd></td></tr>
-<tr><td>Close tab</td><td>Click <kbd>×</kbd> or middle-click tab</td></tr>
-<tr><td>Close other tabs</td><td>Right-click tab → Close Other Tabs</td></tr>
+<tr><td>Close tab</td><td>Click <kbd>&times;</kbd>, middle-click, or right-click &rarr; Close</td></tr>
+<tr><td>Close other tabs</td><td>Right-click tab &rarr; Close Other Tabs</td></tr>
+<tr><td>Close tabs to the right</td><td>Right-click tab &rarr; Close Tabs to the Right</td></tr>
 <tr><td>Rename tab</td><td>Double-click tab name</td></tr>
-<tr><td>Tab color</td><td>Right-click tab → Color</td></tr>
+<tr><td>Tab color</td><td>Right-click tab &rarr; Color</td></tr>
 <tr><td>Reorder tabs</td><td>Drag tabs left/right</td></tr>
+<tr><td>Duplicate tab</td><td>Right-click tab &rarr; Duplicate</td></tr>
+<tr><td>Split right</td><td><kbd>Cmd+Shift+D</kbd></td></tr>
+<tr><td>Split bottom</td><td><kbd>Cmd+D</kbd></td></tr>
+<tr><td>Navigate panes</td><td><kbd>Cmd+Option+Arrow</kbd></td></tr>
 </table>
 </div>
+<a href="#" class="back-top">&uarr; Back to top</a>
 
-<h2>SSH</h2>
+<h2 id="ssh">SSH</h2>
 <div class="section">
-<h3>Connection</h3>
-<p>Create SSH profiles in <b>Settings → Profiles & connections</b>. Each profile stores host, port, username, auth method, and optional settings.</p>
-<p>The connection shows 4-phase progress: <span class="badge badge-blue">1/4</span> Connect → <span class="badge badge-blue">2/4</span> Key Exchange → <span class="badge badge-blue">3/4</span> Auth → <span class="badge badge-green">4/4</span> Ready</p>
+<h3>Creating a Connection</h3>
+<p>Go to <b>Settings &rarr; Profiles &amp; connections &rarr; +</b> &rarr; select SSH. Enter host, port, username, and auth method.</p>
+<p>The <b>Test Connection</b> button verifies connection without opening a tab.</p>
+
+<h3>Connection Progress</h3>
+<p>The terminal shows 4-phase progress:</p>
+<p><span class="badge badge-blue">1/4</span> Connect &rarr; <span class="badge badge-blue">2/4</span> Key Exchange &rarr; <span class="badge badge-blue">3/4</span> Auth &rarr; <span class="badge badge-green">4/4</span> Ready</p>
 
 <h3>Connection Health</h3>
-<p>The tab dot indicates connection status:</p>
 <table>
-<tr><td><span class="badge badge-green">●</span> Green</td><td>Connected and healthy</td></tr>
-<tr><td><span class="badge badge-orange">●</span> Yellow</td><td>Connected but no data received (stale)</td></tr>
-<tr><td><span class="badge badge-red">●</span> Red</td><td>Disconnected</td></tr>
+<tr><td><span class="badge badge-green">&bull;</span> Green</td><td>Connected and healthy</td></tr>
+<tr><td><span class="badge badge-orange">&bull;</span> Yellow</td><td>Connected but stale (no recent data)</td></tr>
+<tr><td><span class="badge badge-red">&bull;</span> Red</td><td>Disconnected</td></tr>
 </table>
 
-<h3>SFTP</h3>
-<p>Click the <b>folder icon</b> in the SSH tab toolbar to open the SFTP panel.</p>
-<p>Features: file upload/download, drag-and-drop, bookmarked paths, transfer progress, directory creation.</p>
-<p>Double-click a file to download it. Star a path to bookmark it for quick navigation.</p>
+<h3>Auth Methods</h3>
+<p>Supported: Password, Public Key, SSH Agent, Keyboard Interactive.</p>
+<p>Set priority order in profile &rarr; Advanced &rarr; Authentication Order.</p>
 
 <h3>Port Forwarding</h3>
-<p>Click the <b>plug icon</b> in the SSH tab toolbar to manage port forwards (local, remote, dynamic SOCKS).</p>
-
-<h3>Auth Methods</h3>
-<p>Supported: Password, Public Key, SSH Agent, Keyboard Interactive. Set priority order in profile settings → Advanced → Authentication Order.</p>
+<p>Click the <b>plug icon</b> in the SSH toolbar. Supports local, remote, and dynamic (SOCKS5) forwarding.</p>
 </div>
+<a href="#" class="back-top">&uarr; Back to top</a>
 
-</div>
-<div>
-
-<h2>API Client</h2>
+<h2 id="sftp">SFTP</h2>
 <div class="section">
-<p>Click the <b>API icon</b> in the tab bar toolbar to open a new API request tab.</p>
+<p>Click the <b>folder icon</b> in the SSH toolbar to open the SFTP panel.</p>
+<table>
+<tr><th>Action</th><th>How</th></tr>
+<tr><td>Upload files</td><td>Click Upload or drag &amp; drop</td></tr>
+<tr><td>Download file</td><td>Double-click a file</td></tr>
+<tr><td>Bookmark path</td><td>Click &star; to save, dropdown to navigate</td></tr>
+<tr><td>Create directory</td><td>Click <kbd>+</kbd> folder button</td></tr>
+<tr><td>Filter files</td><td>Click Filter and type</td></tr>
+</table>
+<p>Transfer progress shows inline with speed and cancel button.</p>
+</div>
+<a href="#" class="back-top">&uarr; Back to top</a>
+
+<h2 id="api-client">API Client</h2>
+<div class="section">
+<p>Click the <b>globe icon</b> in the left dock bar or tab bar toolbar.</p>
 <h3>Making Requests</h3>
-<p>1. Select method (GET, POST, PUT, DELETE, etc.)</p>
+<p>1. Select HTTP method (GET, POST, PUT, DELETE, etc.)</p>
 <p>2. Enter the URL</p>
 <p>3. Add headers, body, or auth as needed</p>
 <p>4. Click <b>Send</b> or press <kbd>Enter</kbd></p>
+<p>Response appears on the right with status, timing, formatted JSON, and headers.</p>
 
 <h3>Collections</h3>
-<p>Save requests to named collections for reuse. Click the <b>Collections</b> tab → create a collection → click the save icon to store the current request.</p>
+<p>Save requests for reuse: Collections tab &rarr; Create collection &rarr; click save icon.</p>
+<p>Click a saved request to load it back. All fields (URL, headers, body, auth) are preserved.</p>
 </div>
+<a href="#" class="back-top">&uarr; Back to top</a>
 
-<h2>RDP</h2>
+<h2 id="rdp">RDP (Remote Desktop)</h2>
 <div class="section">
-<p>Create RDP profiles to connect to Windows Remote Desktop. NexTerm bundles FreeRDP — no additional software needed on macOS.</p>
-<p>If FreeRDP fails, the app offers to switch to the system RDP client (Microsoft Remote Desktop).</p>
+<p>Create RDP profiles to connect to Windows machines. NexTerm bundles <b>FreeRDP</b> on macOS &mdash; no additional software needed.</p>
+<p>If FreeRDP is unavailable, the app prompts to switch to Microsoft Remote Desktop.</p>
 </div>
 
-<h2>Terminal Settings</h2>
+<h2 id="terminal">Terminal Settings</h2>
 <div class="section">
 <h3>Color Scheme</h3>
-<p><b>Settings → Color scheme</b> — Choose from built-in themes or customize all 16 ANSI colors.</p>
-
-<h3>Output Highlighting</h3>
-<p><b>Settings → Terminal → Output keyword highlighting</b></p>
-<p>Color-codes keywords in terminal output (UP=green, DOWN=red, ERROR=red, etc.). Add custom regex rules with any color.</p>
+<p><b>Settings &rarr; Color scheme</b> &mdash; Choose from 190+ built-in themes including Dracula, Nord, One Dark, Catppuccin, GitHub, and more.</p>
+<p>Click <b>Edit</b> to customize foreground, background, cursor, and all 16 ANSI colors.</p>
+<p>Toggle dark/light mode using the switch in the bottom-right corner.</p>
 
 <h3>Button Bar</h3>
-<p><b>Settings → Terminal → Button bar</b> — Create custom command buttons displayed above the terminal.</p>
+<p><b>Settings &rarr; Terminal &rarr; Button bar</b> &mdash; Create custom command buttons above the terminal for quick access to frequent commands.</p>
 </div>
+<a href="#" class="back-top">&uarr; Back to top</a>
 
-<h2>Keyboard Shortcuts</h2>
+<h2 id="highlighting">Output Highlighting</h2>
+<div class="section">
+<p><b>Settings &rarr; Terminal &rarr; Output keyword highlighting</b></p>
+<p>Automatically colors keywords in terminal output:</p>
+<table>
+<tr><td><span style="color:#22c55e;font-weight:700;">UP</span>, <span style="color:#22c55e;font-weight:700;">OK</span></td><td>Green</td></tr>
+<tr><td><span style="color:#ef4444;font-weight:700;">DOWN</span>, <span style="color:#ef4444;font-weight:700;">ERROR</span></td><td>Red</td></tr>
+<tr><td><span style="color:#f59e0b;font-weight:700;">WARNING</span></td><td>Yellow</td></tr>
+<tr><td><span style="color:#5da9f6;font-weight:700;">IP addresses</span>, <span style="color:#5da9f6;font-weight:700;">interfaces</span></td><td>Blue</td></tr>
+</table>
+<p>Add custom rules with regex patterns and any color. Click the color swatch to change.</p>
+</div>
+<a href="#" class="back-top">&uarr; Back to top</a>
+
+<h2 id="shortcuts">Keyboard Shortcuts</h2>
 <div class="section">
 <table>
 <tr><th>Shortcut</th><th>Action</th></tr>
 <tr><td><kbd>Cmd+T</kbd></td><td>New terminal tab</td></tr>
 <tr><td><kbd>Cmd+W</kbd></td><td>Close current tab</td></tr>
 <tr><td><kbd>Cmd+1-9</kbd></td><td>Switch to tab 1-9</td></tr>
-<tr><td><kbd>Cmd+Shift+←→</kbd></td><td>Previous/next tab</td></tr>
+<tr><td><kbd>Cmd+Shift+&larr;&rarr;</kbd></td><td>Previous/next tab</td></tr>
+<tr><td><kbd>Cmd+D</kbd></td><td>Split bottom</td></tr>
+<tr><td><kbd>Cmd+Shift+D</kbd></td><td>Split right</td></tr>
+<tr><td><kbd>Cmd+Option+Arrow</kbd></td><td>Navigate between panes</td></tr>
 <tr><td><kbd>Cmd+,</kbd></td><td>Open settings</td></tr>
 <tr><td><kbd>Cmd+Shift+P</kbd></td><td>Command palette</td></tr>
 <tr><td><kbd>Cmd+C</kbd></td><td>Copy</td></tr>
 <tr><td><kbd>Cmd+V</kbd></td><td>Paste</td></tr>
 </table>
+<p>Customize shortcuts in <b>Settings &rarr; Hotkeys</b>.</p>
 </div>
+<a href="#" class="back-top">&uarr; Back to top</a>
 
-<h2>AI Assistant</h2>
+<h2 id="ai">AI Assistant</h2>
 <div class="section">
-<p>Click the <b>robot icon</b> in the SSH tab toolbar to send terminal output to the AI assistant for analysis.</p>
-<p>The AI also detects common errors (command not found, permission denied, etc.) and offers to help via a toast notification.</p>
-<p>Configure AI providers in <b>Settings → AI Assistant</b>.</p>
+<p>Click the <b>robot icon</b> in the SSH toolbar to send selected terminal text to the AI for analysis.</p>
+<p>The AI detects common errors (command not found, permission denied) and offers to help via a toast notification.</p>
+<p>Configure providers in <b>Settings &rarr; AI Assistant</b>. Supports OpenAI, Anthropic, Ollama, and more.</p>
 </div>
 
-<h2>License</h2>
+<h2 id="license">License</h2>
 <div class="section">
-<p>NexTerm requires a license for continued use. On first launch, you'll see the activation dialog.</p>
-<p>Options: Enter a license key, or click <b>Start Free Trial</b> for a 30-day trial.</p>
-<p>Manage your license in <b>Settings → License Management</b>.</p>
+<p>NexTerm requires a license. On first launch, click <b>Start Free Trial</b> for 30 days, or enter a license key.</p>
+<p>Manage in <b>Settings &rarr; License Management</b>.</p>
+<p>When the license expires, the app requires activation before use.</p>
 </div>
 
 </div>
-</div>
-
 </body>
 </html>
