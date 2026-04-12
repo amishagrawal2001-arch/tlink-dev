@@ -70,14 +70,14 @@ builder({
                 channel: `latest-${process.env.ARCH}`,
             },
         ] : undefined,
-        forceCodeSigning: !!keypair,
+        forceCodeSigning: false,
         win: {
             artifactName: `tlink-\${version}-portable-\${arch}${artifactSuffix}.\${ext}`,
-            signtoolOptions: {
+            signtoolOptions: keypair ? {
                 certificateSha1: process.env.SM_CODE_SIGNING_CERT_SHA1_HASH,
                 publisherName: process.env.SM_PUBLISHER_NAME,
                 signingHashAlgorithms: ['sha256'],
-                sign: keypair ? async function (configuration) {
+                sign: async function (configuration) {
                     console.log('Signing', configuration)
                     if (configuration.path) {
                         try {
@@ -100,8 +100,8 @@ builder({
                             process.exit(1)
                         }
                     }
-                } : undefined,
-            },
+                },
+            } : undefined,
         },
         nsis: {
             artifactName: `tlink-\${version}-setup-\${arch}${artifactSuffix}.\${ext}`,
