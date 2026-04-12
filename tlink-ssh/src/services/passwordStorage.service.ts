@@ -1,6 +1,6 @@
 import * as keytar from 'keytar'
 import { Injectable } from '@angular/core'
-import { VaultService, NotificationsService, LogService, Logger, PlatformService, ConfigService } from 'tlink-core'
+import { VaultService, LogService, Logger, ConfigService } from 'tlink-core'
 import { SSHProfile } from '../api'
 
 export const VAULT_SECRET_TYPE_PASSWORD = 'ssh:password'
@@ -10,213 +10,125 @@ type SavedPasswordRecord = { password: string, username?: string }
 
 @Injectable({ providedIn: 'root' })
 export class PasswordStorageService {
-    private keytarAvailable: boolean | null = null
-    private keytarHealthChecked = false
     private logger: Logger
 
     constructor (
         private vault: VaultService,
-        private notifications: NotificationsService,
-        private platformService: PlatformService,
         private configService: ConfigService,
         log: LogService,
     ) {
         this.logger = log.create('password-storage')
     }
 
-    async checkKeytarHealth (): Promise<boolean> {
-        if (this.keytarHealthChecked) {
-            return this.keytarAvailable !== false
-        }
-        this.keytarHealthChecked = true
-
-        try {
-            await keytar.setPassword('tlink-health-check', 'canary', 'test')
-            const value = await keytar.getPassword('tlink-health-check', 'canary')
-            await keytar.deletePassword('tlink-health-check', 'canary')
-            this.keytarAvailable = value === 'test'
-            if (!this.keytarAvailable) {
-                this.logger.warn('Keychain canary read-back failed')
-                if (await this.ensureVaultReady()) {
-                    this.notifications.error('System keychain is unavailable. Passwords will be stored in the encrypted vault.')
-                } else {
-                    this.notifications.error('System keychain is unavailable. Enable the encrypted vault in settings for reliable password storage.')
-                }
-            }
-            return this.keytarAvailable
-        } catch (e) {
-            this.keytarAvailable = false
-            this.logger.warn('Keychain health check failed', e)
-            if (await this.ensureVaultReady()) {
-                this.notifications.error('System keychain is unavailable. Passwords will be stored in the encrypted vault.')
-            } else {
-                this.notifications.error('System keychain is unavailable. Enable the encrypted vault in settings for reliable password storage.')
-            }
-            return false
-        }
-    }
-
+    /**
+     * Helper for keytar operations used only by migrateAllToVault().
+     * Not used for normal password save/load flows.
+     */
     private async tryKeytarRead<T> (op: () => Promise<T>): Promise<T | null> {
-        if (this.keytarAvailable === false) {
-            return null
-        }
         try {
             return await op()
         } catch (e) {
-            this.keytarAvailable = false
             this.logger.warn('Keychain access failed', e)
-            if (await this.ensureVaultReady()) {
-                this.notifications.error('Keychain access failed. Using encrypted vault as fallback.')
-            } else {
-                this.notifications.error('Keychain access failed. Enable the encrypted vault in settings for reliable password storage.')
-            }
             return null
         }
     }
 
     private async tryKeytarWrite (op: () => Promise<void>): Promise<boolean> {
-        if (this.keytarAvailable === false) {
-            return false
-        }
         try {
             await op()
             return true
         } catch (e) {
-            this.keytarAvailable = false
             this.logger.warn('Keychain write failed', e)
-            if (await this.ensureVaultReady()) {
-                this.notifications.error('Keychain access failed. Using encrypted vault as fallback.')
-            } else {
-                this.notifications.error('Keychain access failed. Enable the encrypted vault in settings for reliable password storage.')
-            }
             return false
         }
     }
 
-    private useVaultFallback (): boolean {
-        return this.keytarAvailable === false
-    }
-
-    private async ensureVaultReady (): Promise<boolean> {
-        if (this.vault.isEnabled()) {
-            return true
-        }
-        // Vault requires a user-set passphrase to enable, so we can't
-        // silently auto-enable it. Vault fallback only works if the user
-        // has previously enabled the vault in settings.
-        this.logger.warn('Vault is not enabled. Enable the encrypted vault in settings for reliable password storage.')
-        return false
-    }
-
     async savePassword (profile: SSHProfile, password: string, username?: string): Promise<void> {
         const account = this.normalizeAccount(username ?? profile.options.user)
-        if (this.vault.isEnabled()) {
-            for (const key of this.getVaultKeysForConnection(profile, account)) {
-                await this.vault.addSecret({ type: VAULT_SECRET_TYPE_PASSWORD, key, value: password })
-            }
-        } else if (this.useVaultFallback()) {
-            // Vault not enabled and keytar unavailable (production mode).
-            // Read raw config, inject password, save via platform.
-            if (profile.options) {
-                profile.options.password = password
-            }
-            try {
-                const yaml = require('js-yaml')
-                const rawYaml = await this.platformService.loadConfig()
-                const raw = yaml.load(rawYaml) ?? {}
-                const profiles = raw.profiles ?? []
-                let found = false
-                for (const p of profiles) {
-                    if (p?.id === profile.id) {
-                        p.options = p.options ?? {}
-                        p.options.password = password
-                        found = true
-                        this.logger.info(`Password injected for profile ${profile.id}`)
-                        break
-                    }
-                }
-                if (found) {
-                    await this.platformService.saveConfig(yaml.dump(raw))
-                    this.logger.info('Config saved with password via platform')
-                } else {
-                    this.logger.warn(`Profile ${profile.id} not found in config for password save`)
-                }
-            } catch (e) {
-                this.logger.warn('Failed to save password via platform', e)
-            }
-            return
-        } else {
-            if (!account) {
-                return
-            }
-            let keytarSucceeded = false
-            for (const key of this.getKeytarKeysForConnection(profile)) {
-                const ok = await this.tryKeytarWrite(() => keytar.setPassword(key, account, password))
-                if (ok) {
-                    keytarSucceeded = true
-                }
-            }
-            if (!keytarSucceeded && this.useVaultFallback()) {
-                for (const key of this.getVaultKeysForConnection(profile, account)) {
-                    await this.vault.addSecret({ type: VAULT_SECRET_TYPE_PASSWORD, key, value: password })
-                }
-            }
-        }
-        // Always save to profile.options.password as backup (survives keytar/vault issues)
-        this.savePasswordToProfile(profile, password).catch(e => {
-            this.logger.warn('Password profile backup failed', e)
-        })
-    }
 
-    private async savePasswordToProfile (profile: SSHProfile, password: string): Promise<void> {
+        // 1. Always set password on the in-memory profile object
         if (profile.options) {
             profile.options.password = password
         }
+
+        // 2. Persist to config store (primary, reliable storage)
+        this.persistPasswordToConfig(profile, password)
+
+        // 3. Also save to vault if enabled (vault is user-opted-in secure storage)
+        if (this.vault.isEnabled()) {
+            for (const key of this.getVaultKeysForConnection(profile, account)) {
+                try {
+                    await this.vault.addSecret({ type: VAULT_SECRET_TYPE_PASSWORD, key, value: password })
+                } catch (e) {
+                    this.logger.warn('Vault save failed (non-critical)', e)
+                }
+            }
+        }
+        // Note: keytar (macOS Keychain) is no longer used for SSH passwords.
+        // Config store is the primary storage; vault is optional secondary.
+    }
+
+    /**
+     * Persist password directly into the config store's profile entry and flush to disk.
+     * This is the primary persistence mechanism that survives app restarts regardless
+     * of keytar/vault availability.
+     */
+    private persistPasswordToConfig (profile: SSHProfile, password: string): void {
         if (!profile.id) {
+            // New profile — password is already set on the in-memory object.
+            // It will be persisted when the profile is saved via newProfile() + config.save().
             return
         }
         try {
-            // Read the current raw config, inject the password, and write back
-            // via writeRaw() which reloads the internal _store from the YAML
-            const rawYaml = this.configService.readRaw()
-            if (!rawYaml) { return }
-            const yaml = require('js-yaml')
-            const raw = yaml.load(rawYaml)
-            if (!raw?.profiles) { return }
-            for (const p of raw.profiles) {
+            // Find the profile in the config store's raw profiles array and set the password
+            const profiles = this.configService.store?.profiles
+            if (!profiles) { return }
+            for (const p of profiles) {
                 if (p?.id === profile.id) {
                     if (!p.options) { p.options = {} }
                     p.options.password = password
-                    // writeRaw() sets _store, saves to disk, and reloads
-                    // so the password becomes part of the internal store
-                    await this.configService.writeRaw(yaml.dump(raw))
-                    this.logger.info('Password saved to config via writeRaw')
+                    this.logger.info(`Password set in config store for profile ${profile.id}`)
+                    // Flush to disk
+                    this.configService.save().catch(e => {
+                        this.logger.warn('Failed to flush config after password save', e)
+                    })
                     return
                 }
             }
+            this.logger.debug(`Profile ${profile.id} not found in config store (may be ephemeral)`)
         } catch (e) {
-            this.logger.warn('Failed to save password to config', e)
+            this.logger.warn('Failed to persist password to config', e)
         }
     }
 
     async deletePassword (profile: SSHProfile, username?: string): Promise<void> {
         const account = this.normalizeAccount(username ?? profile.options.user)
-        if (this.vault.isEnabled() || this.useVaultFallback()) {
+
+        // Clear from config store
+        if (profile.options) {
+            profile.options.password = undefined
+        }
+        if (profile.id) {
+            try {
+                const profiles = this.configService.store?.profiles
+                if (profiles) {
+                    for (const p of profiles) {
+                        if (p?.id === profile.id && p.options) {
+                            delete p.options.password
+                            this.configService.save().catch(() => {})
+                            break
+                        }
+                    }
+                }
+            } catch (e) {
+                this.logger.warn('Failed to clear password from config', e)
+            }
+        }
+
+        // Clear from vault if enabled
+        if (this.vault.isEnabled()) {
             for (const key of this.getVaultKeysForConnection(profile, account)) {
                 await this.vault.removeSecret(VAULT_SECRET_TYPE_PASSWORD, key)
-            }
-        } else {
-            if (!account) {
-                return
-            }
-            for (const key of this.getKeytarKeysForConnection(profile)) {
-                await this.tryKeytarWrite(() => keytar.deletePassword(key, account).then(() => undefined))
-            }
-            // Also clean vault in case a previous fallback stored it there
-            if (this.useVaultFallback()) {
-                for (const key of this.getVaultKeysForConnection(profile, account)) {
-                    await this.vault.removeSecret(VAULT_SECRET_TYPE_PASSWORD, key)
-                }
             }
         }
     }
@@ -224,11 +136,32 @@ export class PasswordStorageService {
     async loadPassword (profile: SSHProfile, username?: string): Promise<string|null> {
         const account = this.normalizeAccount(username ?? profile.options.user)
 
-        // Check profile options first (production fallback storage)
+        // Check profile object first (in-memory)
         if (profile.options?.password) {
             return profile.options.password
         }
 
+        // Check config store (the profile object might be a stale copy from tab recovery)
+        if (profile.id) {
+            try {
+                const profiles = this.configService.store?.profiles
+                if (profiles) {
+                    for (const p of profiles) {
+                        if (p?.id === profile.id && p.options?.password) {
+                            // Sync back to the in-memory profile so future lookups are fast
+                            if (profile.options) {
+                                profile.options.password = p.options.password
+                            }
+                            return p.options.password
+                        }
+                    }
+                }
+            } catch (e) {
+                this.logger.warn('Failed to load password from config store', e)
+            }
+        }
+
+        // Check vault if enabled (secondary storage)
         if (this.vault.isEnabled()) {
             for (const key of this.getVaultKeysForConnection(profile, account)) {
                 const password = (await this.vault.getSecret(VAULT_SECRET_TYPE_PASSWORD, key))?.value
@@ -236,27 +169,9 @@ export class PasswordStorageService {
                     return password
                 }
             }
-            return null
-        } else {
-            if (!account) {
-                return null
-            }
-            for (const key of this.getKeytarKeysForConnection(profile)) {
-                const password = await this.tryKeytarRead(() => keytar.getPassword(key, account))
-                if (password) {
-                    return password
-                }
-            }
-            if (this.useVaultFallback()) {
-                for (const key of this.getVaultKeysForConnection(profile, account)) {
-                    const password = (await this.vault.getSecret(VAULT_SECRET_TYPE_PASSWORD, key))?.value
-                    if (password) {
-                        return password
-                    }
-                }
-            }
-            return null
         }
+
+        return null
     }
 
     async loadAnyPassword (profile: SSHProfile): Promise<SavedPasswordRecord|null> {
@@ -268,7 +183,8 @@ export class PasswordStorageService {
             }
         }
 
-        if (this.vault.isEnabled() || this.useVaultFallback()) {
+        // Check vault if enabled
+        if (this.vault.isEnabled()) {
             const vault = await this.vault.load()
             if (!vault) {
                 return null
@@ -299,95 +215,30 @@ export class PasswordStorageService {
                     username: this.normalizeAccount(typeof key.user === 'string' ? key.user : undefined),
                 }
             }
-            return null
         }
 
-        for (const key of this.getKeytarKeysForConnection(profile)) {
-            const credentials = await this.tryKeytarRead(() => keytar.findCredentials(key))
-            if (credentials) {
-                for (const credential of credentials) {
-                    if (!credential.password) {
-                        continue
-                    }
-                    return {
-                        password: credential.password,
-                        username: this.normalizeAccount(credential.account),
-                    }
-                }
-            }
-        }
-        if (this.useVaultFallback()) {
-            const vault = await this.vault.load()
-            if (vault) {
-                const hostCandidates = new Set(this.getHostCandidates(profile.options.host).map(x => x.toLowerCase()))
-                const portCandidates = new Set(this.getPortCandidates(profile.options.port).map(x => `${typeof x}:${x ?? 'default'}`))
-                for (const secret of vault.secrets ?? []) {
-                    if (secret.type !== VAULT_SECRET_TYPE_PASSWORD || !secret.value) {
-                        continue
-                    }
-                    const key = secret.key as Record<string, unknown>
-                    const host = this.normalizeHost(typeof key.host === 'string' ? key.host : undefined)
-                    if (host && !hostCandidates.has(host.toLowerCase())) {
-                        continue
-                    }
-                    const keyPort = this.normalizePort(key.port as PortValue)
-                    const keyPortValues = this.getPortCandidates(keyPort)
-                    if (!keyPortValues.some(x => portCandidates.has(`${typeof x}:${x ?? 'default'}`))) {
-                        continue
-                    }
-                    return {
-                        password: secret.value,
-                        username: this.normalizeAccount(typeof key.user === 'string' ? key.user : undefined),
-                    }
-                }
-            }
-        }
         return null
     }
 
     async savePrivateKeyPassword (id: string, password: string): Promise<void> {
-        if (this.vault.isEnabled() || this.useVaultFallback()) {
+        if (this.vault.isEnabled()) {
             const key = this.getVaultKeyForPrivateKey(id)
             await this.vault.addSecret({ type: VAULT_SECRET_TYPE_PASSPHRASE, key, value: password })
-        } else {
-            const key = this.getKeytarKeyForPrivateKey(id)
-            const ok = await this.tryKeytarWrite(() => keytar.setPassword(key, 'user', password))
-            if (!ok && this.useVaultFallback()) {
-                const vaultKey = this.getVaultKeyForPrivateKey(id)
-                await this.vault.addSecret({ type: VAULT_SECRET_TYPE_PASSPHRASE, key: vaultKey, value: password })
-            }
         }
     }
 
     async deletePrivateKeyPassword (id: string): Promise<void> {
-        if (this.vault.isEnabled() || this.useVaultFallback()) {
+        if (this.vault.isEnabled()) {
             const key = this.getVaultKeyForPrivateKey(id)
             await this.vault.removeSecret(VAULT_SECRET_TYPE_PASSPHRASE, key)
-        } else {
-            const key = this.getKeytarKeyForPrivateKey(id)
-            await this.tryKeytarWrite(() => keytar.deletePassword(key, 'user').then(() => undefined))
-            // Also clean vault in case a previous fallback stored it there
-            if (this.useVaultFallback()) {
-                const vaultKey = this.getVaultKeyForPrivateKey(id)
-                await this.vault.removeSecret(VAULT_SECRET_TYPE_PASSPHRASE, vaultKey)
-            }
         }
     }
 
     async loadPrivateKeyPassword (id: string): Promise<string|null> {
-        if (this.vault.isEnabled() || this.useVaultFallback()) {
+        if (this.vault.isEnabled()) {
             const key = this.getVaultKeyForPrivateKey(id)
             return (await this.vault.getSecret(VAULT_SECRET_TYPE_PASSPHRASE, key))?.value ?? null
         } else {
-            const key = this.getKeytarKeyForPrivateKey(id)
-            const password = await this.tryKeytarRead(() => keytar.getPassword(key, 'user'))
-            if (password) {
-                return password
-            }
-            if (this.useVaultFallback()) {
-                const vaultKey = this.getVaultKeyForPrivateKey(id)
-                return (await this.vault.getSecret(VAULT_SECRET_TYPE_PASSPHRASE, vaultKey))?.value ?? null
-            }
             return null
         }
     }
@@ -446,28 +297,6 @@ export class PasswordStorageService {
             return { user: account || undefined }
         }
         return null
-    }
-
-    private getKeytarKeysForConnection (profile: SSHProfile): string[] {
-        const keys = new Set<string>()
-        const hosts = this.getHostCandidates(profile.options.host)
-        const ports = this.getPortCandidates(profile.options.port)
-
-        for (const host of hosts) {
-            for (const port of ports) {
-                if (port === undefined || port === null || port === '') {
-                    keys.add(`ssh@${host}`)
-                } else {
-                    keys.add(`ssh@${host}:${port}`)
-                }
-            }
-        }
-
-        return [...keys]
-    }
-
-    private getKeytarKeyForPrivateKey (id: string): string {
-        return `ssh-private-key:${id}`
     }
 
     private getVaultKeysForConnection (profile: SSHProfile, username?: string) {

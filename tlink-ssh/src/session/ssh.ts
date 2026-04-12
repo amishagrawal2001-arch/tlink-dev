@@ -184,7 +184,9 @@ export class SSHSession {
     }
 
     async init (): Promise<void> {
-        await this.passwordStorage.checkKeytarHealth()
+        // Load saved password from config store (handles stale profile objects from tab recovery)
+        const savedPassword = await this.passwordStorage.loadPassword(this.profile)
+
         this.allAuthMethods = [{ type: 'none' }]
         if (!this.profile.options.auth || this.profile.options.auth === 'publicKey') {
             if (this.profile.options.privateKeys?.length) {
@@ -223,13 +225,13 @@ export class SSHSession {
             }
         }
         if (!this.profile.options.auth || this.profile.options.auth === 'password') {
-            if (this.profile.options.password) {
-                this.allAuthMethods.push({ type: 'saved-password', password: this.profile.options.password })
+            if (savedPassword) {
+                this.allAuthMethods.push({ type: 'saved-password', password: savedPassword })
             }
         }
         if (!this.profile.options.auth || this.profile.options.auth === 'keyboardInteractive' || this.profile.options.auth === 'password') {
-            if (this.profile.options.password) {
-                this.allAuthMethods.push({ type: 'keyboard-interactive', savedPassword: this.profile.options.password })
+            if (savedPassword) {
+                this.allAuthMethods.push({ type: 'keyboard-interactive', savedPassword })
             }
             this.allAuthMethods.push({ type: 'keyboard-interactive' })
         }
@@ -289,7 +291,7 @@ export class SSHSession {
             }
         }
 
-        if (!this.profile.options.auth || this.profile.options.auth === 'keyboardInteractive') {
+        if (!this.profile.options.auth || this.profile.options.auth === 'keyboardInteractive' || this.profile.options.auth === 'password') {
             const existingSaved = this.allAuthMethods.find(method => method.type === 'keyboard-interactive' && method.savedPassword === storedPassword)
             if (!existingSaved) {
                 const updatable = this.allAuthMethods.find(method => method.type === 'keyboard-interactive' && method.savedPassword === undefined)
@@ -420,6 +422,7 @@ export class SSHSession {
             return
         }
         const port = this.profile.options.port ?? 22
+        const rememberedPassword = this.savedPassword || this.profile.options?.password
         try {
             const existingProfiles = await this.profilesService.getProfiles({ includeBuiltin: false, clone: true })
             const existing = existingProfiles.find(p =>
@@ -429,18 +432,29 @@ export class SSHSession {
                 p.options?.user?.trim() === username,
             )
             if (existing) {
+                // Profile already exists — persist password to it if we have one
+                if (rememberedPassword && existing.id) {
+                    this.profile.id = existing.id
+                    await this.passwordStorage.savePassword(this.profile, rememberedPassword, username)
+                }
                 return
             }
 
-            await this.profilesService.newProfile({
+            const newProfile: any = {
                 name: `${username}@${host}:${port}`,
                 type: 'ssh',
                 options: {
                     host,
                     port,
                     user: username,
+                    password: rememberedPassword || undefined,
                 },
-            })
+            }
+            await this.profilesService.newProfile(newProfile)
+            // Sync the assigned ID back to this session's profile so future saves work
+            if (newProfile.id) {
+                this.profile.id = newProfile.id
+            }
             await this.config.save()
         } catch (error) {
             this.logger.warn('Failed to save quick-connect profile', error)
