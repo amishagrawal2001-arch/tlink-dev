@@ -620,7 +620,6 @@ export class Application {
 
     openHelpWindow (): void {
         const { BrowserWindow } = require('electron')
-        const path = require('path')
 
         const helpPath = path.join(app.getAppPath(), 'assets', 'help.html')
 
