@@ -1,6 +1,6 @@
 import * as keytar from 'keytar'
 import { Injectable } from '@angular/core'
-import { VaultService, NotificationsService, LogService, Logger, PlatformService } from 'tlink-core'
+import { VaultService, NotificationsService, LogService, Logger, PlatformService, ConfigService } from 'tlink-core'
 import { SSHProfile } from '../api'
 
 export const VAULT_SECRET_TYPE_PASSWORD = 'ssh:password'
@@ -18,6 +18,7 @@ export class PasswordStorageService {
         private vault: VaultService,
         private notifications: NotificationsService,
         private platformService: PlatformService,
+        private configService: ConfigService,
         log: LogService,
     ) {
         this.logger = log.create('password-storage')
@@ -162,38 +163,40 @@ export class PasswordStorageService {
             }
         }
         // Always save to profile.options.password as backup (survives keytar/vault issues)
-        await this.savePasswordToProfile(profile, password)
+        this.savePasswordToProfile(profile, password).catch(e => {
+            this.logger.warn('Password profile backup failed', e)
+        })
     }
 
-    private savePasswordToProfile (profile: SSHProfile, password: string): void {
+    private async savePasswordToProfile (profile: SSHProfile, password: string): Promise<void> {
         if (profile.options) {
             profile.options.password = password
         }
         if (!profile.id) {
             return
         }
-        // Delay the file write to avoid race with config.save()
-        // which might overwrite the file without the password
-        setTimeout(async () => {
-            try {
-                const yaml = require('js-yaml')
-                const rawYaml = await this.platformService.loadConfig()
-                if (!rawYaml) { return }
-                const raw = yaml.load(rawYaml)
-                if (!raw?.profiles) { return }
-                for (const p of raw.profiles) {
-                    if (p?.id === profile.id) {
-                        if (!p.options) { p.options = {} }
-                        p.options.password = password
-                        await this.platformService.saveConfig(yaml.dump(raw))
-                        this.logger.info('Password saved to config (delayed write)')
-                        return
-                    }
+        try {
+            // Read the current raw config, inject the password, and write back
+            // via writeRaw() which reloads the internal _store from the YAML
+            const rawYaml = this.configService.readRaw()
+            if (!rawYaml) { return }
+            const yaml = require('js-yaml')
+            const raw = yaml.load(rawYaml)
+            if (!raw?.profiles) { return }
+            for (const p of raw.profiles) {
+                if (p?.id === profile.id) {
+                    if (!p.options) { p.options = {} }
+                    p.options.password = password
+                    // writeRaw() sets _store, saves to disk, and reloads
+                    // so the password becomes part of the internal store
+                    await this.configService.writeRaw(yaml.dump(raw))
+                    this.logger.info('Password saved to config via writeRaw')
+                    return
                 }
-            } catch (e) {
-                this.logger.warn('Failed to save password to config', e)
             }
-        }, 3000) // 3 second delay to ensure config.save() finishes first
+        } catch (e) {
+            this.logger.warn('Failed to save password to config', e)
+        }
     }
 
     async deletePassword (profile: SSHProfile, username?: string): Promise<void> {
