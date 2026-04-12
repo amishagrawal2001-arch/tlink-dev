@@ -1,7 +1,19 @@
 {
   "extends": "../tsconfig.json",
-  "exclude": ["node_modules", "dist"],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ],
   "compilerOptions": {
-    "baseUrl": "src"
+    "baseUrl": "src",
+    "paths": {
+      "*": [
+        "../../node_modules/*",
+        "../../app/node_modules/*"
+      ],
+      "tlink-*": [
+        "../../tlink-*/src"
+      ]
+    }
   }
 }

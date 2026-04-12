@@ -105,7 +105,7 @@ export class XTermFrontend extends Frontend {
                 backend: this.configService.store.terminal.useConPTY ? 'conpty' : 'winpty',
                 buildNumber: getWindows10Build(),
             } : undefined,
-        })
+        } as any)
         this.flowControl = new FlowControl(this.xterm)
         this.xtermCore = this.xterm['_core']
 
