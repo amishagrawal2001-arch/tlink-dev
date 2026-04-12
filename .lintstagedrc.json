@@ -1,0 +1,3 @@
+{
+  "*.ts": ["eslint --no-error-on-unmatched-pattern"]
+}

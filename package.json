@@ -77,7 +77,9 @@
     "graceful-fs": "^4.2.10",
     "hexer": "^1.5.0",
     "html-loader": "4.2.0",
+    "husky": "^9.1.7",
     "json-loader": "^0.5.7",
+    "lint-staged": "^16.4.0",
     "lru-cache": "^6.0.0",
     "macos-release": "^3.3.0",
     "marked": "^17.0.1",
@@ -151,7 +153,8 @@
     "postinstall": "patch-package && node ./scripts/install-deps.mjs && node ./scripts/build-native.mjs",
     "i18n:pull": "crowdin pull --skip-untranslated-strings",
     "i18n:extract": "node scripts/i18n-extract.mjs",
-    "i18n:push": "crowdin push"
+    "i18n:push": "crowdin push",
+    "prepare": "husky"
   },
   "type": "module",
   "private": true,

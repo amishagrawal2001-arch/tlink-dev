@@ -40,6 +40,9 @@ jobs:
         rm app/node_modules/.yarn-integrity
         yarn
 
+    - name: Validate tsconfigs
+      run: node scripts/validate-tsconfigs.mjs
+
     - name: Build typings
       run: yarn run build:typings
 
@@ -378,14 +381,29 @@ jobs:
         npm install --global node-gyp@10.2.0
         npm prefix -g | % {npm config set node_gyp "$_\node_modules\node-gyp\bin\node-gyp.js"}
 
-    - name: Build
-      shell: powershell
+    - name: Install deps
+      shell: bash
       run: |
         npm i -g yarn node-gyp
         yarn --network-timeout 1000000
-        yarn run build:typings
-        yarn run build
-        node scripts/prepackage-plugins.mjs
+      env:
+        ARCH: ${{matrix.arch}}
+
+    - name: Build typings
+      shell: bash
+      run: yarn run build:typings
+
+    - name: Validate tsconfigs
+      shell: bash
+      run: node scripts/validate-tsconfigs.mjs
+
+    - name: Webpack
+      shell: bash
+      run: yarn run build
+
+    - name: Prepackage plugins
+      shell: bash
+      run: node scripts/prepackage-plugins.mjs
       env:
         ARCH: ${{matrix.arch}}
 
@@ -431,6 +449,7 @@ jobs:
         # DEBUG: electron-builder,electron-builder:*
 
     - name: Build packages without signing
+      shell: bash
       run: node scripts/build-windows.mjs
       env:
         ARCH: ${{matrix.arch}}
