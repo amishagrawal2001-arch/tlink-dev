@@ -372,10 +372,10 @@ export class XTermFrontend extends Frontend {
         const appColorScheme = this.themes._getActiveColorScheme() as TerminalColorScheme
 
         scheme = scheme ?? appColorScheme
-        const selectionBackground = scheme.selection && scheme.selection.trim()
+        const selectionBackground = scheme.selection?.trim()
             ? scheme.selection
             : '#88888888'
-        const selectionForeground = scheme.selectionForeground && scheme.selectionForeground.trim()
+        const selectionForeground = scheme.selectionForeground?.trim()
             ? scheme.selectionForeground
             : scheme.foreground
         const terminalBackground = getTerminalBackgroundColor(this.configService, this.themes, scheme) ?? '#00000000'
@@ -414,9 +414,14 @@ export class XTermFrontend extends Frontend {
             }
         })
 
-        this.xtermCore.browser.isWindows = this.hostApp.platform === Platform.Windows
-        this.xtermCore.browser.isLinux = this.hostApp.platform === Platform.Linux
-        this.xtermCore.browser.isMac = this.hostApp.platform === Platform.macOS
+        try {
+            // xterm internals — may be read-only in newer versions
+            this.xtermCore.browser.isWindows = this.hostApp.platform === Platform.Windows
+            this.xtermCore.browser.isLinux = this.hostApp.platform === Platform.Linux
+            this.xtermCore.browser.isMac = this.hostApp.platform === Platform.macOS
+        } catch {
+            // Browser properties are read-only getters, skip override
+        }
 
         this.xterm.options.fontFamily = getCSSFontFamily(config)
         this.xterm.options.cursorStyle = {

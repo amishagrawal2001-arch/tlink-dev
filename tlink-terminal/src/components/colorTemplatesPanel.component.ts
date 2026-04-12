@@ -20,11 +20,12 @@ export class ColorTemplatesPanelComponent implements OnInit, OnDestroy {
     filterText = ''
     loading = true
     savingProfileId = ''
-    @ViewChild('scrollRegion', { static: false }) scrollRegion: ElementRef<HTMLDivElement>|undefined
+    @ViewChild('scrollRegion', { 'static': false }) scrollRegion: ElementRef<HTMLDivElement>|undefined
 
     private destroy$ = new Subject<void>()
     private splitFocusSub?: Subscription
 
+    // eslint-disable-next-line @typescript-eslint/max-params
     constructor (
         public profilesService: ProfilesService,
         private config: ConfigService,
@@ -102,9 +103,10 @@ export class ColorTemplatesPanelComponent implements OnInit, OnDestroy {
         this.selectedProfileId = id
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     profileLabel (profile: PartialProfile<any>): string {
         const group = this.groupLabel(profile)
-        const name = profile.name ?? profile.id ?? this.translate.instant('Profile')
+        const name = profile.name ?? profile.id ?? this.translate.instant('Profile') // eslint-disable-line @typescript-eslint/no-unnecessary-condition
         return group ? `${group} / ${name}` : name
     }
 
@@ -129,19 +131,27 @@ export class ColorTemplatesPanelComponent implements OnInit, OnDestroy {
         const scrollPos = this.getScrollTop()
         this.savingProfileId = profile.id
         try {
-            const latestProfiles = await this.profilesService.getProfiles({ includeBuiltin: true, clone: true })
-            const latest = latestProfiles.find(p => p.id === profile.id) ?? profile
-            const updated = deepClone(latest)
-            updated.id = latest.id
-            updated.type = latest.type
-            updated.terminalColorScheme = deepClone(scheme)
-            await this.profilesService.writeProfile(updated)
+            // Apply the scheme to the profile in config
+            const cProfile = this.config.store.profiles?.find(p => p.id === profile.id)
+            if (cProfile) {
+                // Profile exists in config store — update in place
+                cProfile.terminalColorScheme = deepClone(scheme)
+            } else {
+                // Built-in or not-yet-saved profile — create an override entry
+                this.config.store.profiles.push({
+                    id: profile.id,
+                    type: profile.type,
+                    name: profile.name,
+                    terminalColorScheme: deepClone(scheme),
+                })
+            }
             await this.config.save()
-            this.profiles = this.profiles.map(p => p.id === updated.id ? { ...p, terminalColorScheme: updated.terminalColorScheme } : p)
-            this.applySchemeToOpenTabs(updated.id ?? '', updated.terminalColorScheme)
+            this.profiles = this.profiles.map(p => p.id === profile.id ? { ...p, terminalColorScheme: deepClone(scheme) } : p)
+            this.applySchemeToOpenTabs(profile.id, deepClone(scheme))
         } catch (error) {
-            console.error(error)
-            this.notifications.error(this.translate.instant('Could not apply template'))
+            console.error('Failed to apply color template:', error)
+            const msg = error instanceof Error ? error.message : String(error)
+            this.notifications.error(`${this.translate.instant('Could not apply template')}: ${msg}`)
         } finally {
             this.savingProfileId = ''
             this.restoreScroll(scrollPos)
@@ -203,14 +213,14 @@ export class ColorTemplatesPanelComponent implements OnInit, OnDestroy {
             return null
         }
         if (tab instanceof SplitTabComponent) {
-            return tab.getFocusedTab() ?? tab.getAllTabs()[0] ?? tab
+            return tab.getFocusedTab() ?? tab.getAllTabs()[0] ?? tab // eslint-disable-line @typescript-eslint/no-unnecessary-condition
         }
         return tab
     }
 
     private normalizeSchemeNames (schemes: TerminalColorScheme[]): TerminalColorScheme[] {
         return schemes.map(scheme => {
-            const name = scheme.name?.trim() ?? ''
+            const name = scheme.name.trim() || '' // eslint-disable-line @typescript-eslint/no-unnecessary-condition
             const renamed = name === 'Termius Dark'
                 ? 'Dark'
                 : name === 'Termius Light'
@@ -227,7 +237,7 @@ export class ColorTemplatesPanelComponent implements OnInit, OnDestroy {
     }
 
     private getScrollTop (): number {
-        return this.scrollRegion?.nativeElement?.scrollTop ?? 0
+        return this.scrollRegion?.nativeElement.scrollTop ?? 0
     }
 
     private restoreScroll (position: number): void {
