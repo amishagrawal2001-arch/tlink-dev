@@ -201,7 +201,7 @@ export class XTermFrontend extends Frontend {
             try {
                 if (this.xterm.element && getComputedStyle(this.xterm.element).getPropertyValue('height') !== 'auto') {
                     this.fitAddon.fit()
-                    this.xtermCore.viewport._refresh()
+                    this.xtermCore.viewport?._refresh()
                 }
             } catch (e) {
                 // tends to throw when element wasn't shown yet
@@ -403,13 +403,9 @@ export class XTermFrontend extends Frontend {
         const config = this.configService.store
 
         setImmediate(() => {
-            if (this.xterm.cols && this.xterm.rows && this.xtermCore.charMeasure) {
-                if (this.xtermCore.charMeasure) {
-                    this.xtermCore.charMeasure.measure(this.xtermCore.options)
-                }
-                if (this.xtermCore.renderer) {
-                    this.xtermCore.renderer._updateDimensions()
-                }
+            if (this.xterm.cols && this.xterm.rows) {
+                this.xtermCore.charMeasure?.measure(this.xtermCore.options)
+                this.xtermCore.renderer?._updateDimensions()
                 this.resizeHandler()
             }
         })
