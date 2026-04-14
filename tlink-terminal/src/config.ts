@@ -4,7 +4,7 @@ import { DEFAULT_OUTPUT_HIGHLIGHT_RULES } from './outputHighlighting'
 import { DEFAULT_OUTPUT_ANALYZER_PATTERNS } from './features/outputAnalyzerPatterns'
 
 // Fallback base class to avoid runtime crashes if the core export is undefined
-const ConfigProvider: any = CoreConfigProvider ?? class {}
+const ConfigProvider: any = CoreConfigProvider ?? class {} // eslint-disable-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/no-extraneous-class
 
 /** @hidden */
 export class TerminalConfigProvider extends ConfigProvider {
@@ -14,12 +14,12 @@ export class TerminalConfigProvider extends ConfigProvider {
         },
         terminal: {
             frontend: 'xterm-webgl',
-            fontSize: 13,
+            fontSize: 14,
             font: 'Menlo',
             fontWeight: 400,
-            fontWeightBold: 700,
+            fontWeightBold: 600,
             fallbackFont: null,
-            linePadding: 0,
+            linePadding: 1,
             bell: 'off',
             bracketedPaste: true,
             background: 'theme',
@@ -139,7 +139,7 @@ export class TerminalConfigProvider extends ConfigProvider {
         },
         [Platform.Windows]: {
             terminal: {
-                font: 'Consolas',
+                font: 'Cascadia Mono',
                 rightClick: 'clipboard',
                 pasteOnMiddleClick: false,
                 copyOnSelect: true,

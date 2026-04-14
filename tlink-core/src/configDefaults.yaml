@@ -19,7 +19,7 @@ appearance:
   vibrancyType: 'blur'
   lastTabClosesWindow: false
   spaciness: 1
-  colorSchemeMode: 'dark'
+  colorSchemeMode: 'auto'
   sideTabInactiveColor: ''
   sideTabHoverColor: ''
   sideTabActiveColor: ''
