@@ -7,10 +7,10 @@
   resolved "https://registry.npmjs.org/@types/marked/-/marked-5.0.1.tgz"
   integrity sha512-Y3pAUzHKh605fN6fvASsz5FDSWbZcs/65Q6xYRmnIP9ZIYz27T4IOmXfH9gWJV1dpi7f1e7z7nBGUTx/a0ptpA==
 
-marked@^5.1.2:
-  version "5.1.2"
-  resolved "https://registry.npmjs.org/marked/-/marked-5.1.2.tgz"
-  integrity sha512-ahRPGXJpjMjwSOlBoTMZAK7ATXkli5qCPxZ21TG44rx1KEo44bii4ekgTDQPNRQ4Kh7JMb9Ub1PVk1NxRSsorg==
+marked@^18.0.1:
+  version "18.0.1"
+  resolved "https://registry.yarnpkg.com/marked/-/marked-18.0.1.tgz#4e69a3518b31efe307a5ecb3e8f921555113dd3f"
+  integrity sha512-IILJE4Aap/KIGu4ZRCzQcYMxkhumblXnbqfQe+HAD4f982wrRAsJEGKGM653yAioS6g3Yq3yOhjrUebcrtOgRA==
 
 ngx-infinite-scroll@^16:
   version "16.0.0"
