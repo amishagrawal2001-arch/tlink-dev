@@ -1,11 +1,12 @@
-import { Component, EventEmitter, OnDestroy, OnInit, Output, HostListener, ElementRef } from '@angular/core';
-import { Subscription } from 'rxjs';
-import { TlinkLicenseService } from '../../tlink-license.service';
-import { LicenseInfo } from '../../models/license.models';
+import { Component, EventEmitter, OnDestroy, OnInit, Output, HostListener, ElementRef } from '@angular/core'
+import { Subscription } from 'rxjs'
+import { TlinkLicenseService } from '../../tlink-license.service'
+import { LicenseInfo } from '../../models/license.models'
 
 @Component({
-  selector: 'tlink-license-menu',
-  template: `
+    standalone: false,
+    selector: 'tlink-license-menu',
+    template: `
     <div class="tlink-menu">
       <button class="tlink-menu__trigger" (click)="toggleMenu()">
         <span class="tlink-menu__badge" [ngClass]="badgeClass">{{ badgeLabel }}</span>
@@ -15,14 +16,11 @@ import { LicenseInfo } from '../../models/license.models';
       <div class="tlink-menu__dropdown" *ngIf="open">
         <div class="tlink-menu__header" *ngIf="info?.status === 'active'">
           <span class="tlink-menu__badge" [ngClass]="badgeClass">{{ badgeLabel | uppercase }}</span>
-          <span class="tlink-menu__header-expiry">Expires: {{ info?.formattedExpiry || 'N/A' }}</span>
+          <span class="tlink-menu__header-expiry">{{ info?.endDate ? 'Expires ' + info?.endDate : '' }}</span>
         </div>
-        <div class="tlink-menu__header" *ngIf="info?.status === 'trial'">
-          <span class="tlink-menu__header-trial">⏱ Trial: {{ info?.trialDaysRemaining }} days remaining</span>
-        </div>
-        <button class="tlink-menu__item" (click)="onAction('activate')">
+        <button class="tlink-menu__item" (click)="onAction('activate')" *ngIf="info?.status !== 'active'">
           <span class="tlink-menu__item-icon">🔑</span>
-          Activate License
+          Sign in
         </button>
         <button class="tlink-menu__item" (click)="onAction('info')">
           <span class="tlink-menu__item-icon">⚙</span>
@@ -32,7 +30,7 @@ import { LicenseInfo } from '../../models/license.models';
         <div class="tlink-menu__separator"></div>
         <button class="tlink-menu__item" (click)="onAction('deactivate')" *ngIf="info?.status === 'active'">
           <span class="tlink-menu__item-icon">✕</span>
-          Deactivate License
+          Sign out
         </button>
         <button class="tlink-menu__item" (click)="onAction('server-settings')">
           <span class="tlink-menu__item-icon">🌐</span>
@@ -46,7 +44,7 @@ import { LicenseInfo } from '../../models/license.models';
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     :host { display: inline-block; position: relative; }
 
     .tlink-menu {
@@ -81,8 +79,8 @@ import { LicenseInfo } from '../../models/license.models';
     }
 
     .tlink-menu__badge--trial { background: #d97706; }
-    .tlink-menu__badge--pro { background: #2563eb; }
-    .tlink-menu__badge--enterprise { background: #7c3aed; }
+    .tlink-menu__badge--individual { background: #2563eb; }
+    .tlink-menu__badge--team { background: #7c3aed; }
     .tlink-menu__badge--expired { background: #dc2626; }
     .tlink-menu__badge--invalid { background: #6b7280; }
 
@@ -170,74 +168,75 @@ import { LicenseInfo } from '../../models/license.models';
   `],
 })
 export class LicenseMenuComponent implements OnInit, OnDestroy {
-  @Output() showInfo = new EventEmitter<void>();
-  @Output() showActivation = new EventEmitter<void>();
-  @Output() showDeactivation = new EventEmitter<void>();
-  @Output() showServerSettings = new EventEmitter<void>();
-  @Output() buyLicense = new EventEmitter<void>();
+    @Output() showInfo = new EventEmitter<void>()
+    @Output() showActivation = new EventEmitter<void>()
+    @Output() showDeactivation = new EventEmitter<void>()
+    @Output() showServerSettings = new EventEmitter<void>()
+    @Output() buyLicense = new EventEmitter<void>()
 
-  open = false;
-  info: LicenseInfo | null = null;
-  badgeLabel = '';
-  badgeClass = '';
+    open = false
+    info: LicenseInfo | null = null
+    badgeLabel = ''
+    badgeClass = ''
 
-  private _sub?: Subscription;
+    private _sub?: Subscription
 
-  constructor(
-    private licenseService: TlinkLicenseService,
-    private elRef: ElementRef,
-  ) {}
+    constructor(
+        private licenseService: TlinkLicenseService,
+        private elRef: ElementRef,
+    ) {}
 
-  ngOnInit(): void {
-    this._sub = this.licenseService.licenseInfo$.subscribe(info => {
-      this.info = info;
-      this._updateBadge(info);
-    });
-  }
-
-  ngOnDestroy(): void {
-    this._sub?.unsubscribe();
-  }
-
-  @HostListener('document:click', ['$event'])
-  onDocumentClick(event: MouseEvent): void {
-    if (!this.elRef.nativeElement.contains(event.target)) {
-      this.open = false;
+    ngOnInit(): void {
+        this._sub = this.licenseService.licenseInfo$.subscribe(info => {
+            this.info = info
+            this._updateBadge(info)
+        })
     }
-  }
 
-  toggleMenu(): void {
-    this.open = !this.open;
-  }
-
-  onAction(action: string): void {
-    this.open = false;
-    switch (action) {
-      case 'info': this.showInfo.emit(); break;
-      case 'activate': this.showActivation.emit(); break;
-      case 'deactivate': this.showDeactivation.emit(); break;
-      case 'server-settings': this.showServerSettings.emit(); break;
-      case 'buy': this.buyLicense.emit(); break;
+    ngOnDestroy(): void {
+        this._sub?.unsubscribe()
     }
-  }
 
-  private _updateBadge(info: LicenseInfo): void {
-    switch (info.status) {
-      case 'trial':
-        this.badgeLabel = `Trial (${info.trialDaysRemaining}d)`;
-        this.badgeClass = 'tlink-menu__badge--trial';
-        break;
-      case 'active':
-        this.badgeLabel = info.tier === 'enterprise' ? 'Enterprise' : 'Pro';
-        this.badgeClass = info.tier === 'enterprise' ? 'tlink-menu__badge--enterprise' : 'tlink-menu__badge--pro';
-        break;
-      case 'expired':
-        this.badgeLabel = 'Expired';
-        this.badgeClass = 'tlink-menu__badge--expired';
-        break;
-      default:
-        this.badgeLabel = 'No License';
-        this.badgeClass = 'tlink-menu__badge--invalid';
+    @HostListener('document:click', ['$event'])
+    onDocumentClick(event: MouseEvent): void {
+        if (!this.elRef.nativeElement.contains(event.target)) {
+            this.open = false
+        }
     }
-  }
+
+    toggleMenu(): void {
+        this.open = !this.open
+    }
+
+    onAction(action: string): void {
+        this.open = false
+        switch (action) {
+            case 'info': this.showInfo.emit(); break
+            case 'activate': this.showActivation.emit(); break
+            case 'deactivate': this.showDeactivation.emit(); break
+            case 'server-settings': this.showServerSettings.emit(); break
+            case 'buy': this.buyLicense.emit(); break
+        }
+    }
+
+    private _updateBadge(info: LicenseInfo): void {
+        if (info.status === 'active') {
+            if (info.billingType === 'TRIAL') {
+                this.badgeLabel = 'Trial'
+                this.badgeClass = 'tlink-menu__badge--trial'
+            } else if (info.licenseType === 'TEAM') {
+                this.badgeLabel = 'Team'
+                this.badgeClass = 'tlink-menu__badge--team'
+            } else {
+                this.badgeLabel = 'Individual'
+                this.badgeClass = 'tlink-menu__badge--individual'
+            }
+        } else if (info.status === 'expired') {
+            this.badgeLabel = 'Expired'
+            this.badgeClass = 'tlink-menu__badge--expired'
+        } else {
+            this.badgeLabel = 'Sign in'
+            this.badgeClass = 'tlink-menu__badge--invalid'
+        }
+    }
 }

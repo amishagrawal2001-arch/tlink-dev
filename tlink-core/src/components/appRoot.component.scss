@@ -702,6 +702,15 @@ hotkey-hint {
 }
 
 
+// License dock wrapper — inline-flex keeps the dropdown on the same line as
+// the neighbouring "Sign in" banner, otherwise the dropdown's default block
+// layout makes the two stack vertically.
+::ng-deep .license-dock-dropdown {
+    display: inline-flex;
+    align-items: center;
+}
+::ng-deep .license-dock-signin { margin-right: 6px; }
+
 // License dock banner (centered in bottom bar)
 ::ng-deep .license-dock-banner {
     display: inline-flex;
@@ -726,6 +735,18 @@ hotkey-hint {
     &.dock-trial { background: #d97706; }
     &.dock-pro { background: #2563eb; }
     &.dock-enterprise { background: #7c3aed; }
+    // Warning/red for license-invalid or expired — "you need to take action".
+    &.dock-expired { background: #dc2626; }
+    // Neutral blue CTA for unauthenticated / trial signin — "come sign in".
+    &.dock-signin { background: #2563eb; }
+}
+
+// When the banner wraps a dock-expired/dock-signin badge we want the pill
+// to read at full opacity — this is a call-to-action, not an info chip.
+::ng-deep .license-dock-signin .license-dock-banner,
+::ng-deep .license-dock-banner:has(.dock-expired),
+::ng-deep .license-dock-banner:has(.dock-signin) {
+    opacity: 1;
 }
 
 ::ng-deep .license-dock-action {

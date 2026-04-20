@@ -28,17 +28,17 @@ import { CodeEditorTabComponent } from './codeEditorTab.component'
 import { TlinkLicenseService } from '../../../tlink-license-client/src/lib/tlink-license.service'
 
 type SplitDirection = 'r' | 'l' | 't' | 'b'
-type LeftDockDropTarget = {
+interface LeftDockDropTarget {
     item: string
     insertAfter: boolean
     isGroupDrop: boolean
 }
-type LeftDockChunk = {
+interface LeftDockChunk {
     id: string
     grouped: boolean
     items: string[]
 }
-type LeftDockPointer = {
+interface LeftDockPointer {
     x: number
     y: number
 }
@@ -151,6 +151,7 @@ export class AppRootComponent implements OnInit {
         'ai-assistant',
         'tabby-url',
     ]
+
     private readonly legacyDefaultLeftDockOrder = [
         'profiles',
         'sftp',
@@ -167,6 +168,7 @@ export class AppRootComponent implements OnInit {
         'websocket',
         'open-shared-session-link',
     ]
+
     private readonly defaultLeftDockGroup = [
         'websocket',
         'share-all-sessions',
@@ -178,6 +180,7 @@ export class AppRootComponent implements OnInit {
         'sftp',
         'ssh',
     ]
+
     private readonly legacyDefaultLeftDockGroup = [
         'profiles',
         'ai-assistant',
@@ -311,7 +314,7 @@ export class AppRootComponent implements OnInit {
 
         platform.fileTransferStarted$.subscribe(transfer => {
             this.activeTransfers.push(transfer)
-            this.activeTransfersDropdown?.open()
+            this.activeTransfersDropdown.open()
         })
 
         this.sidePanel.state$.subscribe(state => {
@@ -324,7 +327,7 @@ export class AppRootComponent implements OnInit {
             this.sidePanels = panels.slice().sort((a, b) => a.label.localeCompare(b.label))
             this.rightDockPanels = this.orderSidePanels(this.sidePanels)
             this.sshSidePanel = this.sidePanels.find(panel =>
-                panel.id?.toLowerCase().includes('ssh') || panel.label?.toLowerCase().includes('ssh'),
+                panel.id.toLowerCase().includes('ssh') || panel.label.toLowerCase().includes('ssh'),
             ) ?? null
             this.refreshLeftDockOrder()
         })
@@ -406,7 +409,7 @@ export class AppRootComponent implements OnInit {
     openHelpGuide (): void {
         try {
             const electron = require('electron')
-            const ipcRenderer = electron.ipcRenderer
+            const { ipcRenderer } = electron
             if (ipcRenderer) {
                 ipcRenderer.send('open-help-window')
             }
@@ -436,6 +439,45 @@ export class AppRootComponent implements OnInit {
         } catch {
             this.hostApp.openSettingsUI()
         }
+    }
+
+    /**
+     * Jumps to Settings → License. Used by the license-dock dropdown so the
+     * user can manage the server URL, inspect details, etc.
+     */
+    openLicenseSettings (): void {
+        try {
+            const { SettingsTabComponent } = window['nodeRequire']('tlink-settings')
+            const existing = this.app.tabs.find(tab => tab instanceof SettingsTabComponent)
+            if (existing) {
+                this.app.selectTab(existing)
+                ;(existing as any).activeTab = 'license'
+                return
+            }
+            this.app.openNewTabRaw({
+                type: SettingsTabComponent as any,
+                inputs: { activeTab: 'license' },
+            })
+        } catch {
+            this.hostApp.openSettingsUI()
+        }
+    }
+
+    /**
+     * Signs the user out via the licensing service. Calls /api/licenses/deactivate
+     * server-side (best-effort), clears the keychain, resets local state.
+     * If the user was on a local trial with no session, the trial marker is
+     * kept — so they can continue the trial after sign-out.
+     */
+    async signOutOfLicense (): Promise<void> {
+        try {
+            await this.licenseSvc.deactivateLicense()
+            this.notifications.info('Signed out of this device')
+        } catch (e: any) {
+            this.notifications.error(e?.message || 'Sign out failed')
+        }
+        // Force the activation dialog back for a clean re-entry.
+        this.showLicenseActivation = this.licenseSvc.licenseStatus !== 'active' || this.licenseSvc.isLocalTrial
     }
 
     cycleColorSchemeFromDock (): void {
@@ -483,7 +525,7 @@ export class AppRootComponent implements OnInit {
 
     get isChatTabActive (): boolean {
         const active = this.getActiveLeafTab()
-        return (active?.constructor?.name ?? '') === 'ChatTabComponent'
+        return (active?.constructor.name ?? '') === 'ChatTabComponent'
     }
 
     async splitActiveTabShortcut (direction: SplitDirection = 'r'): Promise<void> {
@@ -700,7 +742,7 @@ export class AppRootComponent implements OnInit {
     }
 
     private cycleColorSchemeMode (): void {
-        const order: Array<'auto'|'dark'|'light'> = ['auto', 'dark', 'light']
+        const order: ('auto'|'dark'|'light')[] = ['auto', 'dark', 'light']
         const labels: Record<string, string> = { auto: 'From System', dark: 'Dark Mode', light: 'Light Mode' }
         const current = this.config.store.appearance.colorSchemeMode as 'auto'|'dark'|'light'|undefined
         const currentIndex = Math.max(0, order.indexOf(current ?? 'dark'))
@@ -711,23 +753,30 @@ export class AppRootComponent implements OnInit {
     }
 
     async ngOnInit () {
-        this.config.ready$.toPromise().then(() => {
+        this.config.ready$.toPromise().then(async () => {
             this.ready = true
             this.app.emitReady()
 
-            // Check license on first launch
-            setTimeout(() => {
-                const status = this.licenseSvc.checkLicense()
-                if (status === 'expired' || status === 'invalid') {
-                    this.showLicenseActivation = true
-                } else if (!localStorage.getItem('tlink_trial_start') && !localStorage.getItem('tlink_license_key')) {
-                    this.showLicenseActivation = true
-                }
-            }, 2500)
+            // Bootstrap the license session — refresh tokens from keychain or fall through to trial.
+            await this.licenseSvc.bootstrap()
 
-            this.licenseSvc.licenseInfo$.subscribe(() => {
+            // Show the sign-in dialog on every launch unless the user already
+            // has a real (non-trial) paid license. During trial/expired/invalid
+            // we always prompt; the user can dismiss it during trial to
+            // continue, or must sign in when trial has expired (blocking kicks
+            // in via the template when status === 'expired' | 'invalid').
+            this.showLicenseActivation = this.licenseSvc.licenseStatus !== 'active' || this.licenseSvc.isLocalTrial
+
+            this.licenseSvc.licenseInfo$.subscribe(info => {
                 setTimeout(() => {
-                    this.showLicenseActivation = this.licenseSvc.licenseStatus === 'expired' || this.licenseSvc.licenseStatus === 'invalid'
+                    // Close the dialog on successful paid sign-in (active &&
+                    // not a local trial). Force it open on adverse transitions
+                    // (e.g. heartbeat reports SEAT_REVOKED mid-session).
+                    if (info.status === 'active' && !info.isLocalTrial) {
+                        this.showLicenseActivation = false
+                    } else if (info.status === 'expired' || info.status === 'invalid' || info.status === 'unauthenticated') {
+                        this.showLicenseActivation = true
+                    }
                 }, 0)
             })
         })
@@ -857,14 +906,14 @@ export class AppRootComponent implements OnInit {
 
     onTransfersChange () {
         if (this.activeTransfers.length === 0) {
-            this.activeTransfersDropdown?.close()
+            this.activeTransfersDropdown.close()
         }
     }
 
     onTransfersFloatingChange (floating: boolean): void {
         this.transfersFloating = floating
         if (this.activeTransfers.length) {
-            setTimeout(() => this.activeTransfersDropdown?.open())
+            setTimeout(() => this.activeTransfersDropdown.open())
         }
     }
 
@@ -874,19 +923,19 @@ export class AppRootComponent implements OnInit {
 
     private async getToolbarButtons (aboveZero: boolean): Promise<Command[]> {
         const all = await this.commands.getCommands(this.buildCommandContext())
-        const sshCmd = all.find(x => x.label?.toLowerCase().includes('toggle ssh connections sidebar'))
+        const sshCmd = all.find(x => x.label.toLowerCase().includes('toggle ssh connections sidebar'))
         if (sshCmd) {
             this.sshSidebarCommand = sshCmd
         }
         this.intellijEditorCommand = all.find(x => x.id === 'intellij-bridge:open-editor') ?? null
-        this.tabbyUrlCommand = all.find(x => x.label?.toLowerCase().includes('open tabby url')) ?? null
+        this.tabbyUrlCommand = all.find(x => x.label.toLowerCase().includes('open tabby url')) ?? null
 
         const buttons = all
             .filter(x => x.locations?.includes(aboveZero ? CommandLocation.RightToolbar : CommandLocation.LeftToolbar))
-            .filter(x => !x.label?.toLowerCase().includes('toggle ssh connections sidebar'))
-            .filter(x => !x.label?.toLowerCase().includes('ai assistant')) // Filter AI Assistant from toolbar (only in dock)
-            .filter(x => !x.label?.toLowerCase().includes('open copilot')) // Filter Open Copilot Chat from toolbar (only in dock)
-            .filter(x => !x.label?.toLowerCase().includes('open tabby url')) // Filter Open Tabby URL from toolbar (only in dock)
+            .filter(x => !x.label.toLowerCase().includes('toggle ssh connections sidebar'))
+            .filter(x => !x.label.toLowerCase().includes('ai assistant')) // Filter AI Assistant from toolbar (only in dock)
+            .filter(x => !x.label.toLowerCase().includes('open copilot')) // Filter Open Copilot Chat from toolbar (only in dock)
+            .filter(x => !x.label.toLowerCase().includes('open tabby url')) // Filter Open Tabby URL from toolbar (only in dock)
 
         if (!aboveZero) {
             return buttons
@@ -1165,7 +1214,7 @@ export class AppRootComponent implements OnInit {
     }
 
     private resolveLeftDockDropTargetFromPointer (pointer: LeftDockPointer, draggedItem?: string): LeftDockDropTarget | null {
-        const leftDockSection = document.querySelector('.left-dock .left-dock-section') as HTMLElement | null
+        const leftDockSection = document.querySelector('.left-dock .left-dock-section')
         if (!leftDockSection) {
             return null
         }
@@ -1179,9 +1228,9 @@ export class AppRootComponent implements OnInit {
             return null
         }
 
-        const dockButtons = Array.from(leftDockSection.querySelectorAll('[data-left-dock-item]')) as HTMLElement[]
+        const dockButtons = Array.from(leftDockSection.querySelectorAll('[data-left-dock-item]'))
         const candidateButtons = dockButtons.filter(button => {
-            const item = button.dataset?.leftDockItem
+            const item = button.dataset.leftDockItem
             if (!item || !this.leftDockVisibleOrder.includes(item)) {
                 return false
             }
@@ -1210,7 +1259,7 @@ export class AppRootComponent implements OnInit {
             if (candidate.closest('.cdk-drag-preview') || candidate.closest('.cdk-drag-placeholder')) {
                 continue
             }
-            const match = candidate.closest('[data-left-dock-item]') as HTMLElement | null
+            const match = candidate.closest('[data-left-dock-item]')
             if (match && candidateButtons.includes(match)) {
                 button = match
                 break
@@ -1223,14 +1272,14 @@ export class AppRootComponent implements OnInit {
                 if (!candidate) {
                     continue
                 }
-                const groupEl = candidate.closest('[data-left-dock-group]') as HTMLElement | null
-                const groupItemsRaw = groupEl?.dataset?.leftDockGroup
+                const groupEl = candidate.closest('[data-left-dock-group]')
+                const groupItemsRaw = groupEl?.dataset.leftDockGroup
                 if (!groupItemsRaw) {
                     continue
                 }
                 const groupItems = groupItemsRaw.split('|').filter(Boolean)
                 const groupButtons = candidateButtons.filter(btn => {
-                    const item = btn.dataset?.leftDockItem
+                    const item = btn.dataset.leftDockItem
                     return !!item && groupItems.includes(item)
                 })
                 if (!groupButtons.length) {
@@ -1271,7 +1320,7 @@ export class AppRootComponent implements OnInit {
         if (!button) {
             return null
         }
-        const item = button?.dataset?.leftDockItem
+        const item = button.dataset.leftDockItem
         if (!item || !this.leftDockVisibleOrder.includes(item)) {
             return null
         }
@@ -1321,13 +1370,13 @@ export class AppRootComponent implements OnInit {
             return { x: nativeEvent.clientX, y: nativeEvent.clientY }
         }
 
-        if (nativeEvent.changedTouches?.length) {
+        if (nativeEvent.changedTouches.length) {
             return {
                 x: nativeEvent.changedTouches[0].clientX,
                 y: nativeEvent.changedTouches[0].clientY,
             }
         }
-        if (nativeEvent.touches?.length) {
+        if (nativeEvent.touches.length) {
             return {
                 x: nativeEvent.touches[0].clientX,
                 y: nativeEvent.touches[0].clientY,
@@ -1414,95 +1463,95 @@ export class AppRootComponent implements OnInit {
 
     getLeftDockTooltip (item: string): string {
         switch (item) {
-        case 'profiles':
-            return 'Profiles & connections'
-        case 'sftp':
-            return 'Open SFTP'
-        case 'session-manager':
-            return 'Session manager'
-        case 'remote-desktop':
-            return 'Remote desktop'
-        case 'ssh':
-            return this.sshSidePanel?.label || this.sshSidebarCommand?.label || 'SSH sidebar'
-        case 'code-editor':
-            return 'Tlink Studio'
-        case 'intellij-editor':
-            return this.intellijEditorCommand?.label || 'Open IntelliJ editor'
-        case 'ai-chat':
-            return 'AI Chat'
-        case 'ai-assistant':
-            return 'AI Chat (Ollama / OpenAI / Claude)'
-        case 'tabby-url':
-            return this.tabbyUrlCommand?.label || 'Open Tabby URL'
-        case 'copilot-chat':
-            return 'Copilot Agent (Code Assistant)'
-        case 'share-all-sessions':
-            return this.shareAllSessionsInProgress
-                ? 'Sharing open sessions...'
-                : 'Share all open sessions'
-        case 'websocket':
-            return this.websocketServerRunning
-                ? `Session sharing server running on port ${this.websocketServerPort} (click to stop)`
-                : 'Start session sharing server'
-        case 'open-shared-session-link':
-            return this.openSharedLinkInProgress
-                ? 'Opening shared session...'
-                : 'Open shared session link'
-        default:
-            return ''
+            case 'profiles':
+                return 'Profiles & connections'
+            case 'sftp':
+                return 'Open SFTP'
+            case 'session-manager':
+                return 'Session manager'
+            case 'remote-desktop':
+                return 'Remote desktop'
+            case 'ssh':
+                return this.sshSidePanel?.label || this.sshSidebarCommand?.label || 'SSH sidebar'
+            case 'code-editor':
+                return 'Tlink Studio'
+            case 'intellij-editor':
+                return this.intellijEditorCommand?.label || 'Open IntelliJ editor'
+            case 'ai-chat':
+                return 'AI Chat'
+            case 'ai-assistant':
+                return 'AI Chat (Ollama / OpenAI / Claude)'
+            case 'tabby-url':
+                return this.tabbyUrlCommand?.label || 'Open Tabby URL'
+            case 'copilot-chat':
+                return 'Copilot Agent (Code Assistant)'
+            case 'share-all-sessions':
+                return this.shareAllSessionsInProgress
+                    ? 'Sharing open sessions...'
+                    : 'Share all open sessions'
+            case 'websocket':
+                return this.websocketServerRunning
+                    ? `Session sharing server running on port ${this.websocketServerPort} (click to stop)`
+                    : 'Start session sharing server'
+            case 'open-shared-session-link':
+                return this.openSharedLinkInProgress
+                    ? 'Opening shared session...'
+                    : 'Open shared session link'
+            default:
+                return ''
         }
     }
 
     onLeftDockItemClick (item: string): void {
         switch (item) {
-        case 'profiles':
-            this.openProfilesAndConnections()
-            break
-        case 'sftp':
-            void this.openSftpProfileSelector()
-            break
-        case 'session-manager':
-            this.openSidePanelById('session-manager')
-            break
-        case 'remote-desktop':
-            this.openSidePanelById('remote-desktop')
-            break
-        case 'ssh':
-            this.openSSHSidePanel()
-            break
-        case 'code-editor':
-            this.openCodeEditor()
-            break
-        case 'intellij-editor':
-            void this.openIntelliJEditor()
-            break
-        case 'ai-chat':
-            void this.openAIChat()
-            break
-        case 'ai-assistant':
-            this.openAIAssistant()
-            break
-        case 'tabby-url':
-            if (this.tabbyUrlCommand?.run) {
-                void this.tabbyUrlCommand.run()
-            } else if (this.tabbyUrlCommand?.id) {
-                this.commands.run(this.tabbyUrlCommand.id, this.buildCommandContext())
-            }
-            break
-        case 'copilot-chat':
-            this.openCopilotChat()
-            break
-        case 'share-all-sessions':
-            void this.shareAllOpenSessionsFromDock()
-            break
-        case 'websocket':
-            void this.toggleWebSocketServer()
-            break
-        case 'open-shared-session-link':
-            void this.openSharedSessionLinkFromDock()
-            break
-        default:
-            break
+            case 'profiles':
+                this.openProfilesAndConnections()
+                break
+            case 'sftp':
+                void this.openSftpProfileSelector()
+                break
+            case 'session-manager':
+                this.openSidePanelById('session-manager')
+                break
+            case 'remote-desktop':
+                this.openSidePanelById('remote-desktop')
+                break
+            case 'ssh':
+                this.openSSHSidePanel()
+                break
+            case 'code-editor':
+                this.openCodeEditor()
+                break
+            case 'intellij-editor':
+                void this.openIntelliJEditor()
+                break
+            case 'ai-chat':
+                void this.openAIChat()
+                break
+            case 'ai-assistant':
+                this.openAIAssistant()
+                break
+            case 'tabby-url':
+                if (this.tabbyUrlCommand?.run) {
+                    void this.tabbyUrlCommand.run()
+                } else if (this.tabbyUrlCommand?.id) {
+                    this.commands.run(this.tabbyUrlCommand.id, this.buildCommandContext())
+                }
+                break
+            case 'copilot-chat':
+                this.openCopilotChat()
+                break
+            case 'share-all-sessions':
+                void this.shareAllOpenSessionsFromDock()
+                break
+            case 'websocket':
+                void this.toggleWebSocketServer()
+                break
+            case 'open-shared-session-link':
+                void this.openSharedSessionLinkFromDock()
+                break
+            default:
+                break
         }
     }
 
@@ -1584,8 +1633,8 @@ export class AppRootComponent implements OnInit {
         ).catch(() => null)
     }
 
-    private getShareableSessionTabs (): Array<BaseTabComponent & { session?: any, profile?: { type?: string } }> {
-        const tabs: Array<BaseTabComponent & { session?: any, profile?: { type?: string } }> = []
+    private getShareableSessionTabs (): (BaseTabComponent & { session?: any, profile?: { type?: string } })[] {
+        const tabs: (BaseTabComponent & { session?: any, profile?: { type?: string } })[] = []
         const seen = new Set<BaseTabComponent>()
 
         for (const topLevel of this.app.tabs) {
@@ -1649,7 +1698,7 @@ export class AppRootComponent implements OnInit {
 
     private async dispatchShareLinkToCLIHandlers (shareUrl: string): Promise<boolean> {
         const handlers = [...(this.cliHandlers ?? [])]
-            .sort((a, b) => (b?.priority ?? 0) - (a?.priority ?? 0))
+            .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))
         const event = {
             argv: { _: [shareUrl] },
             cwd: process.cwd(),
@@ -1892,7 +1941,7 @@ export class AppRootComponent implements OnInit {
         }
         const allProfiles = await this.profiles.getProfiles({ includeBuiltin: true })
         const sshProfiles = allProfiles.filter(p => p.type === 'ssh')
-        
+
         const options: SelectorOption<void>[] = sshProfiles.map(p => {
             const { result, ...opt } = this.profiles.selectorOptionForProfile(p)
             return {
@@ -1970,8 +2019,8 @@ export class AppRootComponent implements OnInit {
         }
         this.commands.getCommands(this.buildCommandContext()).then(commands => {
             const aiAssistantCmd = commands.find(cmd =>
-                cmd.label?.toLowerCase() === 'ai assistant' ||
-                cmd.label?.toLowerCase().includes('ai assistant'),
+                cmd.label.toLowerCase() === 'ai assistant' ||
+                cmd.label.toLowerCase().includes('ai assistant'),
             )
             if (aiAssistantCmd) {
                 aiAssistantCmd.run()
@@ -1996,7 +2045,7 @@ export class AppRootComponent implements OnInit {
         }
         this.commands.getCommands(this.buildCommandContext()).then(async commands => {
             const copilotCmd = commands.find(cmd => {
-                const label = cmd.label?.toLowerCase() ?? ''
+                const label = cmd.label.toLowerCase() ?? ''
                 return label === 'open copilot chat' || label.includes('copilot')
             })
             if (copilotCmd) {
@@ -2029,7 +2078,7 @@ export class AppRootComponent implements OnInit {
         try {
             if (this.isElectron()) {
                 const electron = (window as any).require('electron')
-                if (electron && electron.ipcRenderer) {
+                if (electron?.ipcRenderer) {
                     return electron.ipcRenderer
                 }
             }
@@ -2097,7 +2146,7 @@ export class AppRootComponent implements OnInit {
                     })
                 }
             }
-            
+
             // Refresh status
             await this.checkWebSocketServerStatus()
         } catch (error) {

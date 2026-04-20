@@ -1,9 +1,10 @@
-import { Component, EventEmitter, Inject, OnDestroy, OnInit, Optional, Output } from '@angular/core';
-import { TlinkLicenseConfig, TLINK_LICENSE_CONFIG, DEFAULT_LICENSE_CONFIG } from '../../tlink-license.config';
+import { Component, EventEmitter, Inject, OnDestroy, OnInit, Optional, Output } from '@angular/core'
+import { TlinkLicenseConfig, TLINK_LICENSE_CONFIG, DEFAULT_LICENSE_CONFIG } from '../../tlink-license.config'
 
 @Component({
-  selector: 'tlink-splash-screen',
-  template: `
+    standalone: false,
+    selector: 'tlink-splash-screen',
+    template: `
     <div class="tlink-splash" *ngIf="visible">
       <div class="tlink-splash__content">
         <img
@@ -22,7 +23,7 @@ import { TlinkLicenseConfig, TLINK_LICENSE_CONFIG, DEFAULT_LICENSE_CONFIG } from
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     :host { display: block; }
 
     .tlink-splash {
@@ -104,34 +105,34 @@ import { TlinkLicenseConfig, TLINK_LICENSE_CONFIG, DEFAULT_LICENSE_CONFIG } from
   `],
 })
 export class SplashScreenComponent implements OnInit, OnDestroy {
-  @Output() dismissed = new EventEmitter<void>();
+    @Output() dismissed = new EventEmitter<void>()
 
-  visible = true;
-  appName: string;
-  appVersion: string;
-  logoUrl: string;
-  duration: number;
+    visible = true
+    appName: string
+    appVersion: string
+    logoUrl: string
+    duration: number
 
-  private _timer?: ReturnType<typeof setTimeout>;
+    private _timer?: ReturnType<typeof setTimeout>
 
-  constructor(
+    constructor(
     @Optional() @Inject(TLINK_LICENSE_CONFIG) config?: TlinkLicenseConfig,
-  ) {
-    const merged = { ...DEFAULT_LICENSE_CONFIG, ...config };
-    this.appName = merged.appName!;
-    this.appVersion = merged.appVersion!;
-    this.logoUrl = merged.appLogoUrl!;
-    this.duration = merged.splashDurationMs!;
-  }
+    ) {
+        const merged = { ...DEFAULT_LICENSE_CONFIG, ...config }
+        this.appName = merged.appName!
+        this.appVersion = merged.appVersion!
+        this.logoUrl = merged.appLogoUrl!
+        this.duration = merged.splashDurationMs!
+    }
 
-  ngOnInit(): void {
-    this._timer = setTimeout(() => {
-      this.visible = false;
-      this.dismissed.emit();
-    }, this.duration);
-  }
+    ngOnInit(): void {
+        this._timer = setTimeout(() => {
+            this.visible = false
+            this.dismissed.emit()
+        }, this.duration)
+    }
 
-  ngOnDestroy(): void {
-    if (this._timer) clearTimeout(this._timer);
-  }
+    ngOnDestroy(): void {
+        if (this._timer) {clearTimeout(this._timer)}
+    }
 }

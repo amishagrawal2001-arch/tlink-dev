@@ -21,7 +21,10 @@ import { SettingsTabProvider } from '../api'
 import { ReleaseNotesComponent } from './releaseNotesTab.component'
 import { TlinkLicenseService } from '../../../tlink-license-client/src/lib/tlink-license.service'
 
-// Guard against missing core export to avoid runtime crashes
+// Guard against missing core export to avoid runtime crashes when a builder
+// tree-shakes the re-export. TS types it as non-null but at runtime the
+// import can still be undefined if core is loaded from a stale bundle.
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition, @typescript-eslint/no-extraneous-class, @typescript-eslint/no-explicit-any
 const BaseTabComponent: any = CoreBaseTabComponent ?? class {}
 
 /** @hidden */
@@ -41,14 +44,30 @@ export class SettingsTabComponent extends BaseTabComponent {
     checkingForUpdate = false
     updateAvailable = false
     showConfigDefaults = false
-    licenseKeyInput = ''
+    licenseEmailInput = ''
+    // Self-service device list.
+    myDevices: any[] = []
+    devicesLoading = false
+    licensePasswordInput = ''
     licenseError = ''
     licenseSuccess = ''
+    // Latest license info snapshot; kept in sync via licenseInfo$ subscription so
+    // templates that bind to it re-render deterministically after sign-in/out.
+    licenseInfo: any = null
     serverUrl = ''
     serverTestResult = ''
+    // Cached fingerprint of this machine. Resolved asynchronously in
+    // ngOnInit — the UI shows "—" until populated. Users copy this value
+    // and send it to their admin when requesting an offline activation code
+    // so the resulting code can be device-bound.
+    deviceFingerprint = ''
+    fingerprintCopied = false
     allLanguages = LocaleService.allLanguages
     @HostBinding('class.pad-window-controls') padWindowControls = false
 
+    // Angular DI constructor — many dependencies is idiomatic here and
+    // can't be meaningfully reduced without losing access to framework services.
+    // eslint-disable-next-line @typescript-eslint/max-params
     constructor (
         public config: ConfigService,
         public hostApp: HostAppService,
@@ -87,10 +106,42 @@ export class SettingsTabComponent extends BaseTabComponent {
 
         this.subscribeUntilDestroyed(config.changed$, onConfigChange)
         onConfigChange()
+
+        // Force re-render of the License tab whenever the license state changes.
+        // Assigning to `licenseInfo` creates a concrete binding Angular's change
+        // detector recognises, even if some parent boundary is OnPush.
+        this.subscribeUntilDestroyed(licenseSvc.licenseInfo$, info => {
+            this.licenseInfo = info
+            // eslint-disable-next-line no-console
+            console.debug('[license] state changed', {
+                status: info?.status,
+                userEmail: info?.userEmail,
+                isLocalTrial: info?.isLocalTrial,
+                licenseType: info?.licenseType,
+                billingType: info?.billingType,
+                reason: info?.lastReasonCode,
+            })
+        })
     }
 
     async ngOnInit () {
         this.isShellIntegrationInstalled = await this.platform.isShellIntegrationInstalled()
+        try {
+            this.deviceFingerprint = await this.licenseSvc.getDeviceFingerprint()
+        } catch {
+            this.deviceFingerprint = ''
+        }
+    }
+
+    async copyDeviceFingerprint () {
+        if (!this.deviceFingerprint) {return}
+        try {
+            await navigator.clipboard.writeText(this.deviceFingerprint)
+            this.fingerprintCopied = true
+            setTimeout(() => { this.fingerprintCopied = false }, 1500)
+        } catch {
+            // Clipboard API can fail in restricted contexts; keep UI quiet.
+        }
     }
 
     async toggleShellIntegration () {
@@ -152,23 +203,84 @@ export class SettingsTabComponent extends BaseTabComponent {
     async activateLicense () {
         this.licenseError = ''
         this.licenseSuccess = ''
-        if (!this.licenseKeyInput.trim()) {
-            this.licenseError = 'Please enter a license key'
+        if (!this.licenseEmailInput.trim() || !this.licensePasswordInput) {
+            this.licenseError = 'Please enter your email and password'
             return
         }
-        const result = await this.licenseSvc.activateLicense(this.licenseKeyInput.trim())
+        const result = await this.licenseSvc.activateLicense(this.licenseEmailInput.trim(), this.licensePasswordInput)
         if (result.success) {
-            this.licenseSuccess = result.message || 'License activated successfully!'
-            this.licenseKeyInput = ''
+            this.licenseSuccess = result.message || 'Signed in successfully!'
+            this.licensePasswordInput = ''
         } else {
-            this.licenseError = result.message || 'Activation failed'
+            this.licenseError = result.message || 'Sign in failed'
         }
     }
 
-    deactivateLicense () {
-        this.licenseSvc.deactivateLicense()
+    async deactivateLicense () {
+        await this.licenseSvc.deactivateLicense()
         this.licenseSuccess = ''
         this.licenseError = ''
+    }
+
+    licenseRefreshing = false
+
+    async refreshLicense () {
+        if (this.licenseRefreshing) {return}
+        this.licenseRefreshing = true
+        this.licenseSuccess = ''
+        this.licenseError = ''
+        try {
+            const result = await this.licenseSvc.refreshLicense()
+            if (result.success) {
+                this.licenseSuccess = result.message
+            } else {
+                this.licenseError = result.message
+            }
+        } finally {
+            this.licenseRefreshing = false
+        }
+    }
+
+    // Self-service device management.
+
+    // Row id currently being deactivated — binds to [disabled] on the per-row
+    // button so double-clicks during the in-flight request are ignored.
+    deactivatingDeviceId: string | null = null
+
+    async loadMyDevices () {
+        if (this.devicesLoading) {return}
+        this.devicesLoading = true
+        try {
+            this.myDevices = await this.licenseSvc.listMyDevices()
+        } finally {
+            this.devicesLoading = false
+        }
+    }
+
+    async deactivateMyDevice (device: any) {
+        if (this.deactivatingDeviceId) {return}
+        if (device.is_current) {
+            if (!confirm('This is THIS device. Deactivating will sign you out. Continue?')) {return}
+        } else {
+            if (!confirm('Deactivate this device? It will be signed out on next check.')) {return}
+        }
+        this.deactivatingDeviceId = String(device.id)
+        try {
+            const ok = await this.licenseSvc.deactivateMyDevice(device.id)
+            if (ok) {
+                await this.loadMyDevices()
+                if (device.is_current) {
+                    // Server row already deactivated — pass skipServerCall=true so
+                    // we don't make a second /deactivate call with a now-invalid
+                    // token (which would 403).
+                    await this.licenseSvc.deactivateLicense(true)
+                }
+            } else {
+                alert('Could not deactivate that device.')
+            }
+        } finally {
+            this.deactivatingDeviceId = null
+        }
     }
 
     async testServerConnection () {

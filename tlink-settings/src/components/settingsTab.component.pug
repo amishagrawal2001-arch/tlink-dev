@@ -1,5 +1,5 @@
 .content
-    ul.nav-pills(ngbNav, #nav='ngbNav', [activeId]='activeTab', orientation='vertical')
+    ul.nav-pills(ngbNav, #nav='ngbNav', [activeId]='activeTab', orientation='vertical', (navChange)='$event.nextId === "license" && loadMyDevices()')
         li(ngbNavItem='application')
             a(ngbNavLink)
                 i.fas.fa-fw.fa-window-maximize.me-2
@@ -147,37 +147,61 @@
                     h3(translate) License Management
 
                     .license-status-card.mb-4(
-                        [class.card-trial]='licenseSvc.licenseStatus === "trial"',
-                        [class.card-pro]='licenseSvc.licenseTier === "pro" && licenseSvc.licenseStatus === "active"',
-                        [class.card-enterprise]='licenseSvc.licenseTier === "enterprise" && licenseSvc.licenseStatus === "active"',
-                        [class.card-expired]='licenseSvc.licenseStatus !== "trial" && licenseSvc.licenseStatus !== "active"'
+                        [class.card-trial]='licenseSvc.billingType === "TRIAL" && licenseSvc.licenseStatus === "active"',
+                        [class.card-pro]='licenseSvc.licenseType === "INDIVIDUAL" && licenseSvc.billingType === "PAID" && licenseSvc.licenseStatus === "active"',
+                        [class.card-enterprise]='licenseSvc.licenseType === "TEAM" && licenseSvc.licenseStatus === "active"',
+                        [class.card-expired]='licenseSvc.licenseStatus !== "active"'
                     )
                         .d-flex.align-items-center
                             span.license-tier-badge(
-                                [class.badge-trial]='licenseSvc.licenseStatus === "trial"',
-                                [class.badge-pro]='licenseSvc.licenseTier === "pro" && licenseSvc.licenseStatus === "active"',
-                                [class.badge-enterprise]='licenseSvc.licenseTier === "enterprise" && licenseSvc.licenseStatus === "active"',
-                                [class.badge-expired]='licenseSvc.licenseStatus !== "trial" && licenseSvc.licenseStatus !== "active"'
+                                [class.badge-trial]='licenseSvc.billingType === "TRIAL" && licenseSvc.licenseStatus === "active"',
+                                [class.badge-pro]='licenseSvc.licenseType === "INDIVIDUAL" && licenseSvc.billingType === "PAID" && licenseSvc.licenseStatus === "active"',
+                                [class.badge-enterprise]='licenseSvc.licenseType === "TEAM" && licenseSvc.licenseStatus === "active"',
+                                [class.badge-expired]='licenseSvc.licenseStatus !== "active"'
                             )
-                                ng-container(*ngIf='licenseSvc.licenseStatus === "active"') {{ licenseSvc.tierDisplayName || 'PRO' }}
-                                ng-container(*ngIf='licenseSvc.licenseStatus === "trial"') TRIAL
-                                ng-container(*ngIf='licenseSvc.licenseStatus !== "trial" && licenseSvc.licenseStatus !== "active"') EXPIRED
-                            span.license-status-text(*ngIf='licenseSvc.licenseStatus === "trial"') ⏱ {{ licenseSvc.trialDaysRemaining }} days remaining
-                            span.license-status-text(*ngIf='licenseSvc.licenseStatus === "active"') Expires: {{ licenseSvc.formattedExpiry }}
-                            span.license-status-text(*ngIf='licenseSvc.licenseStatus !== "trial" && licenseSvc.licenseStatus !== "active"') License expired — please activate
+                                ng-container(*ngIf='licenseSvc.licenseStatus === "active" && licenseSvc.isLocalTrial') TRIAL {{ licenseSvc.trialDaysRemaining }}d
+                                ng-container(*ngIf='licenseSvc.licenseStatus === "active" && !licenseSvc.isLocalTrial && licenseSvc.billingType === "TRIAL"') TRIAL
+                                ng-container(*ngIf='licenseSvc.licenseStatus === "active" && !licenseSvc.isLocalTrial && licenseSvc.billingType === "PAID" && licenseSvc.licenseType === "TEAM"') TEAM
+                                ng-container(*ngIf='licenseSvc.licenseStatus === "active" && !licenseSvc.isLocalTrial && licenseSvc.billingType === "PAID" && licenseSvc.licenseType === "INDIVIDUAL"') INDIVIDUAL
+                                ng-container(*ngIf='licenseSvc.licenseStatus === "expired"') EXPIRED
+                                ng-container(*ngIf='licenseSvc.licenseStatus === "unauthenticated"') NOT SIGNED IN
+                                ng-container(*ngIf='licenseSvc.licenseStatus === "invalid"') INVALID
+                            .ms-3.d-flex.flex-column(style='line-height:1.3')
+                                //- Logged in with a known email: show it.
+                                strong.license-account(*ngIf='licenseSvc.licenseStatus === "active" && licenseSvc.userEmail') {{ licenseSvc.userEmail }}
+                                //- Active but email not yet hydrated from server (old bundle). Don't mislead the user.
+                                strong.license-account(*ngIf='licenseSvc.licenseStatus === "active" && !licenseSvc.userEmail && !licenseSvc.isLocalTrial') Signed in
+                                //- Local 30-day trial — genuinely not signed in yet.
+                                strong.license-account(*ngIf='licenseSvc.licenseStatus === "active" && licenseSvc.isLocalTrial') Local trial — not signed in
+                                //- All non-active states.
+                                strong.license-account(*ngIf='licenseSvc.licenseStatus !== "active"') Not signed in
+                                small.text-muted(*ngIf='licenseSvc.licenseStatus === "active" && licenseSvc.endDate') Expires {{ licenseSvc.endDate }}
+                                small.text-muted(*ngIf='licenseSvc.licenseStatus !== "active"') Please sign in to continue
 
-                    h5.mt-4(translate) Activate License
+                    h5.mt-4(*ngIf='!licenseSvc.userEmail', translate) Sign in
+                    h5.mt-4(*ngIf='licenseSvc.userEmail', translate) Switch account
                     .form-line
                         .header
-                            .title(translate) License Key
-                            .description(translate) Enter your license key
+                            .title(translate) Email
                         .license-input-row
-                            input.form-control.license-key-input(
-                                type='text',
-                                [(ngModel)]='licenseKeyInput',
-                                placeholder='TLINK-XX-XXXX-XXXX-XXXX-XXXX'
+                            input.form-control(
+                                type='email',
+                                autocomplete='email',
+                                [(ngModel)]='licenseEmailInput',
+                                placeholder='you@example.com'
                             )
-                            button.btn.btn-primary.license-btn((click)='activateLicense()') Activate
+                    .form-line
+                        .header
+                            .title(translate) Password
+                        .license-input-row
+                            input.form-control(
+                                type='password',
+                                autocomplete='current-password',
+                                [(ngModel)]='licensePasswordInput',
+                                placeholder='Your password',
+                                (keydown.enter)='activateLicense()'
+                            )
+                            button.btn.btn-primary.license-btn((click)='activateLicense()') Sign in
                     .text-danger.mt-1.small(*ngIf='licenseError') {{ licenseError }}
                     .text-success.mt-1.small(*ngIf='licenseSuccess') {{ licenseSuccess }}
 
@@ -187,29 +211,52 @@
                             .title(translate) Status
                         span.license-detail-badge(
                             [class.detail-active]='licenseSvc.licenseStatus === "active"',
-                            [class.detail-trial]='licenseSvc.licenseStatus === "trial"',
+                            [class.detail-trial]='licenseSvc.billingType === "TRIAL" && licenseSvc.licenseStatus === "active"',
                             [class.detail-expired]='licenseSvc.licenseStatus === "expired"'
-                        ) {{ licenseSvc.licenseStatus | uppercase }}
+                        ) {{ licenseSvc.licenseStatus | uppercase }}{{ licenseSvc.offlineGrace ? ' (OFFLINE)' : '' }}
+
+                    .form-line(*ngIf='licenseSvc.userEmail')
+                        .header
+                            .title(translate) Account
+                        span {{ licenseSvc.userEmail }}
 
                     .form-line(*ngIf='licenseSvc.licenseStatus === "active"')
                         .header
-                            .title(translate) License Key
-                        code.license-code {{ licenseSvc.maskedKey }}
+                            .title(translate) License
+                        span {{ licenseSvc.licenseType }} / {{ licenseSvc.billingType }}
 
-                    .form-line(*ngIf='licenseSvc.licenseStatus === "active"')
-                        .header
-                            .title(translate) Tier
-                        span {{ licenseSvc.tierDisplayName }}
-
-                    .form-line(*ngIf='licenseSvc.licenseStatus === "active"')
+                    .form-line(*ngIf='licenseSvc.licenseStatus === "active" && licenseSvc.endDate')
                         .header
                             .title(translate) Expires
-                        span {{ licenseSvc.formattedExpiry }}
+                        span {{ licenseSvc.endDate }}
 
+                    .form-line(*ngIf='licenseSvc.deviceId')
+                        .header
+                            .title(translate) Device ID
+                        code.license-code {{ licenseSvc.deviceId }}
+
+                    //- Device fingerprint — always shown (even without an active
+                    //- license) so users in offline / blocked-network environments
+                    //- can send it to their admin when requesting an offline
+                    //- activation code. Admin pastes the value into the "Device
+                    //- fingerprint" field when minting the code; the resulting
+                    //- code then only works on THIS machine.
                     .form-line
                         .header
-                            .title(translate) Machine ID
-                        code.license-code {{ licenseSvc.getMachineId() }}
+                            .title(translate) Device fingerprint
+                            .description(translate) Send this to your admin when requesting an offline activation code so the code is bound to this device.
+                        .license-input-row
+                            input.form-control(
+                                type='text',
+                                readonly,
+                                [value]='deviceFingerprint || "(computing…)"'
+                            )
+                            button.btn.btn-secondary.license-btn(
+                                [disabled]='!deviceFingerprint',
+                                (click)='copyDeviceFingerprint()'
+                            )
+                                i.fas.me-1([class.fa-check]='fingerprintCopied', [class.fa-copy]='!fingerprintCopied')
+                                | {{ fingerprintCopied ? 'Copied' : 'Copy' }}
 
                     h5.mt-4(translate) License Server
                     .form-line
@@ -227,11 +274,76 @@
                     .small.mt-1(*ngIf='serverTestResult')
                         span([class.text-success]='serverTestResult.startsWith("connected")', [class.text-danger]='!serverTestResult.startsWith("connected")') {{ serverTestResult }}
 
+                    //- Self-service device portal — lists all devices this
+                    //- account is signed in on and lets the user deactivate
+                    //- any seat without admin involvement.
+                    h5.mt-4(*ngIf='licenseSvc.licenseStatus === "active" && !licenseSvc.isLocalTrial', translate) My Devices
+                    .d-flex.align-items-center.mb-2(*ngIf='licenseSvc.licenseStatus === "active" && !licenseSvc.isLocalTrial')
+                        .small.text-muted(style='flex:1') Every device your account has activated. Click Deactivate to free a seat.
+                        button.btn.btn-sm.btn-outline-secondary(
+                            [disabled]='devicesLoading',
+                            (click)='loadMyDevices()'
+                        )
+                            i.fas.me-1([class.fa-sync-alt]='!devicesLoading', [class.fa-spinner]='devicesLoading', [class.fa-spin]='devicesLoading')
+                            | {{ devicesLoading ? 'Loading…' : 'Refresh' }}
+
+                    table.table.table-sm.small(
+                        *ngIf='licenseSvc.licenseStatus === "active" && !licenseSvc.isLocalTrial && myDevices.length',
+                        style='font-size:12px'
+                    )
+                        thead
+                            tr
+                                th Product
+                                th Platform
+                                th App version
+                                th Last seen
+                                th Status
+                                th
+                        tbody
+                            tr(*ngFor='let d of myDevices')
+                                td
+                                    code(style='font-size:11px') {{ d.product_code }}
+                                    span.badge.bg-primary.ms-1(*ngIf='d.is_current', style='font-size:9px') THIS DEVICE
+                                td {{ d.platform }} {{ d.os_version }}
+                                td {{ d.app_version }}
+                                td {{ d.last_seen_at ? (d.last_seen_at | date:'short') : '—' }}
+                                td
+                                    span.badge.bg-success(*ngIf='!d.deactivated_at', style='font-size:10px') active
+                                    span.badge.bg-secondary(*ngIf='d.deactivated_at', style='font-size:10px') deactivated
+                                td(style='white-space:nowrap')
+                                    button.btn.btn-sm.btn-outline-danger(
+                                        *ngIf='!d.deactivated_at',
+                                        [disabled]='deactivatingDeviceId === d.id',
+                                        (click)='deactivateMyDevice(d)'
+                                    )
+                                        i.fas.fa-spinner.fa-spin.me-1(*ngIf='deactivatingDeviceId === d.id')
+                                        | {{ deactivatingDeviceId === d.id ? 'Deactivating…' : 'Deactivate' }}
+
+                    .small.text-muted(
+                        *ngIf='licenseSvc.licenseStatus === "active" && !licenseSvc.isLocalTrial && !myDevices.length && !devicesLoading'
+                    ) No devices found. Try Refresh.
+
                     .d-flex.gap-3.mt-4
-                        button.btn.btn-outline-danger(
-                            *ngIf='licenseSvc.licenseStatus === "active"',
-                            (click)='deactivateLicense()'
-                        ) Deactivate License
+                        //- Manual refresh — hits /api/licenses/refresh right now
+                        //- instead of waiting for the ~13-min preemptive timer.
+                        button.btn.btn-outline-secondary(
+                            *ngIf='licenseSvc.licenseStatus === "active" && !licenseSvc.isLocalTrial',
+                            [disabled]='licenseRefreshing',
+                            (click)='refreshLicense()'
+                        )
+                            i.fas.me-2(
+                                [class.fa-sync-alt]='!licenseRefreshing',
+                                [class.fa-spinner]='licenseRefreshing',
+                                [class.fa-spin]='licenseRefreshing'
+                            )
+                            | {{ licenseRefreshing ? 'Refreshing…' : 'Refresh license' }}
+
+                        //- Always visible so users can reset local state even
+                        //- when there's no active session (useful when the
+                        //- bundle is stale or the trial is stuck).
+                        button.btn.btn-outline-danger((click)='deactivateLicense()')
+                            i.fas.fa-sign-out-alt.me-2
+                            | Sign out / reset local state
                         a.btn.btn-outline-primary(href='https://tlink.io/buy', target='_blank') Buy License
 
         li(ngbNavItem='config-file')

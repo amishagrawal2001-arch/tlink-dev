@@ -276,18 +276,78 @@ title-bar(
                         rect(x='3.5', y='8.5', width='3', height='2.5', rx='0.5', fill='currentColor')
                         rect(x='8', y='8.5', width='3', height='2.5', rx='0.5', fill='currentColor')
             .shortcut-spacer
-                .license-dock-banner(
-                    *ngIf='licenseSvc.licenseStatus === "trial" || licenseSvc.licenseStatus === "active"',
-                    (click)='showLicenseActivation = true'
+                //- "Sign in" pill — shown when the user isn't in a real
+                //- signed-in session: either fully unauthenticated/expired,
+                //- OR on the local 30-day trial (so they can still upgrade).
+                //- Label + tooltip come from the service so trial, expired,
+                //- seat-revoked, device-limit, etc. each render distinctly
+                //- instead of a single ambiguous "Sign in".
+                .license-dock-banner.license-dock-signin(
+                    *ngIf='licenseSvc.licenseStatus !== "active" || licenseSvc.isLocalTrial',
+                    (click)='showLicenseActivation = true',
+                    [title]='licenseSvc.dockPillTooltip'
                 )
                     span.license-dock-badge(
-                        [class.dock-trial]='licenseSvc.licenseStatus === "trial"',
-                        [class.dock-pro]='licenseSvc.licenseTier === "pro" && licenseSvc.licenseStatus === "active"',
-                        [class.dock-enterprise]='licenseSvc.licenseTier === "enterprise" && licenseSvc.licenseStatus === "active"'
+                        [class.dock-expired]='licenseSvc.licenseStatus === "expired" || licenseSvc.licenseStatus === "invalid"',
+                        [class.dock-signin]='licenseSvc.licenseStatus !== "expired" && licenseSvc.licenseStatus !== "invalid"'
                     )
-                        ng-container(*ngIf='licenseSvc.licenseStatus === "trial"') Trial: {{ licenseSvc.trialDaysRemaining }}d
-                        ng-container(*ngIf='licenseSvc.licenseStatus === "active"') {{ licenseSvc.tierDisplayName }}
-                    span.license-dock-action(*ngIf='licenseSvc.licenseStatus === "trial"')  Upgrade
+                        i.fas.me-1(
+                            [class.fa-exclamation-triangle]='licenseSvc.licenseStatus === "expired" || licenseSvc.licenseStatus === "invalid"',
+                            [class.fa-sign-in-alt]='licenseSvc.licenseStatus !== "expired" && licenseSvc.licenseStatus !== "invalid"'
+                        )
+                        | {{ licenseSvc.dockPillLabel }}
+
+                //- Signed-in dropdown: badge + sign-out + settings.
+                .license-dock-dropdown(
+                    *ngIf='licenseSvc.licenseStatus === "active"',
+                    ngbDropdown,
+                    container='body',
+                    placement='bottom-end'
+                )
+                    .license-dock-banner(ngbDropdownToggle)
+                        span.license-dock-badge(
+                            [class.dock-trial]='licenseSvc.billingType === "TRIAL"',
+                            [class.dock-pro]='licenseSvc.licenseType === "INDIVIDUAL" && licenseSvc.billingType === "PAID"',
+                            [class.dock-enterprise]='licenseSvc.licenseType === "TEAM"'
+                        )
+                            ng-container(*ngIf='licenseSvc.isLocalTrial') Trial: {{ licenseSvc.trialDaysRemaining }}d
+                            ng-container(*ngIf='!licenseSvc.isLocalTrial && licenseSvc.billingType === "TRIAL"') Trial
+                            ng-container(*ngIf='!licenseSvc.isLocalTrial && licenseSvc.licenseType === "TEAM"') Team
+                            ng-container(*ngIf='!licenseSvc.isLocalTrial && licenseSvc.licenseType === "INDIVIDUAL" && licenseSvc.billingType === "PAID"') Individual
+
+                    div(ngbDropdownMenu, style='min-width:220px;padding:4px 0')
+                        //- Account header
+                        .px-3.py-2(*ngIf='licenseSvc.userEmail', style='border-bottom:1px solid var(--theme-bg-more-2)')
+                            .small.text-muted(style='font-size:10px;text-transform:uppercase;letter-spacing:0.5px') Signed in as
+                            .text-truncate(style='font-weight:600;font-size:12px') {{ licenseSvc.userEmail }}
+                        .px-3.py-2(*ngIf='!licenseSvc.userEmail && licenseSvc.isLocalTrial', style='border-bottom:1px solid var(--theme-bg-more-2)')
+                            .small.text-muted Local trial
+                            .small(style='font-size:11px') {{ licenseSvc.trialDaysRemaining }} days remaining
+                        .px-3.py-2(*ngIf='!licenseSvc.userEmail && !licenseSvc.isLocalTrial', style='border-bottom:1px solid var(--theme-bg-more-2)')
+                            .small.text-muted Active session
+
+                        //- Sign in (shown during local trial) or Switch account
+                        button.dropdown-item(
+                            *ngIf='licenseSvc.isLocalTrial || !licenseSvc.userEmail',
+                            (click)='showLicenseActivation = true'
+                        )
+                            i.fas.fa-fw.fa-sign-in-alt.me-2
+                            | Sign in to activate
+
+                        //- Sign out — frees the seat server-side
+                        button.dropdown-item.text-danger(
+                            *ngIf='licenseSvc.deviceId || (licenseSvc.licenseStatus === "active" && !licenseSvc.isLocalTrial)',
+                            (click)='signOutOfLicense()'
+                        )
+                            i.fas.fa-fw.fa-sign-out-alt.me-2
+                            | Sign out of this device
+
+                        .dropdown-divider
+                        button.dropdown-item(
+                            (click)='openLicenseSettings()'
+                        )
+                            i.fas.fa-fw.fa-cog.me-2
+                            | License settings…
             .shortcut-toolbar(*ngIf='rightToolbarButtons?.length || updatesAvailable')
                 button.btn.btn-sm.btn-icon.shortcut-icon-button.toolbar-icon-button(
                     *ngFor='let button of rightToolbarButtons',

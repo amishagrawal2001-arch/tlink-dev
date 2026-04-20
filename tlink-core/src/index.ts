@@ -60,6 +60,7 @@ import { BookmarkEditModalComponent } from './components/bookmarkEditModal.compo
 import { CodeEditorTabComponent } from './components/codeEditorTab.component'
 // import { CodeEditorRecoveryProvider } from './codeEditorRecoveryProvider' // Tlink Studio - deactivated
 import { TlinkLicenseModule } from '../../tlink-license-client/src/lib/tlink-license.module'
+import { OFFLINE_PUBLIC_KEY } from './offline-public-key'
 
 export function TranslateMessageFormatCompilerFactory (): TranslateMessageFormatCompiler {
     return new TranslateMessageFormatCompiler()
@@ -150,13 +151,14 @@ const PROVIDERS = [
         NgbModule,
         DragDropModule,
         TlinkLicenseModule.forRoot({
-            appCode: 'NT',
+            productCode: 'tyllink_terminal',
             appName: 'NexTerm',
             appVersion: '1.0.1',
             serverUrl: 'http://localhost:4000',
             purchaseUrl: 'https://nexterm.io/buy',
-            trialDurationDays: 30,
             splashDurationMs: 2000,
+            gracePeriodHours: 48,
+            offlinePublicKey: OFFLINE_PUBLIC_KEY,
         }),
         TranslateModule.forRoot({
             defaultLanguage: 'en',

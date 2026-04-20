@@ -1,9 +1,10 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
-import { TlinkLicenseService } from '../../tlink-license.service';
+import { Component, EventEmitter, Input, Output } from '@angular/core'
+import { TlinkLicenseService } from '../../tlink-license.service'
 
 @Component({
-  selector: 'tlink-server-settings',
-  template: `
+    standalone: false,
+    selector: 'tlink-server-settings',
+    template: `
     <div class="tlink-overlay" *ngIf="visible" (click)="onOverlayClick($event)">
       <div class="tlink-dialog">
         <div class="tlink-dialog__header">
@@ -51,7 +52,7 @@ import { TlinkLicenseService } from '../../tlink-license.service';
       </div>
     </div>
   `,
-  styles: [`
+    styles: [`
     :host { display: block; }
 
     .tlink-overlay {
@@ -199,48 +200,48 @@ import { TlinkLicenseService } from '../../tlink-license.service';
   `],
 })
 export class ServerSettingsComponent {
-  @Input() visible = false;
-  @Output() saved = new EventEmitter<string>();
-  @Output() closed = new EventEmitter<void>();
+    @Input() visible = false
+    @Output() saved = new EventEmitter<string>()
+    @Output() closed = new EventEmitter<void>()
 
-  serverUrlInput = '';
-  testing = false;
-  testMessage = '';
-  testOk = false;
+    serverUrlInput = ''
+    testing = false
+    testMessage = ''
+    testOk = false
 
-  constructor(private licenseService: TlinkLicenseService) {
-    this.serverUrlInput = this.licenseService.serverUrl;
-  }
-
-  async testConnection(): Promise<void> {
-    if (!this.serverUrlInput.trim() || this.testing) return;
-    this.testing = true;
-    this.testMessage = '';
-
-    const result = await this.licenseService.testServerConnection(this.serverUrlInput.trim());
-    this.testOk = result.reachable;
-    this.testMessage = result.reachable
-      ? `Connected (${result.latencyMs}ms)`
-      : result.message;
-    this.testing = false;
-  }
-
-  save(): void {
-    const url = this.serverUrlInput.trim();
-    if (!url) return;
-    this.licenseService.serverUrl = url;
-    this.saved.emit(url);
-    this.close();
-  }
-
-  close(): void {
-    this.testMessage = '';
-    this.closed.emit();
-  }
-
-  onOverlayClick(event: MouseEvent): void {
-    if ((event.target as HTMLElement).classList.contains('tlink-overlay')) {
-      this.close();
+    constructor(private licenseService: TlinkLicenseService) {
+        this.serverUrlInput = this.licenseService.serverUrl
     }
-  }
+
+    async testConnection(): Promise<void> {
+        if (!this.serverUrlInput.trim() || this.testing) {return}
+        this.testing = true
+        this.testMessage = ''
+
+        const result = await this.licenseService.testServerConnection(this.serverUrlInput.trim())
+        this.testOk = result.reachable
+        this.testMessage = result.reachable
+            ? `Connected (${result.latencyMs}ms)`
+            : result.message
+        this.testing = false
+    }
+
+    save(): void {
+        const url = this.serverUrlInput.trim()
+        if (!url) {return}
+        this.licenseService.serverUrl = url
+        this.saved.emit(url)
+        this.close()
+    }
+
+    close(): void {
+        this.testMessage = ''
+        this.closed.emit()
+    }
+
+    onOverlayClick(event: MouseEvent): void {
+        if ((event.target as HTMLElement).classList.contains('tlink-overlay')) {
+            this.close()
+        }
+    }
 }
