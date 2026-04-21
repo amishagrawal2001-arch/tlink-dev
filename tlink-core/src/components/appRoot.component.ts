@@ -1228,7 +1228,9 @@ export class AppRootComponent implements OnInit {
             return null
         }
 
-        const dockButtons = Array.from(leftDockSection.querySelectorAll('[data-left-dock-item]'))
+        // querySelectorAll without a type argument returns NodeListOf<Element>; we
+        // need HTMLElement here for dataset / closest-as-HTMLElement access below.
+        const dockButtons = Array.from(leftDockSection.querySelectorAll<HTMLElement>('[data-left-dock-item]'))
         const candidateButtons = dockButtons.filter(button => {
             const item = button.dataset.leftDockItem
             if (!item || !this.leftDockVisibleOrder.includes(item)) {
@@ -1259,7 +1261,7 @@ export class AppRootComponent implements OnInit {
             if (candidate.closest('.cdk-drag-preview') || candidate.closest('.cdk-drag-placeholder')) {
                 continue
             }
-            const match = candidate.closest('[data-left-dock-item]')
+            const match = candidate.closest<HTMLElement>('[data-left-dock-item]')
             if (match && candidateButtons.includes(match)) {
                 button = match
                 break
@@ -1272,7 +1274,7 @@ export class AppRootComponent implements OnInit {
                 if (!candidate) {
                     continue
                 }
-                const groupEl = candidate.closest('[data-left-dock-group]')
+                const groupEl = candidate.closest<HTMLElement>('[data-left-dock-group]')
                 const groupItemsRaw = groupEl?.dataset.leftDockGroup
                 if (!groupItemsRaw) {
                     continue
