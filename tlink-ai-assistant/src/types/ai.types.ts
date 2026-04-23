@@ -449,6 +449,13 @@ export interface AgentState {
     toolCallHistory: ToolCallRecord[];
     lastAiResponse: string;
     isActive: boolean;
+    /**
+     * Count of consecutive rounds where the model produced text but no tool
+     * calls while the agent wanted to continue. Capped in the agent loop so
+     * a model that narrates without acting can't burn the whole maxRounds
+     * budget.
+     */
+    emptyRoundRetries?: number;
 }
 
 // Tool call record

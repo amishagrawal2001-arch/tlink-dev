@@ -166,13 +166,22 @@ Note: If there are still incomplete tasks, please complete them first before cal
         },
         {
             name: 'write_to_terminal',
-            description: 'Write a command to the terminal. Can specify terminal index or use the current active terminal.',
+            description:
+                'Run ONE real shell command in the active terminal (or the one at '
+                + '`terminal_index`). The `command` field must be an actual executable '
+                + 'command line like "ls scripts/" or "npm test" — NOT pre-computed '
+                + 'output, NOT a multi-line block, NOT a description. For read-only '
+                + 'inspection prefer `list_files` (listing) or `read_file` (contents); '
+                + 'only reach for this tool when you need to EXECUTE something in the '
+                + 'user\'s terminal.',
             input_schema: {
                 type: 'object',
                 properties: {
                     command: {
                         type: 'string',
-                        description: 'Command to write'
+                        description:
+                            'A single shell command to execute. Example: "ls -la", '
+                            + '"git status", "npm run build". Must be executable as-is.'
                     },
                     execute: {
                         type: 'boolean',
@@ -264,7 +273,11 @@ Note: If there are still incomplete tasks, please complete them first before cal
         },
         {
             name: 'read_file',
-            description: 'Read a text file from disk. Use this to inspect code before making changes.',
+            description:
+                'Read a text file from disk and return its contents. Use this FIRST '
+                + 'to answer questions about a file\'s contents (e.g. "what scripts '
+                + 'does package.json define?", "show me the config"). Do not try to '
+                + 'recall file contents from memory — always read the actual file.',
             input_schema: {
                 type: 'object',
                 properties: {
@@ -278,13 +291,17 @@ Note: If there are still incomplete tasks, please complete them first before cal
         },
         {
             name: 'list_files',
-            description: 'List files in a directory (non-recursive by default).',
+            description:
+                'List entries in a directory (non-recursive). Use this to answer '
+                + 'questions like "what files are in this folder", "list the scripts", '
+                + '"what\'s in src/". Pass "." for the workspace root. Prefer this '
+                + 'over running `ls` via write_to_terminal.',
             input_schema: {
                 type: 'object',
                 properties: {
                     path: {
                         type: 'string',
-                        description: 'Directory path (absolute or relative to workspace root)'
+                        description: 'Directory path (absolute or relative to workspace root). Pass "." for the current working directory.'
                     },
                     max_entries: {
                         type: 'number',

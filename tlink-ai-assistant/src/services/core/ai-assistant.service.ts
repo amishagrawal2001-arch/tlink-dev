@@ -1383,7 +1383,8 @@ export class AiAssistantService {
             startTime: Date.now(),
             toolCallHistory: [],
             lastAiResponse: '',
-            isActive: true
+            isActive: true,
+            emptyRoundRetries: 0
         };
 
         return new Observable<AgentStreamEvent>((subscriber) => {
@@ -1635,6 +1636,11 @@ export class AiAssistantService {
 
                                     this.logger.info(`Round ${agentState.currentRound}: ${pendingToolCalls.length} tools to execute`);
 
+                                    // Reset the empty-round counter — the model
+                                    // called real tools, so later narrate-only
+                                    // rounds still get their one-shot nudge.
+                                    agentState.emptyRoundRetries = 0;
+
                                     // 执行所有工具
                                     const toolResults = await this.executeToolsSequentially(
                                         pendingToolCalls,
@@ -1775,7 +1781,38 @@ export class AiAssistantService {
                                     // 没有工具调用
                                     // 如果 checkTermination 返回 shouldTerminate: false（检测到未完成暗示），继续下一轮
                                     if (!termination.shouldTerminate) {
-                                        this.logger.info(`No tools but incomplete hint detected (${termination.reason}), continuing to next round`);
+                                        // Cap empty-round retries at 1 so a
+                                        // model that narrates without calling
+                                        // tools can't burn the whole round
+                                        // budget (the "list all scripts → 8
+                                        // empty rounds" pattern).
+                                        const emptyRetries = agentState.emptyRoundRetries || 0;
+                                        if (emptyRetries >= 1) {
+                                            const warning = 'Model produced text but no tool calls for 2 rounds in a row — returning the text as-is. Try rephrasing, use a model with better tool-use support, or disable Agent mode for a direct answer.';
+                                            this.logger.warn('Empty-round retry cap reached, terminating', { emptyRetries });
+                                            subscriber.next({
+                                                type: 'text_delta',
+                                                textDelta: `\n\n⚠️ ${warning}\n`
+                                            });
+                                            subscriber.next({
+                                                type: 'agent_complete',
+                                                reason: 'no_tools',
+                                                totalRounds: agentState.currentRound,
+                                                terminationMessage: warning
+                                            });
+                                            callbacks.onAgentComplete?.('no_tools', agentState.currentRound);
+                                            subscriber.complete();
+                                            resolve();
+                                            return;
+                                        }
+                                        agentState.emptyRoundRetries = emptyRetries + 1;
+                                        this.logger.info(`No tools but incomplete hint detected (${termination.reason}), nudging once`);
+                                        conversationMessages.push({
+                                            id: this.generateId(),
+                                            role: MessageRole.SYSTEM,
+                                            content: 'Your last reply had no tool call. If the user asked for a directory listing, call list_files. To read a file, call read_file. To run a shell command, call write_to_terminal with one real shell command (e.g. "ls scripts/"). Do NOT invent command output.',
+                                            timestamp: new Date()
+                                        });
                                         try {
                                             await runSingleRound();
                                         } catch (recursionError) {
@@ -1855,7 +1892,8 @@ export class AiAssistantService {
             startTime: Date.now(),
             toolCallHistory: [],
             lastAiResponse: '',
-            isActive: true
+            isActive: true,
+            emptyRoundRetries: 0
         };
 
             type LangGraphState = {
@@ -1871,6 +1909,7 @@ export class AiAssistantService {
                 reviewRequired: boolean;
                 reviewerNotes: string;
                 contentRetryCount: number;
+                emptyRoundRetries: number;
                 hasToolResult: boolean;
                 hasPatchApplied: boolean;
                 hasContext: boolean;
@@ -1893,6 +1932,7 @@ export class AiAssistantService {
                     reviewRequired: { reducer: (_left: boolean | undefined, right: boolean | undefined) => right ?? _left ?? false, default: () => false },
                     reviewerNotes: { reducer: (_left: string | undefined, right: string | undefined) => right ?? _left ?? '', default: () => '' },
                     contentRetryCount: { reducer: (_left: number | undefined, right: number | undefined) => right ?? _left ?? 0, default: () => 0 },
+                    emptyRoundRetries: { reducer: (_left: number | undefined, right: number | undefined) => right ?? _left ?? 0, default: () => 0 },
                     hasToolResult: { reducer: (_left: boolean | undefined, right: boolean | undefined) => right ?? _left ?? false, default: () => false },
                     hasPatchApplied: { reducer: (_left: boolean | undefined, right: boolean | undefined) => right ?? _left ?? false, default: () => false },
                     hasContext: { reducer: (_left: boolean | undefined, right: boolean | undefined) => right ?? _left ?? false, default: () => false },
@@ -2270,7 +2310,11 @@ export class AiAssistantService {
                         termination: null,
                         forceRetry: false,
                         round: currentRound,
-                        reviewRequired: false
+                        reviewRequired: false,
+                        // Reset the empty-round counter — the model called a
+                        // real tool this round, so a later narrate-only round
+                        // should get its own one-shot nudge.
+                        emptyRoundRetries: 0
                     };
                 }
 
@@ -2466,16 +2510,56 @@ export class AiAssistantService {
                 }
 
                 if (!termination.shouldTerminate) {
-                    this.logger.info(`No tools but incomplete hint detected (${termination.reason}), continuing to next round`);
+                    // Cap empty-round retries at 1. Previously this branch
+                    // would set forceRetry:true every round where the model
+                    // produced text but no tool calls and the termination
+                    // checker hadn't fired yet, turning "list all scripts"
+                    // into 8 rounds of the model narrating instead of acting.
+                    // One retry gives a clear "please call a tool" nudge; a
+                    // second empty round means the model is stuck and we
+                    // should return what it said rather than loop further.
+                    const emptyRetries = state.emptyRoundRetries || 0;
+                    if (emptyRetries >= 1) {
+                        const warning = 'Model produced text but no tool calls for 2 rounds in a row — returning the text as-is. Try rephrasing, use a model with better tool-use support, or disable Agent mode for a direct answer.';
+                        this.logger.warn('Empty-round retry cap reached, terminating', { emptyRetries });
+                        subscriber.next({
+                            type: 'text_delta',
+                            textDelta: `\n\n⚠️ ${warning}\n`
+                        });
+                        subscriber.next({
+                            type: 'agent_complete',
+                            reason: 'no_tools',
+                            totalRounds: agentState.currentRound,
+                            terminationMessage: warning
+                        });
+                        callbacks.onAgentComplete?.('no_tools', agentState.currentRound);
+                        return {
+                            messages: updatedMessages,
+                            pendingToolCalls: [],
+                            lastText: roundTextContent,
+                            shouldTerminate: true,
+                            termination: { shouldTerminate: true, reason: 'no_tools', message: warning } as TerminationResult,
+                            forceRetry: false,
+                            round: currentRound
+                        };
+                    }
+                    const nudge: ChatMessage = {
+                        id: this.generateId(),
+                        role: MessageRole.SYSTEM,
+                        content: 'Your last reply had no tool call. If the user asked for a directory listing, call list_files. To read a file, call read_file. To run a shell command, call write_to_terminal with one real shell command (e.g. "ls scripts/"). Do NOT invent command output.'
+                    } as ChatMessage;
+                    (nudge as any).timestamp = new Date();
+                    this.logger.info(`No tools but incomplete hint detected (${termination.reason}), nudging once and continuing`);
                     return {
-                        messages: updatedMessages,
+                        messages: this.appendRetryHintOnce(updatedMessages, nudge),
                         pendingToolCalls: [],
                         lastText: roundTextContent,
                         shouldTerminate: false,
                         termination: null,
                         forceRetry: true,
                         round: currentRound,
-                        reviewRequired: false
+                        reviewRequired: false,
+                        emptyRoundRetries: emptyRetries + 1
                     };
                 }
 
