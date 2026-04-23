@@ -4,6 +4,7 @@ import { LoggerService } from '../core/logger.service';
 import { ConfigProviderService } from '../core/config-provider.service';
 import { EditorIntegrationService } from '../editor/editor-integration.service';
 import { McpToolBridgeService } from '../tools/mcp-tool-bridge.service';
+import { GitToolsService } from '../tools/git-tools.service';
 
 /**
  * Terminal tool definitions
@@ -524,16 +525,21 @@ Note: If there are still incomplete tasks, please complete them first before cal
         private logger: LoggerService,
         private config: ConfigProviderService,
         private editorIntegration: EditorIntegrationService,
-        private mcpToolBridge: McpToolBridgeService
+        private mcpToolBridge: McpToolBridgeService,
+        private gitTools: GitToolsService
     ) {
         // No longer need static subscription to output, read directly from xterm buffer dynamically
     }
 
     /**
-     * Get all tool definitions (including MCP tools)
+     * Get all tool definitions (core + git + MCP).
      */
     getToolDefinitions(): ToolDefinition[] {
-        return [...this.tools, ...this.mcpToolBridge.getToolDefinitions() as ToolDefinition[]];
+        return [
+            ...this.tools,
+            ...this.gitTools.getToolDefinitions() as ToolDefinition[],
+            ...this.mcpToolBridge.getToolDefinitions() as ToolDefinition[],
+        ];
     }
 
     /**
@@ -549,7 +555,9 @@ Note: If there are still incomplete tasks, please complete them first before cal
 
         // Validate tool name is in available tools list
         const availableTools = this.getToolDefinitions();
-        const toolExists = availableTools.some(t => t.name === toolCall.name) || this.mcpToolBridge.canHandleTool(toolCall.name);
+        const toolExists = availableTools.some(t => t.name === toolCall.name)
+            || this.gitTools.canHandleTool(toolCall.name)
+            || this.mcpToolBridge.canHandleTool(toolCall.name);
         
         if (!toolExists) {
             const errorMsg = `Unknown tool: "${toolCall.name}". Available tools: ${availableTools.map(t => t.name).join(', ')}`;
@@ -694,6 +702,10 @@ Note: If there are still incomplete tasks, please complete them first before cal
                     );
                     break;
                 default:
+                    if (this.gitTools.canHandleTool(toolCall.name)) {
+                        result = await this.gitTools.executeTool(toolCall.name, toolCall.input || {});
+                        break;
+                    }
                     if (this.mcpToolBridge.canHandleTool(toolCall.name)) {
                         result = await this.mcpToolBridge.executeTool(toolCall.name, toolCall.input || {});
                         break;
