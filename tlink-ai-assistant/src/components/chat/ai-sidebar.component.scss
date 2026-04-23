@@ -64,6 +64,13 @@
 //  - larger 28px icon buttons (better click target, still compact)
 //  - the close button picks up a red tint on hover *and* gets a subtle
 //    left-divider so it reads as a separate, intentional action
+//  - `-webkit-app-region: drag` on the header itself so users can grab
+//    the header and reposition the window (critical in full-window mode
+//    where the tab-bar is hidden; in embedded mode it drags the whole
+//    Electron main window, matching how Slack/Linear side panels behave).
+//    Interactive children reset to `no-drag` so buttons stay clickable.
+//  - Left padding widens on macOS so the title doesn't collide with the
+//    traffic-light buttons in full-window mode.
 .ai-sidebar-header {
     display: flex;
     justify-content: space-between;
@@ -72,6 +79,16 @@
     background: var(--ai-bg-secondary, #2d2d2d);
     box-shadow: 0 1px 0 var(--ai-border, #4a4a4a);
     min-height: 42px;
+    -webkit-app-region: drag;
+    user-select: none;
+
+    // macOS: when the AI chat opens in its own BrowserWindow (frame=false,
+    // titleBarStyle=hidden), the traffic-light buttons sit at top-left and
+    // overlap our title. Push the title right so they don't collide.
+    .ai-sidebar-container.macos & {
+        padding-left: 82px;
+        min-height: 48px;
+    }
 
     .header-title {
         display: flex;
@@ -105,6 +122,9 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            // Badge shows a tooltip on hover — needs its own click region
+            // so the browser fires mouseenter instead of starting a drag.
+            -webkit-app-region: no-drag;
 
             .model-name {
                 color: var(--ai-primary, #4dabf7);
@@ -119,6 +139,9 @@
         align-items: center;
         gap: 2px;
         flex-shrink: 0;
+        // Buttons inside a draggable region need to opt back out of the
+        // drag or their click events get swallowed by the OS window-move.
+        -webkit-app-region: no-drag;
 
         .btn {
             padding: 0;
