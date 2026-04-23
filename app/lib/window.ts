@@ -129,9 +129,17 @@ export class Window {
 
         this.webContents = this.window.webContents
 
-        // Allow license server connections by relaxing CSP
+        // CSP for the renderer. `connect-src` allows plain HTTP to ANY host so
+        // users can point the AI Assistant at self-hosted vLLM / Ollama /
+        // Tabby servers on private LAN IPs (10.x / 192.168.x / a corporate
+        // intranet). Without `http://*` those get blocked here even though
+        // the code is correct — Electron applies CSP to renderer fetches.
+        // The app runs from file:// in an Electron context, not a web page,
+        // so the main attack surface CSP defends against (XSS-driven
+        // exfiltration to attacker-controlled hosts) is already limited by
+        // the sandbox + input validation rather than relying on CSP alone.
         this.window.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-            const csp = 'default-src \'self\' \'unsafe-inline\' \'unsafe-eval\' data: blob:; connect-src \'self\' http://localhost:* https://* ws: wss:; img-src \'self\' data: blob: https:; font-src \'self\' data:; media-src \'self\' data: blob:;'
+            const csp = 'default-src \'self\' \'unsafe-inline\' \'unsafe-eval\' data: blob:; connect-src \'self\' http://* https://* ws: wss:; img-src \'self\' data: blob: https: http:; font-src \'self\' data:; media-src \'self\' data: blob:;'
             callback({
                 responseHeaders: {
                     ...details.responseHeaders,
