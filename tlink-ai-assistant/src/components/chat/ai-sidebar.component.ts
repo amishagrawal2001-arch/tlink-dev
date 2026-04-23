@@ -1079,11 +1079,25 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
 
     /**
      * 隐藏侧边栏
+     *
+     * Guard: if an agent run is in flight or tool approvals are pending,
+     * the close button asks for confirmation first. Users have occasionally
+     * lost multi-step work by mis-clicking the close X; making it explicit
+     * costs them one extra click in the rare case they meant it, and saves
+     * them a re-run in the common case they didn't.
      */
     hideSidebar(): void {
-        if (this.sidebarService) {
-            this.sidebarService.hide();
+        if (!this.sidebarService) return;
+        if (this.isLoading || this.pendingApproval) {
+            const ok = typeof window !== 'undefined'
+                && typeof window.confirm === 'function'
+                && window.confirm(
+                    'An agent run is in progress. Close the AI chat and abort the run?'
+                );
+            if (!ok) return;
+            this.cancelAgentRun();
         }
+        this.sidebarService.hide();
     }
 
     /**
