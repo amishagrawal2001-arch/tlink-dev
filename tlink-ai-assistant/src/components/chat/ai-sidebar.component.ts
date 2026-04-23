@@ -1364,8 +1364,16 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
     submit(): void {
         const message = this.inputValue.trim();
         if (message && !this.isLoading) {
-            // Force agent mode if enabled
-            if (this.forceAgentMode) {
+            // Short-circuit trivial greetings / thanks even when the user has
+            // forced agent mode on. Asking the planner to plan how to say
+            // "hi" back is nonsensical, and the LangGraph planner has been
+            // observed hallucinating unrelated task plans (e.g. a dependency
+            // audit) for bare greetings. Keep these in direct chat so the
+            // model just replies.
+            if (this.isTrivialGreeting(message)) {
+                this.logger.debug('Trivial greeting — forcing direct chat', { message: message.substring(0, 50) });
+                this.onSendMessage(message);
+            } else if (this.forceAgentMode) {
                 this.onSendMessageWithAgent(message);
             } else if (this.isSimpleQuestion(message)) {
                 this.logger.debug('Detected simple question, using direct chat', { message: message.substring(0, 50) });
@@ -1378,6 +1386,24 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
             setTimeout(() => this.autoResize(), 0);
             this.textInput?.nativeElement.focus();
         }
+    }
+
+    /**
+     * Narrower version of `isSimpleQuestion` — returns true only for
+     * greetings / thanks / pleasantries that have no actionable intent.
+     * Used to bypass agent mode even when it's been explicitly forced.
+     */
+    private isTrivialGreeting(message: string): boolean {
+        const m = message.toLowerCase().trim();
+        if (!m || m.length > 30) return false;
+        const patterns = [
+            /^(hi|hey|hello|yo|sup|howdy|greetings|good (morning|afternoon|evening|night))[.!]?$/i,
+            /^(thanks|thank you|thx|ty|cheers|appreciate(d)?|got it|okay|ok|cool|nice|great|awesome)[.!]?$/i,
+            /^(bye|goodbye|see ya|see you|cya|later|ttyl)[.!]?$/i,
+            /^(how are you|how's it going|what's up|wassup|sup)[.?!]?$/i,
+            /^(你好|嗨|哈喽|早上好|下午好|晚上好|谢谢|感谢|多谢|再见|拜拜)[.!。！]?$/,
+        ];
+        return patterns.some(p => p.test(m));
     }
 
     cancelAgentRun(): void {

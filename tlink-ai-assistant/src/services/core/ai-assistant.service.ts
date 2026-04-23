@@ -1927,7 +1927,22 @@ export class AiAssistantService {
                         {
                             id: this.generateId(),
                             role: MessageRole.SYSTEM,
-                            content: 'You are a planner. Provide a short bullet plan. Do not call tools. Do not mention tool names, commands, or file paths.',
+                            content:
+                                // The explicit `NONE` escape hatch exists because
+                                // the previous prompt always produced a plan, even
+                                // for trivial inputs — observed: "hi" → a bullet
+                                // list about auditing project dependencies.
+                                'You are a planner for a terminal AI agent.\n\n'
+                                + 'FIRST, decide if the user\'s most recent message needs a plan at all.\n'
+                                + 'Output exactly the word NONE on a single line (and nothing else) when the message is any of:\n'
+                                + '  - a greeting ("hi", "hello")\n'
+                                + '  - a thanks / acknowledgement ("thanks", "got it", "ok")\n'
+                                + '  - a pure factual / knowledge question that can be answered from training data ("what is SSH?", "explain TCP")\n'
+                                + '  - a follow-up clarification that doesn\'t require running tools ("what did you mean?", "why?")\n'
+                                + '  - anything else that doesn\'t require modifying files, running commands, or inspecting state\n\n'
+                                + 'OTHERWISE, provide a short bullet plan (3-6 items) of the steps the agent should take.\n'
+                                + 'Do not call tools. Do not mention tool names, commands, or file paths.\n'
+                                + 'Do not invent context — only plan for what the user actually asked.',
                             timestamp: new Date()
                         }
                     ],
@@ -1938,6 +1953,14 @@ export class AiAssistantService {
                     const planResponse = await activeProvider.chat(planRequest);
                     const planText = planResponse?.message?.content?.trim() || '';
                     if (planText) {
+                        // Model explicitly signalled "no plan needed" — skip
+                        // plan rendering and let the assistant node answer
+                        // directly. Strips optional surrounding quotes / punctuation.
+                        const normalised = planText.replace(/^["'`]+|["'`.!\s]+$/g, '').toUpperCase();
+                        if (normalised === 'NONE' || normalised.startsWith('NONE\n') || normalised === 'NO PLAN') {
+                            this.logger.debug('Planner returned NONE — skipping plan rendering');
+                            return { hasPlan: true };
+                        }
                         const planHasTools = /apply_patch|read_file|list_files|write_to_terminal|task_complete|command:|tool/i.test(planText);
                         if (planHasTools) {
                             return { hasPlan: true };
