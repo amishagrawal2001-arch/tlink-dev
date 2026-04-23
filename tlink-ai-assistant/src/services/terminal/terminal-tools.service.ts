@@ -831,6 +831,26 @@ Note: If there are still incomplete tasks, please complete them first before cal
             throw new Error('Missing path');
         }
         const resolved = this.resolvePath(pathInput);
+        // Cap at 5 MB so a runaway agent can't OOM the renderer process by
+        // reading a large binary file (or a log with a bad rotation policy).
+        // 5 MB already holds ~50k lines of typical source; anything larger
+        // should be inspected with targeted grep/head tools.
+        const MAX_BYTES = 5 * 1024 * 1024;
+        try {
+            const stat = fs.statSync(resolved);
+            if (stat && typeof stat.size === 'number' && stat.size > MAX_BYTES) {
+                throw new Error(
+                    `read_file refused: ${pathInput} is ${stat.size} bytes (limit ${MAX_BYTES}). ` +
+                    `Use a targeted tool (grep / head) or split the file.`
+                );
+            }
+        } catch (e: any) {
+            // ENOENT etc. — let readFileSync below surface the real error.
+            if (e?.code && e.code !== 'ENOENT') {
+                // a "too large" Error we just threw — rethrow
+                if (/refused/.test(e.message || '')) throw e;
+            }
+        }
         const content = fs.readFileSync(resolved, 'utf-8');
         return `=== ${pathInput} ===\n${this.sanitizeForDisplay(content)}`;
     }
@@ -1089,18 +1109,34 @@ Note: If there are still incomplete tasks, please complete them first before cal
     }
 
     private applyHunksToContent(original: string, hunks: string[], filePath: string): string {
-        let lines = original.split('\n');
+        // Normalize line endings so a CRLF file + LF-context patch (or vice
+        // versa) doesn't fail the context check on otherwise identical text.
+        // Detect the predominant ending so we can restore it on the way out.
+        const hadCRLF = /\r\n/.test(original);
+        const hadTrailingNewline = original.endsWith('\n') || original.endsWith('\r\n');
+        const normalized = original.replace(/\r\n/g, '\n');
+        let lines = normalized.split('\n');
+        // Dropping the trailing empty element avoids a phantom "" line at EOF
+        // that confuses context matching — we re-add it when rejoining.
+        if (hadTrailingNewline && lines.length > 0 && lines[lines.length - 1] === '') {
+            lines.pop();
+        }
         let lineOffset = 0;
         for (const hunk of hunks) {
-            const hunkLines = hunk.split('\n');
+            // Hunk lines can also be CRLF if the model echoed the file verbatim.
+            const hunkLines = hunk.replace(/\r\n/g, '\n').split('\n');
             const header = hunkLines.shift();
             if (!header) continue;
             const match = /@@ -(\d+),?(\d+)? \+(\d+),?(\d+)? @@/.exec(header);
             if (!match) {
                 throw new Error(`Invalid hunk header in ${filePath}: ${header}`);
             }
-            // Clamp to 0 so new-file hunks "-0,0" don't become -1
-            const oldStartRaw = parseInt(match[1], 10) - 1 + lineOffset;
+            const oldStartNum = parseInt(match[1], 10);
+            const oldCount = match[2] !== undefined ? parseInt(match[2], 10) : 1;
+            // New-file patches have `-0,0`. Start insertions at EOF so we
+            // don't shove content before whatever (rare) prefix the file had.
+            const isNewFileHunk = oldStartNum === 0 && oldCount === 0;
+            const oldStartRaw = (isNewFileHunk ? lines.length : oldStartNum - 1) + lineOffset;
             const oldStart = Math.max(0, oldStartRaw);
             let idx = oldStart;
             for (const line of hunkLines) {
@@ -1127,7 +1163,11 @@ Note: If there are still incomplete tasks, please complete them first before cal
                 }
             }
         }
-        return lines.join('\n');
+        // Re-join with the original EOL + trailing-newline shape so we don't
+        // silently rewrite every file the agent patches.
+        const joiner = hadCRLF ? '\r\n' : '\n';
+        const tail = hadTrailingNewline ? joiner : '';
+        return lines.join(joiner) + tail;
     }
 
     /**

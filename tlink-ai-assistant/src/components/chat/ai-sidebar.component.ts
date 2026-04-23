@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked, AfterViewInit, ViewEncapsulation, HostBinding, ChangeDetectorRef, SecurityContext } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked, AfterViewInit, ViewEncapsulation, HostBinding, HostListener, ChangeDetectorRef, SecurityContext } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
@@ -1430,7 +1430,30 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
     }
 
     approvePending(approved: boolean): void {
+        // Guard against double-click / mashed keyboard: once the approval is
+        // resolved, `pendingApproval` becomes null via the subscription above,
+        // but a second click that races before the UI updates would call
+        // `resolveCurrent` again with the opposite flag. resolveCurrent is
+        // idempotent on its own, but we short-circuit here for clarity and
+        // to stop emitting duplicate promise settlements.
+        if (!this.pendingApproval) return;
         this.agentApproval.resolveCurrent(approved);
+        this.pendingApproval = null;
+        this.markUiDirty();
+    }
+
+    /**
+     * Escape key handler for the approval modal. Without this, a user who
+     * dismisses the modal via keyboard (instead of clicking Deny) would
+     * leave the agent loop blocked on a promise that never settles.
+     */
+    @HostListener('document:keydown.escape', ['$event'])
+    onEscapeKey(event: KeyboardEvent): void {
+        if (this.pendingApproval) {
+            event.preventDefault();
+            event.stopPropagation();
+            this.approvePending(false);
+        }
     }
 
     updateWorkingDir(value: string): void {

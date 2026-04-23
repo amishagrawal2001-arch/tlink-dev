@@ -173,8 +173,8 @@
                     <pre class="agent-approval-content" *ngIf="pendingApproval.type === 'patch'">{{ pendingApproval.patch }}</pre>
                     <pre class="agent-approval-content" *ngIf="pendingApproval.type === 'command'">{{ pendingApproval.command }}</pre>
                     <div class="agent-approval-actions">
-                        <button class="btn btn-sm btn-primary" (click)="approvePending(true)">Approve</button>
-                        <button class="btn btn-sm btn-secondary" (click)="approvePending(false)">Reject</button>
+                        <button class="btn btn-sm btn-primary" [disabled]="!pendingApproval" (click)="approvePending(true)">Approve</button>
+                        <button class="btn btn-sm btn-secondary" [disabled]="!pendingApproval" (click)="approvePending(false)">Reject</button>
                     </div>
                 </div>
                 <div class="input-container">

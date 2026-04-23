@@ -284,6 +284,12 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
 
     /**
      * 执行重试逻辑
+     *
+     * Retries transient failures with exponential backoff, but BAILS
+     * immediately on 4xx (except 429) because those won't succeed on
+     * retry — they're auth/validation/not-found errors. Retrying them
+     * just hides the real error under an "attempts exhausted" message.
+     * Respects Retry-After header on 429.
      */
     protected async withRetry<T>(operation: () => Promise<T>): Promise<T> {
         let lastError: Error | null = null;
@@ -295,15 +301,35 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
             } catch (error) {
                 lastError = error instanceof Error ? error : new Error(String(error));
 
+                // Non-retriable: 4xx client errors (except 429 rate limit).
+                // These will never succeed on retry — surface immediately.
+                const status = (error as any)?.response?.status;
+                const isClientError = typeof status === 'number' && status >= 400 && status < 500 && status !== 429;
+                if (isClientError) {
+                    this.logger.warn(`Non-retriable ${status} from upstream, aborting retry loop`, {
+                        status,
+                        message: lastError.message
+                    });
+                    throw lastError;
+                }
+
                 if (attempt === retries) {
                     break;
                 }
 
-                // 指数退避
-                const delay = Math.pow(2, attempt) * 1000;
+                // Exponential backoff, but respect Retry-After on 429.
+                let delay = Math.pow(2, attempt) * 1000;
+                if (status === 429) {
+                    const retryAfter = (error as any)?.response?.headers?.['retry-after'];
+                    const retryAfterMs = this.parseRetryAfter(retryAfter);
+                    if (retryAfterMs > 0) {
+                        delay = Math.max(delay, retryAfterMs);
+                    }
+                }
+
                 this.logger.warn(
                     `Operation failed (attempt ${attempt + 1}/${retries + 1}), retrying in ${delay}ms`,
-                    { error: lastError.message }
+                    { error: lastError.message, status }
                 );
 
                 await new Promise(resolve => setTimeout(resolve, delay));
@@ -311,6 +337,16 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
         }
 
         throw lastError;
+    }
+
+    private parseRetryAfter(header: string | number | undefined): number {
+        if (header == null) return 0;
+        if (typeof header === 'number') return header * 1000;
+        const seconds = parseInt(String(header), 10);
+        if (!isNaN(seconds)) return seconds * 1000;
+        const dateMs = Date.parse(String(header));
+        if (!isNaN(dateMs)) return Math.max(0, dateMs - Date.now());
+        return 0;
     }
 
     /**

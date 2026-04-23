@@ -209,6 +209,37 @@ export class TabbyProviderService extends BaseAiProvider {
 
                     const stream = response.data;
                     let fullContent = '';
+                    // Tool-call accumulators — OpenAI-compatible SSE streams
+                    // tool invocations via `delta.tool_calls[n]` chunks whose
+                    // `function.arguments` must be concatenated until the
+                    // tool call at that index finishes. Without this block,
+                    // any tool call from Tabby is silently dropped.
+                    let currentToolCallId = '';
+                    let currentToolCallName = '';
+                    let currentToolInput = '';
+                    let currentToolIndex = -1;
+
+                    const flushPendingToolCall = () => {
+                        if (currentToolIndex < 0) return;
+                        let parsedInput: any = {};
+                        try {
+                            parsedInput = JSON.parse(currentToolInput || '{}');
+                        } catch (e) {
+                            this.logger.warn('Tabby tool-call arguments not valid JSON, passing raw', {
+                                name: currentToolCallName,
+                                raw: currentToolInput
+                            });
+                            parsedInput = { _raw: currentToolInput };
+                        }
+                        subscriber.next({
+                            type: 'tool_use_end',
+                            toolCall: {
+                                id: currentToolCallId,
+                                name: currentToolCallName,
+                                input: parsedInput
+                            }
+                        });
+                    };
 
                     const processChunk = (chunk: any) => {
                         const text = chunk?.toString ? chunk.toString() : String(chunk || '');
@@ -223,10 +254,37 @@ export class TabbyProviderService extends BaseAiProvider {
                                     const parsed = JSON.parse(data);
                                     const choice = parsed.choices?.[0];
 
-                                    this.logger.debug('Stream event', { type: 'delta', hasContent: !!choice?.delta?.content });
+                                    this.logger.debug('Stream event', {
+                                        type: 'delta',
+                                        hasContent: !!choice?.delta?.content,
+                                        hasToolCalls: !!choice?.delta?.tool_calls
+                                    });
 
-                                    // Process text delta
-                                    if (choice?.delta?.content) {
+                                    if (choice?.delta?.tool_calls?.length > 0) {
+                                        for (const toolCall of choice.delta.tool_calls) {
+                                            const index = toolCall.index || 0;
+
+                                            if (currentToolIndex !== index) {
+                                                flushPendingToolCall();
+
+                                                currentToolIndex = index;
+                                                currentToolCallId = toolCall.id || `tool_${Date.now()}_${index}`;
+                                                currentToolCallName = toolCall.function?.name || '';
+                                                currentToolInput = toolCall.function?.arguments || '';
+
+                                                subscriber.next({
+                                                    type: 'tool_use_start',
+                                                    toolCall: {
+                                                        id: currentToolCallId,
+                                                        name: currentToolCallName,
+                                                        input: {}
+                                                    }
+                                                });
+                                            } else if (toolCall.function?.arguments) {
+                                                currentToolInput += toolCall.function.arguments;
+                                            }
+                                        }
+                                    } else if (choice?.delta?.content) {
                                         const textDelta = choice.delta.content;
                                         fullContent += textDelta;
                                         subscriber.next({
@@ -253,6 +311,9 @@ export class TabbyProviderService extends BaseAiProvider {
                         // Fallback: cannot stream, throw error
                         throw new Error('Streaming not supported in this environment');
                     }
+
+                    // Flush any trailing tool call before message_end.
+                    flushPendingToolCall();
 
                     subscriber.next({
                         type: 'message_end',

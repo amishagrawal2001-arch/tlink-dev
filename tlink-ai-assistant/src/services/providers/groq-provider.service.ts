@@ -517,9 +517,12 @@ export class GroqProviderService extends BaseAiProvider {
 
             // Handle Assistant messages - may contain tool_calls
             if (msg.role === 'assistant') {
+                // Groq rejects `content: null`; it requires a string (possibly
+                // empty). Empty string is valid when the message carries only
+                // tool_calls.
                 const assistantMsg: any = {
                     role: 'assistant',
-                    content: msg.content || null
+                    content: String(msg.content ?? '')
                 };
 
                 // If there are tool calls, add tool_calls array

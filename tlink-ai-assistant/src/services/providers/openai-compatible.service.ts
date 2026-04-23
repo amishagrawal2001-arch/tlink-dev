@@ -641,11 +641,65 @@ export class OpenAiCompatibleProviderService extends BaseAiProvider {
         return result;
     }
 
+    /**
+     * OpenAI-compatible transform: preserve tool_calls on assistant messages
+     * and tool_call_id on tool-result messages. Flattening these to
+     * {role, content} makes servers like Tabby return 422 "missing field
+     * tool_call_id" once the conversation includes any tool round.
+     */
     protected transformMessages(messages: any[]): any[] {
-        return messages.map(msg => ({
-            role: msg.role,
-            content: msg.content
-        }));
+        const result: any[] = [];
+
+        for (const msg of messages) {
+            if (msg.role === 'tool' || msg.toolResults) {
+                if (msg.toolResults && msg.toolResults.length > 0) {
+                    for (const tr of msg.toolResults) {
+                        if (tr.tool_use_id) {
+                            result.push({
+                                role: 'tool',
+                                tool_call_id: tr.tool_use_id,
+                                content: String(tr.content || '')
+                            });
+                        }
+                    }
+                } else if (msg.tool_use_id) {
+                    result.push({
+                        role: 'tool',
+                        tool_call_id: msg.tool_use_id,
+                        content: String(msg.content || '')
+                    });
+                }
+                continue;
+            }
+
+            if (msg.role === 'assistant') {
+                const assistantMsg: any = {
+                    role: 'assistant',
+                    content: String(msg.content ?? '')
+                };
+
+                if (msg.toolCalls && msg.toolCalls.length > 0) {
+                    assistantMsg.tool_calls = msg.toolCalls.map((tc: any) => ({
+                        id: tc.id,
+                        type: 'function',
+                        function: {
+                            name: tc.name,
+                            arguments: JSON.stringify(tc.input || {})
+                        }
+                    }));
+                }
+
+                result.push(assistantMsg);
+                continue;
+            }
+
+            result.push({
+                role: msg.role,
+                content: String(msg.content ?? '')
+            });
+        }
+
+        return result;
     }
 
     private transformChatResponse(response: any): ChatResponse {

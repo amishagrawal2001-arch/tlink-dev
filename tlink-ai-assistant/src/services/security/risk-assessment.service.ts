@@ -9,54 +9,73 @@ import { LoggerService } from '../core/logger.service';
 @Injectable({ providedIn: 'root' })
 export class RiskAssessmentService {
     // 危险模式匹配规则
+    // All patterns use /i so a clever model can't bypass via `RM -RF /` or
+    // `Rm -rf /`. Shells on macOS/Linux are case-sensitive but terminal
+    // emulators, scripts with case-insensitive path lookup, and Windows
+    // sub-shells make case-sensitivity a fragile trust boundary.
     private readonly DANGEROUS_PATTERNS = [
         {
-            pattern: /rm\s+-rf\s+\//,
-            description: 'Delete root directory',
+            pattern: /\brm\s+-[rRfF]*[rR][rRfF]*\s+\//i,
+            description: 'Recursive delete starting from a root-ish path',
             severity: RiskLevel.CRITICAL
         },
         {
-            pattern: /sudo\s+rm/,
+            pattern: /\bsudo\s+rm\b/i,
             description: 'sudo delete command',
             severity: RiskLevel.CRITICAL
         },
         {
-            pattern: />\s*\/dev\/null/,
-            description: 'Redirect output to /dev/null',
-            severity: RiskLevel.HIGH
-        },
-        {
-            pattern: /chmod\s+777/,
-            description: 'Dangerous permission change',
-            severity: RiskLevel.HIGH
-        },
-        {
-            pattern: /mv\s+.*\s+\//,
-            description: 'Move to root directory',
-            severity: RiskLevel.HIGH
-        },
-        {
-            pattern: /fork\s*\(/,
-            description: 'Fork bomb',
+            pattern: /\bshred\s+(-[a-z]*\s+)?\//i,
+            description: 'shred on a root-ish path',
             severity: RiskLevel.CRITICAL
         },
         {
-            pattern: /dd\s+if=/,
+            pattern: /\bmkfs(\.\w+)?\b/i,
+            description: 'Filesystem (re)format',
+            severity: RiskLevel.CRITICAL
+        },
+        {
+            pattern: />\s*\/dev\/sd[a-z]/i,
+            description: 'Redirect output to a raw block device',
+            severity: RiskLevel.CRITICAL
+        },
+        {
+            pattern: /\bchmod\s+-?R?\s*777\b/i,
+            description: 'World-writable permission change',
+            severity: RiskLevel.HIGH
+        },
+        {
+            pattern: /^\s*mv\s+\S+\s+\/\s*$/im,
+            description: 'Move file directly to /',
+            severity: RiskLevel.HIGH
+        },
+        {
+            pattern: /:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/,
+            description: 'Classic bash fork bomb',
+            severity: RiskLevel.CRITICAL
+        },
+        {
+            pattern: /\bdd\s+if=/i,
             description: 'dd command (potentially dangerous)',
             severity: RiskLevel.HIGH
         },
         {
-            pattern: /format\s+/,
+            pattern: /\b(curl|wget)\b[^\n]*\|\s*(sudo\s+)?(sh|bash|zsh|fish|python\d?)\b/i,
+            description: 'Download-and-execute pipeline',
+            severity: RiskLevel.CRITICAL
+        },
+        {
+            pattern: /\bformat\s+/i,
             description: 'Format command',
             severity: RiskLevel.CRITICAL
         },
         {
-            pattern: /del\s+\/s\s+/i,
+            pattern: /\bdel\s+\/s\b/i,
             description: 'Windows delete command',
             severity: RiskLevel.HIGH
         },
         {
-            pattern: /rd\s+\/s\s+/i,
+            pattern: /\brd\s+\/s\b/i,
             description: 'Windows delete directory command',
             severity: RiskLevel.HIGH
         },
@@ -99,6 +118,31 @@ export class RiskAssessmentService {
             pattern: /\b(configure\s+terminal|conf\s+t|configure\s+exclusive|edit\s+private)\b/i,
             description: 'Enter device configuration mode',
             severity: RiskLevel.MEDIUM
+        },
+        {
+            pattern: /\bcopy\s+(running-config|startup-config|flash:|tftp:|ftp:|scp:)/i,
+            description: 'Copy device configuration (may overwrite / exfiltrate)',
+            severity: RiskLevel.HIGH
+        },
+        {
+            pattern: /\b(boot\s+system|boot\s+image)\b/i,
+            description: 'Change device boot image',
+            severity: RiskLevel.CRITICAL
+        },
+        {
+            pattern: /\bdelete\s+(flash:|nvram:|slot0:)/i,
+            description: 'Delete file from device storage',
+            severity: RiskLevel.HIGH
+        },
+        {
+            pattern: /\b(tftp|ftp)\s+\S+/i,
+            description: 'Transfer file to/from device',
+            severity: RiskLevel.MEDIUM
+        },
+        {
+            pattern: /\b(format|erase)\s+(flash:|nvram:|slot0:)/i,
+            description: 'Format / erase device storage',
+            severity: RiskLevel.CRITICAL
         },
     ];
 

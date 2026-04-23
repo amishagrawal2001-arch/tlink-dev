@@ -1436,8 +1436,29 @@ export class AiAssistantService {
                     // 添加工具定义
                     roundRequest.tools = this.terminalTools.getToolDefinitions();
 
+                    // Hard timeout so a silent upstream (dropped socket, hung
+                    // worker) can't wedge runSingleRound forever. We track
+                    // settled + subscription so the timer fires at most once
+                    // and doesn't tear down an already-completed round.
+                    const streamDeadlineMs = Math.max(60_000, Math.min(timeoutMs, 600_000));
+                    let settled = false;
+                    let streamSub: { unsubscribe: () => void } | null = null;
+                    const timeoutHandle = setTimeout(() => {
+                        if (settled) return;
+                        settled = true;
+                        try { streamSub?.unsubscribe(); } catch { /* noop */ }
+                        const err = new Error(`Stream stalled after ${Math.round(streamDeadlineMs / 1000)}s with no completion`);
+                        subscriber.next({ type: 'error', error: err.message });
+                        reject(err);
+                    }, streamDeadlineMs);
+                    const clearAndResolve = () => {
+                        if (settled) return;
+                        settled = true;
+                        clearTimeout(timeoutHandle);
+                    };
+
                     // 直接订阅 provider 的流（不使用 merge，否则需要所有源都 complete）
-                    activeProvider.chatStream(roundRequest).subscribe({
+                    streamSub = activeProvider.chatStream(roundRequest).subscribe({
                         next: (event: any) => {
                             switch (event.type) {
                                 case 'text_delta':
@@ -1476,6 +1497,8 @@ export class AiAssistantService {
                             }
                         },
                         error: (error) => {
+                            if (settled) return;
+                            clearAndResolve();
                             subscriber.next({
                                 type: 'error',
                                 error: error instanceof Error ? error.message : String(error)
@@ -1483,6 +1506,8 @@ export class AiAssistantService {
                             reject(error);
                         },
                         complete: () => {
+                            if (settled) return;
+                            clearAndResolve();
                             // 使用 IIFE 确保异步操作被正确执行
                             (async () => {
                                 // 发送 round_end 事件
@@ -2035,7 +2060,23 @@ export class AiAssistantService {
                     };
                 }
 
+                // Race the stream against a hard timeout so a silent upstream
+                // (lost connection, hung Tabby worker) can't wedge the graph
+                // forever — the assistantNode was previously waiting on this
+                // Promise with no escape hatch.
+                const streamDeadlineMs = Math.max(60_000, Math.min(timeoutMs, 600_000));
                 await new Promise<void>((resolve, reject) => {
+                    let settled = false;
+                    const finish = (err?: any) => {
+                        if (settled) return;
+                        settled = true;
+                        if (timeoutHandle) clearTimeout(timeoutHandle);
+                        try { streamSub?.unsubscribe(); } catch { /* noop */ }
+                        if (err) reject(err); else resolve();
+                    };
+                    const timeoutHandle = setTimeout(() => {
+                        finish(new Error(`Stream stalled after ${Math.round(streamDeadlineMs / 1000)}s with no completion`));
+                    }, streamDeadlineMs);
                     const streamSub = activeProvider.chatStream(roundRequest).subscribe({
                         next: (event: any) => {
                             if (!agentState.isActive) return;
@@ -2065,12 +2106,10 @@ export class AiAssistantService {
                                 type: 'error',
                                 error: error instanceof Error ? error.message : String(error)
                             });
-                            streamSub.unsubscribe();
-                            reject(error);
+                            finish(error);
                         },
                         complete: () => {
-                            streamSub.unsubscribe();
-                            resolve();
+                            finish();
                         }
                     });
                 });
@@ -2185,7 +2224,7 @@ export class AiAssistantService {
                         content: 'Respond with the final answer only. Do not include internal reasoning or meta commentary. If you need info, call a tool.',
                         timestamp: new Date()
                     };
-                    const retryMessages = [...updatedMessages, retryHint];
+                    const retryMessages = this.appendRetryHintOnce(updatedMessages, retryHint);
                     subscriber.next({
                         type: 'text_delta',
                         textDelta: '\n\n[System: Reasoning content detected, retrying...]\n'
@@ -2391,7 +2430,7 @@ export class AiAssistantService {
                             content: 'Provide the full file contents in a code block. Do not output tool commands or file paths.',
                             timestamp: new Date()
                         };
-                        const retryMessages = [...updatedMessages, retryHint];
+                        const retryMessages = this.appendRetryHintOnce(updatedMessages, retryHint);
                         return {
                             messages: retryMessages,
                             pendingToolCalls: [],
@@ -2462,7 +2501,7 @@ export class AiAssistantService {
                         timestamp: new Date()
                     };
                     return {
-                        messages: [...updatedMessages, retryHint],
+                        messages: this.appendRetryHintOnce(updatedMessages, retryHint),
                         pendingToolCalls: [],
                         lastText: roundTextContent,
                         shouldTerminate: false,
@@ -2849,10 +2888,16 @@ export class AiAssistantService {
                 const result = await this.terminalTools.executeToolCall(toolCall);
                 const duration = Date.now() - startTime;
 
-                // 添加工具名称到结果中
+                // ALWAYS bind the result's tool_use_id back to the original
+                // toolCall.id. Some dispatch paths (MCP bridge, git tools)
+                // synthesize their own ids; if we let those leak into the
+                // conversation history, the matching tool_use block never
+                // pairs up and Anthropic's API rejects the next turn with
+                // "tool_use ids must have a corresponding tool_result".
                 results.push({
                     ...result,
-                    name: toolCall.name  // 添加工具名称
+                    tool_use_id: toolCall.id,
+                    name: toolCall.name
                 });
 
                 // 记录到 Agent 状态历史
@@ -2866,7 +2911,9 @@ export class AiAssistantService {
                     });
                 }
 
-                // 发送 tool_executed 事件
+                // 发送 tool_executed 事件 (always use toolCall.id so the UI
+                // can correlate this result with the tool_use_start event it
+                // saw earlier).
                 subscriber.next({
                     type: 'tool_executed',
                     toolCall: {
@@ -2875,7 +2922,7 @@ export class AiAssistantService {
                         input: toolCall.input
                     },
                     toolResult: {
-                        tool_use_id: result.tool_use_id,
+                        tool_use_id: toolCall.id,
                         content: result.content,
                         is_error: !!result.is_error,
                         duration
@@ -2946,7 +2993,18 @@ export class AiAssistantService {
      * 关键：添加 toolResults 和 tool_use_id 字段，供 transformMessages 正确识别和处理
      */
     private buildToolResultMessage(results: ToolResult[]): ChatMessage {
-        const content = results.map(r => {
+        // Defensive: guarantee every result has a tool_use_id before it lands
+        // in conversation history. A missing id will make every downstream
+        // provider (Anthropic, OpenAI, Tabby, Groq…) reject the turn.
+        const sanitized = results.map(r => {
+            if (!r.tool_use_id) {
+                this.logger.error('Tool result missing tool_use_id; synthesizing a placeholder', { name: r.name });
+                return { ...r, tool_use_id: `orphan_${this.generateId()}` };
+            }
+            return r;
+        });
+
+        const content = sanitized.map(r => {
             const toolName = r.name || r.tool_use_id;
             const status = r.is_error ? 'Execution failed' : 'Execution successful';
             return `[${toolName}] ${status}.\nResult: ${r.content}`;
@@ -2959,14 +3017,14 @@ export class AiAssistantService {
             content: `Tool execution completed:\n\n${content}\n\nPlease check the user's original request. If there are still incomplete tasks, please continue calling the appropriate tools to complete them. If all tasks are completed, please summarize the results and reply to the user.`,
             timestamp: new Date(),
             // 关键：添加 toolResults 字段供 transformMessages 识别
-            toolResults: results.map(r => ({
+            toolResults: sanitized.map(r => ({
                 tool_use_id: r.tool_use_id,
                 name: r.name,
                 content: r.content,
                 is_error: r.is_error
             })),
             // 保留 tool_use_id 供简单识别
-            tool_use_id: results[0]?.tool_use_id || ''
+            tool_use_id: sanitized[0]?.tool_use_id || ''
         };
     }
 
@@ -3815,6 +3873,24 @@ ${workingDirLine}
     private shouldFetchTerminalCwd(message: string): boolean {
         const text = (message || '').toLowerCase();
         return /current\s+working\s+dir|working\s+dir|working\s+directory|current\s+dir|current\s+directory|\bcwd\b|\bpwd\b|where\s+am\s+i/.test(text);
+    }
+
+    /**
+     * Append a system retry hint to the message list only if the last few
+     * messages don't already carry the same hint. Without this, LangGraph
+     * cycles through the same condition (e.g., "missing patch") on every
+     * round and stacks identical system messages, ballooning the token
+     * budget and confusing the model.
+     */
+    private appendRetryHintOnce(messages: ChatMessage[], hint: ChatMessage): ChatMessage[] {
+        const tail = messages.slice(-4);
+        const alreadyThere = tail.some(m =>
+            m.role === MessageRole.SYSTEM &&
+            typeof m.content === 'string' &&
+            m.content === hint.content
+        );
+        if (alreadyThere) return messages;
+        return [...messages, hint];
     }
 
     private looksLikeReasoning(text: string): boolean {

@@ -188,11 +188,15 @@ export class GitToolsService {
         const paths = Array.isArray(input.paths) ? input.paths.map(String).map(s => s.trim()).filter(Boolean) : [];
         if (paths.length === 0) throw new Error('git_add requires non-empty `paths`');
         // Reject wildcards / "." — force the agent to be explicit so the user
-        // always knows what's about to be staged.
-        const forbidden = new Set(['.', '*', '-A', '-a', '--all']);
+        // always knows what's about to be staged. We also reject ANY arg that
+        // starts with "-" (flag-shaped) and any arg containing pathspec magic
+        // (:, **). The `--` separator in runGit shields the positional paths
+        // but a pathspec-magic string like `:(glob)**/*` would still be
+        // interpreted by git and act as a broad stage.
+        const forbidden = new Set(['.', '*', '-A', '-a', '--all', '-u', '--update']);
         for (const p of paths) {
-            if (forbidden.has(p) || p.includes('*')) {
-                throw new Error(`git_add: path "${p}" is too broad; list files explicitly`);
+            if (forbidden.has(p) || p.includes('*') || p.startsWith('-') || p.startsWith(':')) {
+                throw new Error(`git_add: path "${p}" is too broad or flag-shaped; list files explicitly`);
             }
         }
         await this.runGit(['add', '--', ...paths]);
@@ -202,6 +206,17 @@ export class GitToolsService {
     private async gitCommit (input: Record<string, any>): Promise<string> {
         const message = String(input.message || '').trim();
         if (!message) throw new Error('git_commit requires a non-empty `message`');
+        // Cap message length so a runaway model can't wedge `git commit` with
+        // a 100KB message. 4000 chars is generous for a single commit body.
+        if (message.length > 4000) {
+            throw new Error(`git_commit: message too long (${message.length} chars, limit 4000)`);
+        }
+        // Reject ASCII control chars (except \t and \n) so nothing in the
+        // message manipulates a terminal when git's output is displayed.
+        // eslint-disable-next-line no-control-regex
+        if (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(message)) {
+            throw new Error('git_commit: message contains control characters');
+        }
         // No --amend, no --no-verify from the agent. Straight commit.
         return this.runGit(['commit', '-m', message]);
     }
