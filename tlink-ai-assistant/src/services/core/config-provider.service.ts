@@ -30,8 +30,10 @@ export interface AiAssistantConfig {
         compactMode: boolean;
         fontSize: number;
     };
-    /** Agent execution engine */
-    agentEngine: 'langgraph' | 'legacy' | 'continue';
+    /** Agent execution engine. 'auto' picks Legacy for Anthropic/Claude
+     *  providers (closest to native tool-use) and LangGraph for everyone
+     *  else (planner+reviewer scaffolding helps weaker models). */
+    agentEngine: 'auto' | 'langgraph' | 'legacy' | 'continue';
     /** Enable planner node in agent flow */
     agentPlannerEnabled: boolean;
     /** Enable reviewer node in agent flow */
@@ -81,7 +83,7 @@ const DEFAULT_CONFIG: AiAssistantConfig = {
         compactMode: false,
         fontSize: 14
     },
-    agentEngine: 'langgraph',
+    agentEngine: 'auto',
     agentPlannerEnabled: true,
     agentReviewerEnabled: true,
     agentMaxRounds: 50,

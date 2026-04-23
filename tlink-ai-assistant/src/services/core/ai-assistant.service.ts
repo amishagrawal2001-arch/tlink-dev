@@ -1308,15 +1308,46 @@ export class AiAssistantService {
         request: ChatRequest,
         config: AgentLoopConfig = {}
     ): Observable<AgentStreamEvent> {
-        const configuredEngine = (this.config.get<string>('agentEngine', 'langgraph') || 'langgraph').toLowerCase();
-        const engine = configuredEngine === 'continue' ? 'langgraph' : configuredEngine;
+        const configuredEngine = (this.config.get<string>('agentEngine', 'auto') || 'auto').toLowerCase();
+        // Drop the deprecated "continue" option. Anything that isn't a known
+        // engine collapses to the auto-select path.
+        let engine: 'langgraph' | 'legacy' | 'auto';
         if (configuredEngine === 'continue') {
-            this.logger.warn('Continue agent engine was removed. Falling back to LangGraph.');
+            this.logger.warn('Continue agent engine was removed. Falling back to auto.');
+            engine = 'auto';
+        } else if (configuredEngine === 'langgraph' || configuredEngine === 'legacy') {
+            engine = configuredEngine;
+        } else {
+            engine = 'auto';
         }
+
+        // Auto-select: Claude-family providers run best on the Legacy loop
+        // (which mirrors Anthropic's native tool-use pattern — no planner /
+        // reviewer scaffolding that fights Claude's own reasoning). Every
+        // other provider defaults to LangGraph, whose planner+reviewer
+        // stages genuinely help weaker / smaller models.
+        if (engine === 'auto') {
+            engine = this.preferLegacyForCurrentProvider() ? 'legacy' : 'langgraph';
+            this.logger.debug('Agent engine auto-selected', { engine, provider: this.config.getDefaultProvider() });
+        }
+
         if (engine === 'legacy') {
             return this.chatStreamWithLegacyAgentLoop(request, config);
         }
         return this.chatStreamWithLangGraphLoop(request, config);
+    }
+
+    /**
+     * True when the currently-selected provider is Claude (Anthropic) or an
+     * Anthropic-compatible proxy. Heuristic: provider name contains "anthropic"
+     * or "claude", OR the model id starts with `claude-`.
+     */
+    private preferLegacyForCurrentProvider (): boolean {
+        const provider = this.config.getDefaultProvider() || '';
+        const name = provider.toLowerCase();
+        if (name.includes('anthropic') || name.includes('claude')) return true;
+        const model = (this.config.getProviderConfig(provider)?.model || '').toLowerCase();
+        return model.startsWith('claude-');
     }
 
     /**

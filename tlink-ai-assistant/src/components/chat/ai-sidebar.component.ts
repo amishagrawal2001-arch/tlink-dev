@@ -62,10 +62,11 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
     modelOptions: { name: string; label: string }[] = [];
     selectedModelProvider: string = '';
     agentEngineOptions: { value: string; label: string }[] = [
+        { value: 'auto', label: 'Auto (Claude → Legacy, others → LangGraph)' },
         { value: 'langgraph', label: 'LangGraph' },
-        { value: 'legacy', label: 'Legacy' }
+        { value: 'legacy', label: 'Legacy (Claude-native)' }
     ];
-    selectedAgentEngine: string = 'langgraph';
+    selectedAgentEngine: string = 'auto';
     private isSwitchingProvider: boolean = false;
     intentOptions: { value: string; label: string }[] = [
         { value: 'auto', label: 'Auto' },
@@ -124,7 +125,7 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
         // Load current provider information
         this.loadCurrentProvider();
         this.workingDir = this.config.get<string>('agentWorkingDir', '') || '';
-        const configuredEngine = this.config.get<string>('agentEngine', 'langgraph') || 'langgraph';
+        const configuredEngine = this.config.get<string>('agentEngine', 'auto') || 'auto';
         this.selectedAgentEngine = this.normalizeAgentEngine(configuredEngine);
         if ((configuredEngine || '').toLowerCase() !== this.selectedAgentEngine) {
             this.config.set('agentEngine', this.selectedAgentEngine);
@@ -145,7 +146,7 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
                 }
                 this.workingDir = this.config.get<string>('agentWorkingDir', '') || '';
                 this.selectedAgentEngine = this.normalizeAgentEngine(
-                    this.config.get<string>('agentEngine', 'langgraph') || 'langgraph'
+                    this.config.get<string>('agentEngine', 'auto') || 'auto'
                 );
             });
 
@@ -1404,12 +1405,11 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
         this.logger.info('Agent engine updated', { engine: normalized });
     }
 
-    private normalizeAgentEngine(value: string): 'langgraph' | 'legacy' {
-        const normalized = (value || 'langgraph').toLowerCase();
-        if (normalized === 'legacy') {
-            return 'legacy';
-        }
-        return 'langgraph';
+    private normalizeAgentEngine(value: string): 'auto' | 'langgraph' | 'legacy' {
+        const normalized = (value || 'auto').toLowerCase();
+        if (normalized === 'legacy') return 'legacy';
+        if (normalized === 'langgraph') return 'langgraph';
+        return 'auto';
     }
 
     openWorkdirPicker(): void {
