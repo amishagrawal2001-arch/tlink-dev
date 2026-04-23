@@ -2663,16 +2663,33 @@ export class AiAssistantService {
                 hasTerminalCwd: false
             };
 
-            graph.invoke(initialState)
+            // LangGraph's default recursionLimit is 25 transitions — each round
+            // burns ~4-5 transitions (planner → assistant → tool-exec →
+            // reviewer → assistant) so the default runs out after ~5 rounds.
+            // Scale to maxRounds × 8 with a floor of 80 so even small
+            // maxRounds values get plenty of headroom.
+            const recursionLimit = Math.max(80, maxRounds * 8);
+            graph.invoke(initialState, { recursionLimit })
                 .then(() => {
                     if (!subscriber.closed) {
                         subscriber.complete();
                     }
                 })
                 .catch((error: any) => {
-                    const message = error instanceof Error ? error.message : String(error);
-                    subscriber.next({ type: 'error', error: message });
-                    subscriber.error(error);
+                    const rawMessage = error instanceof Error ? error.message : String(error);
+                    // The graph may legitimately hit the recursion cap on a
+                    // pathological task — rewrite into a user-actionable
+                    // message rather than leaking "GraphRecursionError:
+                    // recursion limit reached" into the chat.
+                    const friendlyMessage = /RecursionError|recursion limit/i.test(rawMessage)
+                        ? `Agent exceeded its step budget (${recursionLimit} graph transitions / ~${maxRounds} rounds).`
+                            + ' The task looks stuck in a loop or is too complex for one run.'
+                            + ' Try: (1) break the task into smaller steps, (2) raise `agentMaxRounds` in Settings,'
+                            + ' or (3) switch the engine to Legacy if you\'re on Claude.'
+                        : rawMessage;
+                    this.logger.warn('LangGraph agent terminated with error', { recursionLimit, maxRounds, rawMessage });
+                    subscriber.next({ type: 'error', error: friendlyMessage });
+                    subscriber.error(new Error(friendlyMessage));
                 });
 
             return () => {
