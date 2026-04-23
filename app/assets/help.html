@@ -127,6 +127,7 @@ a:hover { text-decoration: underline; }
     <a href="#highlighting">Output Highlighting</a>
     <a href="#shortcuts">Keyboard Shortcuts</a>
     <a href="#ai">AI Assistant</a>
+    <a href="#agent">AI Agent (coding + lab)</a>
     <a href="#copilot-agent">Copilot / VS Code Agent</a>
     <a href="#intellij">IntelliJ Bridge</a>
     <a href="#tabby">Tabby (Self-hosted AI)</a>
@@ -370,7 +371,82 @@ a:hover { text-decoration: underline; }
 <div class="section">
 <p>Click the <b>robot icon</b> in the SSH toolbar to send selected terminal text to the AI for analysis.</p>
 <p>The AI detects common errors (command not found, permission denied) and offers to help via a toast notification.</p>
-<p>Configure providers in <b>Settings &rarr; AI Assistant</b>. Supports OpenAI, Anthropic, Ollama, and more.</p>
+<p>Configure providers in <b>Settings &rarr; AI Assistant</b>. Supports OpenAI, Anthropic, Ollama, vLLM, Tabby, and more.</p>
+<p>For <b>task-oriented work</b> (edit files, drive a lab switch, multi-step debugging), see the <a href="#agent">AI Agent</a> section below.</p>
+</div>
+<a href="#" class="back-top">&uarr; Back to top</a>
+
+<h2 id="agent">AI Agent (coding + lab)</h2>
+<div class="section">
+<p>The AI Assistant sidebar has a built-in <b>agent mode</b> that plans and executes multi-step tasks. Same sidebar, same input field, but when a task is running the chat stream turns into tool-call cards with approvals.</p>
+
+<h3>When to use it</h3>
+<p>Chat mode is for one-shot Q&amp;A (<i>"what does this command do?"</i>). Agent mode is for anything task-shaped (<i>"add a health endpoint and a test"</i>, <i>"figure out why VLAN 42 has no internet"</i>, <i>"commit these changes with a good message"</i>). The sidebar auto-routes non-trivial questions to agent mode; the <b>agent toggle</b> in the sidebar header pins the choice.</p>
+
+<h3>Prerequisites (one-time)</h3>
+<table>
+<tr><td><b>Provider</b></td><td><b>Settings &rarr; AI Assistant &rarr; Providers</b>. For Claude-quality agent behavior: Anthropic. For free local: Ollama with a tool-capable model (<code>qwen2.5-coder:7b</code>, <code>llama3.1:8b</code>). For self-hosted: vLLM or Tabby.</td></tr>
+<tr><td><b>Workspace</b></td><td><b>Settings &rarr; AI Assistant &rarr; General &rarr; Agent working directory</b>. Point at your project root for coding tasks.</td></tr>
+<tr><td><b>Terminal session</b></td><td>For lab / network tasks, open the SSH / Telnet / Serial tab to the device first &mdash; the agent drives an <i>existing</i> tab, it doesn't spawn new ones.</td></tr>
+</table>
+
+<h3>Coding workflow</h3>
+<p>Example task: <i>"Add a /health endpoint to this Node app and a test for it."</i></p>
+<p>1. Open the sidebar (<kbd>Cmd+Shift+A</kbd>). Type the task, hit <kbd>Enter</kbd>.</p>
+<p>2. Agent streams a plan as a bulleted list in the chat.</p>
+<p>3. Tool calls fire one at a time, each rendered as a collapsible card showing name + inputs + output. Typical chain: <code>list_files</code> &rarr; <code>read_file</code> &rarr; <code>git_status</code> &rarr; <code>apply_patch</code> &rarr; <code>network_exec</code> to run tests.</p>
+<p>4. Risky tools (<code>apply_patch</code>, <code>git_commit</code>) pause for an approval dialog with a diff preview.</p>
+<p>5. On completion the agent summarises what it changed and points at the files.</p>
+
+<h3>Lab / network workflow</h3>
+<p>Example task: <i>"VLAN 42 users can't reach the internet &mdash; I'm SSH'd into core-sw-01. Figure out why."</i></p>
+<p>1. Make sure you have the SSH tab open and logged in.</p>
+<p>2. Sidebar: describe the problem and tell it which tab to use (<i>"tab 0"</i> or <i>"the core switch SSH"</i>).</p>
+<p>3. Agent runs <code>network_exec</code> calls for diagnostic commands (<code>show vlan</code>, <code>show interfaces</code>, <code>show ip route</code>, <code>ping</code>). Low-risk reads auto-approve; the output streams into cards.</p>
+<p>4. Agent proposes a fix (<i>"interface Vlan42 is shutdown; run <code>no shutdown</code>?"</i>). HIGH-risk commands prompt for approval.</p>
+<p>5. After the fix, agent re-runs the diagnostic and confirms the change worked.</p>
+
+<h3>Approval tiers</h3>
+<table>
+<tr><th>Risk</th><th>What happens</th><th>Examples</th></tr>
+<tr><td><span class="badge badge-green">LOW</span></td><td>Auto-approved, runs immediately</td><td><code>show</code>, <code>ping</code>, <code>traceroute</code>, <code>git_status</code>, <code>read_file</code>, <code>list_files</code></td></tr>
+<tr><td><span class="badge badge-orange">MEDIUM</span></td><td>One-click approval dialog</td><td><code>git_add</code>, <code>git_commit</code>, <code>apply_patch</code>, <code>configure terminal</code>, <code>clear ip route</code></td></tr>
+<tr><td><span class="badge badge-red">HIGH</span></td><td>Approval dialog with command details</td><td><code>shutdown</code> (interface), <code>no ip address</code>, <code>chmod 777</code>, <code>mv</code> to <code>/</code></td></tr>
+<tr><td><span class="badge badge-red">CRITICAL</span></td><td>Password-gated &mdash; always prompts</td><td><code>reload</code>, <code>write erase</code>, <code>rm -rf /</code>, <code>request system reboot</code>, <code>format</code></td></tr>
+</table>
+<p><b>Pair-programming mode</b> (on by default) turns MEDIUM into "approve each time". Turn it off in <b>Settings &rarr; AI Assistant &rarr; Security</b> once you trust the setup.</p>
+
+<h3>Tools available to the agent</h3>
+<table>
+<tr><th>Category</th><th>Tools</th></tr>
+<tr><td><b>Files</b></td><td><code>read_file</code>, <code>list_files</code>, <code>find_files</code>, <code>apply_patch</code>, <code>search_code_content</code></td></tr>
+<tr><td><b>Terminal</b></td><td><code>get_terminal_list</code>, <code>read_terminal_output</code>, <code>write_to_terminal</code>, <code>network_exec</code> (network-gear helper), <code>get_terminal_cwd</code>, <code>focus_terminal</code></td></tr>
+<tr><td><b>Editor</b></td><td><code>get_active_editor_context</code>, <code>get_editor_diagnostics</code>, <code>insert_at_cursor</code>, <code>replace_selection</code></td></tr>
+<tr><td><b>Code intel</b></td><td><code>search_symbols</code>, <code>get_type_info</code>, <code>get_definition</code>, <code>get_references</code>, <code>get_hover_info</code>, <code>get_project_info</code></td></tr>
+<tr><td><b>Git</b></td><td><code>git_status</code>, <code>git_diff</code>, <code>git_log</code>, <code>git_show</code>, <code>git_branch_list</code>, <code>git_add</code>, <code>git_commit</code></td></tr>
+<tr><td><b>External</b></td><td>Any tool exposed by connected MCP servers (see <a href="#copilot-agent">Copilot Agent</a> / <a href="#intellij">IntelliJ Bridge</a>)</td></tr>
+</table>
+<p>Destructive git operations (<code>reset --hard</code>, <code>push --force</code>, <code>branch -D</code>, <code>--amend</code>, <code>--no-verify</code>) are deliberately NOT exposed. The agent will ask you to run those in a terminal if it thinks they're needed.</p>
+
+<h3>Engine selection</h3>
+<p><b>Settings &rarr; AI Assistant &rarr; General &rarr; Agent engine</b>:</p>
+<ul>
+<li><b>Auto</b> (default) &mdash; picks the right engine for your provider. Claude / Anthropic &rarr; Legacy (matches Claude's native tool-use). Everything else &rarr; LangGraph (planner+reviewer stages that help weaker models).</li>
+<li><b>LangGraph</b> &mdash; forces the StateGraph-based loop with planner and reviewer nodes. Best for Ollama / Qwen / smaller models.</li>
+<li><b>Legacy (Claude-native)</b> &mdash; forces the simpler loop (model decides each round, no extra stages). Best for Claude / GPT-4o / top-tier models.</li>
+</ul>
+
+<h3>Cancel / pause / history</h3>
+<p>The sidebar shows a red <b>Abort</b> button while the agent is running. Click to stop cleanly; the agent emits a <i>"run cancelled"</i> system message and leaves any partial work in place (you'll see which tools ran and which didn't).</p>
+<p>Past agent runs stay in the chat scroll-back. You can ask follow-ups about something the agent did three runs ago &mdash; the session remembers.</p>
+
+<h3>Troubleshooting</h3>
+<table>
+<tr><td>Agent doesn't start</td><td>Provider not configured, or the selected model doesn't support tool use. Anthropic Claude 3.5+, OpenAI GPT-4o, GLM-4.6, Qwen 2.5 Coder+, and Llama 3.1+ all work. GPT-3.5 and tiny Ollama models often don't.</td></tr>
+<tr><td>Tool keeps saying "Unknown tool"</td><td>MCP server disconnected, or the model hallucinated a tool name. Restart the agent or the connected MCP server.</td></tr>
+<tr><td>Weak model gets stuck in a loop</td><td>Switch the engine to LangGraph explicitly &mdash; planner/reviewer scaffolding helps small models.</td></tr>
+<tr><td>Agent won't run a command it should be allowed to</td><td>Check <b>Settings &rarr; AI Assistant &rarr; Security</b> &mdash; the risk band might be stricter than you want. Password-gated commands always prompt regardless of settings.</td></tr>
+</table>
 </div>
 <a href="#" class="back-top">&uarr; Back to top</a>
 
