@@ -26,9 +26,14 @@ export class GeneralSettingsComponent implements OnInit, OnDestroy {
     // Translation object
     t: any;
 
-    // Local provider status cache
+    // Local provider status cache — populated asynchronously via
+    // refreshLocalProviderStatus() on init + interval, NOT during render.
+    // The template's [style.color] / [ngClass] / {{ text }} bindings must
+    // read this cache through a pure getter so Angular's dev-mode
+    // checkNoChanges pass doesn't trip ExpressionChangedAfterItHasBeenChecked.
     private localProviderStatus: { [key: string]: { text: string; color: string; icon: string; time: number } } = {};
     private readonly statusCacheDuration = 30000; // 30 second cache
+    private statusRefreshTimer: ReturnType<typeof setInterval> | null = null;
     private destroy$ = new Subject<void>();
 
     languages = [
@@ -84,9 +89,16 @@ export class GeneralSettingsComponent implements OnInit, OnDestroy {
 
         this.loadSettings();
         this.loadProviders();
+        // Kick an initial status refresh right after providers are known,
+        // then re-poll every 30s. The refresh mutates `localProviderStatus`
+        // outside any template-binding evaluation, so it's CD-safe.
+        this.refreshAllLocalProviderStatuses();
+        this.statusRefreshTimer = setInterval(() => {
+            this.refreshAllLocalProviderStatuses();
+        }, this.statusCacheDuration);
         // Apply current theme
         this.applyTheme(this.theme);
-        
+
         // Refresh providers when config changes (especially provider configs)
         this.config.onConfigChange().pipe(
             takeUntil(this.destroy$)
@@ -94,6 +106,9 @@ export class GeneralSettingsComponent implements OnInit, OnDestroy {
             // Reload providers when provider configs change
             if (change.key?.startsWith('providers.') || change.key === 'defaultProvider' || change.key === '*') {
                 this.loadProviders();
+                // New / changed provider configs may point at different
+                // endpoints, so re-probe the local ones immediately.
+                this.refreshAllLocalProviderStatuses();
                 // Update selected provider if it changed
                 if (change.key === 'defaultProvider') {
                     this.selectedProvider = change.value || this.config.getDefaultProvider() || '';
@@ -105,6 +120,10 @@ export class GeneralSettingsComponent implements OnInit, OnDestroy {
     ngOnDestroy(): void {
         this.destroy$.next();
         this.destroy$.complete();
+        if (this.statusRefreshTimer !== null) {
+            clearInterval(this.statusRefreshTimer);
+            this.statusRefreshTimer = null;
+        }
     }
 
     /**
@@ -241,34 +260,50 @@ export class GeneralSettingsComponent implements OnInit, OnDestroy {
     }
 
     /**
-     * Get local provider status (synchronous return, async update cache)
+     * Pure read of the local-provider status cache. Called from the template
+     * every change-detection cycle; MUST NOT mutate `this` or start async
+     * work, otherwise Angular's dev-mode checkNoChanges pass sees different
+     * state on re-evaluation and throws ExpressionChangedAfterItHasBeenChecked.
+     *
+     * Returns "Checking…" when we haven't populated the cache yet. The
+     * scheduled refresh in ngOnInit fills it within a second or two.
      */
     getLocalProviderStatus(providerName: string): { text: string; color: string; icon: string } {
-        const now = Date.now();
         const cached = this.localProviderStatus[providerName];
-
-        // Check if cache is valid (within 30 seconds)
-        if (cached && (now - cached.time) < this.statusCacheDuration) {
+        if (cached) {
             return { text: cached.text, color: cached.color, icon: cached.icon };
         }
+        return { text: 'Checking...', color: '#ff9800', icon: 'fa-spinner fa-spin' };
+    }
 
-        // Return default status and update async
-        const defaultStatus = { text: 'Checking...', color: '#ff9800', icon: 'fa-spinner fa-spin' };
-        this.localProviderStatus[providerName] = { ...defaultStatus, time: now };
-
-        // Async check actual status
-        this.checkLocalProviderStatus(providerName).then(isOnline => {
-            const status = isOnline
+    /**
+     * Fetches a single local provider's online status and updates the cache.
+     * Side-effectful — only called from lifecycle hooks / timers / explicit
+     * config-change events, never from a template binding.
+     */
+    private async refreshLocalProviderStatus(providerName: string): Promise<void> {
+        const now = Date.now();
+        try {
+            const isOnline = await this.checkLocalProviderStatus(providerName);
+            this.localProviderStatus[providerName] = isOnline
                 ? { text: 'Online', color: '#4caf50', icon: 'fa-check-circle', time: now }
                 : { text: 'Offline', color: '#f44336', icon: 'fa-times-circle', time: now };
-            this.localProviderStatus[providerName] = status;
             this.logger.debug('Local provider status updated', { provider: providerName, isOnline });
-        }).catch(() => {
-            const status = { text: 'Offline', color: '#f44336', icon: 'fa-times-circle', time: now };
-            this.localProviderStatus[providerName] = status;
-        });
+        } catch {
+            this.localProviderStatus[providerName] = { text: 'Offline', color: '#f44336', icon: 'fa-times-circle', time: now };
+        }
+    }
 
-        return defaultStatus;
+    /**
+     * Kick a refresh for every currently-known local provider. Used on init,
+     * on config change, and on the interval timer.
+     */
+    private refreshAllLocalProviderStatuses(): void {
+        for (const p of this.availableProviders) {
+            if (p.isLocal) {
+                void this.refreshLocalProviderStatus(p.name);
+            }
+        }
     }
 
     /**
