@@ -59,7 +59,47 @@ export class RiskAssessmentService {
             pattern: /rd\s+\/s\s+/i,
             description: 'Windows delete directory command',
             severity: RiskLevel.HIGH
-        }
+        },
+
+        // ─── Network-gear patterns (Cisco IOS / Junos / Arista / Linux routers) ───
+        // The agent needs to distinguish "show me the config" (safe) from
+        // "reload the device" (will take it offline). Patterns below assume
+        // the command is about to run on a remote device via SSH/Telnet/Serial.
+        {
+            pattern: /\breload\b/i,
+            description: 'Reboot network device',
+            severity: RiskLevel.CRITICAL
+        },
+        {
+            pattern: /\bwrite\s+erase\b|\berase\s+startup-config\b/i,
+            description: 'Wipe device startup configuration',
+            severity: RiskLevel.CRITICAL
+        },
+        {
+            pattern: /\brequest\s+system\s+(reboot|halt|zeroize)\b/i,
+            description: 'Junos reboot / halt / zeroize',
+            severity: RiskLevel.CRITICAL
+        },
+        {
+            pattern: /^\s*shutdown\b/i,
+            description: 'Disable interface (device command, not OS shutdown)',
+            severity: RiskLevel.HIGH
+        },
+        {
+            pattern: /\bno\s+(interface|ip\s+address|vlan|router|access-list|route-map|neighbor)\b/i,
+            description: 'Remove network configuration stanza',
+            severity: RiskLevel.HIGH
+        },
+        {
+            pattern: /\bclear\s+(ip\s+route|arp|mac\s+address-table|counters)\b/i,
+            description: 'Clear network state tables',
+            severity: RiskLevel.MEDIUM
+        },
+        {
+            pattern: /\b(configure\s+terminal|conf\s+t|configure\s+exclusive|edit\s+private)\b/i,
+            description: 'Enter device configuration mode',
+            severity: RiskLevel.MEDIUM
+        },
     ];
 
     // 系统修改命令

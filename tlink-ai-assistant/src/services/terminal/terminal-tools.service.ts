@@ -187,6 +187,41 @@ Note: If there are still incomplete tasks, please complete them first before cal
             }
         },
         {
+            name: 'network_exec',
+            description:
+                'High-level helper for driving a remote network device (router, switch, '
+                + 'Linux server) over an existing SSH / Telnet / Serial terminal. Combines '
+                + '`write_to_terminal` + a wait for output + `read_terminal_output` into a '
+                + 'single call. Prefer this over the raw write/read pair when talking to '
+                + 'lab gear so the risk assessor can band the command appropriately '
+                + '(reload / write erase / no ip … are gated).',
+            input_schema: {
+                type: 'object',
+                properties: {
+                    command: {
+                        type: 'string',
+                        description:
+                            'Device command to run. Examples: "show version", "show interfaces status", '
+                            + '"ping 8.8.8.8 count 4". Do NOT include a trailing newline.'
+                    },
+                    terminal_index: {
+                        type: 'number',
+                        description: 'Target terminal (0-based). Omit to use the active terminal.'
+                    },
+                    wait_ms: {
+                        type: 'number',
+                        description: 'How long to wait for output before reading. Default 2000 ms; '
+                            + 'increase for slow commands (e.g. "show tech-support" needs ~10000).'
+                    },
+                    read_lines: {
+                        type: 'number',
+                        description: 'How many trailing lines to return after the wait. Default 200.'
+                    }
+                },
+                required: ['command']
+            }
+        },
+        {
             name: 'get_terminal_list',
             description: 'Get a list of all open terminals, including terminal ID, title, active status, etc.',
             input_schema: {
@@ -600,6 +635,14 @@ Note: If there are still incomplete tasks, please complete them first before cal
                         toolCall.input.command,
                         toolCall.input.execute ?? true,
                         toolCall.input.terminal_index
+                    );
+                    break;
+                case 'network_exec':
+                    result = await this.networkExec(
+                        String(toolCall.input.command ?? ''),
+                        toolCall.input.terminal_index,
+                        Number(toolCall.input.wait_ms) || 2000,
+                        Number(toolCall.input.read_lines) || 200
                     );
                     break;
                 case 'get_terminal_list':
@@ -1204,6 +1247,42 @@ Note: If there are still incomplete tasks, please complete them first before cal
     /**
      * 写入终端 - 带执行反馈和智能等待
      */
+    /**
+     * High-level "drive a network device" helper — write a command, wait a
+     * configurable amount of time for output to settle, then read the last
+     * N lines back. Saves the agent from needing two tool round-trips per
+     * device command, and the dedicated name lets the risk assessor
+     * specifically band network-gear commands (reload / write erase / no ip
+     * …) that `write_to_terminal` can't distinguish from shell commands.
+     */
+    private async networkExec(
+        command: string,
+        terminalIndex: number | undefined,
+        waitMs: number,
+        readLines: number
+    ): Promise<string> {
+        if (!command || !command.trim()) {
+            throw new Error('network_exec requires a non-empty `command`');
+        }
+        // Clamp the wait to something sane — the model shouldn't be able to
+        // hang the UI by asking for a 10-minute wait. Longest legit case is
+        // `show tech-support` which takes ~30s on a busy device.
+        const clampedWait = Math.max(100, Math.min(waitMs || 2000, 60_000));
+        const clampedLines = Math.max(10, Math.min(readLines || 200, 2000));
+
+        this.logger.info('network_exec', { command, terminalIndex, waitMs: clampedWait, readLines: clampedLines });
+
+        // Reuse the existing writer — it already handles index vs active,
+        // error cases, and post-write smart-wait. We ignore its returned
+        // buffer snippet and take a fresh read below so the caller can
+        // control how much history comes back.
+        await this.writeToTerminal(command, true, terminalIndex);
+        await new Promise(resolve => setTimeout(resolve, clampedWait));
+
+        const output = this.readTerminalOutput(clampedLines, terminalIndex);
+        return `=== network_exec: ${command} ===\n${output}`;
+    }
+
     private async writeToTerminal(command: string, execute: boolean, terminalIndex?: number): Promise<string> {
         this.logger.info('writeToTerminal called', { command, execute, terminalIndex });
 
