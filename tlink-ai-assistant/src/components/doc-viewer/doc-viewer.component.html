@@ -1,0 +1,17 @@
+<div class="doc-viewer-modal">
+    <div class="modal-header">
+        <h4 class="modal-title">
+            <i class="fa fa-book me-2"></i>
+            {{ title }}
+        </h4>
+        <button type="button" class="btn-close" aria-label="Close" (click)="close()"></button>
+    </div>
+
+    <div class="modal-body doc-viewer-body">
+        <div class="doc-content" [innerHTML]="rendered"></div>
+    </div>
+
+    <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="close()">Close</button>
+    </div>
+</div>

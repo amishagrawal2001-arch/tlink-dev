@@ -18,6 +18,14 @@ export default () => {
                 test: /\.html$/,
                 type: 'asset/source',
             },
+            // Markdown docs bundled alongside the plugin (e.g. README-vllm.md).
+            // Imported as raw strings so the app can render them in-process —
+            // avoids relying on filesystem paths that don't exist in the
+            // packaged / installed app.
+            {
+                test: /\.md$/,
+                type: 'asset/source',
+            },
         ],
     })
     return cfg

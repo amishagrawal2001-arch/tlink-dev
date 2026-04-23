@@ -1,12 +1,18 @@
 import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, ViewEncapsulation } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
+import { NgbModal } from '@ng-bootstrap/ng-bootstrap';
 import { ConfigProviderService } from '../../services/core/config-provider.service';
 import { LoggerService } from '../../services/core/logger.service';
 import { ToastService } from '../../services/core/toast.service';
 import { TranslateService } from '../../i18n';
 import { AiAssistantService } from '../../services/core/ai-assistant.service';
 import { OllamaModelService, OllamaModel, ModelPullProgress } from '../../services/ollama/ollama-model.service';
+import { DocViewerComponent } from '../doc-viewer/doc-viewer.component';
+// Bundled vLLM setup guide — webpack `asset/source` rule imports it as a
+// raw string. Shipping the text inside the plugin bundle means the in-app
+// viewer works in both dev and packaged installs with no filesystem lookup.
+import vllmGuideMarkdown from '../../../README-vllm.md';
 
 type TabbyModelKind = 'completion' | 'chat' | 'embedding';
 
@@ -322,9 +328,54 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
         private toast: ToastService,
         private translate: TranslateService,
         private ollamaModelService: OllamaModelService,
-        private aiService: AiAssistantService
+        private aiService: AiAssistantService,
+        private modal: NgbModal
     ) {
         this.t = this.translate.t;
+    }
+
+    /**
+     * Opens the vLLM setup guide in an in-app modal. Uses the markdown that
+     * was bundled via webpack at build time — no filesystem access, works
+     * identically in dev and packaged installs.
+     */
+    openVllmGuide(event?: Event): void {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        // backdrop: 'static' disables the click-outside-to-dismiss behaviour —
+        // users must use the explicit Close button or Escape. Prevents
+        // accidental dismissal while scrolling a long setup guide.
+        const ref = this.modal.open(DocViewerComponent, { size: 'lg', scrollable: true, centered: true, backdrop: 'static' });
+        ref.componentInstance.title = 'vLLM setup guide';
+        ref.componentInstance.markdown = vllmGuideMarkdown;
+    }
+
+    /**
+     * Turn a non-2xx response from an AI-provider models endpoint into a
+     * human-readable error message. Corporate proxies (Zscaler, Squid,
+     * generic gateways) commonly reply with a full HTML error page even when
+     * the client asked for JSON — dumping 200 chars of that HTML into a
+     * toast is useless and historically broke the toast component. Instead
+     * we detect the HTML payload, hint at the likely cause, and fall back to
+     * a plain-text slice only when the body is genuinely short-text.
+     */
+    private describeUpstreamError(status: number, body: string): string {
+        const trimmed = (body ?? '').trim();
+        const looksHtml = trimmed.startsWith('<') || trimmed.toLowerCase().includes('<!doctype');
+        const zscaler = /zscaler/i.test(trimmed);
+        if (looksHtml) {
+            if (zscaler) {
+                return `Status ${status}: blocked by Zscaler proxy. Ask IT to allow the provider's domain, or use a different network.`;
+            }
+            if (status === 407) return `Status ${status}: proxy authentication required.`;
+            if (status === 504 || status === 502 || status === 503) {
+                return `Status ${status}: gateway / proxy timeout. The request didn't reach the provider — likely a corporate firewall.`;
+            }
+            return `Status ${status}: upstream returned an HTML error page (likely a proxy / firewall block).`;
+        }
+        return `Status ${status}: ${trimmed.substring(0, 200)}`;
     }
 
     ngOnInit(): void {
@@ -2207,7 +2258,7 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
 
             if (!resp.ok) {
                 const text = await resp.text();
-                throw new Error(`Status ${resp.status}: ${text.substring(0, 200)}`);
+                throw new Error(this.describeUpstreamError(resp.status, text));
             }
 
             const data = await resp.json();
@@ -2281,7 +2332,7 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
 
             if (!resp.ok) {
                 const text = await resp.text();
-                throw new Error(`Status ${resp.status}: ${text.substring(0, 200)}`);
+                throw new Error(this.describeUpstreamError(resp.status, text));
             }
 
             const data = await resp.json();
@@ -2980,7 +3031,7 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
 
             if (!resp.ok) {
                 const text = await resp.text();
-                throw new Error(`Status ${resp.status}: ${text.substring(0, 200)}`);
+                throw new Error(this.describeUpstreamError(resp.status, text));
             }
 
             const data = await resp.json();
@@ -3246,7 +3297,7 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
 
             if (!resp.ok) {
                 const text = await resp.text();
-                throw new Error(`Status ${resp.status}: ${text.substring(0, 200)}`);
+                throw new Error(this.describeUpstreamError(resp.status, text));
             }
 
             const data = await resp.json();

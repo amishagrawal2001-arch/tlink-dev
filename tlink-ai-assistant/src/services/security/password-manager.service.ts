@@ -1,8 +1,10 @@
 import { Injectable } from '@angular/core';
+import { NgbModal } from '@ng-bootstrap/ng-bootstrap';
 import * as CryptoJS from 'crypto-js';
 import { PasswordValidationResult } from '../../types/security.types';
 import { LoggerService } from '../core/logger.service';
 import { FileStorageService } from '../core/file-storage.service';
+import { PasswordPromptComponent } from '../../components/security/password-prompt.component';
 
 @Injectable({ providedIn: 'root' })
 export class PasswordManagerService {
@@ -20,7 +22,8 @@ export class PasswordManagerService {
 
     constructor(
         private logger: LoggerService,
-        private fileStorage: FileStorageService
+        private fileStorage: FileStorageService,
+        private modal: NgbModal
     ) {
         this.loadState();
     }
@@ -46,15 +49,36 @@ export class PasswordManagerService {
             return false;
         }
 
-        // 显示密码输入框
-        const password = prompt('Enter your password to continue:');
-        if (password === null) {
-            // 用户取消
+        // Prompt via the in-app modal component rather than the browser's
+        // native `prompt()`. Native prompt exposes the plaintext in the
+        // window URL bar on some platforms, blocks the main thread, can't be
+        // styled, and keeps the string pinned in browser memory until GC.
+        // The Angular modal's input is a local component field; we zero it
+        // out explicitly after verification finishes.
+        let password: string
+        try {
+            const ref = this.modal.open(PasswordPromptComponent, {
+                backdrop: 'static',
+                keyboard: true,
+                centered: true,
+            });
+            ref.componentInstance.title = 'Enter your password to continue';
+            password = await ref.result as string
+            // Clear the component's copy immediately (best-effort; strings
+            // are immutable but this lets the GC reclaim sooner).
+            ref.componentInstance.password = ''
+        } catch {
+            // User dismissed / cancelled — treat as "no".
+            return false;
+        }
+        if (!password) {
             return false;
         }
 
         // 验证密码
         const isValid = await this.verifyPassword(password);
+        // Overwrite the local reference so it's not retained in closure.
+        password = '';
 
         if (isValid) {
             this.resetAttempts();

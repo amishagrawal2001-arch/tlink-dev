@@ -60,7 +60,17 @@ export class ToastService {
         `;
 
         const icon = type === 'success' ? '✓' : type === 'error' ? '✗' : type === 'warning' ? '⚠' : 'ℹ';
-        toast.innerHTML = `<span style="font-size: 16px;">${icon}</span><span>${message}</span>`;
+        // Build the toast body with DOM nodes — never innerHTML string-concat.
+        // Error paths often surface raw HTML (e.g. Zscaler / gateway error
+        // pages returned when an AI provider API is blocked), and putting
+        // that into innerHTML is both an XSS hole and trips Angular's
+        // sanitizer warnings. textContent escapes everything automatically.
+        const iconEl = document.createElement('span');
+        iconEl.style.fontSize = '16px';
+        iconEl.textContent = icon;
+        const messageEl = document.createElement('span');
+        messageEl.textContent = message;
+        toast.append(iconEl, messageEl);
 
         toast.onclick = () => {
             this.removeToast(toast);

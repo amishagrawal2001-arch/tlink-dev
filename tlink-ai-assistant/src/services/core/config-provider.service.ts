@@ -162,9 +162,18 @@ export class ConfigProviderService {
 
     /**
      * 设置完整配置
+     * Validates the proposed merge before writing — rejects obviously-bad
+     * values (negative counts, broken URLs, out-of-range temperature) so
+     * a malformed import or programmatic call can't corrupt the store.
      */
     setConfig(config: Partial<AiAssistantConfig>): void {
-        this.config = { ...this.config, ...config };
+        const merged = { ...this.config, ...config };
+        const check = this.validateIncomingConfig(merged);
+        if (!check.valid) {
+            this.logger.warn('Rejected configuration update: invalid values', { errors: check.errors });
+            throw new Error(`Invalid configuration: ${check.errors.join(', ')}`);
+        }
+        this.config = merged;
         this.saveConfig();
         this.configChange$.next({ key: '*', value: this.config });
         this.logger.info('Configuration updated');
@@ -172,8 +181,16 @@ export class ConfigProviderService {
 
     /**
      * 设置指定配置项
+     * Validates the single-path update against a minimal schema so a
+     * negative temperature / empty API key / malformed URL can't land.
      */
     set<T>(key: string, value: T): void {
+        const issue = this.validateSettingValue(key, value);
+        if (issue) {
+            this.logger.warn('Rejected configuration setting', { key, issue });
+            throw new Error(`Invalid value for "${key}": ${issue}`);
+        }
+
         const keys = key.split('.');
         const lastKey = keys.pop()!;
 
@@ -192,6 +209,95 @@ export class ConfigProviderService {
         this.configChange$.next({ key, value });
 
         this.logger.debug('Configuration item updated', { key, value });
+    }
+
+    /**
+     * Minimal schema-level check for incoming config updates. Designed to
+     * catch programmer bugs and malformed imports; NOT a replacement for
+     * runtime validation of individual fields at their read site.
+     */
+    private validateIncomingConfig(cfg: Partial<AiAssistantConfig>): { valid: boolean; errors: string[] } {
+        const errors: string[] = [];
+        const providers: any = (cfg as any).providers;
+        if (providers && typeof providers === 'object') {
+            for (const [name, p] of Object.entries(providers)) {
+                const issue = this.validateProviderFields(p as any);
+                if (issue) errors.push(`providers.${name}: ${issue}`);
+            }
+        }
+        if ((cfg as any).security?.consentExpiryDays !== undefined) {
+            const v = (cfg as any).security.consentExpiryDays;
+            if (typeof v !== 'number' || !Number.isFinite(v) || v < 1) {
+                errors.push('security.consentExpiryDays must be a positive number');
+            }
+        }
+        if ((cfg as any).maxChatHistory !== undefined) {
+            const v = (cfg as any).maxChatHistory;
+            if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) {
+                errors.push('maxChatHistory must be a non-negative number');
+            }
+        }
+        return { valid: errors.length === 0, errors };
+    }
+
+    /**
+     * Schema check for a single provider config entry. Returns a human
+     * reason string when invalid, or `null` when fine.
+     */
+    private validateProviderFields(p: any): string | null {
+        if (!p || typeof p !== 'object') return 'must be an object';
+        if (p.baseURL !== undefined && p.baseURL !== '' && p.baseURL !== null) {
+            if (typeof p.baseURL !== 'string') return 'baseURL must be a string';
+            try { new URL(p.baseURL); } catch { return `baseURL "${p.baseURL}" is not a valid URL`; }
+        }
+        if (p.apiKey !== undefined && p.apiKey !== null) {
+            if (typeof p.apiKey !== 'string') return 'apiKey must be a string';
+        }
+        if (p.temperature !== undefined && p.temperature !== null) {
+            const v = p.temperature;
+            if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 2) {
+                return 'temperature must be a number between 0 and 2';
+            }
+        }
+        if (p.maxTokens !== undefined && p.maxTokens !== null) {
+            const v = p.maxTokens;
+            if (typeof v !== 'number' || !Number.isFinite(v) || v < 1 || v > 1_000_000) {
+                return 'maxTokens must be a positive integer';
+            }
+        }
+        if (p.timeout !== undefined && p.timeout !== null) {
+            const v = p.timeout;
+            if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) {
+                return 'timeout must be a non-negative number (ms)';
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Lightweight per-path validation used by `set()`. Known paths are
+     * checked against the schema; unknown paths pass through (the caller
+     * is usually setting a plugin-specific key we shouldn't police).
+     */
+    private validateSettingValue(key: string, value: any): string | null {
+        if (key.startsWith('providers.')) {
+            const parts = key.split('.');
+            // providers.<name>           (whole object)
+            if (parts.length === 2) return this.validateProviderFields(value);
+            // providers.<name>.<field>
+            if (parts.length === 3) return this.validateProviderFields({ [parts[2]]: value });
+        }
+        if (key === 'security.consentExpiryDays') {
+            if (typeof value !== 'number' || !Number.isFinite(value) || value < 1) {
+                return 'must be a positive number';
+            }
+        }
+        if (key === 'maxChatHistory') {
+            if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+                return 'must be a non-negative number';
+            }
+        }
+        return null;
     }
 
     /**

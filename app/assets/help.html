@@ -118,12 +118,19 @@ a:hover { text-decoration: underline; }
     <a href="#tabs">Tab Management</a>
     <a href="#ssh">SSH</a>
     <a href="#sftp">SFTP</a>
-    <a href="#api-client">API Client</a>
     <a href="#rdp">RDP</a>
+    <a href="#telnet">Telnet</a>
+    <a href="#serial">Serial</a>
+    <a href="#api-client">API Client</a>
+    <a href="#studio">Tlink Studio (Editor)</a>
     <a href="#terminal">Terminal Settings</a>
     <a href="#highlighting">Output Highlighting</a>
     <a href="#shortcuts">Keyboard Shortcuts</a>
     <a href="#ai">AI Assistant</a>
+    <a href="#copilot-agent">Copilot / VS Code Agent</a>
+    <a href="#intellij">IntelliJ Bridge</a>
+    <a href="#tabby">Tabby (Self-hosted AI)</a>
+    <a href="#sharing">Session Sharing &amp; WebSocket</a>
     <a href="#license">License</a>
 </nav>
 
@@ -215,11 +222,103 @@ a:hover { text-decoration: underline; }
 </div>
 <a href="#" class="back-top">&uarr; Back to top</a>
 
+<h2 id="studio">Tlink Studio (Code Editor)</h2>
+<div class="section">
+<p>A Monaco-powered code editor tab that opens alongside your terminals. Click the <b>file-pen icon</b> in the left dock (labeled <b>Tlink Studio</b>) to open it.</p>
+
+<h3>What it does</h3>
+<table>
+<tr><td><b>Open local files</b></td><td>File &rarr; Open, drag &amp; drop onto the tab, or <kbd>Cmd+O</kbd></td></tr>
+<tr><td><b>Open remote files</b></td><td>In an SFTP panel, double-click a text file &mdash; opens a Studio tab over the remote path and saves back over SFTP</td></tr>
+<tr><td><b>Multi-tab editing</b></td><td>Each open file is its own sub-tab inside the Studio window; <kbd>Cmd+W</kbd> closes the current file, not the whole Studio tab</td></tr>
+<tr><td><b>Syntax highlighting</b></td><td>Auto-detected from file extension; 50+ languages out of the box</td></tr>
+<tr><td><b>Find / Replace</b></td><td><kbd>Cmd+F</kbd> / <kbd>Cmd+Option+F</kbd>, regex mode supported</td></tr>
+<tr><td><b>Multiple cursors</b></td><td><kbd>Cmd+Click</kbd> to add a cursor; <kbd>Cmd+D</kbd> to select next occurrence</td></tr>
+</table>
+
+<h3>Save behavior</h3>
+<p><kbd>Cmd+S</kbd> saves. For remote files, the save round-trips over the same SFTP session you opened from &mdash; if the SSH connection has dropped, Studio prompts to reconnect before writing. Unsaved files show a dot on the tab; closing prompts to save.</p>
+
+<h3>AI in the editor</h3>
+<p>When the AI Assistant is configured (<b>Settings &rarr; AI Assistant</b>), Studio surfaces inline explain / fix actions from the right-click menu &mdash; selects code, sends it to the configured provider, returns suggestions inline or in the AI sidebar. Works with any AI provider, not just cloud ones &mdash; Ollama / vLLM / Tabby all route through the same path.</p>
+
+<h3>Limits</h3>
+<p>Studio isn't a full IDE &mdash; no language-server integration, no debugger, no project tree. For heavy editing use the IntelliJ Bridge or Copilot Agent to keep your real IDE in the loop; Studio is for quick edits without tab-switching to another window.</p>
+</div>
+<a href="#" class="back-top">&uarr; Back to top</a>
+
 <h2 id="rdp">RDP (Remote Desktop)</h2>
 <div class="section">
-<p>Create RDP profiles to connect to Windows machines. NexTerm bundles <b>FreeRDP</b> on macOS &mdash; no additional software needed.</p>
-<p>If FreeRDP is unavailable, the app prompts to switch to Microsoft Remote Desktop.</p>
+<p>Connect to Windows / Linux-XRDP desktops from a tab. NexTerm bundles <b>FreeRDP</b> on macOS &mdash; no extra install needed. Falls back to Microsoft Remote Desktop if FreeRDP is unavailable.</p>
+
+<h3>Create a profile</h3>
+<p><b>Settings &rarr; Profiles &amp; connections &rarr; + &rarr; RDP</b>. Fill in host, port (default <code>3389</code>), username, password or credential.</p>
+
+<h3>Common options</h3>
+<table>
+<tr><th>Field</th><th>What it does</th></tr>
+<tr><td>Domain</td><td>AD domain for <code>DOMAIN\user</code> logins</td></tr>
+<tr><td>Resolution</td><td>Fixed (e.g. 1920&times;1080) or auto-fit to window</td></tr>
+<tr><td>Color depth</td><td>16 / 24 / 32 bit &mdash; lower for slow links</td></tr>
+<tr><td>Audio redirection</td><td>Play remote audio on local speakers</td></tr>
+<tr><td>Clipboard / drive share</td><td>Cross-session clipboard; mount a local path as <code>\\tsclient\&lt;name&gt;</code></td></tr>
+<tr><td>Gateway</td><td>RD Gateway hostname if you go through one</td></tr>
+</table>
+
+<h3>During a session</h3>
+<p>Keyboard shortcuts are sent to the remote host while the RDP tab has focus. The <b>Send Ctrl+Alt+Del</b> button is in the tab toolbar. Drag the tab to split-view to work alongside a terminal.</p>
 </div>
+<a href="#" class="back-top">&uarr; Back to top</a>
+
+<h2 id="telnet">Telnet</h2>
+<div class="section">
+<p>Legacy plain-text connections for gear that still speaks Telnet (switches, routers, console servers, old print servers). <b>No encryption</b> &mdash; use only on trusted networks.</p>
+
+<h3>Create a profile</h3>
+<p><b>Settings &rarr; Profiles &amp; connections &rarr; + &rarr; Telnet</b>. Enter host and port (default <code>23</code>). Optional: auto-send login string after a banner pattern matches.</p>
+
+<h3>Auto-login</h3>
+<p>For devices that prompt for user / password on raw Telnet, add an <b>Expect / Send</b> pair under Advanced:</p>
+<table>
+<tr><th>Expect</th><th>Send</th></tr>
+<tr><td><code>Username:</code></td><td><code>admin\n</code></td></tr>
+<tr><td><code>Password:</code></td><td><code>{password}\n</code></td></tr>
+</table>
+<p><code>{password}</code> pulls from the profile's saved password field; never embed the literal password in the Send string.</p>
+
+<h3>Encoding / line mode</h3>
+<p>Advanced &rarr; <b>Character encoding</b>: pick UTF-8, Latin-1, GBK, or Shift-JIS for old regional consoles. <b>Line mode</b> toggles between raw-byte and line-buffered behavior &mdash; flip if your device echoes double characters or drops input.</p>
+</div>
+<a href="#" class="back-top">&uarr; Back to top</a>
+
+<h2 id="serial">Serial</h2>
+<div class="section">
+<p>Connect to anything on a USB-serial adapter: network-gear console ports, microcontrollers, bench instruments. Uses the OS's serial drivers directly &mdash; no extra software.</p>
+
+<h3>Create a profile</h3>
+<p><b>Settings &rarr; Profiles &amp; connections &rarr; + &rarr; Serial</b>. Pick a port from the dropdown (refreshes on plug/unplug) and set:</p>
+<table>
+<tr><th>Field</th><th>Typical value</th></tr>
+<tr><td>Baud rate</td><td>9600 (routers/switches), 115200 (MCUs, most modern consoles), 57600 (older gear)</td></tr>
+<tr><td>Data bits</td><td>8 (almost always)</td></tr>
+<tr><td>Parity</td><td>None (almost always); Even/Odd for some legacy devices</td></tr>
+<tr><td>Stop bits</td><td>1</td></tr>
+<tr><td>Flow control</td><td>None; set to Hardware (RTS/CTS) if the device requires it</td></tr>
+</table>
+
+<h3>Finding the port</h3>
+<p><b>macOS / Linux:</b> <code>ls /dev/tty.* /dev/ttyUSB* /dev/ttyACM*</code>. Typical names: <code>/dev/tty.usbserial-XXXX</code>, <code>/dev/ttyUSB0</code>, <code>/dev/ttyACM0</code>.</p>
+<p><b>Windows:</b> Device Manager &rarr; Ports (COM &amp; LPT). Use <code>COM3</code>, <code>COM4</code>, etc.</p>
+
+<h3>Troubleshooting</h3>
+<table>
+<tr><td>Port not in dropdown</td><td>macOS may need the FTDI / CH340 / Silicon Labs driver for the adapter. Unplug / replug and hit refresh.</td></tr>
+<tr><td>Permission denied</td><td>Linux: add your user to the <code>dialout</code> group (<code>sudo usermod -aG dialout $USER</code>, then log out / in).</td></tr>
+<tr><td>Garbled output</td><td>Wrong baud rate or encoding. Try 115200 first; try 9600 second.</td></tr>
+<tr><td>No response to keystrokes</td><td>Flow control mismatch. Flip to Hardware or None.</td></tr>
+</table>
+</div>
+<a href="#" class="back-top">&uarr; Back to top</a>
 
 <h2 id="terminal">Terminal Settings</h2>
 <div class="section">
@@ -273,6 +372,170 @@ a:hover { text-decoration: underline; }
 <p>The AI detects common errors (command not found, permission denied) and offers to help via a toast notification.</p>
 <p>Configure providers in <b>Settings &rarr; AI Assistant</b>. Supports OpenAI, Anthropic, Ollama, and more.</p>
 </div>
+<a href="#" class="back-top">&uarr; Back to top</a>
+
+<h2 id="copilot-agent">Copilot / VS Code Agent</h2>
+<div class="section">
+<p>NexTerm ships an MCP server (the <b>Copilot Agent</b>, also known as the <b>VS Code Agent</b> — same plugin) so an external AI client like VS Code's Copilot Chat can drive your terminal sessions: read the buffer, run commands, inspect history, abort stuck jobs.</p>
+
+<h3>One-time setup (inside NexTerm)</h3>
+<p>1. Open <b>Settings &rarr; Copilot Agent</b>.</p>
+<p>2. Set the port (default <code>3001</code>; change only if it collides).</p>
+<p>3. Toggle <b>Start on Boot</b> if you want the server always available.</p>
+<p>4. Toggle <b>Pair Programming Mode</b> on — a confirmation dialog pops up in NexTerm before the AI runs any command. Strongly recommended.</p>
+<p>5. Click <b>Start Server</b>. Status indicator should flip to <span class="badge badge-green">&bull; Running</span>. Server URL becomes <code>http://localhost:3001/sse</code>.</p>
+
+<h3>One-time setup (inside VS Code)</h3>
+<p>Edit your MCP config (usually <code>~/.config/Code/User/globalStorage/mcp.json</code> on Linux/macOS; equivalent on Windows) and add:</p>
+<pre style="background:rgba(255,255,255,0.05);padding:12px;border-radius:6px;font-size:12px;overflow-x:auto;color:#d4d4d8">{
+  "servers": {
+    "nexterm": {
+      "url": "http://localhost:3001/sse",
+      "type": "http"
+    }
+  }
+}</pre>
+<p>Reload VS Code. Copilot Chat (or any other MCP client — Claude Desktop, Cursor, Zed) will now see the NexTerm tools.</p>
+
+<p><b>Stdio alternative:</b> if your client prefers stdio, the Copilot Agent settings page shows a path to the local node entry — add it as <code>{ "type": "stdio", "command": "node", "args": ["&lt;path-from-settings&gt;"] }</code>.</p>
+
+<h3>Things you can ask the AI</h3>
+<table>
+<tr><th>Ask</th><th>Tool used</th></tr>
+<tr><td><i>"What's in my first terminal session?"</i></td><td><code>get_terminal_buffer</code></td></tr>
+<tr><td><i>"List all my SSH sessions"</i></td><td><code>get_ssh_session_list</code></td></tr>
+<tr><td><i>"Run <code>npm test</code> in session 1"</i></td><td><code>execute_command</code> (approval dialog if Pair Mode is on)</td></tr>
+<tr><td><i>"What commands are still running?"</i></td><td><code>list_running_commands</code></td></tr>
+<tr><td><i>"Show me the output of the last command"</i></td><td><code>get_command_output</code></td></tr>
+<tr><td><i>"Abort the stuck process in session 0"</i></td><td><code>abort_command</code> (sends Ctrl+C)</td></tr>
+</table>
+
+<h3>Toolbar buttons the plugin adds</h3>
+<table>
+<tr><td><b>Open Copilot Chat</b></td><td>Opens VS Code directly</td></tr>
+<tr><td><b>Command History</b></td><td>Browse past commands + outputs</td></tr>
+<tr><td><b>Running Commands</b></td><td>Monitor / abort active commands across all sessions</td></tr>
+</table>
+
+<h3>Safety notes</h3>
+<p>Leave <b>Pair Programming Mode</b> on. An AI can issue <code>rm -rf /</code> just as easily as <code>ls</code>; the approval dialog is the last line of defense.</p>
+<p>The AI Assistant's risk-assessment flow (Low / Medium / High / Critical bands with password protection on high-risk) applies to commands that arrive via MCP too.</p>
+
+<h3>Troubleshooting</h3>
+<table>
+<tr><td>Server won't start</td><td>Port collision (try <code>3002</code>), firewall, or stale process on old port. Check NexTerm logs.</td></tr>
+<tr><td>VS Code doesn't see the server</td><td>Reload VS Code after editing <code>mcp.json</code>. Verify with <code>curl http://localhost:3001/sse</code> &mdash; should return an SSE handshake.</td></tr>
+<tr><td>Commands silently don't run</td><td>The MCP tools operate on <i>existing</i> terminal tabs &mdash; open at least one session before the AI tries to drive it.</td></tr>
+<tr><td>Approval dialog never appears</td><td>Check Pair Programming Mode is enabled, and the NexTerm window has focus.</td></tr>
+</table>
+</div>
+<a href="#" class="back-top">&uarr; Back to top</a>
+
+<h2 id="intellij">IntelliJ Bridge</h2>
+<div class="section">
+<p>The sibling plugin to the Copilot / VS Code Agent &mdash; same idea (let an external IDE drive your terminal sessions over an MCP-style bridge) but scoped to IntelliJ-family editors (IDEA, PyCharm, WebStorm, GoLand, CLion, Rider, etc.). Use this when your day job is in IntelliJ and you want to ask the IDE's built-in AI to work with your live terminal buffers.</p>
+
+<h3>One-time setup (inside NexTerm)</h3>
+<p>1. Open the left dock, right-click the <b>IntelliJ</b> icon &rarr; settings, or find the bridge under <b>Settings &rarr; IntelliJ Bridge</b>.</p>
+<p>2. Pick the IntelliJ port (default <code>63342</code>, matching IntelliJ's built-in HTTP server).</p>
+<p>3. Click <b>Start Bridge</b>. Status flips to <span class="badge badge-green">&bull; Running</span>.</p>
+
+<h3>One-time setup (inside IntelliJ)</h3>
+<p>1. <b>Settings &rarr; Tools &rarr; Startup/Shutdown Tasks</b> (or <b>Plugins</b> if the matching IntelliJ-side plugin is installed).</p>
+<p>2. Enable IntelliJ's built-in HTTP server (<b>Settings &rarr; Build, Execution, Deployment &rarr; Debugger &rarr; Built-in server</b>, port <code>63342</code>).</p>
+<p>3. If you're using AI Assistant inside IntelliJ (JetBrains AI or a third-party plugin), configure it to discover NexTerm at <code>http://localhost:63342/tlink</code>.</p>
+
+<h3>Click the left-dock icon to open IntelliJ</h3>
+<p>The <b>laptop-code icon</b> in the left dock opens IntelliJ on the current workspace (if one is detected). Without a detected project, it opens the most recent project. On first click NexTerm asks for the IntelliJ binary path; pick the <code>idea</code> / <code>pycharm</code> / etc. command-line launcher.</p>
+
+<h3>What you can ask from IntelliJ</h3>
+<p>The exact surface depends on which IntelliJ AI integration you use. If your IntelliJ plugin is MCP-aware (e.g., recent JetBrains AI builds, Continue.dev in IntelliJ), you get the same tool set as the VS Code Agent: buffer read, command execution with approval, history, running commands, abort. See the <a href="#copilot-agent">Copilot / VS Code Agent</a> section for the full tool list &mdash; it applies identically here.</p>
+
+<h3>Safety &amp; troubleshooting</h3>
+<p>Keep <b>Pair Programming Mode</b> on (same toggle as the VS Code Agent &mdash; they share the approval flow). If the bridge won't start, verify IntelliJ's built-in server is running (<code>curl http://localhost:63342</code> should return something) and the port isn't held by another IDE instance.</p>
+</div>
+<a href="#" class="back-top">&uarr; Back to top</a>
+
+<h2 id="tabby">Tabby (Self-hosted AI)</h2>
+<div class="section">
+<p><b>Tabby</b> here means <a href="https://tabby.tabbyml.com/" target="_blank" rel="noopener">Tabby ML</a> &mdash; the self-hosted, open-source AI coding assistant with an OpenAI-compatible API. (Not the terminal app this codebase forked from.) NexTerm treats it as one of the AI providers in the Assistant, plus ships a dedicated <b>Settings &rarr; Tabby Server</b> tab for a streamlined config flow.</p>
+
+<p><b>Why use it:</b> your prompts and code never leave your machine / private server. Good fit when your org's policy bans sending code to OpenAI / Anthropic / Claude.</p>
+
+<h3>Install Tabby (Docker, quickest path)</h3>
+<p>On a machine with an NVIDIA GPU (or CPU-only for small models):</p>
+<pre style="background:rgba(255,255,255,0.05);padding:12px;border-radius:6px;font-size:12px;overflow-x:auto;color:#d4d4d8">docker run -it --gpus all -p 8080:8080 \
+  -v $HOME/.tabby:/data \
+  tabbyml/tabby \
+  serve --model StarCoder-1B --device cuda</pre>
+<p>Leave the container running. Tabby listens on <code>http://localhost:8080</code> by default.</p>
+<p>Full install options (CPU-only, Apple Silicon, systemd, k8s) at <a href="https://tabby.tabbyml.com/docs/quick-start/installation/docker/" target="_blank" rel="noopener">tabbyml.com/docs/quick-start</a>.</p>
+
+<h3>Register an account &amp; get an API token</h3>
+<p>1. Open <code>http://localhost:8080</code> in your browser.</p>
+<p>2. Create the first admin account (Tabby auto-promotes the first user).</p>
+<p>3. Go to <b>Settings &rarr; General &rarr; Credentials</b> (or equivalent) and copy your <b>API token</b>.</p>
+<p>Full walkthrough: <a href="https://tabby.tabbyml.com/docs/quick-start/register-account/" target="_blank" rel="noopener">tabbyml.com/docs/quick-start/register-account</a>.</p>
+
+<h3>Configure NexTerm to use Tabby</h3>
+<p>Two equivalent paths:</p>
+<p><b>Option A &mdash; Tabby Server tab (streamlined):</b></p>
+<p>&nbsp;&nbsp;&bull; <b>Settings &rarr; Tabby Server</b></p>
+<p>&nbsp;&nbsp;&bull; Endpoint: <code>http://localhost:8080</code> (or your remote Tabby URL)</p>
+<p>&nbsp;&nbsp;&bull; API token: paste the one from the Tabby UI</p>
+<p>&nbsp;&nbsp;&bull; Pick completion / chat / embedding models (dropdowns auto-load from Tabby's catalog)</p>
+
+<p><b>Option B &mdash; AI Assistant provider tab:</b></p>
+<p>&nbsp;&nbsp;&bull; <b>Settings &rarr; AI Assistant &rarr; Providers</b> &rarr; select <b>Tabby</b></p>
+<p>&nbsp;&nbsp;&bull; Same fields (base URL, API key, model); shares storage with Option A.</p>
+
+<h3>What you get</h3>
+<table>
+<tr><td><b>Chat</b></td><td>Ask the AI sidebar questions; responses come from your Tabby server instead of a cloud API.</td></tr>
+<tr><td><b>Completion</b></td><td>If you wire the completion model, Tabby drives inline code suggestions.</td></tr>
+<tr><td><b>Command help</b></td><td>The terminal's AI helpers (explain error, fix command) route through Tabby the same way they route through OpenAI.</td></tr>
+</table>
+
+<h3>Troubleshooting</h3>
+<table>
+<tr><td>Connection test fails</td><td>Verify Tabby is running: <code>curl http://localhost:8080/health</code>. If remote, check firewall / port forwarding.</td></tr>
+<tr><td>401 / 403 on requests</td><td>API token wrong or revoked. Regenerate in Tabby's Settings and re-paste in NexTerm.</td></tr>
+<tr><td>Slow responses</td><td>Small CPU-only models (StarCoder-1B) are slow on non-GPU hardware. Use a larger GPU model or smaller context window.</td></tr>
+<tr><td>Models dropdown empty</td><td>Tabby needs at least one model loaded. Check the Tabby UI under <b>Models</b> &mdash; see <a href="https://tabby.tabbyml.com/docs/models/" target="_blank" rel="noopener">model docs</a>.</td></tr>
+</table>
+
+<p>API reference (if you're scripting against the same endpoint): <a href="https://tabby.tabbyml.com/docs/api" target="_blank" rel="noopener">tabbyml.com/docs/api</a>.</p>
+</div>
+<a href="#" class="back-top">&uarr; Back to top</a>
+
+<h2 id="sharing">Session Sharing &amp; WebSocket</h2>
+<div class="section">
+<p>Three related left-dock items let you share terminal sessions with a teammate or let NexTerm accept inbound connections from other tools:</p>
+
+<h3>Share All Sessions</h3>
+<p>The <b>share-nodes icon</b> in the left dock. Click it to expose every currently-open terminal tab over a shared-session link. NexTerm opens a local relay, then pops up a URL you can send to another NexTerm user.</p>
+<p>The receiver pastes the link into their own <b>Open Shared Session Link</b> dock item (see below) and instantly sees your tabs in read-only form (or read-write if you granted it). Useful for pairing without screen-sharing the whole desktop.</p>
+<p>Click the icon a second time to stop sharing; all generated links expire immediately.</p>
+
+<h3>Open Shared Session Link</h3>
+<p>The <b>link icon</b>. Paste a share URL that a teammate sent you. NexTerm connects to the relay and adds their live sessions as tabs in your workspace. You see their tabs alongside your own; closing the linked tab disconnects you without affecting them.</p>
+<p>Permissions are controlled by the sender &mdash; if they shared read-only, your keystrokes are dropped. If they granted read-write, you share the input buffer (both of you type into the same stream).</p>
+
+<h3>WebSocket Server</h3>
+<p>The <b>plug icon</b>. Toggles a local WebSocket endpoint that other tools &mdash; scripts, browser extensions, another NexTerm instance &mdash; can connect to for programmatic access to terminal sessions.</p>
+<p>Icon states:</p>
+<table>
+<tr><td><i class="far" style="color:#888">plug</i></td><td>Server off</td></tr>
+<tr><td><i style="color:#22c55e">power-off</i></td><td>Server running &mdash; click to stop</td></tr>
+<tr><td><i style="color:#f59e0b">spinner</i></td><td>Starting / stopping</td></tr>
+</table>
+<p>Default port is printed in the toast when the server comes up. Configure authentication (token-based) and allowed origins under <b>Settings &rarr; WebSocket</b>. The Copilot / VS Code Agent and IntelliJ Bridge both optionally use this transport under the hood.</p>
+
+<h3>Safety</h3>
+<p>Shared session links are unauthenticated past the URL &mdash; anyone with the link gets the permissions it was issued with. Treat them like share-tokens: send through a private channel, and stop sharing when you're done pairing.</p>
+<p>The WebSocket server binds to <code>127.0.0.1</code> by default. Only change that if you know what you're doing (firewall, auth config, the works).</p>
+</div>
+<a href="#" class="back-top">&uarr; Back to top</a>
 
 <h2 id="license">License</h2>
 <div class="section">

@@ -78,7 +78,7 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
             return networkStatus;
 
         } catch (error) {
-            this.logger.error(`Health check failed for ${this.name}`, error);
+            this.logError(error, { phase: 'healthCheck' });
             this.lastHealthCheck = { status: HealthStatus.UNHEALTHY, timestamp: new Date() };
             return HealthStatus.UNHEALTHY;
         }
@@ -132,7 +132,7 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
                 return HealthStatus.DEGRADED;
             }
 
-            this.logger.error(`Health check network error for ${this.name}`, error);
+            this.logError(error, { phase: 'performNetworkHealthCheck' });
             return HealthStatus.UNHEALTHY;
         }
     }
@@ -335,11 +335,34 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
      * 记录错误
      */
     protected logError(error: any, context?: any): void {
+        const raw = error instanceof Error ? error.message : String(error);
         this.logger.error(`[${this.name}] Error`, {
-            error: error instanceof Error ? error.message : String(error),
-            stack: error instanceof Error ? error.stack : undefined,
+            error: this.scrubSecrets(raw),
+            stack: error instanceof Error ? this.scrubSecrets(error.stack ?? '') : undefined,
             context
         });
+    }
+
+    /**
+     * Strip anything that looks like an API key or bearer token out of a
+     * free-form string before it hits the logger. Provider error messages
+     * occasionally include request URLs, response bodies, or
+     * `Authorization: Bearer ...` headers in their `.message`; we scrub
+     * defensively so a console dump in a bug report doesn't leak a key.
+     */
+    private scrubSecrets(s: string): string {
+        if (!s) return s;
+        return s
+            // Authorization: Bearer <token>
+            .replace(/(authorization\s*[:=]\s*)(bearer\s+)?[\w\-.~+/=]{12,}/gi, '$1$2***')
+            // OpenAI-style keys: sk-... / sk-proj-... (32+ chars)
+            .replace(/\bsk-[A-Za-z0-9_-]{20,}\b/g, 'sk-***')
+            // Anthropic: sk-ant-... / claude-*
+            .replace(/\bsk-ant-[A-Za-z0-9_-]{20,}\b/g, 'sk-ant-***')
+            // Generic high-entropy key=value in query strings
+            .replace(/([?&](?:api[_-]?key|token|access[_-]?token|refresh[_-]?token)=)[^&\s"']+/gi, '$1***')
+            // Bare `"apiKey": "..."` / `"token": "..."` in JSON-ish blobs
+            .replace(/(["']?(?:api[_-]?key|token|access[_-]?token|refresh[_-]?token|secret)["']?\s*[:=]\s*["'])[^"']+(["'])/gi, '$1***$2');
     }
 
     /**

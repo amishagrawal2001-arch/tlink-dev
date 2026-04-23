@@ -1,4 +1,5 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked, AfterViewInit, ViewEncapsulation, HostBinding, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked, AfterViewInit, ViewEncapsulation, HostBinding, ChangeDetectorRef, SecurityContext } from '@angular/core';
+import { DomSanitizer } from '@angular/platform-browser';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap';
@@ -102,7 +103,8 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
         private agentApproval: AgentApprovalService,
         private platformDetection: PlatformDetectionService,
         private selector: SelectorService,
-        private cdr: ChangeDetectorRef
+        private cdr: ChangeDetectorRef,
+        private sanitizer: DomSanitizer
     ) {
         // Detect platform
         this.isMacOS = this.platformDetection.detectOS() === OSType.MACOS;
@@ -1193,8 +1195,10 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
             // 使用 marked 库渲染 Markdown
             const { marked } = require('marked');
             const renderer = new marked.Renderer();
-            // Disallow raw HTML from markdown input to avoid XSS sanitizer stripping warnings.
-            renderer.html = ({ text }: { text: string }) => this.escapeHtml(text ?? '');
+            // Disallow raw HTML from markdown input. marked's installed
+            // runtime (v17) passes a token object with { text }; older
+            // v4 passed a raw string. Accept both shapes.
+            renderer.html = (token: any) => this.escapeHtml((token?.text ?? token ?? '') as string);
 
             // 配置 marked 选项
             marked.setOptions({
@@ -1206,19 +1210,34 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
             });
 
             const rendered = marked.parse(content);
-            return this.sanitizeRenderedMarkdown(rendered);
+            return this.postSanitize(this.sanitizeRenderedMarkdown(rendered));
         } catch (e) {
-            // 如果 marked 失败，使用基本格式化
-            const fallback = content
+            // 如果 marked 失败，使用基本格式化. Note: escape BEFORE applying
+            // the bold/italic/code regex replacements so captured groups
+            // can't reintroduce unescaped HTML via `$1` substitution.
+            const escaped = content
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
+                .replace(/>/g, '&gt;');
+            const fallback = escaped
                 .replace(/\n/g, '<br>')
                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                 .replace(/\*(.*?)\*/g, '<em>$1</em>')
                 .replace(/`(.*?)`/g, '<code>$1</code>');
-            return this.sanitizeRenderedMarkdown(fallback);
+            return this.postSanitize(this.sanitizeRenderedMarkdown(fallback));
         }
+    }
+
+    /**
+     * Last line of defence before the rendered markdown hits `[innerHTML]`.
+     * Angular's DomSanitizer strips `<script>`, inline event handlers,
+     * `javascript:` URIs, `<iframe>`/`<object>`/`<embed>`, and dangerous
+     * attribute values — catches anything the markdown renderer or our
+     * link/image scrubber missed. Prompt-injected AI responses containing
+     * `<img src=x onerror=alert(1)>` get neutralised here.
+     */
+    private postSanitize(html: string): string {
+        return this.sanitizer.sanitize(SecurityContext.HTML, html) ?? '';
     }
 
     /**

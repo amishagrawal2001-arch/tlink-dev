@@ -1,3 +1,5 @@
+/// <reference path="./types/assets.d.ts" />
+
 import { NgModule, ModuleWithProviders } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -99,6 +101,8 @@ import { AiToolbarButtonComponent } from './components/terminal/ai-toolbar-butto
 
 import { LoadingSpinnerComponent } from './components/common/loading-spinner.component';
 import { ErrorMessageComponent } from './components/common/error-message.component';
+
+import { DocViewerComponent } from './components/doc-viewer/doc-viewer.component';
 
 // Tlink Integration Providers (enabled for proper integration)
 import { AiToolbarButtonProvider } from './providers/tlink/ai-toolbar-button.provider';
@@ -220,7 +224,10 @@ import { AiAssistantCLIHandler } from './cli';
 
         // Common Components
         LoadingSpinnerComponent,
-        ErrorMessageComponent
+        ErrorMessageComponent,
+
+        // Bundled-doc viewer (vLLM setup guide, etc.)
+        DocViewerComponent
     ],
     entryComponents: [
         ChatInterfaceComponent,
@@ -229,7 +236,8 @@ import { AiAssistantCLIHandler } from './cli';
         PasswordPromptComponent,
         ConsentDialogComponent,
         CommandSuggestionComponent,
-        CommandPreviewComponent
+        CommandPreviewComponent,
+        DocViewerComponent
     ]
 })
 export default class AiAssistantModule {
