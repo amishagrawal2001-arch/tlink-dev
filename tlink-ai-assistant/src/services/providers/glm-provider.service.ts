@@ -302,7 +302,17 @@ export class GlmProviderService extends BaseAiProvider {
                                 let parsedInput = {};
                                 try {
                                     parsedInput = JSON.parse(currentToolInput || '{}');
-                                } catch (e) {}
+                                } catch (e) {
+                                    // Malformed JSON tool input — emit an empty
+                                    // object so downstream tool dispatch still
+                                    // fires, but log the raw string so we can
+                                    // diagnose model-output drift later.
+                                    this.logger.warn('GLM tool_use input was not valid JSON — dispatching with empty args', {
+                                        tool: currentToolName,
+                                        rawInput: String(currentToolInput).substring(0, 300),
+                                        error: e instanceof Error ? e.message : String(e),
+                                    });
+                                }
                                 subscriber.next({
                                     type: 'tool_use_end',
                                     toolCall: { id: currentToolId, name: currentToolName, input: parsedInput }

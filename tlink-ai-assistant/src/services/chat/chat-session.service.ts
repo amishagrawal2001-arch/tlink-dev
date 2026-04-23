@@ -37,6 +37,48 @@ export class ChatSessionService {
     ) { }
 
     /**
+     * Hard ceiling on in-memory chat messages per session. The TokenBudget
+     * and Compaction services try to trim proactively, but if they fail or
+     * are disabled, a long-running conversation can grow unbounded and
+     * exhaust memory. This cap is the last line of defence; SOFT_WARN is
+     * the threshold at which we log a one-shot warning so the admin
+     * notices before the hard cap kicks in.
+     */
+    private readonly HARD_MAX_MESSAGES = 10000;
+    private readonly SOFT_WARN_MESSAGES = 8000;
+    private softWarnLogged = false;
+
+    /**
+     * Enforces the hard cap by keeping the most recent N messages. If a
+     * SYSTEM message sits at the head of the array (typical for session
+     * prompts), it's preserved — dropping it would silently change the
+     * assistant's behavior mid-conversation. All other history older than
+     * the cap is discarded.
+     */
+    private cap (msgs: ChatMessage[]): ChatMessage[] {
+        if (msgs.length > this.SOFT_WARN_MESSAGES && !this.softWarnLogged) {
+            this.softWarnLogged = true;
+            this.logger.warn('Chat history approaching hard cap', {
+                sessionId: this.currentSessionId,
+                messageCount: msgs.length,
+                softWarn: this.SOFT_WARN_MESSAGES,
+                hardMax: this.HARD_MAX_MESSAGES,
+                hint: 'Consider enabling auto-compaction or starting a new session.',
+            });
+        }
+        if (msgs.length <= this.HARD_MAX_MESSAGES) return msgs;
+        const head = msgs[0]?.role === MessageRole.SYSTEM ? [msgs[0]] : [];
+        const tailStart = Math.max(head.length, msgs.length - (this.HARD_MAX_MESSAGES - head.length));
+        const capped = [...head, ...msgs.slice(tailStart)];
+        this.logger.warn('Chat history hit hard cap — trimmed to most recent window', {
+            sessionId: this.currentSessionId,
+            dropped: msgs.length - capped.length,
+            kept: capped.length,
+        });
+        return capped;
+    }
+
+    /**
      * 创建新会话
      */
     createSession(): string {
@@ -65,7 +107,8 @@ export class ChatSessionService {
                 timestamp: msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp || Date.now())
             }));
 
-            this.messagesSubject.next(chatMessages);
+            this.softWarnLogged = false;
+            this.messagesSubject.next(this.cap(chatMessages));
             this.logger.info('Loaded session history', {
                 sessionId,
                 messageCount: chatMessages.length
@@ -99,7 +142,7 @@ export class ChatSessionService {
             };
 
             const currentMessages = this.messagesSubject.value;
-            this.messagesSubject.next([...currentMessages, userMessage]);
+            this.messagesSubject.next(this.cap([...currentMessages, userMessage]));
 
             // 显示打字状态
             this.isTypingSubject.next(true);
@@ -121,10 +164,10 @@ export class ChatSessionService {
                 id: this.generateMessageId()
             };
 
-            this.messagesSubject.next([
+            this.messagesSubject.next(this.cap([
                 ...this.messagesSubject.value,
                 assistantMessage
-            ]);
+            ]));
 
             this.logger.info('Message sent successfully', {
                 sessionId: this.currentSessionId,
@@ -198,7 +241,8 @@ export class ChatSessionService {
         try {
             const data = JSON.parse(sessionData);
             this.currentSessionId = data.sessionId;
-            this.messagesSubject.next(data.messages || []);
+            this.softWarnLogged = false;
+            this.messagesSubject.next(this.cap(data.messages || []));
             this.logger.info('Imported session', { sessionId: this.currentSessionId });
         } catch (error) {
             this.logger.error('Failed to import session', error);

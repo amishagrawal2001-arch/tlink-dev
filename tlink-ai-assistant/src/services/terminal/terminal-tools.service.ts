@@ -777,7 +777,34 @@ Note: If there are still incomplete tasks, please complete them first before cal
         }
         const resolved = this.resolvePath(pathInput);
         const content = fs.readFileSync(resolved, 'utf-8');
-        return `=== ${pathInput} ===\n${content}`;
+        return `=== ${pathInput} ===\n${this.sanitizeForDisplay(content)}`;
+    }
+
+    /**
+     * Strip terminal control codes before a file's content is handed back to
+     * a tool caller (which may write it into a terminal, or embed it in a
+     * prompt). Raw ANSI / OSC / DCS sequences in a file can reposition the
+     * cursor, set window titles, or in some terminals trigger paste-mode
+     * exploits. Keep only printable + common whitespace.
+     *
+     * NOTE: this is for display-bound output only. Callers that mutate the
+     * file (applyPatch, write-file handlers) must operate on the raw bytes
+     * so round-trip integrity is preserved.
+     */
+    private sanitizeForDisplay (content: string): string {
+        if (!content) return content;
+        return content
+            // CSI, OSC, DCS, SOS, PM, APC, and generic ESC-prefixed sequences
+            // eslint-disable-next-line no-control-regex
+            .replace(/\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)/g, '')  // OSC ... BEL or ST
+            // eslint-disable-next-line no-control-regex
+            .replace(/\x1B[@-Z\\-_]/g, '')                      // 7-bit C1 singletons
+            // eslint-disable-next-line no-control-regex
+            .replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '')            // CSI ... final byte
+            // eslint-disable-next-line no-control-regex
+            .replace(/\x1B[PX^_][^\x1B]*\x1B\\/g, '')           // DCS/SOS/PM/APC ... ST
+            // eslint-disable-next-line no-control-regex
+            .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');  // bare C0 controls (keep \t\n\r)
     }
 
     private listFiles(pathInput: string, maxEntries: number = 200): string {
