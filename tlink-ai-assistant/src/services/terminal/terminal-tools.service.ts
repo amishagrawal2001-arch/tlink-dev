@@ -888,7 +888,12 @@ Note: If there are still incomplete tasks, please complete them first before cal
             throw new Error('File system not available');
         }
         const configuredRoot = (this.config.get<string>('agentWorkingDir', '') || '').trim();
-        const root = configuredRoot ? this.resolvePath(configuredRoot) : '';
+        // Use the SAME normalization that resolvePath uses for file paths so the
+        // root and the resolved target share a base. Previously we called
+        // resolvePath(configuredRoot) here, which double-resolved `~` and
+        // relative roots and produced a root the resolved target could never
+        // live under — every patch then tripped the containment check.
+        const root = this.normalizeWorkingDir(configuredRoot);
         const files = this.parseUnifiedDiff(patch);
         const results: string[] = [];
         for (const file of files) {
@@ -896,8 +901,17 @@ Note: If there are still incomplete tasks, please complete them first before cal
             if (root) {
                 const normalizedRoot = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
                 if (!(resolved === root || resolved.startsWith(normalizedRoot))) {
-                    throw new Error(`Patch target خارج working dir: ${file.path}`);
+                    throw new Error(
+                        `Patch target is outside working dir "${root}": ${file.path} (resolved to ${resolved}). ` +
+                        `Use a path relative to the working dir, or update agentWorkingDir in settings.`
+                    );
                 }
+            }
+            // Ensure the parent directory exists so new-file patches don't
+            // ENOENT before we even write.
+            const parentDir = path.dirname(resolved);
+            if (parentDir && !fs.existsSync(parentDir)) {
+                fs.mkdirSync(parentDir, { recursive: true });
             }
             const original = fs.existsSync(resolved) ? fs.readFileSync(resolved, 'utf-8') : '';
             const updated = this.applyHunksToContent(original, file.hunks, file.path);

@@ -383,13 +383,73 @@ export class TabbyProviderService extends BaseAiProvider {
     }
 
     /**
-     * Transform message format - OpenAI-compatible format for Tabby
+     * Transform message format - OpenAI-compatible format for Tabby.
+     *
+     * Tabby's /v1beta/chat/completions validates every message against an
+     * OpenAI-style schema. If an assistant message carried tool_calls but we
+     * send only {role, content}, or if a tool-result message is missing its
+     * tool_call_id, the server 422s with "missing field tool_call_id".
+     *
+     * This mirrors the OpenAI provider's transform: expand tool-result
+     * messages (one per result, each with tool_call_id) and emit assistant
+     * messages with their tool_calls array intact.
      */
     protected transformMessages(messages: any[]): any[] {
-        return messages.map(msg => ({
-            role: msg.role,
-            content: String(msg.content ?? '')
-        }));
+        const result: any[] = [];
+
+        for (const msg of messages) {
+            // Tool-result messages -> role:'tool' with tool_call_id
+            if (msg.role === 'tool' || msg.toolResults) {
+                if (msg.toolResults && msg.toolResults.length > 0) {
+                    for (const tr of msg.toolResults) {
+                        if (tr.tool_use_id) {
+                            result.push({
+                                role: 'tool',
+                                tool_call_id: tr.tool_use_id,
+                                content: String(tr.content || '')
+                            });
+                        }
+                    }
+                } else if (msg.tool_use_id) {
+                    result.push({
+                        role: 'tool',
+                        tool_call_id: msg.tool_use_id,
+                        content: String(msg.content || '')
+                    });
+                }
+                continue;
+            }
+
+            // Assistant messages - preserve tool_calls array
+            if (msg.role === 'assistant') {
+                const assistantMsg: any = {
+                    role: 'assistant',
+                    content: String(msg.content ?? '')
+                };
+
+                if (msg.toolCalls && msg.toolCalls.length > 0) {
+                    assistantMsg.tool_calls = msg.toolCalls.map((tc: any) => ({
+                        id: tc.id,
+                        type: 'function',
+                        function: {
+                            name: tc.name,
+                            arguments: JSON.stringify(tc.input || {})
+                        }
+                    }));
+                }
+
+                result.push(assistantMsg);
+                continue;
+            }
+
+            // User / system messages - plain {role, content}
+            result.push({
+                role: msg.role,
+                content: String(msg.content ?? '')
+            });
+        }
+
+        return result;
     }
 
     private transformChatResponse(response: any): ChatResponse {
