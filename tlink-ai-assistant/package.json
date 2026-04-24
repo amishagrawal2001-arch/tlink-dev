@@ -6,7 +6,8 @@
     "typings": "typings/index.d.ts",
     "readme": "README.md",
     "scripts": {
-    "build": "webpack --progress --color && node build-fix.mjs",
+    "build": "jest && webpack --progress --color && node build-fix.mjs",
+    "build:skip-tests": "webpack --progress --color && node build-fix.mjs",
     "watch": "webpack --progress --color --watch",
     "agent:dev": "WATCHPACK_POLLING=true WATCHPACK_POLLING_INTERVAL=1000 WATCHPACK_IGNORE=node_modules ../node_modules/.bin/webpack --watch --color --config webpack.config.mjs --watch-options-poll=1000",
     "clean": "rimraf dist build",
