@@ -1368,7 +1368,10 @@ export class AiAssistantService {
         // 降低默认轮次，避免长时间循环
         const maxRounds = config.maxRounds || 6;
         const timeoutMs = config.timeoutMs || 120000;  // 默认 2 分钟
-        const repeatThreshold = config.repeatThreshold || 5;  // 重复调用阈值（提高到 5，避免正常多次调用被误判）
+        // Three identical tool calls in a row is already pathological — a
+        // normal iterative pattern is call → read → adjust → call with
+        // different args. Default 3 (was 5) so we catch loops faster.
+        const repeatThreshold = config.repeatThreshold || 3;
         const failureThreshold = config.failureThreshold || 3;  // 连续失败阈值（提高到 3，但添加无进展检测）
 
         const callbacks = {
@@ -1876,7 +1879,7 @@ export class AiAssistantService {
 
         const maxRounds = config.maxRounds || 6;
         const timeoutMs = config.timeoutMs || 120000;
-        const repeatThreshold = config.repeatThreshold || 5;
+        const repeatThreshold = config.repeatThreshold || 3;
         const failureThreshold = config.failureThreshold || 3;
         const plannerEnabled = (this.config.get<boolean>('agentPlannerEnabled', true) ?? true);
         const reviewerEnabled = (this.config.get<boolean>('agentReviewerEnabled', true) ?? true);
@@ -3242,7 +3245,11 @@ export class AiAssistantService {
             }
         }
 
-        // 4. 重复工具调用检测 (两个场景都检查)
+        // 4. 重复工具调用检测 (两个场景都检查).
+        // Two patterns we want to catch:
+        //   a) Same (tool, input) repeated N times in a row ("call ls, ls, ls...").
+        //   b) Alternating pair ping-pong ("ls, cd, ls, cd, ls, cd"). Classic
+        //      fix-check-fix-check loop that never completes.
         if (currentToolCalls.length > 0) {
             const recentHistory = state.toolCallHistory.slice(-config.repeatThreshold * 2);
 
@@ -3256,8 +3263,30 @@ export class AiAssistantService {
                     return {
                         shouldTerminate: true,
                         reason: 'repeated_tool',
-                        message: `Tool ${tc.name} was called ${repeatCount + 1} times; possible loop`
+                        message: `Tool ${tc.name} was called ${repeatCount + 1} times with the same input; possible loop`
                     };
+                }
+            }
+
+            // Alternating-pair ping-pong. If the last 6 history entries
+            // collapse to exactly 2 unique (name, inputHash) combos and each
+            // appears >= 3 times, we're almost certainly in a fix-check-fix
+            // cycle.
+            const tail = state.toolCallHistory.slice(-6);
+            if (tail.length >= 6) {
+                const sig = (r: { name: string; inputHash: string }) => `${r.name}::${r.inputHash}`;
+                const unique = new Set(tail.map(sig));
+                if (unique.size === 2) {
+                    const counts: Record<string, number> = {};
+                    for (const r of tail) counts[sig(r)] = (counts[sig(r)] || 0) + 1;
+                    const allAtLeastThree = Object.values(counts).every(c => c >= 3);
+                    if (allAtLeastThree) {
+                        return {
+                            shouldTerminate: true,
+                            reason: 'repeated_tool',
+                            message: 'Agent is ping-ponging between two tool calls; stopping before it burns the round budget.'
+                        };
+                    }
                 }
             }
         }

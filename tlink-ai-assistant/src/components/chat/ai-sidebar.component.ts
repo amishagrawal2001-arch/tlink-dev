@@ -89,6 +89,9 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
     maxTokens: number = 200000;
     tokenUsagePercent: number = 0;
 
+    // Debug panel — collapsed by default, toggled from the header.
+    showDebugPanel = false;
+
     private destroy$ = new Subject<void>();
     private shouldScrollToBottom = false;
     private destroyed = false;
@@ -1453,7 +1456,70 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
             event.preventDefault();
             event.stopPropagation();
             this.approvePending(false);
+        } else if (this.showDebugPanel) {
+            this.toggleDebugPanel();
         }
+    }
+
+    toggleDebugPanel(): void {
+        this.showDebugPanel = !this.showDebugPanel;
+        this.markUiDirty();
+    }
+
+    /**
+     * Produce annotated rows for the debug panel — one entry per message,
+     * with the tool_use ids it declares and the tool_result ids it carries,
+     * plus a rough token estimate and a one-line preview. Used by the
+     * inspector UI to surface mismatched ids and history drift at a glance.
+     */
+    getDebugMessageRows(): Array<{
+        role: string;
+        preview: string;
+        tokens: number;
+        toolCallIds?: string[];
+        toolResultIds?: string[];
+        orphan?: boolean;
+    }> {
+        const issues = new Set(this.getDebugToolPairingIssues());
+        return (this.messages || []).map((m: any) => {
+            const role = String(m.role || 'unknown');
+            const rawContent = typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '');
+            const preview = rawContent.replace(/\s+/g, ' ').slice(0, 140);
+            const tokens = Math.ceil((rawContent?.length || 0) / 4);
+            const toolCallIds = Array.isArray(m.toolCalls)
+                ? m.toolCalls.map((tc: any) => tc?.id).filter(Boolean)
+                : undefined;
+            const toolResultIds = Array.isArray(m.toolResults)
+                ? m.toolResults.map((tr: any) => tr?.tool_use_id).filter(Boolean)
+                : (m.tool_use_id ? [m.tool_use_id] : undefined);
+            const orphan = !!(toolResultIds && toolResultIds.some((id: string) => issues.has(id)));
+            return { role, preview, tokens, toolCallIds, toolResultIds, orphan };
+        });
+    }
+
+    /**
+     * Return the list of tool_result tool_use_ids that don't have a matching
+     * assistant.toolCalls[n].id anywhere earlier in the conversation. These
+     * are the ids that will make any provider reject the next turn.
+     */
+    getDebugToolPairingIssues(): string[] {
+        const knownIds = new Set<string>();
+        const issues: string[] = [];
+        for (const m of this.messages || []) {
+            const mAny = m as any;
+            if (mAny.role === 'assistant' && Array.isArray(mAny.toolCalls)) {
+                for (const tc of mAny.toolCalls) {
+                    if (tc?.id) knownIds.add(tc.id);
+                }
+            }
+            const resultIds = Array.isArray(mAny.toolResults)
+                ? mAny.toolResults.map((tr: any) => tr?.tool_use_id).filter(Boolean)
+                : (mAny.tool_use_id ? [mAny.tool_use_id] : []);
+            for (const id of resultIds) {
+                if (!knownIds.has(id)) issues.push(id);
+            }
+        }
+        return issues;
     }
 
     updateWorkingDir(value: string): void {

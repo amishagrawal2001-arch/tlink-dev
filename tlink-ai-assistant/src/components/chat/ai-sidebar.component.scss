@@ -243,6 +243,90 @@
     }
 }
 
+// Debug panel — appears between header and messages when showDebugPanel is on
+.ai-debug-panel {
+    flex: 0 0 auto;
+    max-height: 40%;
+    overflow: auto;
+    background: var(--ai-bg-secondary, #1b1d21);
+    border-bottom: 1px solid var(--ai-border, #2a2d33);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+    font-size: 11px;
+    color: var(--ai-text-secondary, #c0c4cc);
+
+    .debug-panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 6px 10px;
+        background: var(--ai-bg-tertiary, #23262b);
+        border-bottom: 1px solid var(--ai-border, #2a2d33);
+        font-weight: 600;
+        color: var(--ai-text-primary, #f8f9fa);
+
+        .debug-close {
+            padding: 0 6px;
+            font-size: 12px;
+            color: var(--ai-text-secondary, #c0c4cc);
+        }
+    }
+
+    .debug-panel-summary {
+        padding: 8px 10px;
+        border-bottom: 1px dashed var(--ai-border, #2a2d33);
+
+        > div {
+            margin-bottom: 3px;
+        }
+
+        .debug-bad {
+            color: #e06c75;
+        }
+
+        .debug-detail {
+            color: #b0b5bd;
+            font-size: 10px;
+        }
+    }
+
+    .debug-panel-list {
+        padding: 4px 0;
+    }
+
+    .debug-row {
+        padding: 4px 10px;
+        border-left: 3px solid transparent;
+
+        &.debug-row-user { border-left-color: #61afef; }
+        &.debug-row-assistant { border-left-color: #98c379; }
+        &.debug-row-system { border-left-color: #e5c07b; }
+        &.debug-row-tool { border-left-color: #c678dd; }
+        &.debug-row-orphan { background: rgba(224, 108, 117, 0.12); border-left-color: #e06c75; }
+
+        .debug-row-meta {
+            display: flex;
+            gap: 8px;
+            font-size: 10px;
+            color: var(--ai-text-muted, #8a8f99);
+            margin-bottom: 2px;
+            flex-wrap: wrap;
+
+            .debug-role { font-weight: 600; color: var(--ai-text-primary, #f8f9fa); text-transform: uppercase; }
+            .debug-tokens { color: #8a8f99; }
+            .debug-tooluse { color: #98c379; }
+            .debug-toolresult { color: #c678dd; }
+        }
+
+        .debug-row-preview {
+            font-size: 11px;
+            color: var(--ai-text-secondary, #c0c4cc);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+    }
+}
+
 // Messages container
 .ai-sidebar-messages {
     flex: 1 !important;

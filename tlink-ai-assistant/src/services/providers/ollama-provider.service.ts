@@ -248,13 +248,19 @@ export class OllamaProviderService extends BaseAiProvider {
     }
 
     /**
-     * Transform messages to native Ollama format
+     * Transform messages to native Ollama format. Native Ollama accepts
+     * user / assistant / system / tool roles — don't squash system into
+     * user (or worse, into assistant) because that silently drops the
+     * agent's planner / retry-hint instructions from the prompt.
      */
     private transformMessagesToNative(messages: any[]): any[] {
-        return messages.map(msg => ({
-            role: msg.role === 'assistant' ? 'assistant' : 'user',
-            content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
-        }));
+        const allowedRoles = new Set(['user', 'assistant', 'system', 'tool']);
+        return messages
+            .filter(msg => msg && msg.role)
+            .map(msg => ({
+                role: allowedRoles.has(msg.role) ? msg.role : 'user',
+                content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+            }));
     }
 
     /**
@@ -524,12 +530,20 @@ export class OllamaProviderService extends BaseAiProvider {
                                         // 新工具调用开始
                                         if (currentToolIndex !== index) {
                                             if (currentToolIndex >= 0) {
-                                                // 发送前一个工具调用的结束事件
-                                                let parsedInput = {};
+                                                // Flush prior tool call. If arguments
+                                                // didn't parse as JSON, preserve the raw
+                                                // text under `_raw` so the tool executor
+                                                // can surface a real error to the agent
+                                                // instead of silently dropping a bad call.
+                                                let parsedInput: any = {};
                                                 try {
                                                     parsedInput = JSON.parse(currentToolInput || '{}');
                                                 } catch (e) {
-                                                    // 使用原始输入
+                                                    this.logger.warn('Ollama tool-call arguments not valid JSON, passing raw', {
+                                                        name: currentToolCallName,
+                                                        raw: currentToolInput
+                                                    });
+                                                    parsedInput = { _raw: currentToolInput };
                                                 }
                                                 subscriber.next({
                                                     type: 'tool_use_end',
@@ -602,13 +616,17 @@ export class OllamaProviderService extends BaseAiProvider {
                         }
                     }
 
-                    // 发送最后一个工具调用的结束事件
+                    // Flush the trailing tool call at stream end.
                     if (currentToolIndex >= 0 && currentToolCallName && currentToolCallName.trim() !== '') {
-                        let parsedInput = {};
+                        let parsedInput: any = {};
                         try {
                             parsedInput = JSON.parse(currentToolInput || '{}');
                         } catch (e) {
-                            // 使用原始输入
+                            this.logger.warn('Ollama final tool-call arguments not valid JSON, passing raw', {
+                                name: currentToolCallName,
+                                raw: currentToolInput
+                            });
+                            parsedInput = { _raw: currentToolInput };
                         }
                         subscriber.next({
                             type: 'tool_use_end',
@@ -940,9 +958,15 @@ export class OllamaProviderService extends BaseAiProvider {
                 continue;
             }
 
-            // 用户消息
+            // Preserve user / system roles. The previous version coerced
+            // anything that wasn't 'user' to 'assistant', which silently
+            // converted system messages (planner / retry hints / tool-use
+            // instructions) into assistant text — the model then saw its
+            // own guidance as if it had said it, which is confusing and
+            // defeats the point of the system message.
+            const allowedRoles = new Set(['user', 'system']);
             result.push({
-                role: msg.role === 'user' ? 'user' : 'assistant',
+                role: allowedRoles.has(msg.role) ? msg.role : 'user',
                 content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
             });
         }

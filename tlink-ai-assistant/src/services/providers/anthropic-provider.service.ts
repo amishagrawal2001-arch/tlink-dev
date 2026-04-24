@@ -363,9 +363,14 @@ export class AnthropicProviderService extends BaseAiProvider {
                     }
                     result.push({ role: 'assistant', content: contentBlocks });
                 } else {
+                    // Anthropic rejects content blocks with empty text; skip
+                    // assistant messages whose content is empty entirely —
+                    // they carry no information and would fail validation.
+                    const text = String(msg.content || '');
+                    if (!text) continue;
                     result.push({
                         role: 'assistant',
-                        content: [{ type: 'text', text: String(msg.content || '') }]
+                        content: [{ type: 'text', text }]
                     });
                 }
                 continue;
