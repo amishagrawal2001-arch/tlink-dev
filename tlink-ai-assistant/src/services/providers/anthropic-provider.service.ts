@@ -118,13 +118,23 @@ export class AnthropicProviderService extends BaseAiProvider {
 
             const runStream = async () => {
                 try {
-                    const stream = await this.client!.messages.stream({
-                        model: this.config?.model || 'claude-3-sonnet',
-                        max_tokens: request.maxTokens || 1000,
-                        system: request.systemPrompt || this.getDefaultSystemPrompt(),
-                        messages: this.transformMessages(request.messages),
-                        temperature: request.temperature || 1.0,
-                    });
+                    // Pass the abort signal to the Anthropic SDK so
+                    // unsubscribing actually tears down the HTTP request.
+                    // Without this, abort() only flipped a flag that the
+                    // for-await loop checked AFTER the next chunk — the
+                    // inflight request kept streaming tokens to nobody
+                    // until the server closed the connection (a rate-limit
+                    // cost we were eating for every user-cancelled turn).
+                    const stream = await this.client!.messages.stream(
+                        {
+                            model: this.config?.model || 'claude-3-sonnet',
+                            max_tokens: request.maxTokens || 1000,
+                            system: request.systemPrompt || this.getDefaultSystemPrompt(),
+                            messages: this.transformMessages(request.messages),
+                            temperature: request.temperature || 1.0,
+                        },
+                        { signal: abortController.signal } as any
+                    );
 
                     for await (const event of stream) {
                         if (abortController.signal.aborted) break;

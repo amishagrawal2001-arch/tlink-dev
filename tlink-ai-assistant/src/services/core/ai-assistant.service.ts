@@ -2924,6 +2924,95 @@ export class AiAssistantService {
                     }
                 }
 
+                // MCP bridge tools that execute shell commands or call
+                // arbitrary remote tools need the same approval gate as
+                // `write_to_terminal`. Without this, a malicious or
+                // misconfigured MCP bridge exposing a dangerous tool would
+                // run unprompted through the agent. We gate both
+                // mcp_exec_command (shell) and mcp_call_tool (generic
+                // invoke-anything — tool_name was just validated against a
+                // safe regex in the bridge, but the ACTION could still be
+                // destructive so the human stays in the loop).
+                if (toolCall.name === 'mcp_exec_command' && toolCall.input?.command) {
+                    const approved = await this.agentApproval.requestApproval({
+                        id: toolCall.id,
+                        type: 'command',
+                        title: 'Approve MCP Command Execution',
+                        command: String(toolCall.input.command),
+                        detail: `The agent wants to run this command via the MCP bridge (session ${toolCall.input.tabId || 'default'}).`
+                    });
+                    if (!approved) {
+                        const duration = Date.now() - startTime;
+                        subscriber.next({
+                            type: 'tool_executed',
+                            toolCall: { id: toolCall.id, name: toolCall.name, input: toolCall.input },
+                            toolResult: {
+                                tool_use_id: toolCall.id,
+                                content: '⚠️ MCP command denied by user',
+                                is_error: true,
+                                duration
+                            }
+                        });
+                        results.push({
+                            tool_use_id: toolCall.id,
+                            name: toolCall.name,
+                            content: 'MCP command denied by user',
+                            is_error: true
+                        });
+                        if (agentState) {
+                            agentState.toolCallHistory.push({
+                                name: toolCall.name,
+                                input: toolCall.input,
+                                inputHash: this.hashInput(toolCall.input),
+                                success: false,
+                                timestamp: Date.now()
+                            });
+                        }
+                        continue;
+                    }
+                }
+
+                if (toolCall.name === 'mcp_call_tool') {
+                    const targetName = String(toolCall.input?.tool_name || '');
+                    const args = toolCall.input?.arguments ? JSON.stringify(toolCall.input.arguments) : '{}';
+                    const approved = await this.agentApproval.requestApproval({
+                        id: toolCall.id,
+                        type: 'command',
+                        title: 'Approve MCP Tool Invocation',
+                        command: `${targetName}(${args})`,
+                        detail: `The agent wants to invoke MCP bridge tool "${targetName}". Tool behaviour is defined by the bridge — review carefully.`
+                    });
+                    if (!approved) {
+                        const duration = Date.now() - startTime;
+                        subscriber.next({
+                            type: 'tool_executed',
+                            toolCall: { id: toolCall.id, name: toolCall.name, input: toolCall.input },
+                            toolResult: {
+                                tool_use_id: toolCall.id,
+                                content: '⚠️ MCP tool invocation denied by user',
+                                is_error: true,
+                                duration
+                            }
+                        });
+                        results.push({
+                            tool_use_id: toolCall.id,
+                            name: toolCall.name,
+                            content: 'MCP tool invocation denied by user',
+                            is_error: true
+                        });
+                        if (agentState) {
+                            agentState.toolCallHistory.push({
+                                name: toolCall.name,
+                                input: toolCall.input,
+                                inputHash: this.hashInput(toolCall.input),
+                                success: false,
+                                timestamp: Date.now()
+                            });
+                        }
+                        continue;
+                    }
+                }
+
                 if (toolCall.name === 'apply_patch' && toolCall.input?.patch) {
                     const patch = toolCall.input.patch;
                     const approved = await this.agentApproval.requestApproval({

@@ -204,23 +204,35 @@ export class RiskAssessmentService {
             }
         }
 
+        // CRITICAL BUG FIX: these three branches used to do
+        //   if (<condition> && maxSeverity < RiskLevel.MEDIUM)
+        // which is a STRING comparison. Because RiskLevel is a string enum
+        // with alphabetical ordering c < h < l < m, `'critical' < 'medium'`
+        // was TRUE — so every CRITICAL / HIGH assessment got silently
+        // DOWNGRADED to MEDIUM whenever the command also contained a
+        // system-modifying keyword like `rm` or `chmod`. This completely
+        // broke the risk band — `rm -rf /` was reported as MEDIUM for
+        // weeks. Compare via getSeverityLevel() (numeric) instead.
+        const mediumLevel = this.getSeverityLevel(RiskLevel.MEDIUM);
+        const currentLevel = () => this.getSeverityLevel(maxSeverity);
+
         // 2. 检查系统修改命令
         const hasSystemCommand = this.hasCommand(command, this.SYSTEM_COMMANDS);
-        if (hasSystemCommand && maxSeverity < RiskLevel.MEDIUM) {
+        if (hasSystemCommand && currentLevel() < mediumLevel) {
             maxSeverity = RiskLevel.MEDIUM;
             reasons.push('Includes system-modifying command');
         }
 
         // 3. 检查网络命令
         const hasNetworkCommand = this.hasCommand(command, this.NETWORK_COMMANDS);
-        if (hasNetworkCommand && maxSeverity < RiskLevel.MEDIUM) {
+        if (hasNetworkCommand && currentLevel() < mediumLevel) {
             maxSeverity = RiskLevel.MEDIUM;
             reasons.push('Includes network command; may involve external requests');
         }
 
         // 4. 检查是否主要是只读命令
         const hasOnlyReadonly = this.hasOnlyReadonlyCommands(command, this.READONLY_COMMANDS);
-        if (hasOnlyReadonly && maxSeverity < RiskLevel.MEDIUM) {
+        if (hasOnlyReadonly && currentLevel() < mediumLevel) {
             maxSeverity = RiskLevel.LOW;
             reasons.push('Contains only read-only safe commands');
         }

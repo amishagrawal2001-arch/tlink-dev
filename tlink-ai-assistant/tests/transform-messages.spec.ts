@@ -10,7 +10,7 @@
  * carry `tool_calls[*].id` and `tool_call_id` respectively.
  */
 import { TabbyProviderService } from '../src/services/providers/tabby-provider.service';
-import { OpenAIProviderService } from '../src/services/providers/openai-provider.service';
+import { OpenAiProviderService } from '../src/services/providers/openai-provider.service';
 import { OllamaProviderService } from '../src/services/providers/ollama-provider.service';
 
 class StubLogger {
@@ -67,8 +67,8 @@ describe('TabbyProviderService.transformMessages', () => {
     });
 });
 
-describe('OpenAIProviderService.transformMessages', () => {
-    const p = makeProvider(OpenAIProviderService);
+describe('OpenAiProviderService.transformMessages', () => {
+    const p = makeProvider(OpenAiProviderService);
 
     it('preserves tool_calls on assistant messages', () => {
         const out = callTransform(p, CONVERSATION);

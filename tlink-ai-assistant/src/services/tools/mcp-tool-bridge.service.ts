@@ -412,6 +412,15 @@ export class McpToolBridgeService {
             if (!explicit) {
                 throw new Error('mcp_call_tool requires input.tool_name');
             }
+            // Constrain the remote tool name to a safe shape so a clever
+            // input like "../internal/admin" can't break out of the bridge's
+            // URL router. `encodeURIComponent` on the caller side already
+            // escapes slashes for HTTP, but the bridge may still decode and
+            // interpret, so this is defense-in-depth. Real tool names on the
+            // MCP catalog are alphanumeric + underscore/hyphen.
+            if (!/^[a-zA-Z0-9_\-.]+$/.test(explicit)) {
+                throw new Error(`mcp_call_tool: invalid tool_name "${explicit}" — must match /^[a-zA-Z0-9_\\-.]+$/`);
+            }
             return [explicit];
         }
 

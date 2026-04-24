@@ -10,7 +10,7 @@
 // We need access to the protected `withRetry` method. Subclass the
 // concrete OpenAI provider (arbitrary choice — the method lives on
 // the base) and expose it.
-import { OpenAIProviderService } from '../src/services/providers/openai-provider.service';
+import { OpenAiProviderService } from '../src/services/providers/openai-provider.service';
 
 class StubLogger {
     debug(..._args: any[]) { /* noop */ }
@@ -19,11 +19,12 @@ class StubLogger {
     error(..._args: any[]) { /* noop */ }
 }
 
-class TestProvider extends OpenAIProviderService {
+class TestProvider extends OpenAiProviderService {
     constructor() {
         super(new StubLogger() as any);
         // Shorten the retry budget — we assert on attempt counts, not timing.
-        this.config = { retries: 3 } as any;
+        // `config` is protected on BaseAiProvider; bracket-access past TS.
+        (this as any).config = { retries: 3 };
     }
     public runWithRetry<T>(fn: () => Promise<T>): Promise<T> {
         return (this as any).withRetry(fn);
