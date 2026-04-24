@@ -25,6 +25,9 @@ export class ChatSettingsComponent implements OnInit, OnDestroy {
         enterToSend: boolean;
         soundEnabled: boolean;
         agentMaxRounds: number;
+        agentCompressionEnabled: boolean;
+        agentCompressionTrigger: number;
+        agentCompressionKeepTail: number;
     } = {
         chatHistoryEnabled: true,
         maxChatHistory: 100,
@@ -36,7 +39,10 @@ export class ChatSettingsComponent implements OnInit, OnDestroy {
         showAvatars: true,
         enterToSend: true,
         soundEnabled: true,
-        agentMaxRounds: 50
+        agentMaxRounds: 50,
+        agentCompressionEnabled: true,
+        agentCompressionTrigger: 40,
+        agentCompressionKeepTail: 20
     };
 
     // 翻译对象
@@ -107,6 +113,9 @@ export class ChatSettingsComponent implements OnInit, OnDestroy {
         this.settings.enterToSend = this.config.get('ui.enterToSend', true) ?? true;
         this.settings.soundEnabled = this.config.get('ui.soundEnabled', true) ?? true;
         this.settings.agentMaxRounds = this.config.get('agentMaxRounds', 50) ?? 50;
+        this.settings.agentCompressionEnabled = this.config.get<boolean>('agentCompressionEnabled', true) ?? true;
+        this.settings.agentCompressionTrigger = this.config.get<number>('agentCompressionTrigger', 40) ?? 40;
+        this.settings.agentCompressionKeepTail = this.config.get<number>('agentCompressionKeepTail', 20) ?? 20;
     }
 
     /**
@@ -193,7 +202,10 @@ export class ChatSettingsComponent implements OnInit, OnDestroy {
                 showAvatars: true,
                 enterToSend: true,
                 soundEnabled: true,
-                agentMaxRounds: 50
+                agentMaxRounds: 50,
+                agentCompressionEnabled: true,
+                agentCompressionTrigger: 40,
+                agentCompressionKeepTail: 20
             };
 
             // 保存所有设置

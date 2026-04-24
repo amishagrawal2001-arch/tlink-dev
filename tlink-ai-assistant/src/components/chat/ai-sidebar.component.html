@@ -201,6 +201,14 @@
 
             <!-- Input -->
             <div class="ai-sidebar-input">
+                <!-- Offer a one-click retry when the agent terminated on a
+                     recoverable failure (stream stall, empty-round cap,
+                     network blip). Hidden otherwise. -->
+                <div class="agent-retry" *ngIf="canRetryAgent && !pendingApproval && !isLoading">
+                    <span class="agent-retry-text">Agent stopped on a recoverable error.</span>
+                    <button class="btn btn-sm btn-primary" (click)="retryLastAgent()" title="Re-run the last agent task">Retry</button>
+                    <button class="btn btn-sm btn-link" (click)="canRetryAgent = false" title="Dismiss retry offer">Dismiss</button>
+                </div>
                 <div class="agent-approval" *ngIf="pendingApproval">
                     <div class="agent-approval-header">
                         <span class="agent-approval-title">{{ pendingApproval.title }}</span>

@@ -92,6 +92,13 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
     // Debug panel — collapsed by default, toggled from the header.
     showDebugPanel = false;
 
+    // Last prompt sent through the agent (null when no agent run is
+    // replay-eligible). Populated at send-time, cleared on a clean
+    // completion, preserved on a recoverable failure so the UI can
+    // offer a one-click retry instead of making the user retype.
+    lastAgentPrompt: string | null = null;
+    canRetryAgent = false;
+
     private destroy$ = new Subject<void>();
     private shouldScrollToBottom = false;
     private destroyed = false;
@@ -741,6 +748,12 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
             return;
         }
 
+        // Remember the prompt so we can offer one-click retry on
+        // recoverable failures. Clear the retry flag now that a new
+        // run is starting.
+        this.lastAgentPrompt = content.trim();
+        this.canRetryAgent = false;
+
         // 添加用户消息
         const userMessage: ChatMessage = {
             id: this.generateId(),
@@ -881,11 +894,18 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
      */
     private handleStreamError(error: any, message: ChatMessage): void {
         this.logger.error('Agent stream error', error);
-        message.content += `\n\n❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        const msg = error instanceof Error ? error.message : String(error ?? 'Unknown error');
+        message.content += `\n\n❌ Error: ${msg}`;
         this.isLoading = false;
         this.shouldScrollToBottom = true;
         this.updateTokenUsage();
         this.saveChatHistory();
+        // Stream-level errors (network, upstream 5xx, timeouts) are
+        // transient — keep the retry offer alive for these. Auth /
+        // validation errors (401, 422) have already bailed out via
+        // withRetry's 4xx short-circuit so they won't reach here.
+        this.canRetryAgent = !!this.lastAgentPrompt && this.isRecoverableFailure(msg);
+        this.markUiDirty();
     }
 
     /**
@@ -896,6 +916,46 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
         this.updateTokenUsage();
         this.saveChatHistory();
         this.shouldScrollToBottom = true;
+        // A "complete" that actually carries a recoverable-failure warning
+        // (empty-round cap, stream stall, no-progress termination) should
+        // still offer retry. The content of the message ends up carrying
+        // the warning text — match on known phrases we emit.
+        const content = typeof message.content === 'string' ? message.content : '';
+        this.canRetryAgent = !!this.lastAgentPrompt && this.isRecoverableFailure(content);
+        this.markUiDirty();
+    }
+
+    /**
+     * Decide whether a terminated / errored run is worth offering a
+     * one-click retry for. We retry only on failure modes that are
+     * likely to succeed a second time (transient network, stream
+     * stall, weak-model empty rounds). Explicit user cancels and
+     * authoritative "task complete" runs do NOT get a retry button.
+     */
+    private isRecoverableFailure(text: string): boolean {
+        if (!text) return false;
+        const patterns: RegExp[] = [
+            /stream stalled/i,
+            /stream failed/i,
+            /no tool calls for 2 rounds/i,
+            /producing text but no tool calls/i,
+            /no progress made/i,
+            /ping-ponging between two tool calls/i,
+            /network (error|timeout|unavailable)/i,
+            /econnreset|etimedout|enotfound/i,
+            /upstream (error|5\d\d)/i
+        ];
+        return patterns.some(re => re.test(text));
+    }
+
+    retryLastAgent(): void {
+        if (!this.lastAgentPrompt || this.isLoading) {
+            return;
+        }
+        const prompt = this.lastAgentPrompt;
+        this.canRetryAgent = false;
+        this.markUiDirty();
+        void this.onSendMessageWithAgent(prompt);
     }
 
     /**

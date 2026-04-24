@@ -49,6 +49,16 @@ jobs:
     - name: Lint
       run: yarn run lint
 
+    # Run the AI-assistant plugin's jest suite. The root build pipeline
+    # invokes webpack directly (scripts/build-modules.mjs), so the
+    # `jest && webpack` gate in the plugin's own `npm run build` never
+    # fires during CI. Running the suite here closes that gap so a
+    # regression in the risk catalog / transformMessages / retry logic
+    # fails a push before it lands. Tests take ~5 seconds and only
+    # touch pure logic — no browser / Electron setup needed.
+    - name: AI-assistant plugin tests
+      run: yarn --cwd tlink-ai-assistant run test
+
   macOS-Build:
     runs-on: macos-15
     needs: Lint

@@ -117,6 +117,54 @@
             </div>
             <small class="form-text">{{ t.chatSettings.agentMaxRoundsDesc }}</small>
         </div>
+
+        <!-- Context compression knobs. The three settings below were
+             previously config-only (edit-the-JSON) — users couldn't
+             discover them. Sensible defaults shipped, but letting
+             power users tune the trigger / keep-tail is cheap. -->
+        <div class="form-check">
+            <input
+                type="checkbox"
+                id="agentCompressionEnabled"
+                [(ngModel)]="settings.agentCompressionEnabled"
+                (change)="saveSetting('agentCompressionEnabled', settings.agentCompressionEnabled)">
+            <label for="agentCompressionEnabled">
+                <strong>Context compression</strong>
+                <span class="option-desc">Collapse older turns into a one-line summary once history passes the trigger. Non-destructive — the UI still shows the full transcript.</span>
+            </label>
+        </div>
+
+        <div class="form-group" *ngIf="settings.agentCompressionEnabled">
+            <label>Compression trigger</label>
+            <div class="input-with-unit">
+                <input
+                    type="number"
+                    class="form-control"
+                    [(ngModel)]="settings.agentCompressionTrigger"
+                    (change)="saveSetting('agentCompressionTrigger', settings.agentCompressionTrigger)"
+                    min="10"
+                    max="200"
+                    step="10">
+                <span class="unit">messages</span>
+            </div>
+            <small class="form-text">Fire compression once the conversation reaches this many messages. Lower = more aggressive token savings.</small>
+        </div>
+
+        <div class="form-group" *ngIf="settings.agentCompressionEnabled">
+            <label>Keep last N verbatim</label>
+            <div class="input-with-unit">
+                <input
+                    type="number"
+                    class="form-control"
+                    [(ngModel)]="settings.agentCompressionKeepTail"
+                    (change)="saveSetting('agentCompressionKeepTail', settings.agentCompressionKeepTail)"
+                    min="5"
+                    max="100"
+                    step="5">
+                <span class="unit">messages</span>
+            </div>
+            <small class="form-text">Recent messages kept full-size for the current task context. The head (system + first user turn) is always preserved.</small>
+        </div>
     </div>
 
     <!-- 聊天历史 -->
