@@ -1421,10 +1421,16 @@ export class AiAssistantService {
                 let roundTextContent = '';
 
                 return new Promise<void>((resolve, reject) => {
-                    // 构建当前轮次的请求
+                    // 构建当前轮次的请求. Compress the middle of a long
+                    // conversation before sending it upstream — keeps the
+                    // head (system + first user turn) and a verbatim tail,
+                    // folds everything else into one summary system message.
+                    // The stored `conversationMessages` is untouched so the
+                    // UI still shows the full history and any bug-hunt can
+                    // inspect what actually happened.
                     const roundRequest: ChatRequest = {
                         ...request,
-                        messages: conversationMessages,
+                        messages: this.compressConversationHistory(conversationMessages),
                         enableTools: true
                     };
 
@@ -2087,7 +2093,10 @@ export class AiAssistantService {
 
                 const roundRequest: ChatRequest = {
                     ...request,
-                    messages: state.messages || [],
+                    // Compress the middle of a long conversation before
+                    // dispatch (see compressConversationHistory for details).
+                    // Graph state keeps the uncompressed history.
+                    messages: this.compressConversationHistory(state.messages || []),
                     enableTools: true,
                     tools: this.terminalTools.getToolDefinitions()
                 };
@@ -4075,6 +4084,117 @@ ${workingDirLine}
     private shouldFetchTerminalCwd(message: string): boolean {
         const text = (message || '').toLowerCase();
         return /current\s+working\s+dir|working\s+dir|working\s+directory|current\s+dir|current\s+directory|\bcwd\b|\bpwd\b|where\s+am\s+i/.test(text);
+    }
+
+    /**
+     * Compress the middle of a long conversation so we don't pay for
+     * hundreds of messages on every round. Non-destructive — returns a
+     * new array; the caller's stored history is unchanged, so the UI
+     * and any future debugging still see the full transcript.
+     *
+     * Keeps the HEAD (leading system messages + the first user turn) and
+     * the TAIL (last N messages verbatim) so the model has enough recent
+     * context to reason on the current task. The MIDDLE gets folded into
+     * a single system message that lists the user intents and the tools
+     * that ran (name + success/failure + tiny content preview). Lossy by
+     * design; this is a token-budget tool, not a memory system.
+     *
+     * Triggers when messages.length >= 40 (configurable via
+     * `agentCompressionTrigger`) and reduces to ~keepTail + 2 messages.
+     */
+    private compressConversationHistory(messages: ChatMessage[]): ChatMessage[] {
+        if (!Array.isArray(messages) || messages.length === 0) return messages;
+
+        const enabled = this.config.get<boolean>('agentCompressionEnabled', true) !== false;
+        if (!enabled) return messages;
+
+        const trigger = Math.max(10, this.config.get<number>('agentCompressionTrigger', 40) || 40);
+        const keepTail = Math.max(5, this.config.get<number>('agentCompressionKeepTail', 20) || 20);
+
+        if (messages.length < trigger) return messages;
+
+        // Head: leading system messages + the first user turn that follows
+        // them. Most conversations have 0-1 system messages at the front
+        // plus the original user question; keeping both anchors the model.
+        let headEnd = 0;
+        while (headEnd < messages.length && messages[headEnd].role === MessageRole.SYSTEM) {
+            headEnd++;
+        }
+        if (headEnd < messages.length && messages[headEnd].role === MessageRole.USER) {
+            headEnd++;
+        }
+        const head = messages.slice(0, headEnd);
+        const tail = messages.slice(-keepTail);
+
+        // Safety: if head + tail already covers everything, don't collapse.
+        if (head.length + tail.length >= messages.length) return messages;
+
+        const middle = messages.slice(head.length, messages.length - keepTail);
+        if (middle.length === 0) return messages;
+
+        const summary: ChatMessage = {
+            id: this.generateId(),
+            role: MessageRole.SYSTEM,
+            content: this.summarizeForCompression(middle),
+            timestamp: new Date()
+        };
+
+        this.logger.info('Compressed conversation history', {
+            originalCount: messages.length,
+            compressedCount: head.length + 1 + tail.length,
+            collapsedMiddleCount: middle.length
+        });
+
+        return [...head, summary, ...tail];
+    }
+
+    private summarizeForCompression(middle: ChatMessage[]): string {
+        const lines: string[] = [
+            `[Conversation summary — ${middle.length} earlier messages folded for token budget. Full history is preserved in the UI and debug panel.]`
+        ];
+        for (const msg of middle) {
+            const role = msg.role;
+            if (role === MessageRole.USER) {
+                const text = this.compactContent(msg.content, 240);
+                if (text) lines.push(`USER: ${text}`);
+            } else if (role === MessageRole.ASSISTANT) {
+                const toolNames = Array.isArray((msg as any).toolCalls)
+                    ? (msg as any).toolCalls.map((tc: any) => tc?.name).filter(Boolean)
+                    : [];
+                const text = this.compactContent(msg.content, 180);
+                if (toolNames.length > 0) {
+                    const prefix = `ASSISTANT → tools: [${toolNames.join(', ')}]`;
+                    lines.push(text ? `${prefix} — ${text}` : prefix);
+                } else if (text) {
+                    lines.push(`ASSISTANT: ${text}`);
+                }
+            } else if (role === MessageRole.TOOL) {
+                const results = Array.isArray((msg as any).toolResults) ? (msg as any).toolResults : [];
+                if (results.length === 0 && (msg as any).tool_use_id) {
+                    lines.push(`TOOL [${this.compactContent(msg.content, 120)}]`);
+                }
+                for (const r of results) {
+                    const status = r.is_error ? 'ERROR' : 'OK';
+                    lines.push(`TOOL ${r.name || r.tool_use_id || '?'} [${status}]: ${this.compactContent(r.content, 120)}`);
+                }
+            } else if (role === MessageRole.SYSTEM) {
+                // Nested system messages in the middle are usually retry
+                // hints or earlier compression artifacts; keep them terse.
+                const text = this.compactContent(msg.content, 200);
+                if (text && !/^\[Conversation summary/i.test(text)) {
+                    lines.push(`SYSTEM: ${text}`);
+                }
+            }
+        }
+        return lines.join('\n');
+    }
+
+    private compactContent(value: any, max: number): string {
+        if (value == null) return '';
+        const str = typeof value === 'string' ? value : JSON.stringify(value);
+        const clean = str.replace(/\s+/g, ' ').trim();
+        if (!clean) return '';
+        return clean.length > max ? clean.slice(0, max - 1) + '…' : clean;
     }
 
     /**
