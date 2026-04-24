@@ -1,6 +1,6 @@
 {
     "name": "tlink-ai-assistant",
-    "version": "1.0.38",
+    "version": "1.0.40",
     "description": "Tlink terminal AI assistant plugin - supports multiple AI providers (OpenAI, Anthropic, Minimax, GLM, Ollama, vLLM) and MCP servers",
     "main": "dist/index.js",
     "typings": "typings/index.d.ts",

@@ -2,6 +2,116 @@
 
 All notable changes to the Tlink AI Assistant plugin will be documented in this file.
 
+## [1.0.40] - Agent Hardening + Observability
+
+Large bug-fix + hardening release across the AI Agent pipeline.
+Shipped with a new 57-test jest suite and a CI test gate so the class
+of regressions this release fixes can't silently return.
+
+### Security / correctness (critical)
+- **CRITICAL: Risk-band downgrade fixed.** Every dangerous command
+  (`rm -rf /`, `sudo rm`, fork bombs, `mkfs`, `curl | sh`, Cisco
+  `reload` / `format`) had been silently downgraded to MEDIUM risk
+  because `maxSeverity < RiskLevel.MEDIUM` was doing string
+  comparison (`'critical' < 'medium'` is TRUE alphabetically). The
+  risk catalog was functionally broken for weeks. Now compares via
+  numeric severity. Caught by the new test suite on first run.
+- **Risk patterns expanded & case-normalized.** Every pattern now
+  uses `/i` so `RM -RF /` or `Conf T` can't bypass. Added patterns
+  for `shred` on root, `mkfs`, raw-device redirects, classic fork
+  bomb `:(){:|:&};:`, `curl|sh` / `wget|bash` pipelines, and Cisco
+  gaps (`copy running-config`, `boot system`, `delete flash:`,
+  `format flash:`, `tftp`).
+- **MCP bridge approval gates.** `mcp_exec_command` and
+  `mcp_call_tool` now prompt for approval before execution, matching
+  the gate on `write_to_terminal` / `apply_patch`. Previously any
+  MCP bridge tool could execute unprompted. `mcp_call_tool` also
+  validates `tool_name` against `/^[a-zA-Z0-9_\-.]+$/`.
+- **Secret scrubber.** New recursive redactor applied at tool-input
+  logs and provider `sanitizeRequest` / `sanitizeResponse`. Catches
+  Bearer tokens, OpenAI `sk-*`, Anthropic `sk-ant-*`, Google
+  `AIza*`, AWS `AKIA*`/`ASIA*`, GitHub `ghp_`/`gho_`/etc., Slack
+  `xox*-`, curl Authorization headers, named `api_key=` /
+  `password=` assignments, and 40+ char hex blobs.
+
+### Provider pipeline fixes
+- **Tabby 422 "missing tool_call_id".** `transformMessages` was
+  flattening every message to `{role, content}`, dropping
+  `tool_calls` and `tool_call_id`. `chatStream` also ignored
+  `delta.tool_calls` so tool calls from Tabby were silently
+  dropped. Both fixed.
+- **openai-compatible.service.ts:** same bug, same fix.
+- **Ollama:** fallback branch in `transformMessages` was relabeling
+  `system` → `assistant`. Now preserves user/system explicitly.
+- **Anthropic stream abort wiring.** SDK `messages.stream()` now
+  receives the AbortController signal so unsubscribe actually tears
+  down the HTTP request. Also skips empty assistant `text` blocks.
+- **Groq `content:null`** coerced to empty string.
+- **withRetry no longer retries 4xx.** 401/422/404 bail
+  immediately; respects `Retry-After` on 429.
+- **apply_patch workdir false-positive.** Root and target now use
+  the same `normalizeWorkingDir` path. English error message; new-
+  file patches auto-create parent dirs. CRLF-file + LF-patch no
+  longer fails context matching.
+
+### Agent-loop safety
+- **tool_use_id alignment.** Tool results always bind
+  `tool_use_id = toolCall.id` before history append.
+- **Stream timeout.** Both loops race against a hard deadline so a
+  silent upstream can't wedge the Promise forever.
+- **Empty-round retry cap.** "Text but no tool calls" capped at 1
+  retry with a one-shot nudge; second empty round terminates.
+- **Ping-pong detection.** Detects A→B→A→B→A cycles the same-call-N×
+  rule missed. Default `repeatThreshold` lowered 5 → 3.
+- **Tool-output truncation.** Over ~10KB trimmed to first 8KB +
+  last 2KB + elision marker before hitting history.
+- **Context compression.** At 40+ messages, middle collapses into
+  one summary system message. Non-destructive. Tunable via
+  `agentCompressionEnabled` / `Trigger` / `KeepTail`.
+- **Retry-hint dedup.** Identical system hints no longer stack.
+
+### UX / observability
+- **Debug panel.** New bug-icon toggle in the sidebar header — a
+  compact inspector showing provider/model/token estimate, orphaned
+  tool_use_ids, and per-message rows with role / tokens / tool ids
+  / preview. Orphan rows highlighted red.
+- **Settings UI for agent knobs.** Compression trigger + keep-tail
+  + master switch now editable in the chat settings pane.
+- **One-click retry** bar above the input when the agent terminates
+  on a transient failure (stream stalled, empty-round cap, ping-
+  pong, network 5xx). Does NOT appear for auth/validation errors.
+- **Approval modal hardening.** Esc resolves to deny; buttons
+  disable after first click.
+- **Draggable sidebar header** + close guard on active agent runs.
+
+### Tool hardening
+- **`write_to_terminal` input validator** rejects non-string,
+  empty, >2000 chars, >3 newlines, or Markdown-code-fence-wrapped
+  commands. Fails at dispatch with a clear error.
+- **Tool descriptions rewritten** so small models pick `list_files`
+  / `read_file` for "list the scripts" / "what does X say" instead
+  of writing hallucinated output to the terminal.
+- **`read_file` 5MB size cap** so runaway reads can't OOM the
+  renderer.
+- **`git_add` refuses flag-shaped args (`-*`) and pathspec magic
+  (`:*`). `git_commit` caps message length and rejects control
+  chars.
+
+### Infrastructure
+- **57-test jest suite** across 4 specs covering risk patterns,
+  `transformMessages` round-tripping, `withRetry` 4xx handling, and
+  history compression. Runs in ~5 seconds.
+- **Tests gate the build.** `npm run build` runs
+  `jest && webpack && build-fix`; `build:skip-tests` as escape
+  hatch. CI Lint job also runs the suite so regressions fail at
+  push.
+
+### Help
+- New sections under "AI Agent" covering the debug panel, the
+  compression config keys, and the regression tests.
+
+---
+
 ## [1.0.39] - Tabby Provider Integration
 
 ### Added
