@@ -3,6 +3,7 @@ import { Observable, of } from 'rxjs';
 import { IBaseAiProvider, ProviderConfig, AuthConfig, ProviderCapability, HealthStatus, ValidationResult, ProviderInfo, PROVIDER_DEFAULTS } from '../../types/provider.types';
 import { ChatRequest, ChatResponse, CommandRequest, CommandResponse, ExplainRequest, ExplainResponse, AnalysisRequest, AnalysisResponse, StreamEvent, MessageRole } from '../../types/ai.types';
 import { LoggerService } from '../core/logger.service';
+import { scrubSecrets } from '../security/secret-scrubber';
 
 /**
  * 基础AI提供商抽象类
@@ -402,28 +403,27 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
     }
 
     /**
-     * 清理请求数据（移除敏感信息）
+     * Remove credentials from request data before logging. Previously only
+     * scrubbed top-level `apiKey` and one header — messages could still
+     * carry `curl -H "Authorization: Bearer …"` or equivalent inside the
+     * user's prompt, and that would flow to dev consoles untouched. Now
+     * runs the full recursive secret scrubber which catches credential
+     * patterns regardless of nesting depth.
      */
     protected sanitizeRequest(request: any): any {
-        const sanitized = { ...request };
-        if (sanitized.apiKey) {
-            sanitized.apiKey = '***';
-        }
-        if (sanitized.headers?.Authorization) {
-            sanitized.headers.Authorization = '***';
-        }
-        return sanitized;
+        const base = { ...(request || {}) };
+        if (base.apiKey) base.apiKey = '***';
+        if (base.headers?.Authorization) base.headers = { ...base.headers, Authorization: '***' };
+        return scrubSecrets(base);
     }
 
     /**
-     * 清理响应数据
+     * Remove credentials from response data before logging.
      */
     protected sanitizeResponse(response: any): any {
-        const sanitized = { ...response };
-        if (sanitized.data?.apiKey) {
-            sanitized.data.apiKey = '***';
-        }
-        return sanitized;
+        const base = { ...(response || {}) };
+        if (base.data?.apiKey) base.data = { ...base.data, apiKey: '***' };
+        return scrubSecrets(base);
     }
 
     /**

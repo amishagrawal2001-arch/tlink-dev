@@ -446,7 +446,33 @@ a:hover { text-decoration: underline; }
 <tr><td>Tool keeps saying "Unknown tool"</td><td>MCP server disconnected, or the model hallucinated a tool name. Restart the agent or the connected MCP server.</td></tr>
 <tr><td>Weak model gets stuck in a loop</td><td>Switch the engine to LangGraph explicitly &mdash; planner/reviewer scaffolding helps small models.</td></tr>
 <tr><td>Agent won't run a command it should be allowed to</td><td>Check <b>Settings &rarr; AI Assistant &rarr; Security</b> &mdash; the risk band might be stricter than you want. Password-gated commands always prompt regardless of settings.</td></tr>
+<tr><td>Agent loops with no tool calls, same text each round</td><td>Empty-round retries are capped at 1 &mdash; the second empty round terminates with a warning. If you hit this often, the model likely doesn't support tool use well; switch to a stronger model or use Chat mode for that question.</td></tr>
+<tr><td>Conversation feels slow / hitting token limits on long sessions</td><td>History compression kicks in at 40 messages &mdash; the middle turns get folded into a one-line summary per round. If you want to disable it, set <code>agentCompressionEnabled: false</code> in <b>Settings</b> (full history still sends, but you pay for every token).</td></tr>
 </table>
+
+<h3>Debug panel (inspect the conversation)</h3>
+<p>The sidebar header has a <b>bug icon</b> next to <b>Export</b>. Click it to toggle a compact inspector between the header and the message list. Shows:</p>
+<ul>
+<li><b>Provider / model / message count / token estimate</b> at the top.</li>
+<li><b>Orphaned tool_use_ids</b> in red when present &mdash; the class of bug where a tool result can't find its tool call is now one click away instead of a log-diving session.</li>
+<li>One row per message with role, token estimate, tool_use &amp; tool_result ids, and a one-line preview. Rows with mismatched ids get highlighted red.</li>
+</ul>
+<p>Press <kbd>Esc</kbd> to close the panel. Safe to leave open; it's reactive and doesn't change agent behavior.</p>
+
+<h3>Context compression knobs</h3>
+<p>Three config keys govern how aggressively long conversations get collapsed before dispatch:</p>
+<table>
+<tr><th>Key</th><th>Default</th><th>What it does</th></tr>
+<tr><td><code>agentCompressionEnabled</code></td><td><code>true</code></td><td>Master switch. Set <code>false</code> to always send full history (and pay the tokens).</td></tr>
+<tr><td><code>agentCompressionTrigger</code></td><td><code>40</code></td><td>How many messages the history must reach before compression fires. Lower = more aggressive.</td></tr>
+<tr><td><code>agentCompressionKeepTail</code></td><td><code>20</code></td><td>How many recent messages are kept verbatim. The head (system + first user turn) is always preserved.</td></tr>
+</table>
+<p>Compression is non-destructive &mdash; the UI and debug panel still see the full history. Only the payload sent to the provider is trimmed.</p>
+
+<h3>Regression tests</h3>
+<p>The plugin ships a small jest suite covering the pieces that have historically drifted: risk-pattern coverage, provider <code>transformMessages</code> round-tripping, <code>withRetry</code> 4xx handling, and history compression. Run from <code>tlink-ai-assistant/</code>:</p>
+<pre><code>./node_modules/.bin/jest</code></pre>
+<p>57 tests across 4 suites; takes ~5 seconds. Any change to the risk catalog, provider message shapes, or retry logic should keep them green.</p>
 </div>
 <a href="#" class="back-top">&uarr; Back to top</a>
 

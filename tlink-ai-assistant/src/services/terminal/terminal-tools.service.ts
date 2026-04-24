@@ -5,6 +5,7 @@ import { ConfigProviderService } from '../core/config-provider.service';
 import { EditorIntegrationService } from '../editor/editor-integration.service';
 import { McpToolBridgeService } from '../tools/mcp-tool-bridge.service';
 import { GitToolsService } from '../tools/git-tools.service';
+import { scrubSecrets } from '../security/secret-scrubber';
 
 /**
  * Terminal tool definitions
@@ -621,7 +622,11 @@ Note: If there are still incomplete tasks, please complete them first before cal
             throw new Error(errorMsg);
         }
 
-        this.logger.info('Executing tool call', { name: toolCall.name, input: toolCall.input });
+        // Scrub the input before logging. Tool inputs frequently contain
+        // bearer tokens, API keys, or passwords pasted into `curl` / `ssh`
+        // style commands. Logs land in dev consoles, crash reports,
+        // user-submitted screenshots; treating them as private is wishful.
+        this.logger.info('Executing tool call', { name: toolCall.name, input: scrubSecrets(toolCall.input) });
 
         try {
             let result: string;
@@ -648,6 +653,7 @@ Note: If there are still incomplete tasks, please complete them first before cal
                     );
                     break;
                 case 'write_to_terminal':
+                    this.validateShellCommandInput(toolCall.input.command);
                     result = await this.writeToTerminal(
                         toolCall.input.command,
                         toolCall.input.execute ?? true,
@@ -1352,6 +1358,51 @@ Note: If there are still incomplete tasks, please complete them first before cal
 
         const output = this.readTerminalOutput(clampedLines, terminalIndex);
         return `=== network_exec: ${command} ===\n${output}`;
+    }
+
+    /**
+     * Reject `write_to_terminal` inputs that clearly aren't a shell command
+     * at dispatch time, before we actually send the bytes to the user's
+     * terminal. The "list all scripts" regression produced a `command` that
+     * was a ~400-char multi-line block of hallucinated `npm run` output —
+     * the terminal happily wrote the whole thing as if it were a command,
+     * which is both confusing and abusable. This catches that pattern up
+     * front with a clear error the model can recover from.
+     *
+     * Rules:
+     *  - Must be a non-empty string.
+     *  - Max 2000 chars. (A real one-liner fits; hallucinated blobs don't.)
+     *  - Max 3 newlines. Here-docs and multi-line pipes are rare but legal;
+     *    4+ lines is almost always a narrative block, not a command.
+     *  - Must not be wrapped entirely in a Markdown code fence (model
+     *    leaking its own rendering into the tool arg).
+     */
+    private validateShellCommandInput(command: unknown): void {
+        if (typeof command !== 'string') {
+            throw new Error('write_to_terminal: `command` must be a string.');
+        }
+        const trimmed = command.trim();
+        if (!trimmed) {
+            throw new Error('write_to_terminal: `command` is empty.');
+        }
+        if (command.length > 2000) {
+            throw new Error(
+                `write_to_terminal: \`command\` is ${command.length} chars (limit 2000). ` +
+                'Pass ONE executable shell command, not a document or output dump.'
+            );
+        }
+        const newlineCount = (command.match(/\n/g) || []).length;
+        if (newlineCount > 3) {
+            throw new Error(
+                `write_to_terminal: \`command\` has ${newlineCount} newlines. ` +
+                'Pass a single-line command (or a short here-doc). Do not paste multi-line output.'
+            );
+        }
+        if (/^```/m.test(trimmed)) {
+            throw new Error(
+                'write_to_terminal: `command` looks like a Markdown code block. Pass the raw command text, not its fence.'
+            );
+        }
     }
 
     private async writeToTerminal(command: string, execute: boolean, terminalIndex?: number): Promise<string> {

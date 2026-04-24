@@ -3182,11 +3182,19 @@ export class AiAssistantService {
         // in conversation history. A missing id will make every downstream
         // provider (Anthropic, OpenAI, Tabby, Groq…) reject the turn.
         const sanitized = results.map(r => {
+            const withId = r.tool_use_id
+                ? r
+                : ({ ...r, tool_use_id: `orphan_${this.generateId()}` } as ToolResult);
             if (!r.tool_use_id) {
                 this.logger.error('Tool result missing tool_use_id; synthesizing a placeholder', { name: r.name });
-                return { ...r, tool_use_id: `orphan_${this.generateId()}` };
             }
-            return r;
+            // Truncate per-tool content before it goes upstream. A single
+            // `read_file` / `git_log` / `show tech-support` can easily dump
+            // hundreds of KB — those bytes get billed every subsequent round
+            // for little marginal signal. UI events emit the full content
+            // separately; only the prompt copy gets trimmed.
+            const truncated = this.truncateToolContent(String(withId.content ?? ''));
+            return { ...withId, content: truncated } as ToolResult;
         });
 
         const content = sanitized.map(r => {
@@ -3211,6 +3219,27 @@ export class AiAssistantService {
             // 保留 tool_use_id 供简单识别
             tool_use_id: sanitized[0]?.tool_use_id || ''
         };
+    }
+
+    /**
+     * Shrink a tool result before it goes into the model's history. Strategy:
+     * if under HEAD+TAIL bytes, return as-is. Otherwise keep the first HEAD
+     * bytes (so initial structure / headers survive) + the last TAIL bytes
+     * (so the most recent output — usually the actual answer — survives),
+     * with an explicit elision marker in between so the model knows bytes
+     * were dropped. Typical commands (`git log`, `show running-config`) have
+     * their signal at the start OR end; this bracket preserves both.
+     */
+    private truncateToolContent(content: string): string {
+        if (!content) return content;
+        const HEAD = 8192;
+        const TAIL = 2048;
+        const THRESHOLD = HEAD + TAIL + 256; // small slack so we don't trim near-boundary outputs
+        if (content.length <= THRESHOLD) return content;
+        const head = content.slice(0, HEAD);
+        const tail = content.slice(-TAIL);
+        const elided = content.length - HEAD - TAIL;
+        return `${head}\n\n[… ${elided} bytes elided to fit context — UI shows full output …]\n\n${tail}`;
     }
 
     /**
