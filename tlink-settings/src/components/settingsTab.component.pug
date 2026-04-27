@@ -262,7 +262,7 @@
                     .form-line
                         .header
                             .title(translate) Server URL
-                            .description(translate) License server. Accepts a host (e.g. http://localhost:4000), a versioned API root (e.g. https://…/dev/api/v1), or a licenses-rooted URL (e.g. https://…/api/v1/licenses/). Health, activate, validate, etc. are appended automatically.
+                            .description(translate) License server. Accepts a host (e.g. http://localhost:4000), an API root (e.g. https://…/dev/api/v1), or a licenses-rooted URL (e.g. https://…/api/v1/licenses/). Health hits ${apiRoot}/health and license actions hit ${apiRoot}/licenses/&lt;action&gt; — automatically derived from whichever form you paste.
                         .license-input-row
                             input.form-control(
                                 type='text',

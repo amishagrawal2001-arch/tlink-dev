@@ -228,33 +228,30 @@ export class TlinkLicenseService implements OnDestroy {
     }
 
     /**
-     * Compose an endpoint URL from `serverUrl` + a license action name.
+     * Derive the API root + URL shape from the configured server URL.
      *
-     * Three base-URL shapes are supported, picked by inspecting the path
-     * of the configured server URL:
+     * The AWS deployment puts the licenses resource under the API root
+     * (`${apiRoot}/licenses/<action>`) but the health probe at the API
+     * root itself (`${apiRoot}/health`, NOT under `/licenses`). The
+     * local Express server keeps both under `/api/...`. So we need a
+     * single "API root" anchor that the rest of the URL builders hang
+     * off, regardless of which form the user pasted.
+     *
+     * Three base-URL shapes:
      *
      *   1. **Bare host / legacy** — `http://localhost:4000`,
-     *      `https://license.example.com`. No path (or just `/`).
-     *      Endpoints: `${base}/api/licenses/<action>`; health:
-     *      `${base}/api/health`. Matches the local Express server.
+     *      `https://license.example.com`. No path or just `/`. The
+     *      whole URL is the API root; license + health paths are
+     *      prefixed with `/api/...` to match the local Express server.
      *
-     *   2. **Versioned API root** — `https://…/dev/api/v1`. Has a
-     *      meaningful path but doesn't include `/licenses`. We assume
-     *      the licenses resource hangs off the API root.
-     *      Endpoints: `${base}/licenses/<action>`; health:
-     *      `${base}/licenses/health`. Matches the AWS API-Gateway
-     *      base when the user pastes everything up to the version
-     *      stage.
+     *   2. **API root** — `https://…/dev/api/v1`. Path present but no
+     *      `/licenses` segment. The base IS the API root; license is
+     *      `${base}/licenses/<action>`, health is `${base}/health`.
      *
      *   3. **Licenses-rooted** — `https://…/dev/api/v1/licenses` (with
-     *      or without trailing slash). Already at the licenses
-     *      resource. Endpoints: `${base}/<action>`; health:
-     *      `${base}/health`. Same AWS deployment as case 2, but with
-     *      the user pasting the licenses root directly.
-     *
-     * Cases 2 and 3 produce identical URLs in practice. Detection is
-     * cheap (path inspection) and stays out of the way for case 1, so
-     * existing local-server users see no behavioral change.
+     *      or without trailing slash). The user pasted past the API
+     *      root, so we strip `/licenses` to get back to it. Final URLs
+     *      match case 2.
      */
     private classifyBase (base: string): 'bare' | 'versioned' | 'licenses' {
         // Pull the path component without depending on `URL` (which
@@ -264,6 +261,16 @@ export class TlinkLicenseService implements OnDestroy {
         if (/\/licenses(\/|$)/i.test(path)) return 'licenses'
         if (path && path !== '/') return 'versioned'
         return 'bare'
+    }
+
+    /**
+     * Strip a trailing `/licenses` segment so cases (2) and (3) collapse
+     * to the same API root. For case (1) the base IS the API root.
+     */
+    private apiRootFromBase (base: string): string {
+        const kind = this.classifyBase(base)
+        if (kind === 'licenses') return base.replace(/\/licenses$/i, '')
+        return base
     }
 
     private trimmedServerUrl (): string {
@@ -290,39 +297,27 @@ export class TlinkLicenseService implements OnDestroy {
     licenseEndpoint (action: string): string {
         const base = this.trimmedServerUrl()
         const kind = this.classifyBase(base)
+        const apiRoot = this.apiRootFromBase(base)
         const cleanAction = this.translateActionForBase(
             String(action).replace(/^\/+/, ''),
             kind
         )
-        switch (kind) {
-            case 'licenses':
-                return `${base}/${cleanAction}`
-            case 'versioned':
-                return `${base}/licenses/${cleanAction}`
-            case 'bare':
-            default:
-                return `${base}/api/licenses/${cleanAction}`
-        }
+        if (kind === 'bare') return `${apiRoot}/api/licenses/${cleanAction}`
+        return `${apiRoot}/licenses/${cleanAction}`
     }
 
     /**
-     * Build the URL for the server health probe. The three base shapes
-     * diverge: local servers expose `/api/health` at the host root,
-     * versioned API bases expose `${base}/licenses/health`, and
-     * licenses-rooted bases expose `${base}/health`.
+     * Build the URL for the server health probe. AWS exposes health at
+     * the API root (`${apiRoot}/health`, NOT under `/licenses`); local
+     * Express server exposes `/api/health` directly off the host. Both
+     * collapse via apiRootFromBase().
      */
     healthEndpoint (overrideBase?: string): string {
         const raw = (overrideBase ?? this.serverUrl).trim().replace(/\/+$/, '')
         const kind = this.classifyBase(raw)
-        switch (kind) {
-            case 'licenses':
-                return `${raw}/health`
-            case 'versioned':
-                return `${raw}/licenses/health`
-            case 'bare':
-            default:
-                return `${raw}/api/health`
-        }
+        const apiRoot = this.apiRootFromBase(raw)
+        if (kind === 'bare') return `${apiRoot}/api/health`
+        return `${apiRoot}/health`
     }
 
     // ─── Bootstrap (call from app startup) ────────────────────────────────
