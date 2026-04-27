@@ -282,15 +282,22 @@ export class TlinkLicenseService implements OnDestroy {
      * `refresh`, `heartbeat`, `validate`, `public-key`).
      *
      * Action-name translation for cloud bases: the AWS API-Gateway
-     * server collapses refresh-and-validate into a single `/validate`
-     * endpoint that returns rotated tokens, while the local Express
-     * server splits them into `/refresh` + a dedicated `/validate`. We
-     * map `refresh` → `validate` when the base is anything other than
-     * a bare host, so callers stay shape-agnostic; the response is the
-     * same `LicenseEnvelope` either way.
+     * server exposes a single `/validate` endpoint that handles both
+     * the initial activate-with-credentials call AND the token-refresh
+     * call (the request body distinguishes them — credentials vs
+     * refresh_token). The local Express server splits these into
+     * separate `/activate` and `/refresh` paths.
+     *
+     * Map both `activate` and `refresh` → `validate` when the base is
+     * anything other than a bare host so callers stay shape-agnostic.
+     * The response is the same `LicenseEnvelope` shape either way.
+     *
+     * `heartbeat` and `deactivate` aren't aliased because we don't
+     * know yet whether AWS exposes them; if they 404 / 405 we'll
+     * extend this map then.
      */
     private translateActionForBase (action: string, kind: 'bare' | 'versioned' | 'licenses'): string {
-        if (kind !== 'bare' && action === 'refresh') return 'validate'
+        if (kind !== 'bare' && (action === 'refresh' || action === 'activate')) return 'validate'
         return action
     }
 
