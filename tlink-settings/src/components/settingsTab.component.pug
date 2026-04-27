@@ -274,6 +274,22 @@
                     .small.mt-1(*ngIf='serverTestResult')
                         span([class.text-success]='serverTestResult.startsWith("connected")', [class.text-danger]='!serverTestResult.startsWith("connected")') {{ serverTestResult }}
 
+                    //- Product code override. Sent in the activate / validate
+                    //- request body. Lets a user fix a PRODUCT_NOT_ENTITLED
+                    //- rejection without rebuilding the app.
+                    .form-line
+                        .header
+                            .title(translate) Product Code
+                            .description(translate) Sent with activate/validate. Override only if your tenant uses a non-default product slug.
+                        .license-input-row
+                            input.form-control(
+                                type='text',
+                                [(ngModel)]='productCode',
+                                placeholder='tyllink_terminal'
+                            )
+                            button.btn.btn-primary.license-btn((click)='saveProductCode()') Save
+                    .small.mt-1.text-success(*ngIf='productCodeSaved', translate) Saved
+
                     //- Self-service device portal — lists all devices this
                     //- account is signed in on and lets the user deactivate
                     //- any seat without admin involvement.

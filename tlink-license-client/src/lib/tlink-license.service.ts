@@ -20,6 +20,7 @@ import { FingerprintService } from './services/fingerprint.service'
 import { LicenseTokenStorageService, StoredLicenseBundle } from './services/tokenStorage.service'
 
 const STORAGE_KEY_SERVER_URL = 'tlink-license-server-url'
+const STORAGE_KEY_PRODUCT_CODE = 'tlink-license-product-code'
 
 @Injectable({ providedIn: 'root' })
 export class TlinkLicenseService implements OnDestroy {
@@ -225,6 +226,27 @@ export class TlinkLicenseService implements OnDestroy {
 
     set serverUrl (url: string) {
         localStorage.setItem(STORAGE_KEY_SERVER_URL, url)
+    }
+
+    /**
+     * Product code sent to the license server during activate / validate.
+     * Editable at runtime via the Settings UI so a user whose tenant uses
+     * a non-default product slug doesn't have to rebuild the app to fix
+     * a `PRODUCT_NOT_ENTITLED` rejection. Falls back to the build-time
+     * default in `TlinkLicenseConfig`.
+     */
+    get productCode (): string {
+        const stored = localStorage.getItem(STORAGE_KEY_PRODUCT_CODE)?.trim()
+        return stored || this.config.productCode
+    }
+
+    set productCode (code: string) {
+        const trimmed = (code || '').trim()
+        if (trimmed) {
+            localStorage.setItem(STORAGE_KEY_PRODUCT_CODE, trimmed)
+        } else {
+            localStorage.removeItem(STORAGE_KEY_PRODUCT_CODE)
+        }
     }
 
     /**
@@ -478,7 +500,7 @@ export class TlinkLicenseService implements OnDestroy {
         const body = {
             email: email.trim(),
             password,
-            product_code: this.config.productCode,
+            product_code: this.productCode,
             device_fingerprint_hash: fp,
             platform: this.fingerprint.getPlatform(),
             os_version: this.fingerprint.getOsVersion(),

@@ -56,6 +56,11 @@ export class SettingsTabComponent extends BaseTabComponent {
     licenseInfo: any = null
     serverUrl = ''
     serverTestResult = ''
+    // Product code sent to the license server during activate / validate.
+    // Editable at runtime so a tenant whose product slug differs from the
+    // build-time default can override it without rebuilding the app.
+    productCode = ''
+    productCodeSaved = false
     // Cached fingerprint of this machine. Resolved asynchronously in
     // ngOnInit — the UI shows "—" until populated. Users copy this value
     // and send it to their admin when requesting an offline activation code
@@ -85,6 +90,7 @@ export class SettingsTabComponent extends BaseTabComponent {
         super(injector)
         this.setTitle(translate.instant(_('Settings')))
         this.serverUrl = licenseSvc.serverUrl
+        this.productCode = licenseSvc.productCode
         this.settingsProviders = config.enabledServices(this.settingsProviders)
         this.settingsProviders = this.settingsProviders.filter(x => {
             const componentType = x.getComponentType()
@@ -296,5 +302,14 @@ export class SettingsTabComponent extends BaseTabComponent {
     saveServerUrl () {
         this.licenseSvc.serverUrl = this.serverUrl
         localStorage.setItem('tlink-license-server-url', this.serverUrl)
+    }
+
+    saveProductCode () {
+        this.licenseSvc.productCode = this.productCode
+        // Reflect what actually got persisted (may have been blank-trimmed
+        // back to the config default).
+        this.productCode = this.licenseSvc.productCode
+        this.productCodeSaved = true
+        setTimeout(() => { this.productCodeSaved = false }, 2000)
     }
 }
