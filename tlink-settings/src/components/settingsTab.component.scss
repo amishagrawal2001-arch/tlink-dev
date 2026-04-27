@@ -127,6 +127,16 @@ textarea {
     display: flex;
     gap: 8px;
     align-items: center;
+    // Defensive: a verbose description in a sibling .header can squeeze
+    // this row's intrinsic width to zero in `.form-line`'s flex layout.
+    // 320px is comfortable for the longest valid license-server URL we'd
+    // expect a user to paste; the input inside also stretches to fill.
+    min-width: 320px;
+
+    .form-control {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
 }
 
 .license-key-input {

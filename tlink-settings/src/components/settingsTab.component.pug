@@ -262,12 +262,12 @@
                     .form-line
                         .header
                             .title(translate) Server URL
-                            .description(translate) License server. Accepts a host (e.g. http://localhost:4000), an API root (e.g. https://…/dev/api/v1), or a licenses-rooted URL (e.g. https://…/api/v1/licenses/). Health and license actions are appended to the API root automatically.
+                            .description(translate) Host, API root, or licenses-rooted URL — endpoints derived automatically.
                         .license-input-row
                             input.form-control(
                                 type='text',
                                 [(ngModel)]='serverUrl',
-                                placeholder='http://localhost:4000  ·  https://…/api/v1  ·  https://…/api/v1/licenses/'
+                                placeholder='http://localhost:4000 or https://…/api/v1'
                             )
                             button.btn.btn-secondary.license-btn((click)='testServerConnection()') Test
                             button.btn.btn-primary.license-btn((click)='saveServerUrl()') Save
