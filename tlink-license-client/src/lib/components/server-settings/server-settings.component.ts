@@ -18,8 +18,13 @@ import { TlinkLicenseService } from '../../tlink-license.service'
             class="tlink-dialog__input"
             type="url"
             [(ngModel)]="serverUrlInput"
-            placeholder="http://localhost:4000"
+            placeholder="http://localhost:4000  or  https://…/api/v1/licenses/"
             [disabled]="testing" />
+          <small class="tlink-dialog__hint" style="display:block;margin-top:6px;opacity:0.7;font-size:11px;line-height:1.4;">
+            Accepts a host (local server) or a fully-pathed cloud endpoint
+            ending in <code>/licenses/</code> (e.g. AWS API Gateway).
+            Health and validate calls are appended to the configured base.
+          </small>
 
           <div class="tlink-dialog__test-row">
             <button

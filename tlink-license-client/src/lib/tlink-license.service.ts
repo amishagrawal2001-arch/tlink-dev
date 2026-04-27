@@ -227,6 +227,69 @@ export class TlinkLicenseService implements OnDestroy {
         localStorage.setItem(STORAGE_KEY_SERVER_URL, url)
     }
 
+    /**
+     * Compose an endpoint URL from `serverUrl` + a license action name.
+     *
+     * Two base-URL shapes are supported:
+     *
+     *   1. **Host-only / legacy** — `http://localhost:4000` or
+     *      `https://license.example.com` (no `/licenses` segment in the
+     *      path). Endpoints land at `${base}/api/licenses/{action}`. This
+     *      matches the local Express server's routes.
+     *
+     *   2. **Pre-rooted** — `https://b8yf8qingg.execute-api.us-west-1.
+     *      amazonaws.com/dev/api/v1/licenses/` or any URL whose path
+     *      already contains `/licenses` (with or without trailing slash).
+     *      Endpoints land at `${base}/{action}`. This matches the AWS
+     *      API-Gateway flavor where stage + version + resource are baked
+     *      into the base.
+     *
+     * Detection: if the trimmed base path includes a `/licenses` segment,
+     * we're in form (2); otherwise form (1). This is a one-line heuristic
+     * that covers every URL we've seen in practice, and keeps the local-
+     * server default working without migration.
+     *
+     * Health is special: legacy uses `/api/health`, pre-rooted uses
+     * `/health` under the licenses root. See `buildHealthUrl()`.
+     */
+    private isPreRootedBase (base: string): boolean {
+        return /\/licenses(\/|$)/i.test(base)
+    }
+
+    private trimmedServerUrl (): string {
+        return this.serverUrl.trim().replace(/\/+$/, '')
+    }
+
+    /**
+     * Build the URL for a license action (`activate`, `deactivate`,
+     * `refresh`, `heartbeat`, `validate`, `public-key`).
+     */
+    licenseEndpoint (action: string): string {
+        const base = this.trimmedServerUrl()
+        const cleanAction = String(action).replace(/^\/+/, '')
+        if (this.isPreRootedBase(base)) {
+            // Strip a possible trailing `/licenses` (already trimmed of
+            // trailing slash) so we don't double it on the action side.
+            const root = base.replace(/\/licenses$/i, '/licenses')
+            return `${root}/${cleanAction}`
+        }
+        return `${base}/api/licenses/${cleanAction}`
+    }
+
+    /**
+     * Build the URL for the server health probe. Legacy and pre-rooted
+     * shapes diverge: local servers expose `/api/health`, AWS-style
+     * licenses-rooted bases expose `health` under the same root.
+     */
+    healthEndpoint (overrideBase?: string): string {
+        const raw = (overrideBase ?? this.serverUrl).trim().replace(/\/+$/, '')
+        if (this.isPreRootedBase(raw)) {
+            const root = raw.replace(/\/licenses$/i, '/licenses')
+            return `${root}/health`
+        }
+        return `${raw}/api/health`
+    }
+
     // ─── Bootstrap (call from app startup) ────────────────────────────────
 
     /**
@@ -387,7 +450,7 @@ export class TlinkLicenseService implements OnDestroy {
         }
 
         try {
-            const res = await this.loggedFetch('/api/licenses/activate', `${this.serverUrl}/api/licenses/activate`, {
+            const res = await this.loggedFetch('licenses/activate', this.licenseEndpoint('activate'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
@@ -478,7 +541,17 @@ export class TlinkLicenseService implements OnDestroy {
     private async authedFetch (path: string, init: any): Promise<Response | null> {
         const doCall = async () => {
             const headers = { ...(init.headers || {}), Authorization: `Bearer ${this.accessToken ?? ''}` }
-            return this.loggedFetch(path, `${this.serverUrl}${path}`, { ...init, headers })
+            // Map legacy `/api/licenses/<action>` paths through licenseEndpoint
+            // so a pre-rooted serverUrl (e.g. AWS API Gateway base ending in
+            // `/api/v1/licenses/`) doesn't double the `/api/licenses/` segment.
+            // Anything that doesn't match falls back to raw concatenation,
+            // which preserves behavior for non-licenses paths if any are
+            // added later.
+            const m = /^\/api\/licenses\/(.+)$/.exec(path)
+            const url = m
+                ? this.licenseEndpoint(m[1])
+                : `${this.trimmedServerUrl()}${path.startsWith('/') ? path : `/${path}`}`
+            return this.loggedFetch(path, url, { ...init, headers })
         }
         try {
             let res = await doCall()
@@ -529,7 +602,7 @@ export class TlinkLicenseService implements OnDestroy {
         if (!skipServerCall) {
             try {
                 const fp = await this.fingerprint.get()
-                const res = await this.loggedFetch('/api/licenses/deactivate', `${this.serverUrl}/api/licenses/deactivate`, {
+                const res = await this.loggedFetch('licenses/deactivate', this.licenseEndpoint('deactivate'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.accessToken ?? ''}` },
                     body: JSON.stringify({ device_fingerprint_hash: fp }),
@@ -580,10 +653,10 @@ export class TlinkLicenseService implements OnDestroy {
 
     async testServerConnection (url?: string): Promise<ServerTestResult> {
         if (this.proxy) {return this.proxy.testServerConnection(url)}
-        const target = (url ?? this.serverUrl).replace(/\/$/, '')
+        const healthUrl = this.healthEndpoint(url)
         const t0 = Date.now()
         try {
-            const res = await this.loggedFetch('/api/health', `${target}/api/health`, { method: 'GET' })
+            const res = await this.loggedFetch('health', healthUrl, { method: 'GET' })
             const latencyMs = Date.now() - t0
             if (res.ok) {return { reachable: true, message: 'Server reachable', latencyMs }}
             return { reachable: false, message: `HTTP ${res.status}` }
@@ -639,7 +712,7 @@ export class TlinkLicenseService implements OnDestroy {
             if (localStorage.getItem(TlinkLicenseService.OFFLINE_KEY_STORAGE)) {return}
         } catch { /* ignore */ }
         try {
-            const res = await this.loggedFetch('/api/licenses/public-key', `${this.serverUrl}/api/licenses/public-key`, { method: 'GET' })
+            const res = await this.loggedFetch('licenses/public-key', this.licenseEndpoint('public-key'), { method: 'GET' })
             if (!res.ok) {return}
             const pem = await res.text()
             if (typeof pem === 'string' && pem.includes('BEGIN PUBLIC KEY')) {
@@ -770,7 +843,7 @@ export class TlinkLicenseService implements OnDestroy {
         if (!this.refreshToken) {return null}
         try {
             const fp = await this.fingerprint.get()
-            const res = await this.loggedFetch('/api/licenses/refresh', `${this.serverUrl}/api/licenses/refresh`, {
+            const res = await this.loggedFetch('licenses/refresh', this.licenseEndpoint('refresh'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ refresh_token: this.refreshToken, device_fingerprint_hash: fp }),
@@ -789,7 +862,7 @@ export class TlinkLicenseService implements OnDestroy {
                 // Let heartbeat rotate tokens inline.
                 body.refresh_token = this.refreshToken
             }
-            const res = await this.loggedFetch('/api/licenses/heartbeat', `${this.serverUrl}/api/licenses/heartbeat`, {
+            const res = await this.loggedFetch('licenses/heartbeat', this.licenseEndpoint('heartbeat'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
