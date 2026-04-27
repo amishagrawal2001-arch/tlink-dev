@@ -263,11 +263,28 @@ export class TlinkLicenseService implements OnDestroy {
     /**
      * Build the URL for a license action (`activate`, `deactivate`,
      * `refresh`, `heartbeat`, `validate`, `public-key`).
+     *
+     * Action-name translation for pre-rooted bases: the AWS API-Gateway
+     * server collapses refresh-and-validate into a single `/validate`
+     * endpoint that returns rotated tokens, while the local Express
+     * server splits them into `/refresh` + a dedicated `/validate`. We
+     * map `refresh` → `validate` when on the pre-rooted base so callers
+     * stay shape-agnostic; the response is the same `LicenseEnvelope`
+     * either way.
      */
+    private translateActionForBase (action: string, preRooted: boolean): string {
+        if (preRooted && action === 'refresh') return 'validate'
+        return action
+    }
+
     licenseEndpoint (action: string): string {
         const base = this.trimmedServerUrl()
-        const cleanAction = String(action).replace(/^\/+/, '')
-        if (this.isPreRootedBase(base)) {
+        const preRooted = this.isPreRootedBase(base)
+        const cleanAction = this.translateActionForBase(
+            String(action).replace(/^\/+/, ''),
+            preRooted
+        )
+        if (preRooted) {
             // Strip a possible trailing `/licenses` (already trimmed of
             // trailing slash) so we don't double it on the action side.
             const root = base.replace(/\/licenses$/i, '/licenses')
@@ -455,7 +472,7 @@ export class TlinkLicenseService implements OnDestroy {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
             })
-            const envelope = await res.json() as LicenseEnvelope
+            const envelope = this.normalizeEnvelope(await res.json())
 
             if (envelope.license_status === 'VALID') {
                 this.userEmail = email.trim()
@@ -848,7 +865,7 @@ export class TlinkLicenseService implements OnDestroy {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ refresh_token: this.refreshToken, device_fingerprint_hash: fp }),
             })
-            return await res.json() as LicenseEnvelope
+            return this.normalizeEnvelope(await res.json())
         } catch {
             return null
         }
@@ -870,13 +887,84 @@ export class TlinkLicenseService implements OnDestroy {
                 },
                 body: JSON.stringify(body),
             })
-            return await res.json() as HeartbeatEnvelope
+            return this.normalizeHeartbeat(await res.json())
         } catch {
             return null
         }
     }
 
     // ─── State helpers ────────────────────────────────────────────────────
+
+    /**
+     * Normalize a license-server JSON response into the client's canonical
+     * `LicenseEnvelope` shape. Different deployments use slightly different
+     * field semantics:
+     *
+     *   - **Local Express server** returns `license_type` as the SEAT tier
+     *     (`'INDIVIDUAL' | 'TEAM'`) and `billing_type` as the billing
+     *     flavor (`'TRIAL' | 'PAID'`). Two distinct fields.
+     *
+     *   - **AWS API Gateway server** returns `license_type` as the BILLING
+     *     flavor (`'PAID'`, `'TRIAL'`) and omits `billing_type` entirely.
+     *     The seat tier isn't surfaced.
+     *
+     * Detection: if `license_type` matches a billing value AND `billing_type`
+     * is absent, swap them. Default the missing seat tier to `INDIVIDUAL`
+     * since the AWS server doesn't surface team-vs-individual yet — team-
+     * only feature flags will gate appropriately on `isFeatureAvailable()`.
+     *
+     * Also coerces `reason_code: null` → 'OK' when status is VALID so the
+     * downstream `lastReasonCode` field stays typed.
+     */
+    private normalizeEnvelope (raw: any): LicenseEnvelope {
+        const r = raw && typeof raw === 'object' ? raw : {}
+        const licenseTypeRaw = r.license_type ?? null
+        const billingTypeRaw = r.billing_type ?? null
+
+        // Detect AWS-style "license_type holds billing flavor" responses.
+        const looksLikeBilling = (v: any): v is BillingType =>
+            v === 'PAID' || v === 'TRIAL'
+
+        let licenseType: LicenseType | null = licenseTypeRaw
+        let billingType: BillingType | null = billingTypeRaw
+        if (billingType == null && looksLikeBilling(licenseTypeRaw)) {
+            billingType = licenseTypeRaw
+            // Server didn't tell us seat tier — assume individual; team-only
+            // features check `licenseType` and will deny correctly.
+            licenseType = 'INDIVIDUAL'
+        }
+
+        const status: 'VALID' | 'INVALID' = r.license_status === 'VALID' ? 'VALID' : 'INVALID'
+        const reasonCode: ReasonCode = r.reason_code ?? (status === 'VALID' ? 'OK' : 'INVALID_CREDENTIALS')
+
+        return {
+            license_status: status,
+            reason_code: reasonCode,
+            user_email: r.user_email ?? null,
+            device_id: r.device_id ?? null,
+            license_id: r.license_id ?? null,
+            license_type: licenseType,
+            billing_type: billingType,
+            start_date: r.start_date ?? null,
+            end_date: r.end_date ?? null,
+            access_token: r.access_token ?? null,
+            refresh_token: r.refresh_token ?? null,
+            access_expires_in_sec: typeof r.access_expires_in_sec === 'number' ? r.access_expires_in_sec : null,
+            refresh_expires_in_sec: typeof r.refresh_expires_in_sec === 'number' ? r.refresh_expires_in_sec : null,
+        }
+    }
+
+    private normalizeHeartbeat (raw: any): HeartbeatEnvelope {
+        const r = raw && typeof raw === 'object' ? raw : {}
+        return {
+            status: r.status === 'VALID' ? 'VALID' : 'INVALID',
+            reason_code: r.reason_code ?? null,
+            access_token: r.access_token,
+            refresh_token: r.refresh_token,
+            access_expires_in_sec: typeof r.access_expires_in_sec === 'number' ? r.access_expires_in_sec : undefined,
+            refresh_expires_in_sec: typeof r.refresh_expires_in_sec === 'number' ? r.refresh_expires_in_sec : undefined,
+        }
+    }
 
     private applyEnvelope (e: LicenseEnvelope): void {
         this.accessToken = e.access_token
