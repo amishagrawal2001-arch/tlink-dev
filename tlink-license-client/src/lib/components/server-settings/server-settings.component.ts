@@ -21,9 +21,10 @@ import { TlinkLicenseService } from '../../tlink-license.service'
             placeholder="http://localhost:4000  or  https://…/api/v1/licenses/"
             [disabled]="testing" />
           <small class="tlink-dialog__hint" style="display:block;margin-top:6px;opacity:0.7;font-size:11px;line-height:1.4;">
-            Accepts a host (local server) or a fully-pathed cloud endpoint
-            ending in <code>/licenses/</code> (e.g. AWS API Gateway).
-            Health and validate calls are appended to the configured base.
+            Accepts: a host (<code>http://localhost:4000</code>), a versioned
+            API root (<code>https://…/dev/api/v1</code>), or a licenses-rooted
+            URL (<code>https://…/api/v1/licenses/</code>). Health, activate,
+            validate, etc. are appended automatically.
           </small>
 
           <div class="tlink-dialog__test-row">

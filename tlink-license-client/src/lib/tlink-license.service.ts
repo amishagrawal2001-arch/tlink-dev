@@ -230,30 +230,40 @@ export class TlinkLicenseService implements OnDestroy {
     /**
      * Compose an endpoint URL from `serverUrl` + a license action name.
      *
-     * Two base-URL shapes are supported:
+     * Three base-URL shapes are supported, picked by inspecting the path
+     * of the configured server URL:
      *
-     *   1. **Host-only / legacy** — `http://localhost:4000` or
-     *      `https://license.example.com` (no `/licenses` segment in the
-     *      path). Endpoints land at `${base}/api/licenses/{action}`. This
-     *      matches the local Express server's routes.
+     *   1. **Bare host / legacy** — `http://localhost:4000`,
+     *      `https://license.example.com`. No path (or just `/`).
+     *      Endpoints: `${base}/api/licenses/<action>`; health:
+     *      `${base}/api/health`. Matches the local Express server.
      *
-     *   2. **Pre-rooted** — `https://b8yf8qingg.execute-api.us-west-1.
-     *      amazonaws.com/dev/api/v1/licenses/` or any URL whose path
-     *      already contains `/licenses` (with or without trailing slash).
-     *      Endpoints land at `${base}/{action}`. This matches the AWS
-     *      API-Gateway flavor where stage + version + resource are baked
-     *      into the base.
+     *   2. **Versioned API root** — `https://…/dev/api/v1`. Has a
+     *      meaningful path but doesn't include `/licenses`. We assume
+     *      the licenses resource hangs off the API root.
+     *      Endpoints: `${base}/licenses/<action>`; health:
+     *      `${base}/licenses/health`. Matches the AWS API-Gateway
+     *      base when the user pastes everything up to the version
+     *      stage.
      *
-     * Detection: if the trimmed base path includes a `/licenses` segment,
-     * we're in form (2); otherwise form (1). This is a one-line heuristic
-     * that covers every URL we've seen in practice, and keeps the local-
-     * server default working without migration.
+     *   3. **Licenses-rooted** — `https://…/dev/api/v1/licenses` (with
+     *      or without trailing slash). Already at the licenses
+     *      resource. Endpoints: `${base}/<action>`; health:
+     *      `${base}/health`. Same AWS deployment as case 2, but with
+     *      the user pasting the licenses root directly.
      *
-     * Health is special: legacy uses `/api/health`, pre-rooted uses
-     * `/health` under the licenses root. See `buildHealthUrl()`.
+     * Cases 2 and 3 produce identical URLs in practice. Detection is
+     * cheap (path inspection) and stays out of the way for case 1, so
+     * existing local-server users see no behavioral change.
      */
-    private isPreRootedBase (base: string): boolean {
-        return /\/licenses(\/|$)/i.test(base)
+    private classifyBase (base: string): 'bare' | 'versioned' | 'licenses' {
+        // Pull the path component without depending on `URL` (which
+        // throws on invalid inputs). Strip scheme + authority.
+        const m = /^(?:[a-z][a-z0-9+.\-]*:\/\/)?[^/]*(\/.*)?$/i.exec(base)
+        const path = (m?.[1] ?? '').replace(/\/+$/, '')
+        if (/\/licenses(\/|$)/i.test(path)) return 'licenses'
+        if (path && path !== '/') return 'versioned'
+        return 'bare'
     }
 
     private trimmedServerUrl (): string {
@@ -264,47 +274,55 @@ export class TlinkLicenseService implements OnDestroy {
      * Build the URL for a license action (`activate`, `deactivate`,
      * `refresh`, `heartbeat`, `validate`, `public-key`).
      *
-     * Action-name translation for pre-rooted bases: the AWS API-Gateway
+     * Action-name translation for cloud bases: the AWS API-Gateway
      * server collapses refresh-and-validate into a single `/validate`
      * endpoint that returns rotated tokens, while the local Express
      * server splits them into `/refresh` + a dedicated `/validate`. We
-     * map `refresh` → `validate` when on the pre-rooted base so callers
-     * stay shape-agnostic; the response is the same `LicenseEnvelope`
-     * either way.
+     * map `refresh` → `validate` when the base is anything other than
+     * a bare host, so callers stay shape-agnostic; the response is the
+     * same `LicenseEnvelope` either way.
      */
-    private translateActionForBase (action: string, preRooted: boolean): string {
-        if (preRooted && action === 'refresh') return 'validate'
+    private translateActionForBase (action: string, kind: 'bare' | 'versioned' | 'licenses'): string {
+        if (kind !== 'bare' && action === 'refresh') return 'validate'
         return action
     }
 
     licenseEndpoint (action: string): string {
         const base = this.trimmedServerUrl()
-        const preRooted = this.isPreRootedBase(base)
+        const kind = this.classifyBase(base)
         const cleanAction = this.translateActionForBase(
             String(action).replace(/^\/+/, ''),
-            preRooted
+            kind
         )
-        if (preRooted) {
-            // Strip a possible trailing `/licenses` (already trimmed of
-            // trailing slash) so we don't double it on the action side.
-            const root = base.replace(/\/licenses$/i, '/licenses')
-            return `${root}/${cleanAction}`
+        switch (kind) {
+            case 'licenses':
+                return `${base}/${cleanAction}`
+            case 'versioned':
+                return `${base}/licenses/${cleanAction}`
+            case 'bare':
+            default:
+                return `${base}/api/licenses/${cleanAction}`
         }
-        return `${base}/api/licenses/${cleanAction}`
     }
 
     /**
-     * Build the URL for the server health probe. Legacy and pre-rooted
-     * shapes diverge: local servers expose `/api/health`, AWS-style
-     * licenses-rooted bases expose `health` under the same root.
+     * Build the URL for the server health probe. The three base shapes
+     * diverge: local servers expose `/api/health` at the host root,
+     * versioned API bases expose `${base}/licenses/health`, and
+     * licenses-rooted bases expose `${base}/health`.
      */
     healthEndpoint (overrideBase?: string): string {
         const raw = (overrideBase ?? this.serverUrl).trim().replace(/\/+$/, '')
-        if (this.isPreRootedBase(raw)) {
-            const root = raw.replace(/\/licenses$/i, '/licenses')
-            return `${root}/health`
+        const kind = this.classifyBase(raw)
+        switch (kind) {
+            case 'licenses':
+                return `${raw}/health`
+            case 'versioned':
+                return `${raw}/licenses/health`
+            case 'bare':
+            default:
+                return `${raw}/api/health`
         }
-        return `${raw}/api/health`
     }
 
     // ─── Bootstrap (call from app startup) ────────────────────────────────
