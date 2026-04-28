@@ -1,6 +1,6 @@
 {
   "name": "@tlink/license-client",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Reusable Angular license management UI components for Tlink apps",
   "author": "Tlink Technologies",
   "license": "SEE LICENSE IN LICENSE",
