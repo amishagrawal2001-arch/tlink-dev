@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tyllink — Software Commerce Platform</title>
+    <meta name="description" content="Discover, purchase, activate, and manage commercial software licenses through a unified web portal. Home of Tyllink License, NetOps, Tlink Studio, and Netgen." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+    <!-- ─── Navigation ────────────────────────────────────────────────── -->
+    <nav class="nav">
+        <div class="container nav-inner">
+            <a href="#" class="brand" aria-label="Tyllink home">
+                <span class="brand-mark" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#0a0e1a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2 4 6v6c0 5 3.5 9 8 10 4.5-1 8-5 8-10V6l-8-4z" fill="#fff" />
+                    </svg>
+                </span>
+                <span class="brand-text">Tyllink</span>
+            </a>
+
+            <ul class="nav-links" id="navLinks">
+                <li><a href="#home">Home</a></li>
+                <li><a href="#products">Products</a></li>
+                <li><a href="#why">Why Tyllink</a></li>
+                <li><a href="#pricing">Pricing</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+
+            <div class="nav-actions">
+                <a href="#contact" class="btn btn-ghost">Sign in</a>
+                <a href="#products" class="btn btn-primary">Start free trial</a>
+            </div>
+
+            <button class="nav-toggle" aria-label="Toggle navigation" onclick="document.getElementById('navLinks').classList.toggle('open')">☰</button>
+        </div>
+    </nav>
+
+    <!-- ─── Hero ──────────────────────────────────────────────────────── -->
+    <header id="home" class="hero">
+        <div class="hero-bg" aria-hidden="true">
+            <!-- Dotted globe arc backdrop. Pure SVG — no external assets. -->
+            <svg viewBox="0 0 1400 700" preserveAspectRatio="xMidYMid slice">
+                <defs>
+                    <radialGradient id="globeGlow" cx="80%" cy="50%" r="55%">
+                        <stop offset="0%" stop-color="#1d4ed8" stop-opacity="0.35" />
+                        <stop offset="60%" stop-color="#1e3a8a" stop-opacity="0.12" />
+                        <stop offset="100%" stop-color="#0a0e1a" stop-opacity="0" />
+                    </radialGradient>
+                    <pattern id="dotGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <circle cx="2" cy="2" r="1" fill="#3b82f6" fill-opacity="0.15" />
+                    </pattern>
+                </defs>
+                <rect width="1400" height="700" fill="url(#globeGlow)" />
+                <rect width="1400" height="700" fill="url(#dotGrid)" opacity="0.5" />
+                <!-- Faint orbit arcs on the right -->
+                <g fill="none" stroke="#3b82f6" stroke-opacity="0.18" stroke-width="1">
+                    <circle cx="1100" cy="350" r="280" />
+                    <circle cx="1100" cy="350" r="220" />
+                    <circle cx="1100" cy="350" r="160" />
+                    <circle cx="1100" cy="350" r="100" />
+                </g>
+                <!-- Floating accent dots -->
+                <g fill="#60a5fa">
+                    <circle cx="1180" cy="170" r="4" opacity="0.7" />
+                    <circle cx="985" cy="240" r="5" opacity="0.5" />
+                    <circle cx="1380" cy="200" r="4" opacity="0.5" />
+                    <circle cx="900" cy="430" r="5" opacity="0.7" />
+                    <circle cx="1370" cy="460" r="3" opacity="0.6" />
+                    <circle cx="1180" cy="580" r="4" opacity="0.5" />
+                </g>
+            </svg>
+        </div>
+
+        <div class="container hero-grid">
+            <div class="hero-copy">
+                <span class="eyebrow">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M11 2 3 13h7l-1 9 8-11h-7l1-9z" /></svg>
+                    SOFTWARE COMMERCE PLATFORM
+                </span>
+                <h1>License Management<br /><span class="accent">Made Simple</span></h1>
+                <p class="lead">
+                    Discover, purchase, activate, and manage commercial software
+                    licenses through a unified web portal. From free trials to
+                    enterprise deployments &mdash; one account, every product.
+                </p>
+                <div class="hero-cta">
+                    <a href="#products" class="btn btn-primary btn-lg">Browse the catalogue</a>
+                    <a href="#why" class="btn btn-ghost btn-lg">How it works →</a>
+                </div>
+                <div class="hero-tag">
+                    <span class="dot" aria-hidden="true"></span>
+                    FREE TRIALS AVAILABLE ON EVERY PRODUCT
+                </div>
+            </div>
+
+            <!-- Right-side hero illustration: shield + chat bubbles + chart bubble.
+                 Inline SVG so it scales crisply at any DPR and ships in zero
+                 extra HTTP requests. -->
+            <div class="hero-art" aria-hidden="true">
+                <svg viewBox="0 0 520 520" width="100%" height="100%">
+                    <defs>
+                        <linearGradient id="shieldGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="#3b82f6" />
+                            <stop offset="100%" stop-color="#1e40af" />
+                        </linearGradient>
+                        <linearGradient id="bubbleGrad" x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0%" stop-color="#1e3a8a" stop-opacity="0.85" />
+                            <stop offset="100%" stop-color="#172554" stop-opacity="0.95" />
+                        </linearGradient>
+                    </defs>
+
+                    <!-- Central shield -->
+                    <g transform="translate(260 260)">
+                        <path d="M0,-130 L100,-90 L100,30 C100,90 60,130 0,150 C-60,130 -100,90 -100,30 L-100,-90 Z"
+                              fill="url(#shieldGrad)" stroke="#60a5fa" stroke-width="2" stroke-opacity="0.6" />
+                        <!-- Lock icon -->
+                        <rect x="-28" y="-15" width="56" height="50" rx="6" fill="#0a0e1a" stroke="#93c5fd" stroke-width="2" />
+                        <path d="M-18,-15 L-18,-30 C-18,-40 -10,-48 0,-48 C10,-48 18,-40 18,-30 L18,-15"
+                              fill="none" stroke="#93c5fd" stroke-width="3" />
+                        <circle cx="0" cy="8" r="5" fill="#93c5fd" />
+                        <line x1="0" y1="13" x2="0" y2="22" stroke="#93c5fd" stroke-width="3" />
+                    </g>
+
+                    <!-- Top-left chat bubble (license activation) -->
+                    <g transform="translate(60 120)">
+                        <rect x="0" y="0" width="170" height="44" rx="22" fill="url(#bubbleGrad)" stroke="#3b82f6" stroke-opacity="0.4" />
+                        <circle cx="22" cy="22" r="6" fill="#10b981" />
+                        <line x1="42" y1="18" x2="150" y2="18" stroke="#93c5fd" stroke-width="3" stroke-opacity="0.5" />
+                        <line x1="42" y1="28" x2="120" y2="28" stroke="#93c5fd" stroke-width="3" stroke-opacity="0.3" />
+                    </g>
+
+                    <!-- Bottom-left chart bubble -->
+                    <g transform="translate(80 380)">
+                        <rect x="0" y="0" width="200" height="48" rx="10" fill="url(#bubbleGrad)" stroke="#3b82f6" stroke-opacity="0.4" />
+                        <polyline points="14,34 30,22 46,28 62,14 78,18 94,8" fill="none" stroke="#10b981" stroke-width="2.5" />
+                        <line x1="110" y1="20" x2="180" y2="20" stroke="#93c5fd" stroke-width="3" stroke-opacity="0.5" />
+                        <line x1="110" y1="30" x2="160" y2="30" stroke="#93c5fd" stroke-width="3" stroke-opacity="0.3" />
+                    </g>
+
+                    <!-- Floating circles -->
+                    <g fill="#60a5fa">
+                        <circle cx="40" cy="240" r="6" opacity="0.7" />
+                        <circle cx="500" cy="180" r="5" opacity="0.6" />
+                        <circle cx="480" cy="400" r="6" opacity="0.7" />
+                        <circle cx="350" cy="80" r="4" opacity="0.5" />
+                    </g>
+                </svg>
+            </div>
+        </div>
+    </header>
+
+    <!-- ─── Product catalogue ─────────────────────────────────────────── -->
+    <section id="products" class="catalogue">
+        <div class="container">
+            <div class="section-head">
+                <span class="badge">PRODUCT CATALOGUE</span>
+                <h2>Professional Security Suite</h2>
+                <p class="section-lead">
+                    Four products under one roof, one license, one bill. Each
+                    runs standalone or together &mdash; pick what you need.
+                </p>
+            </div>
+
+            <div class="product-grid">
+
+                <!-- Tyllink License (the platform itself) -->
+                <article class="product-card product-tyllink">
+                    <div class="product-icon">
+                        <svg viewBox="0 0 64 64" width="40" height="40" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M32 6 12 14v18c0 12 8 22 20 26 12-4 20-14 20-26V14L32 6z" />
+                            <path d="M22 32l8 8 14-16" />
+                        </svg>
+                    </div>
+                    <h3>Tyllink License</h3>
+                    <p class="product-tagline">Software commerce + license server</p>
+                    <p class="product-blurb">
+                        Sign-in, activate, validate, and bill across every
+                        Tyllink product. Per-seat or per-device licensing,
+                        offline activation codes, and 48&#8209;hour grace
+                        windows for dropped connections.
+                    </p>
+                    <ul class="product-features">
+                        <li>Self-service device portal</li>
+                        <li>Team + individual tiers</li>
+                        <li>Offline activation codes</li>
+                    </ul>
+                    <a href="#contact" class="product-cta">Open the portal →</a>
+                </article>
+
+                <!-- NetOps -->
+                <article class="product-card product-netops">
+                    <div class="product-icon">
+                        <svg viewBox="0 0 64 64" width="40" height="40" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="6" y="14" width="52" height="36" rx="4" />
+                            <line x1="6" y1="24" x2="58" y2="24" />
+                            <circle cx="14" cy="19" r="1.5" fill="currentColor" />
+                            <circle cx="20" cy="19" r="1.5" fill="currentColor" />
+                            <path d="M16 36l8 6 8-6 8 6 8-6" />
+                        </svg>
+                    </div>
+                    <h3>NetOps</h3>
+                    <p class="product-tagline">Modern terminal for ops teams</p>
+                    <p class="product-blurb">
+                        SSH, RDP, Serial, Telnet, and SFTP in one cross-platform
+                        terminal. Built-in AI assistant, session recording,
+                        port-forwarding, and workspace sharing for remote teams.
+                    </p>
+                    <ul class="product-features">
+                        <li>Multi-protocol connection manager</li>
+                        <li>AI agent for coding + lab workflows</li>
+                        <li>Session sharing &amp; recording</li>
+                    </ul>
+                    <a href="#contact" class="product-cta">Download for free →</a>
+                </article>
+
+                <!-- Tlink Studio -->
+                <article class="product-card product-studio">
+                    <div class="product-icon">
+                        <svg viewBox="0 0 64 64" width="40" height="40" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M6 12h52v40H6z" />
+                            <path d="M6 22h52" />
+                            <path d="M16 32l-4 6 4 6" />
+                            <path d="M32 32l-4 6 4 6" />
+                            <path d="M44 32l8 6-8 6" />
+                        </svg>
+                    </div>
+                    <h3>Tlink Studio</h3>
+                    <p class="product-tagline">Topology + code editor</p>
+                    <p class="product-blurb">
+                        Monaco-powered code editor with a topology designer.
+                        Edit configs alongside live SSH sessions, render YAML
+                        topologies as interactive graphs, and ship configs back
+                        without leaving the app.
+                    </p>
+                    <ul class="product-features">
+                        <li>Inline AI explain &amp; fix</li>
+                        <li>JSON / YAML topology graphs</li>
+                        <li>Round-trip via the same SFTP session</li>
+                    </ul>
+                    <a href="#contact" class="product-cta">Try Studio →</a>
+                </article>
+
+                <!-- Netgen -->
+                <article class="product-card product-netgen">
+                    <div class="product-icon">
+                        <svg viewBox="0 0 64 64" width="40" height="40" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="14" cy="14" r="6" />
+                            <circle cx="50" cy="14" r="6" />
+                            <circle cx="14" cy="50" r="6" />
+                            <circle cx="50" cy="50" r="6" />
+                            <circle cx="32" cy="32" r="7" />
+                            <line x1="14" y1="20" x2="32" y2="32" />
+                            <line x1="50" y1="20" x2="32" y2="32" />
+                            <line x1="14" y1="44" x2="32" y2="32" />
+                            <line x1="50" y1="44" x2="32" y2="32" />
+                        </svg>
+                    </div>
+                    <h3>Netgen</h3>
+                    <p class="product-tagline">Config &amp; topology generator</p>
+                    <p class="product-blurb">
+                        Generate device configs, lab topologies, and test
+                        scenarios from declarative templates. Drive Cisco,
+                        Junos, Arista, and Linux gear from a single source of
+                        truth that diffs cleanly in version control.
+                    </p>
+                    <ul class="product-features">
+                        <li>Multi-vendor template library</li>
+                        <li>Topology &rarr; config in one pass</li>
+                        <li>Native Git workflow</li>
+                    </ul>
+                    <a href="#contact" class="product-cta">See sample configs →</a>
+                </article>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- ─── Why Tyllink ───────────────────────────────────────────────── -->
+    <section id="why" class="why">
+        <div class="container">
+            <div class="section-head section-head-center">
+                <span class="badge">WHY TYLLINK</span>
+                <h2>One account. Every product. Built for teams that ship.</h2>
+            </div>
+
+            <div class="why-grid">
+                <div class="why-item">
+                    <div class="why-icon">
+                        <svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="4" y="6" width="24" height="20" rx="3" />
+                            <path d="M4 12h24" />
+                            <circle cx="9" cy="9" r="1" fill="currentColor" />
+                            <circle cx="13" cy="9" r="1" fill="currentColor" />
+                        </svg>
+                    </div>
+                    <h4>Unified portal</h4>
+                    <p>One sign-in for purchases, activations, device management, and renewals. No per-product credentials.</p>
+                </div>
+                <div class="why-item">
+                    <div class="why-icon">
+                        <svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M16 4 4 10v8c0 7 5 13 12 14 7-1 12-7 12-14v-8L16 4z" />
+                            <path d="M11 17l3 3 7-7" />
+                        </svg>
+                    </div>
+                    <h4>Offline-tolerant</h4>
+                    <p>48-hour grace window keeps your team productive when the license server is unreachable. No surprise lockouts.</p>
+                </div>
+                <div class="why-item">
+                    <div class="why-icon">
+                        <svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 16h6l3-9 6 18 3-9h6" />
+                        </svg>
+                    </div>
+                    <h4>Per-device telemetry</h4>
+                    <p>See every active device, last seen, and app version in your team console. Revoke a seat without admin tickets.</p>
+                </div>
+                <div class="why-item">
+                    <div class="why-icon">
+                        <svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="16" cy="16" r="12" />
+                            <path d="M16 8v8l5 3" />
+                        </svg>
+                    </div>
+                    <h4>30-day free trials</h4>
+                    <p>Every product ships with a real 30-day trial &mdash; full feature set, no card required, conversion when you&rsquo;re ready.</p>
+                </div>
+                <div class="why-item">
+                    <div class="why-icon">
+                        <svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 8h24v18H4z" />
+                            <path d="M4 14h24" />
+                            <path d="M10 22h6" />
+                        </svg>
+                    </div>
+                    <h4>Per-seat or per-device</h4>
+                    <p>Pick the licensing model that fits your team. Mix individual seats with team plans on the same invoice.</p>
+                </div>
+                <div class="why-item">
+                    <div class="why-icon">
+                        <svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 6h14l5 6-12 14L4 12z" />
+                            <path d="M9 6l3 6h8l3-6" />
+                            <path d="M12 12l4 14 4-14" />
+                        </svg>
+                    </div>
+                    <h4>Air-gapped friendly</h4>
+                    <p>Offline activation codes for environments without internet. Generate a device-bound code, redeem locally, no server contact required.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ─── Pricing strip ─────────────────────────────────────────────── -->
+    <section id="pricing" class="pricing">
+        <div class="container">
+            <div class="section-head section-head-center">
+                <span class="badge">PRICING</span>
+                <h2>Honest tiers, no surprise add-ons</h2>
+            </div>
+
+            <div class="pricing-grid">
+                <div class="price-card">
+                    <h4>Trial</h4>
+                    <p class="price">Free</p>
+                    <p class="price-sub">30 days, full feature set</p>
+                    <ul>
+                        <li>Every product unlocked</li>
+                        <li>One device per product</li>
+                        <li>Email support</li>
+                    </ul>
+                    <a href="#contact" class="btn btn-ghost btn-block">Start trial</a>
+                </div>
+
+                <div class="price-card price-card-feature">
+                    <span class="price-flag">Most popular</span>
+                    <h4>Individual</h4>
+                    <p class="price">$12<span>/mo</span></p>
+                    <p class="price-sub">Per product, per device</p>
+                    <ul>
+                        <li>One product, your choice</li>
+                        <li>Up to 3 devices</li>
+                        <li>Priority email + chat</li>
+                    </ul>
+                    <a href="#contact" class="btn btn-primary btn-block">Buy individual</a>
+                </div>
+
+                <div class="price-card">
+                    <h4>Team</h4>
+                    <p class="price">$28<span>/seat/mo</span></p>
+                    <p class="price-sub">Bundle every product</p>
+                    <ul>
+                        <li>All four products</li>
+                        <li>SSO + admin console</li>
+                        <li>Dedicated success manager</li>
+                    </ul>
+                    <a href="#contact" class="btn btn-ghost btn-block">Talk to sales</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ─── CTA strip ─────────────────────────────────────────────────── -->
+    <section id="contact" class="cta-strip">
+        <div class="container cta-inner">
+            <div>
+                <h2>Ready to roll out across your team?</h2>
+                <p>Spin up a 30-day trial in under a minute &mdash; no credit card, every product unlocked.</p>
+            </div>
+            <div class="cta-buttons">
+                <a href="#" class="btn btn-primary btn-lg">Create account</a>
+                <a href="mailto:hello@tyllink.io" class="btn btn-ghost btn-lg">Talk to us</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- ─── Footer ────────────────────────────────────────────────────── -->
+    <footer class="footer">
+        <div class="container footer-grid">
+            <div>
+                <a href="#" class="brand">
+                    <span class="brand-mark" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#0a0e1a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2 4 6v6c0 5 3.5 9 8 10 4.5-1 8-5 8-10V6l-8-4z" fill="#fff" />
+                        </svg>
+                    </span>
+                    <span class="brand-text">Tyllink</span>
+                </a>
+                <p class="footer-blurb">Software commerce platform for security &amp; ops teams.</p>
+            </div>
+
+            <div>
+                <h5>Products</h5>
+                <ul>
+                    <li><a href="#products">Tyllink License</a></li>
+                    <li><a href="#products">NetOps</a></li>
+                    <li><a href="#products">Tlink Studio</a></li>
+                    <li><a href="#products">Netgen</a></li>
+                </ul>
+            </div>
+
+            <div>
+                <h5>Company</h5>
+                <ul>
+                    <li><a href="#why">Why Tyllink</a></li>
+                    <li><a href="#pricing">Pricing</a></li>
+                    <li><a href="mailto:hello@tyllink.io">Contact</a></li>
+                </ul>
+            </div>
+
+            <div>
+                <h5>Resources</h5>
+                <ul>
+                    <li><a href="#">Docs</a></li>
+                    <li><a href="#">Status</a></li>
+                    <li><a href="#">Changelog</a></li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="container footer-bottom">
+            <span>© 2026 Tyllink. All rights reserved.</span>
+            <span class="footer-tag">Built for teams that ship.</span>
+        </div>
+    </footer>
+
+</body>
+</html>
