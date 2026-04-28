@@ -91,6 +91,11 @@ export class SettingsTabComponent extends BaseTabComponent {
         this.setTitle(translate.instant(_('Settings')))
         this.serverUrl = licenseSvc.serverUrl
         this.productCode = licenseSvc.productCode
+        // Pre-fill the sign-in email field. Prefer the live `userEmail`
+        // (active session) so a user inspecting Settings sees what they're
+        // signed in as; fall back to `lastSignInEmail` after a wipe / first
+        // launch since restart so they don't have to retype it.
+        this.licenseEmailInput = licenseSvc.userEmail ?? licenseSvc.lastSignInEmail ?? ''
         this.settingsProviders = config.enabledServices(this.settingsProviders)
         this.settingsProviders = this.settingsProviders.filter(x => {
             const componentType = x.getComponentType()

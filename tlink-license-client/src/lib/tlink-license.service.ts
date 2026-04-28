@@ -21,6 +21,11 @@ import { LicenseTokenStorageService, StoredLicenseBundle } from './services/toke
 
 const STORAGE_KEY_SERVER_URL = 'tlink-license-server-url'
 const STORAGE_KEY_PRODUCT_CODE = 'tlink-license-product-code'
+// Last signed-in email — kept in localStorage (NOT the keychain) so the
+// Settings UI can pre-fill the email field after a restart even when the
+// keychain bundle was cleared (offline grace expired, refresh failed, user
+// signed out). Passwords are deliberately NEVER persisted.
+const STORAGE_KEY_LAST_EMAIL = 'tlink-license-last-email'
 
 @Injectable({ providedIn: 'root' })
 export class TlinkLicenseService implements OnDestroy {
@@ -246,6 +251,26 @@ export class TlinkLicenseService implements OnDestroy {
             localStorage.setItem(STORAGE_KEY_PRODUCT_CODE, trimmed)
         } else {
             localStorage.removeItem(STORAGE_KEY_PRODUCT_CODE)
+        }
+    }
+
+    /**
+     * Last email a user successfully signed in with. Persisted to
+     * localStorage so the Settings → License email field can pre-fill on
+     * restart, even if the secured token bundle was cleared (offline grace
+     * expired, sign-out, etc.). Empty string when nothing has been stored.
+     *
+     * Passwords are NEVER persisted — that's a deliberate boundary, not an
+     * oversight. The user types the password each session.
+     */
+    get lastSignInEmail (): string {
+        return localStorage.getItem(STORAGE_KEY_LAST_EMAIL) ?? ''
+    }
+
+    private rememberSignInEmail (email: string): void {
+        const trimmed = (email || '').trim()
+        if (trimmed) {
+            localStorage.setItem(STORAGE_KEY_LAST_EMAIL, trimmed)
         }
     }
 
@@ -518,6 +543,11 @@ export class TlinkLicenseService implements OnDestroy {
 
             if (envelope.license_status === 'VALID') {
                 this.userEmail = email.trim()
+                // Remember the email separately (localStorage, not keychain)
+                // so the Settings UI can pre-fill it on next launch even if
+                // the secured bundle gets wiped. Saved BEFORE applyEnvelope
+                // so a downstream failure can't lose this UX win.
+                this.rememberSignInEmail(this.userEmail)
                 // Suppress the trial UI in this session, but leave the trial
                 // marker on disk. The 30-day clock counts from install time —
                 // not from the current session — so a sign-out / re-login cycle
