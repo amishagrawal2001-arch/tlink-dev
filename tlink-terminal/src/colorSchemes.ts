@@ -4,31 +4,39 @@ import { TerminalColorSchemeProvider } from './api/colorSchemeProvider'
 
 @Injectable({ providedIn: 'root' })
 export class DefaultColorSchemes extends TerminalColorSchemeProvider {
+    /**
+     * Default dark scheme — AdventureTime palette. Matches the
+     * tlink-community-color-schemes/schemes/AdventureTime entry so
+     * picking that name from the dropdown leaves the terminal looking
+     * identical to a fresh install. If you want the previous Catppuccin-
+     * Mocha-derived default back, swap this block with the values from
+     * git history at colorSchemes.ts before this commit.
+     */
     static defaultColorScheme: TerminalColorScheme = {
-        name: 'NexTerm Default',
-        foreground: '#d4d4d4',
-        background: '#1e1e2e',
-        cursor: '#f5e0dc',
+        name: 'AdventureTime',
+        foreground: '#f8dcc0',
+        background: '#1f1d45',
+        cursor: '#efbf38',
         colors: [
-            '#45475a', // black
-            '#f38ba8', // red
-            '#a6e3a1', // green
-            '#f9e2af', // yellow
-            '#89b4fa', // blue
-            '#cba6f7', // magenta
-            '#94e2d5', // cyan
-            '#bac2de', // white
-            '#585b70', // bright black
-            '#f38ba8', // bright red
-            '#a6e3a1', // bright green
-            '#f9e2af', // bright yellow
-            '#89b4fa', // bright blue
-            '#cba6f7', // bright magenta
-            '#94e2d5', // bright cyan
-            '#a6adc8', // bright white
+            '#050404', // black
+            '#bd0013', // red
+            '#4ab118', // green
+            '#e7741e', // yellow
+            '#0f4ac6', // blue
+            '#665993', // magenta
+            '#70a598', // cyan
+            '#f8dcc0', // white
+            '#4e7cbf', // bright black
+            '#fc5f5a', // bright red
+            '#9eff6e', // bright green
+            '#efc11a', // bright yellow
+            '#1997c6', // bright blue
+            '#9b5953', // bright magenta
+            '#c8faf4', // bright cyan
+            '#f6f5fb', // bright white
         ],
-        selection: '#585b7066',
-        cursorAccent: '#1e1e2e',
+        selection: '#4e7cbf66',
+        cursorAccent: '#1f1d45',
     }
 
     static defaultLightColorScheme: TerminalColorScheme = {

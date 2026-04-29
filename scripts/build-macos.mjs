@@ -14,6 +14,14 @@ const __dirname = url.fileURLToPath(new URL('.', import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
 const appPath = path.join(repoRoot, 'app')
 const keytarBinaryPath = path.join(appPath, 'node_modules', 'keytar', 'build', 'Release', 'keytar.node')
+// node-pty's prebuild-install hook downloads a host-arch binary during
+// `yarn install`. On the arm64 macOS-15 runner that's normally arm64,
+// but we've seen it land as x86_64 (likely a Rosetta'd shell or a stale
+// prebuild cache). The downstream symptom is a fully-built arm64 .app
+// that crashes on launch with "Cannot find module '../build/Debug/pty.node'"
+// because dlopen rejects the wrong-arch binary. Verify-then-rebuild like
+// keytar.
+const ptyBinaryPath = path.join(appPath, 'node_modules', 'node-pty', 'build', 'Release', 'pty.node')
 
 function normalizeMacArch (arch) {
     if (arch === 'x86_64' || arch === 'x64') {
@@ -50,41 +58,50 @@ function detectBinaryArchitectures (filePath) {
     }
 }
 
-function keytarBinaryMatchesTargetArch (targetArch) {
-    if (!fs.existsSync(keytarBinaryPath)) {
+function nativeBinaryMatchesTargetArch (binaryPath, targetArch) {
+    if (!fs.existsSync(binaryPath)) {
         return false
     }
     const expectedArch = normalizeMacArch(targetArch)
-    const arches = detectBinaryArchitectures(keytarBinaryPath)
+    const arches = detectBinaryArchitectures(binaryPath)
     if (!arches.size) {
         return true
     }
     return arches.has(expectedArch)
 }
 
-async function ensureKeytarBinary (targetArch) {
-    if (keytarBinaryMatchesTargetArch(targetArch)) {
+/**
+ * Verify a native module's pty.node / keytar.node / etc. matches the
+ * target arch; rebuild if not. Generalized from the original keytar-only
+ * guard so node-pty (and any future native module) can use the same
+ * pre-flight without repeating the verify-rebuild-verify dance.
+ */
+async function ensureNativeBinary (label, binaryPath, moduleName, targetArch) {
+    if (nativeBinaryMatchesTargetArch(binaryPath, targetArch)) {
         return
     }
 
-    console.log(`Ensuring keytar native module for arch=${targetArch}`)
+    console.log(`Ensuring ${label} native module for arch=${targetArch}`)
     await rebuild({
         buildPath: appPath,
         electronVersion: vars.electronVersion,
         arch: targetArch,
         force: true,
         useCache: false,
-        onlyModules: ['keytar'],
+        onlyModules: [moduleName],
     })
 
-    if (!fs.existsSync(keytarBinaryPath)) {
-        throw new Error(`Missing keytar native module after rebuild: ${keytarBinaryPath}`)
+    if (!fs.existsSync(binaryPath)) {
+        throw new Error(`Missing ${label} native module after rebuild: ${binaryPath}`)
     }
-    if (!keytarBinaryMatchesTargetArch(targetArch)) {
-        const detected = [...detectBinaryArchitectures(keytarBinaryPath)].join(', ') || 'unknown'
-        throw new Error(`keytar native module arch mismatch: expected ${normalizeMacArch(targetArch)}, got ${detected}`)
+    if (!nativeBinaryMatchesTargetArch(binaryPath, targetArch)) {
+        const detected = [...detectBinaryArchitectures(binaryPath)].join(', ') || 'unknown'
+        throw new Error(`${label} native module arch mismatch: expected ${normalizeMacArch(targetArch)}, got ${detected}`)
     }
 }
+
+const ensureKeytarBinary = (targetArch) => ensureNativeBinary('keytar', keytarBinaryPath, 'keytar', targetArch)
+const ensureNodePtyBinary = (targetArch) => ensureNativeBinary('node-pty', ptyBinaryPath, 'node-pty', targetArch)
 
 const isTag = (process.env.GITHUB_REF || '').startsWith('refs/tags/')
 
@@ -127,6 +144,7 @@ function removeNestedBinDirs () {
 
 ;(async () => {
     await ensureKeytarBinary(process.env.ARCH)
+    await ensureNodePtyBinary(process.env.ARCH)
 
     // Remove nested .bin symlink directories to prevent EEXIST errors during packaging
     removeNestedBinDirs()
