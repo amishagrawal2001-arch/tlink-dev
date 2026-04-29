@@ -1,4 +1,4 @@
-import { Component, Injector, HostBinding } from '@angular/core'
+import { Component, Injector, HostBinding, HostListener } from '@angular/core'
 import { BaseTabComponent, ConfigService, NotificationsService } from 'tlink-core'
 import { HttpClientService } from '../services/httpClient.service'
 import { APIClientProfile, APIResponse, HttpMethod, BodyType, AuthType, RequestHeader, SavedRequest, APICollection } from '../api/interfaces'
@@ -21,6 +21,32 @@ export class APIClientTabComponent extends BaseTabComponent {
     headers: RequestHeader[] = [{ key: '', value: '', enabled: true }]
     body = ''
     bodyType: BodyType = 'none'
+    bodyColor = ''
+    bodyBgColor = ''
+    jsonError: string | null = null
+    activeColorPicker: 'text' | 'bg' | null = null
+
+    // Preset palettes tuned for readability on the body textarea. First in each
+    // list is a theme-default sentinel ('') which we handle as "use theme".
+    textPresets: string[] = [
+        // Near-whites / greys — the common defaults on dark backgrounds.
+        '#ffffff', '#f8fafc', '#e5e7eb', '#cbd5e1',
+        // Warm accents (yellows → orange) — good for dark + light bgs.
+        '#fef9c3', '#fde68a', '#fcd34d', '#fb923c',
+        // Cool accents — green / blue / purple / red.
+        '#86efac', '#60a5fa', '#c084fc', '#f87171',
+        // Darks / blacks — paired with the new light backgrounds.
+        '#374151', '#1f2937', '#111827', '#000000',
+    ]
+    bgPresets: string[] = [
+        // Lights first — easiest to scan, most requested.
+        '#ffffff', '#f8fafc', '#fef9c3', '#fef3c7',
+        '#d1fae5', '#dbeafe', '#e9d5ff', '#fce7f3',
+        // Mid-tones for tinted backgrounds.
+        '#e5e7eb', '#cbd5e1', '#94a3b8', '#64748b',
+        // Darks for low-glare coding.
+        '#1f2937', '#111827', '#0f172a', '#0c0c0c',
+    ]
     auth: { type: AuthType, token: string, username: string, password: string } = {
         type: 'none', token: '', username: '', password: '',
     }
@@ -57,6 +83,8 @@ export class APIClientTabComponent extends BaseTabComponent {
             this.headers = this.profile.options.headers?.length ? this.profile.options.headers : this.headers
             this.body = this.profile.options.body || this.body
             this.bodyType = this.profile.options.bodyType || this.bodyType
+            this.bodyColor = this.profile.options.bodyColor || this.bodyColor
+            this.bodyBgColor = this.profile.options.bodyBgColor || this.bodyBgColor
             if (this.profile.options.auth) {
                 this.auth = {
                     type: this.profile.options.auth.type || 'none',
@@ -68,6 +96,7 @@ export class APIClientTabComponent extends BaseTabComponent {
             this.timeout = this.profile.options.timeout || this.timeout
         }
 
+        this.validateBody()
         this.loadCollections()
     }
 
@@ -113,6 +142,62 @@ export class APIClientTabComponent extends BaseTabComponent {
         this.headers.splice(index, 1)
     }
 
+    // Called on body text change and on body-type switch. Non-json types clear
+    // the error so a stale message never sticks around when the user flips away
+    // from json.
+    validateBody (): void {
+        if (this.bodyType !== 'json' || !this.body.trim()) {
+            this.jsonError = null
+            return
+        }
+        try {
+            JSON.parse(this.body)
+            this.jsonError = null
+        } catch (e: any) {
+            this.jsonError = e?.message || 'Invalid JSON'
+        }
+    }
+
+    setBodyType (bt: BodyType): void {
+        this.bodyType = bt
+        this.validateBody()
+    }
+
+    toggleColorPicker (which: 'text' | 'bg', event?: Event): void {
+        event?.stopPropagation()
+        this.activeColorPicker = this.activeColorPicker === which ? null : which
+    }
+
+    pickColor (which: 'text' | 'bg', hex: string): void {
+        if (which === 'text') {
+            this.bodyColor = hex
+        } else {
+            this.bodyBgColor = hex
+        }
+        this.activeColorPicker = null
+    }
+
+    resetColor (which: 'text' | 'bg'): void {
+        if (which === 'text') {
+            this.bodyColor = ''
+        } else {
+            this.bodyBgColor = ''
+        }
+        this.activeColorPicker = null
+    }
+
+    onCustomColor (which: 'text' | 'bg', event: Event): void {
+        const value = (event.target as HTMLInputElement).value
+        this.pickColor(which, value)
+    }
+
+    // HostListener is cleaner but keeps a doc-level listener; in a tab this is
+    // fine. Closes the popover when the user clicks anywhere else.
+    @HostListener('document:click')
+    onDocumentClick (): void {
+        this.activeColorPicker = null
+    }
+
     getFormattedBody (): string {
         if (!this.response?.body) {
             return ''
@@ -126,6 +211,31 @@ export class APIClientTabComponent extends BaseTabComponent {
 
     getResponseSize (): string {
         return this.response ? this.httpClient.formatSize(this.response.size) : ''
+    }
+
+    async copyResponseBody (): Promise<void> {
+        if (!this.response) {
+            return
+        }
+        // Copy what the user is currently looking at: formatted JSON, raw body,
+        // or a key:value rendering of the headers tab.
+        let text = ''
+        if (this.activeResponseTab === 'headers') {
+            text = this.getResponseHeaders().map(h => `${h.key}: ${h.value}`).join('\n')
+        } else if (this.activeResponseTab === 'raw') {
+            text = this.response.body || ''
+        } else {
+            text = this.getFormattedBody()
+        }
+        if (!text) {
+            return
+        }
+        try {
+            await navigator.clipboard.writeText(text)
+            this.notifications.info('Copied to clipboard')
+        } catch (e: any) {
+            this.notifications.error(e?.message || 'Copy failed')
+        }
     }
 
     getResponseHeaders (): { key: string, value: string }[] {
@@ -187,6 +297,8 @@ export class APIClientTabComponent extends BaseTabComponent {
                 headers: this.headers.filter(h => h.key.trim()),
                 body: this.body,
                 bodyType: this.bodyType,
+                bodyColor: this.bodyColor,
+                bodyBgColor: this.bodyBgColor,
                 timeout: this.timeout,
                 auth: this.auth,
             },
@@ -203,6 +315,8 @@ export class APIClientTabComponent extends BaseTabComponent {
         this.headers = opts.headers?.length ? opts.headers : [{ key: '', value: '', enabled: true }]
         this.body = opts.body || ''
         this.bodyType = opts.bodyType || 'none'
+        this.bodyColor = opts.bodyColor || ''
+        this.bodyBgColor = opts.bodyBgColor || ''
         this.auth = {
             type: opts.auth?.type || 'none',
             token: opts.auth?.token || '',
@@ -212,6 +326,7 @@ export class APIClientTabComponent extends BaseTabComponent {
         this.timeout = opts.timeout || 30000
         this.response = null
         this.activeRequestTab = 'headers'
+        this.validateBody()
     }
 
     deleteRequest (col: APICollection, req: SavedRequest): void {

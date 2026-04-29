@@ -63,14 +63,85 @@
                     button.body-type-btn(
                         *ngFor='let bt of bodyTypes',
                         [class.active]='bodyType === bt',
-                        (click)='bodyType = bt'
+                        (click)='setBodyType(bt)'
                     ) {{bt}}
+                    .color-group.ms-auto(*ngIf='bodyType !== "none"')
+                        button.color-btn(
+                            (click)='toggleColorPicker("text", $event)',
+                            title='Text color'
+                        )
+                            span.color-dot([style.background]='bodyColor || "transparent"', [class.empty]='!bodyColor')
+                            | Text
+                        .color-pop(*ngIf='activeColorPicker === "text"', (click)='$event.stopPropagation()')
+                            .color-pop-title Text color
+                            .color-pop-grid
+                                button.color-chip(
+                                    *ngFor='let c of textPresets',
+                                    [style.background]='c',
+                                    [class.selected]='bodyColor === c',
+                                    (click)='pickColor("text", c)',
+                                    [title]='c'
+                                )
+                            .color-pop-actions
+                                label.custom-color
+                                    i.fas.fa-eye-dropper
+                                    | Custom…
+                                    input(
+                                        type='color',
+                                        [value]='bodyColor || "#ffffff"',
+                                        (input)='onCustomColor("text", $event)'
+                                    )
+                                button.reset-color(
+                                    *ngIf='bodyColor',
+                                    (click)='resetColor("text")'
+                                )
+                                    i.fas.fa-undo.me-1
+                                    | Reset
+                    .color-group(*ngIf='bodyType !== "none"')
+                        button.color-btn(
+                            (click)='toggleColorPicker("bg", $event)',
+                            title='Background color'
+                        )
+                            span.color-dot.square([style.background]='bodyBgColor || "transparent"', [class.empty]='!bodyBgColor')
+                            | BG
+                        .color-pop(*ngIf='activeColorPicker === "bg"', (click)='$event.stopPropagation()')
+                            .color-pop-title Background color
+                            .color-pop-grid
+                                button.color-chip(
+                                    *ngFor='let c of bgPresets',
+                                    [style.background]='c',
+                                    [class.selected]='bodyBgColor === c',
+                                    (click)='pickColor("bg", c)',
+                                    [title]='c'
+                                )
+                            .color-pop-actions
+                                label.custom-color
+                                    i.fas.fa-eye-dropper
+                                    | Custom…
+                                    input(
+                                        type='color',
+                                        [value]='bodyBgColor || "#1f2937"',
+                                        (input)='onCustomColor("bg", $event)'
+                                    )
+                                button.reset-color(
+                                    *ngIf='bodyBgColor',
+                                    (click)='resetColor("bg")'
+                                )
+                                    i.fas.fa-undo.me-1
+                                    | Reset
                 textarea.code-editor(
                     *ngIf='bodyType !== "none"',
                     [(ngModel)]='body',
+                    (ngModelChange)='validateBody()',
+                    [class.invalid]='jsonError',
+                    [style.color]='bodyColor || null',
+                    [style.background]='bodyBgColor || null',
                     placeholder='{\n  "key": "value"\n}',
                     spellcheck='false'
                 )
+                .json-error(*ngIf='jsonError && bodyType === "json"')
+                    i.fas.fa-exclamation-circle.me-1
+                    | {{jsonError}}
                 .empty-state(*ngIf='bodyType === "none"')
                     i.fas.fa-ban(style='font-size: 20px; opacity: 0.2;')
                     .mt-1 This request does not have a body
@@ -168,6 +239,11 @@
                         [class.active]='activeResponseTab === "raw"',
                         (click)='activeResponseTab = "raw"'
                     ) Raw
+                    button.icon-btn.copy-btn.ms-auto(
+                        (click)='copyResponseBody()',
+                        title='Copy response'
+                    )
+                        i.fas.fa-copy
                 .response-content
                     pre.response-json(*ngIf='activeResponseTab === "body"') {{getFormattedBody()}}
                     .response-header-list(*ngIf='activeResponseTab === "headers"')
