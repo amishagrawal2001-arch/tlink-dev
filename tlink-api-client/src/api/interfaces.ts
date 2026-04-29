@@ -23,6 +23,8 @@ export interface APIClientOptions {
     headers: RequestHeader[]
     body: string
     bodyType: BodyType
+    bodyColor?: string
+    bodyBgColor?: string
     timeout: number
     auth: AuthConfig
 }
