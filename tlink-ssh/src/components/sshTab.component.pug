@@ -41,7 +41,11 @@ terminal-toolbar([tab]='this')
         [ngbTooltip]='"SFTP"|translate',
         container='body'
     )
-        i.far.fa-folder-open
+        //- Distinct from the .far.fa-folder-open used for the local session-log
+        //- directory above. SFTP opens a remote file tree, so the tree icon
+        //- communicates that better and the two buttons are now visually
+        //- separable side-by-side in the toolbar.
+        i.fas.fa-folder-tree
 
     button.btn.btn-sm.btn-link(
         *ngIf='session && session.open && hostApp.platform !== Platform.Web',
