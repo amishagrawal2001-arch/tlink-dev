@@ -14,6 +14,31 @@ export class SSHProfilesService extends QuickConnectProfileProvider<SSHProfile> 
     settingsComponent = SSHProfileSettingsComponent
     configDefaults = {
         behaviorOnSessionEnd: 'reconnect',
+        // Lock AdventureTime as the per-profile color scheme on new SSH
+        // profiles. The global terminal default is also AdventureTime, so
+        // this is mostly belt-and-braces — but it means a user who later
+        // switches the global default to something else still gets
+        // AdventureTime on every NEW SSH profile they create. Existing
+        // profiles whose terminalColorScheme was never written stay on the
+        // global default; this only affects the initial value when a new
+        // profile is built.
+        //
+        // Inlined rather than imported from tlink-terminal because
+        // DefaultColorSchemes isn't part of that package's public API.
+        terminalColorScheme: {
+            name: 'AdventureTime',
+            foreground: '#f8dcc0',
+            background: '#1f1d45',
+            cursor: '#efbf38',
+            colors: [
+                '#050404', '#bd0013', '#4ab118', '#e7741e',
+                '#0f4ac6', '#665993', '#70a598', '#f8dcc0',
+                '#4e7cbf', '#fc5f5a', '#9eff6e', '#efc11a',
+                '#1997c6', '#9b5953', '#c8faf4', '#f6f5fb',
+            ],
+            selection: '#4e7cbf66',
+            cursorAccent: '#1f1d45',
+        },
         options: {
             host: null,
             port: 22,
