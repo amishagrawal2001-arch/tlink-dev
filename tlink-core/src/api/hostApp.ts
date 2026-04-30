@@ -72,6 +72,17 @@ export abstract class HostAppService {
      * Fired when Set session log file is selected from the menu
      */
     get sessionLogFileRequest$ (): Observable<void> { return this.sessionLogFileRequest }
+
+    /**
+     * Public fire-the-event helper for callers (e.g. the SSH toolbar's
+     * "Session log file" button when no log path is configured yet) that
+     * want the same modal the menu opens. The existing TabContextMenu
+     * listener picks this up and runs the SessionLogSettingsModal flow
+     * against the currently active tab.
+     */
+    requestSessionLogFile (): void {
+        this.sessionLogFileRequest.next()
+    }
     /**
      * Fired when Save Workspace is selected from the menu
      */

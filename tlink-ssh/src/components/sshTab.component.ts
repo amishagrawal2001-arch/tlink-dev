@@ -5,7 +5,7 @@ import { marker as _ } from '@biesbjerg/ngx-translate-extract-marker'
 import colors from 'ansi-colors'
 import { Component, HostBinding, Injector } from '@angular/core'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
-import { Platform, ProfilesService, NotificationsService } from 'tlink-core'
+import { Platform, ProfilesService, NotificationsService, HostAppService } from 'tlink-core'
 import { BaseTerminalTabComponent, ConnectableTerminalTabComponent } from 'tlink-terminal'
 import { SSHService } from '../services/ssh.service'
 import { KeyboardInteractivePrompt, SSHSession } from '../session/ssh'
@@ -56,6 +56,7 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
         private profilesService: ProfilesService,
         private sshMultiplexer: SSHMultiplexerService,
         private sshNotifications: NotificationsService,
+        private sshHostApp: HostAppService,
     ) {
         super(injector)
         this.sessionChanged$.subscribe(() => {
@@ -278,7 +279,14 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
         try {
             const filePath = (this as any).sessionLogPath as string | undefined
             if (!filePath) {
-                this.notifications.error(this.translate.instant(_('Session log file is not available yet')))
+                // Session log isn't configured for this tab yet. Instead of
+                // dead-ending with "Session log file is not available yet",
+                // open the same Session Log settings modal that the
+                // Edit-menu / context-menu uses, so the user can enable +
+                // configure the log right from the toolbar button. The
+                // modal is wired through HostAppService.requestSessionLogFile
+                // → TabContextMenu listener → SessionLogSettingsModal.
+                this.sshHostApp.requestSessionLogFile()
                 return
             }
             await fs.mkdir(path.dirname(filePath), { recursive: true })
