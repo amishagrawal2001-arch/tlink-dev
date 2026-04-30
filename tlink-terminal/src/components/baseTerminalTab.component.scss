@@ -39,6 +39,28 @@
         }
     }
 
+    // Hover-peek strip at the top of every toolbar-enabled tab. Sits
+    // behind the (offscreen) toolbar at z-index:3 so the toolbar's own
+    // mouseenter still fires once it slides down. The strip is faint
+    // and only ~4px tall — visible enough to discover, narrow enough
+    // not to steal real-estate from the terminal.
+    &.toolbar-enabled:not(.toolbar-pinned) > .terminal-toolbar-spacer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 3;
+        height: 4px;
+        width: 100%;
+        background: linear-gradient(180deg, rgba(96, 165, 250, 0.35), rgba(96, 165, 250, 0));
+        opacity: 0.6;
+        transition: opacity 0.2s ease-out;
+        cursor: pointer;
+    }
+    &.toolbar-enabled:not(.toolbar-pinned):hover > .terminal-toolbar-spacer {
+        opacity: 1;
+    }
+
     &.toolbar-pinned > .terminal-toolbar-spacer {
         width: 100%;
         height: $toolbarHeight;

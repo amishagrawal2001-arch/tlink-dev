@@ -1,4 +1,13 @@
-.terminal-toolbar-spacer
+//- The spacer doubles as a hover-peek zone when the toolbar is enabled
+//- but not pinned. Without this, hover-revealing the toolbar is
+//- impossible — the toolbar element itself is translated offscreen
+//- with `transform: translate(0, -100px)`, so the mouse can't
+//- physically enter it. The spacer is a thin (4px) always-visible
+//- strip that captures the hover and triggers showToolbar().
+.terminal-toolbar-spacer(
+    (mouseenter)='showToolbar()',
+    (mouseleave)='hideToolbar()'
+)
 terminal-toolbar([tab]='this')
 .terminal-pane-close(
     *ngIf='showInPaneClose',
