@@ -723,7 +723,18 @@ export class SessionManagerTabComponent extends BaseTabComponentRuntime {
         } else if (this.isRemoteDesktopPanel()) {
             this.profileGroups = normalized
         } else {
-            this.profileGroups = normalized.filter(group => !this.isBuiltInGroup(group))
+            // Default Session Manager panel: drop the built-in group AND
+            // exclude RDP profiles. RDP has its own dedicated Remote Desktop
+            // panel so showing them here is duplication that confuses users
+            // (they see an `RDP` badge in a list otherwise full of SSH /
+            // Telnet / Serial sessions and don't know what to do with it).
+            this.profileGroups = normalized
+                .filter(group => !this.isBuiltInGroup(group))
+                .map(group => ({
+                    ...group,
+                    profiles: (group.profiles ?? []).filter(profile => profile.type !== 'rdp'),
+                }))
+                .filter(group => (group.profiles?.length ?? 0) > 0)
         }
         if (this.isRemoteDesktopPanel()) {
             this.profileGroups = this.profileGroups
