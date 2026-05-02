@@ -1321,16 +1321,24 @@ export class TlinkLicenseService implements OnDestroy {
             this.heartbeatFailureCount += 1
             this.heartbeatLastStatus = 'unreachable'
             this.heartbeatLastReason = null
-            const withinGrace = this.lastServerContactAt && this.isWithinGrace(this.lastServerContactAt.getTime())
+            const withinGrace = !!(this.lastServerContactAt && this.isWithinGrace(this.lastServerContactAt.getTime()))
+            const noSession = !this.accessToken || !this.deviceId || !this.licenseId
             // eslint-disable-next-line no-console
             console.warn(`%c[license:heartbeat] tick #${this.heartbeatCount} → UNREACHABLE`,
                 'color:#f59e0b;font-weight:700',
                 {
                     durationMs: this.heartbeatLastDurationMs,
                     error: this.heartbeatLastError,
+                    // When duration is ~1ms with no error, the call short-
+                    // circuited before HTTP. Surface why explicitly.
+                    diagnostic: noSession
+                        ? 'no-session (sign in first; heartbeat needs an active access_token + device_id + license_id)'
+                        : (this.heartbeatLastError ? 'fetch threw (network / DNS / CORS)' : 'request returned non-OK or invalid JSON'),
                     lastServerContactAt: this.lastServerContactAt?.toISOString() ?? null,
                     gracePeriodHours: this.config.gracePeriodHours,
                     withinGrace,
+                    serverUrl: this.serverUrl,
+                    heartbeatUrl: this.licenseEndpoint('heartbeat'),
                 })
             if (withinGrace) {
                 this.offlineGrace = true
