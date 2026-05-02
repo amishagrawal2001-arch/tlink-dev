@@ -152,7 +152,7 @@
                         [class.card-enterprise]='licenseSvc.licenseType === "TEAM" && licenseSvc.licenseStatus === "active"',
                         [class.card-expired]='licenseSvc.licenseStatus !== "active"'
                     )
-                        .d-flex.align-items-center
+                        .d-flex.align-items-center.flex-wrap(style='gap:10px')
                             span.live-dot(*ngIf='licenseSvc.licenseStatus === "active"', title='Heartbeat active')
                             span.license-tier-badge(
                                 [class.badge-trial]='licenseSvc.billingType === "TRIAL" && licenseSvc.licenseStatus === "active"',
@@ -160,14 +160,14 @@
                                 [class.badge-enterprise]='licenseSvc.licenseType === "TEAM" && licenseSvc.licenseStatus === "active"',
                                 [class.badge-expired]='licenseSvc.licenseStatus !== "active"'
                             )
-                                ng-container(*ngIf='licenseSvc.licenseStatus === "active" && licenseSvc.isLocalTrial') TRIAL {{ licenseSvc.trialDaysRemaining }}d
+                                ng-container(*ngIf='licenseSvc.licenseStatus === "active" && licenseSvc.isLocalTrial') TRIAL
                                 ng-container(*ngIf='licenseSvc.licenseStatus === "active" && !licenseSvc.isLocalTrial && licenseSvc.billingType === "TRIAL"') TRIAL
                                 ng-container(*ngIf='licenseSvc.licenseStatus === "active" && !licenseSvc.isLocalTrial && licenseSvc.billingType === "PAID" && licenseSvc.licenseType === "TEAM"') TEAM
                                 ng-container(*ngIf='licenseSvc.licenseStatus === "active" && !licenseSvc.isLocalTrial && licenseSvc.billingType === "PAID" && licenseSvc.licenseType === "INDIVIDUAL"') INDIVIDUAL
                                 ng-container(*ngIf='licenseSvc.licenseStatus === "expired"') EXPIRED
                                 ng-container(*ngIf='licenseSvc.licenseStatus === "unauthenticated"') NOT SIGNED IN
                                 ng-container(*ngIf='licenseSvc.licenseStatus === "invalid"') INVALID
-                            .ms-3.d-flex.flex-column(style='line-height:1.3')
+                            .d-flex.flex-column.flex-grow-1(style='line-height:1.3; min-width:200px')
                                 //- Logged in with a known email: show it.
                                 strong.license-account(*ngIf='licenseSvc.licenseStatus === "active" && licenseSvc.userEmail') {{ licenseSvc.userEmail }}
                                 //- Active but email not yet hydrated from server (old bundle). Don't mislead the user.
@@ -178,6 +178,14 @@
                                 strong.license-account(*ngIf='licenseSvc.licenseStatus !== "active"') Not signed in
                                 small.text-muted(*ngIf='licenseSvc.licenseStatus === "active" && licenseSvc.endDate') Expires {{ formatExpiry() }}
                                 small.text-muted(*ngIf='licenseSvc.licenseStatus !== "active"') Please sign in to continue
+
+                        //- Trial progress bar — only on local trials. Shows
+                        //- proportion of the 30-day window used up. Helps
+                        //- communicate urgency without taking extra rows.
+                        .trial-progress.mt-2(*ngIf='licenseSvc.licenseStatus === "active" && licenseSvc.isLocalTrial')
+                            .trial-progress-fill([style.width.%]='trialProgressPercent()')
+                            .trial-progress-label
+                                | {{ licenseSvc.trialDaysRemaining }} of {{ licenseSvc.trialDurationDays }} trial days left
 
                     //- Sign-in form is heavy (two big inputs + button). When
                     //- the user is already signed in, hide it behind a
@@ -202,25 +210,44 @@
                             .header
                                 .title(translate) Email
                             .license-input-row
-                                input.form-control(
-                                    type='email',
-                                    autocomplete='email',
-                                    [(ngModel)]='licenseEmailInput',
-                                    placeholder='you@example.com'
-                                )
+                                .input-with-icon
+                                    i.fas.fa-envelope.input-icon
+                                    input.form-control(
+                                        type='email',
+                                        autocomplete='email',
+                                        [(ngModel)]='licenseEmailInput',
+                                        placeholder='you@example.com',
+                                        [disabled]='licenseSigningIn'
+                                    )
                         .form-line
                             .header
                                 .title(translate) Password
                             .license-input-row
-                                input.form-control(
-                                    type='password',
-                                    autocomplete='current-password',
-                                    [(ngModel)]='licensePasswordInput',
-                                    placeholder='Your password',
-                                    (keydown.enter)='activateLicense()'
+                                .input-with-icon
+                                    i.fas.fa-lock.input-icon
+                                    input.form-control(
+                                        type='password',
+                                        autocomplete='current-password',
+                                        [(ngModel)]='licensePasswordInput',
+                                        placeholder='Your password',
+                                        [disabled]='licenseSigningIn',
+                                        (keydown.enter)='activateLicense()'
+                                    )
+                                button.btn.btn-primary.license-btn(
+                                    (click)='activateLicense()',
+                                    [disabled]='licenseSigningIn'
                                 )
-                                button.btn.btn-primary.license-btn((click)='activateLicense()') Sign in
-                                button.btn.btn-link.btn-sm(*ngIf='licenseSvc.userEmail', (click)='toggleSignInForm()') Cancel
+                                    i.fas.me-1(
+                                        [class.fa-spinner]='licenseSigningIn',
+                                        [class.fa-spin]='licenseSigningIn',
+                                        [class.fa-sign-in-alt]='!licenseSigningIn'
+                                    )
+                                    | {{ licenseSigningIn ? 'Signing in…' : 'Sign in' }}
+                                button.btn.btn-link.btn-sm(
+                                    *ngIf='licenseSvc.userEmail',
+                                    (click)='toggleSignInForm()',
+                                    [disabled]='licenseSigningIn'
+                                ) Cancel
                         .text-danger.mt-1.small(*ngIf='licenseError') {{ licenseError }}
                         .text-success.mt-1.small(*ngIf='licenseSuccess') {{ licenseSuccess }}
 
@@ -258,11 +285,13 @@
                             .title(translate) Device fingerprint
                             .description(translate) Send this to your admin when requesting an offline activation code so the code is bound to this device.
                         .license-input-row
-                            input.form-control(
-                                type='text',
-                                readonly,
-                                [value]='deviceFingerprint || "(computing…)"'
-                            )
+                            .input-with-icon
+                                i.fas.fa-fingerprint.input-icon
+                                input.form-control(
+                                    type='text',
+                                    readonly,
+                                    [value]='deviceFingerprint || "(computing…)"'
+                                )
                             button.btn.btn-secondary.license-btn(
                                 [disabled]='!deviceFingerprint',
                                 (click)='copyDeviceFingerprint()'
@@ -278,11 +307,13 @@
                             .title(translate) Server URL
                             .description(translate) Host, API root, or licenses-rooted URL — endpoints derived automatically.
                         .license-input-row
-                            input.form-control(
-                                type='text',
-                                [(ngModel)]='serverUrl',
-                                placeholder='http://localhost:4000 or https://…/api/v1'
-                            )
+                            .input-with-icon
+                                i.fas.fa-link.input-icon
+                                input.form-control(
+                                    type='text',
+                                    [(ngModel)]='serverUrl',
+                                    placeholder='http://localhost:4000 or https://…/api/v1'
+                                )
                             button.btn.btn-secondary.license-btn((click)='testServerConnection()') Test
                             button.btn.btn-primary.license-btn((click)='saveServerUrl()') Save
                     .small.mt-1(*ngIf='serverTestResult')
@@ -296,11 +327,13 @@
                             .title(translate) Product Code
                             .description(translate) Sent with activate/validate. Override only if your tenant uses a non-default product slug.
                         .license-input-row
-                            input.form-control(
-                                type='text',
-                                [(ngModel)]='productCode',
-                                placeholder='tyllink_terminal'
-                            )
+                            .input-with-icon
+                                i.fas.fa-tag.input-icon
+                                input.form-control(
+                                    type='text',
+                                    [(ngModel)]='productCode',
+                                    placeholder='tyllink_terminal'
+                                )
                             button.btn.btn-primary.license-btn((click)='saveProductCode()') Save
                     .small.mt-1.text-success(*ngIf='productCodeSaved', translate) Saved
 
@@ -350,33 +383,62 @@
                         span.stat-chip.stat-error(*ngIf='licenseSvc.heartbeatLastResult.status === "invalid"')
                             span.stat-label Last
                             span.stat-value Invalid ({{ licenseSvc.heartbeatLastResult.reason }})
+                        //- Sparkline visualizing the last ~24 heartbeat
+                        //- durations. Tucked into the chip row so it
+                        //- reads as one more piece of telemetry; quietly
+                        //- disappears when there's no data yet.
+                        span.stat-chip.heartbeat-sparkline-chip(*ngIf='heartbeatSparklinePoints()', title='Recent heartbeat durations')
+                            span.stat-label Trend
+                            svg.heartbeat-sparkline(viewBox='0 0 80 18', preserveAspectRatio='none')
+                                polyline(
+                                    fill='none',
+                                    stroke='currentColor',
+                                    stroke-width='1.4',
+                                    stroke-linecap='round',
+                                    stroke-linejoin='round',
+                                    [attr.points]='heartbeatSparklinePoints()'
+                                )
 
-                    .d-flex.gap-3.mt-4
-                        //- Manual refresh — hits /api/licenses/refresh right now
-                        //- instead of waiting for the ~13-min preemptive timer.
-                        //- Grey + retitle when the server already proved it
-                        //- doesn't support token-only refresh, so the user
-                        //- isn't tempted to repeatedly click a doomed button.
-                        button.btn.btn-outline-secondary(
-                            *ngIf='licenseSvc.licenseStatus === "active" && !licenseSvc.isLocalTrial',
-                            [disabled]='licenseRefreshing || licenseSvc.heartbeatDisabled',
-                            [title]='licenseSvc.heartbeatDisabled ? "This server requires sign-in to refresh." : ""',
-                            (click)='refreshLicense()'
-                        )
-                            i.fas.me-2(
-                                [class.fa-sync-alt]='!licenseRefreshing',
-                                [class.fa-spinner]='licenseRefreshing',
-                                [class.fa-spin]='licenseRefreshing'
+                    //- Action footer. Two groups: secondary actions left,
+                    //- primary CTAs right. Top divider visually breaks the
+                    //- panel from the form rows above so the buttons read
+                    //- as a "what next" toolbar rather than another row.
+                    .license-actions-footer.mt-4
+                        .actions-group.actions-secondary
+                            //- Manual refresh — hits /api/licenses/refresh
+                            //- right now instead of waiting for the ~13-min
+                            //- preemptive timer. Grey + retitle when the
+                            //- server already proved it doesn't support
+                            //- token-only refresh, so the user isn't
+                            //- tempted to repeatedly click a doomed button.
+                            button.btn.btn-outline-secondary(
+                                *ngIf='licenseSvc.licenseStatus === "active" && !licenseSvc.isLocalTrial',
+                                [disabled]='licenseRefreshing || licenseSvc.heartbeatDisabled',
+                                [title]='licenseSvc.heartbeatDisabled ? "This server requires sign-in to refresh." : ""',
+                                (click)='refreshLicense()'
                             )
-                            | {{ licenseRefreshing ? 'Refreshing…' : (licenseSvc.heartbeatDisabled ? 'Refresh unavailable' : 'Refresh license') }}
+                                i.fas.me-2(
+                                    [class.fa-sync-alt]='!licenseRefreshing',
+                                    [class.fa-spinner]='licenseRefreshing',
+                                    [class.fa-spin]='licenseRefreshing'
+                                )
+                                | {{ licenseRefreshing ? 'Refreshing…' : (licenseSvc.heartbeatDisabled ? 'Refresh unavailable' : 'Refresh license') }}
 
-                        //- Always visible so users can reset local state even
-                        //- when there's no active session (useful when the
-                        //- bundle is stale or the trial is stuck).
-                        button.btn.btn-outline-danger((click)='deactivateLicense()')
-                            i.fas.fa-sign-out-alt.me-2
-                            | Sign out / reset local state
-                        a.btn.btn-outline-primary(href='https://tlink.io/buy', target='_blank') Buy License
+                            //- Always visible so users can reset local
+                            //- state even when there's no active session
+                            //- (useful when the bundle is stale or the
+                            //- trial is stuck).
+                            button.btn.btn-outline-danger((click)='deactivateLicense()')
+                                i.fas.fa-sign-out-alt.me-2
+                                | Sign out
+
+                        .actions-group.actions-primary
+                            //- Primary CTA — sits at the far right where the
+                            //- eye lands last. Outline-style avoids fighting
+                            //- with form's own submit affordances above.
+                            a.btn.btn-primary(href='https://tlink.io/buy', target='_blank')
+                                i.fas.fa-shopping-cart.me-2
+                                | Buy License
 
         li(ngbNavItem='config-file')
             a.d-flex.align-items-center(ngbNavLink)

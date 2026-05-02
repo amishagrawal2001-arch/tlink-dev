@@ -75,6 +75,16 @@ export class TlinkLicenseService implements OnDestroy {
     private heartbeatLastDurationMs: number | null = null
     private heartbeatLastError: string | null = null
     /**
+     * Ring buffer of the last N heartbeat round-trip times in ms. The
+     * Settings UI renders this as a tiny sparkline next to the chip
+     * stats so users can see the network shape over time at a glance:
+     * stable bars = healthy server, growing bars = degrading latency,
+     * gaps = unreachable. Keeps the most recent SAMPLES entries; older
+     * ticks fall off.
+     */
+    private static readonly HEARTBEAT_HISTORY_SIZE = 24
+    private heartbeatHistory: number[] = []
+    /**
      * Set to true when the server returns 422 with a "missing email" /
      * "missing password" detail — indicating the heartbeat endpoint is
      * actually a re-authentication endpoint (AWS API-Gateway shape) and
@@ -265,6 +275,9 @@ export class TlinkLicenseService implements OnDestroy {
      */
     get productCode (): string {
         const stored = localStorage.getItem(STORAGE_KEY_PRODUCT_CODE)?.trim()
+        // Empty string after trim should fall through to default — `??` would
+        // keep the empty value, so `||` is intentional here.
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
         return stored || this.config.productCode
     }
 
@@ -328,8 +341,8 @@ export class TlinkLicenseService implements OnDestroy {
         // throws on invalid inputs). Strip scheme + authority.
         const m = /^(?:[a-z][a-z0-9+.\-]*:\/\/)?[^/]*(\/.*)?$/i.exec(base)
         const path = (m?.[1] ?? '').replace(/\/+$/, '')
-        if (/\/licenses(\/|$)/i.test(path)) return 'licenses'
-        if (path && path !== '/') return 'versioned'
+        if (/\/licenses(\/|$)/i.test(path)) {return 'licenses'}
+        if (path && path !== '/') {return 'versioned'}
         return 'bare'
     }
 
@@ -339,7 +352,7 @@ export class TlinkLicenseService implements OnDestroy {
      */
     private apiRootFromBase (base: string): string {
         const kind = this.classifyBase(base)
-        if (kind === 'licenses') return base.replace(/\/licenses$/i, '')
+        if (kind === 'licenses') {return base.replace(/\/licenses$/i, '')}
         return base
     }
 
@@ -384,9 +397,9 @@ export class TlinkLicenseService implements OnDestroy {
         const apiRoot = this.apiRootFromBase(base)
         const cleanAction = this.translateActionForBase(
             String(action).replace(/^\/+/, ''),
-            kind
+            kind,
         )
-        if (kind === 'bare') return `${apiRoot}/api/licenses/${cleanAction}`
+        if (kind === 'bare') {return `${apiRoot}/api/licenses/${cleanAction}`}
         return `${apiRoot}/licenses/${cleanAction}`
     }
 
@@ -400,7 +413,7 @@ export class TlinkLicenseService implements OnDestroy {
         const raw = (overrideBase ?? this.serverUrl).trim().replace(/\/+$/, '')
         const kind = this.classifyBase(raw)
         const apiRoot = this.apiRootFromBase(raw)
-        if (kind === 'bare') return `${apiRoot}/api/health`
+        if (kind === 'bare') {return `${apiRoot}/api/health`}
         return `${apiRoot}/health`
     }
 
@@ -712,6 +725,7 @@ export class TlinkLicenseService implements OnDestroy {
             // if THIS call detected the missing-credentials shape. Return a
             // matching message so the user sees the same explanation
             // whether they hit the button before or after the auto-detect.
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
             if (this.heartbeatDisabledByServer) {
                 return {
                     success: false,
@@ -736,6 +750,7 @@ export class TlinkLicenseService implements OnDestroy {
             'DEVICE_MISMATCH', 'SIGNATURE_INVALID', 'PRODUCT_NOT_ENTITLED',
             'APP_VERSION_BLOCKED', 'INVALID_CREDENTIALS',
         ])
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (envelope.reason_code && REVOCATION_CODES.has(envelope.reason_code)) {
             await this.handleInvalid(envelope.reason_code)
         }
@@ -1289,8 +1304,8 @@ export class TlinkLicenseService implements OnDestroy {
      * re-activating. No-op if the flag wasn't set.
      */
     resetHeartbeatBackoff (): void {
-        if (this.proxy) {return this.proxy.resetHeartbeatBackoff()}
-        if (!this.heartbeatDisabledByServer) return
+        if (this.proxy) {this.proxy.resetHeartbeatBackoff(); return}
+        if (!this.heartbeatDisabledByServer) {return}
         this.heartbeatDisabledByServer = false
         this.heartbeatLastError = null
         this.heartbeatLastStatus = null
@@ -1490,6 +1505,7 @@ export class TlinkLicenseService implements OnDestroy {
                 'DEVICE_MISMATCH', 'SIGNATURE_INVALID', 'PRODUCT_NOT_ENTITLED',
                 'APP_VERSION_BLOCKED', 'INVALID_CREDENTIALS',
             ])
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
             if (envelope.reason_code && REVOCATION_CODES.has(envelope.reason_code)) {
                 await this.handleInvalid(envelope.reason_code)
             } else {
@@ -1525,6 +1541,12 @@ export class TlinkLicenseService implements OnDestroy {
         }
         this.heartbeatLastAt = new Date()
         this.heartbeatLastDurationMs = Date.now() - startedAt
+        // Push to the ring buffer for the sparkline. Cap at HISTORY_SIZE
+        // so very long sessions don't grow this array unbounded.
+        this.heartbeatHistory.push(this.heartbeatLastDurationMs)
+        if (this.heartbeatHistory.length > TlinkLicenseService.HEARTBEAT_HISTORY_SIZE) {
+            this.heartbeatHistory.shift()
+        }
         this.emit()
 
         if (!h) {
@@ -1616,34 +1638,34 @@ export class TlinkLicenseService implements OnDestroy {
 
     /** Configured heartbeat interval in ms. Read from merged config. */
     get heartbeatIntervalMs (): number {
-        if (this.proxy) return this.proxy.heartbeatIntervalMs
+        if (this.proxy) {return this.proxy.heartbeatIntervalMs}
         return this.config.heartbeatIntervalMs
     }
 
     /** Total heartbeat attempts made this process run. Resets on app restart. */
     get heartbeatAttemptCount (): number {
-        if (this.proxy) return this.proxy.heartbeatAttemptCount
+        if (this.proxy) {return this.proxy.heartbeatAttemptCount}
         return this.heartbeatCount
     }
 
     get heartbeatSuccesses (): number {
-        if (this.proxy) return this.proxy.heartbeatSuccesses
+        if (this.proxy) {return this.proxy.heartbeatSuccesses}
         return this.heartbeatSuccessCount
     }
 
     get heartbeatFailures (): number {
-        if (this.proxy) return this.proxy.heartbeatFailures
+        if (this.proxy) {return this.proxy.heartbeatFailures}
         return this.heartbeatFailureCount
     }
 
     /** Wall-clock of the most recent heartbeat attempt, or null if none yet. */
     get heartbeatLastRunAt (): Date | null {
-        if (this.proxy) return this.proxy.heartbeatLastRunAt
+        if (this.proxy) {return this.proxy.heartbeatLastRunAt}
         return this.heartbeatLastAt
     }
 
     get heartbeatLastResult (): { status: 'ok' | 'unreachable' | 'invalid' | null; reason: ReasonCode | null; durationMs: number | null; error: string | null } {
-        if (this.proxy) return this.proxy.heartbeatLastResult
+        if (this.proxy) {return this.proxy.heartbeatLastResult}
         return {
             status: this.heartbeatLastStatus,
             reason: this.heartbeatLastReason,
@@ -1659,8 +1681,29 @@ export class TlinkLicenseService implements OnDestroy {
      * Doesn't disturb the periodic timer.
      */
     async triggerHeartbeat (): Promise<void> {
-        if (this.proxy) return this.proxy.triggerHeartbeat()
+        if (this.proxy) {return this.proxy.triggerHeartbeat()}
         await this.heartbeatTick()
+    }
+
+    /**
+     * Recent heartbeat round-trip durations in ms (oldest → newest, up
+     * to HEARTBEAT_HISTORY_SIZE samples). Used by the Settings UI to
+     * render a tiny sparkline that visualises latency trend over time.
+     */
+    get heartbeatRecentDurations (): number[] {
+        if (this.proxy) {return this.proxy.heartbeatRecentDurations}
+        return [...this.heartbeatHistory]
+    }
+
+    /**
+     * Configured trial duration in days. Settings UI multiplies this
+     * by `trialDaysRemaining` to render a progress bar. Exposed as a
+     * getter (rather than letting the UI peek at `config`) so the
+     * config field stays private.
+     */
+    get trialDurationDays (): number {
+        if (this.proxy) {return this.proxy.trialDurationDays}
+        return this.config.trialDurationDays
     }
 
     /**
@@ -1671,7 +1714,7 @@ export class TlinkLicenseService implements OnDestroy {
      * nothing on subsequent clicks.
      */
     get heartbeatDisabled (): boolean {
-        if (this.proxy) return this.proxy.heartbeatDisabled
+        if (this.proxy) {return this.proxy.heartbeatDisabled}
         return this.heartbeatDisabledByServer
     }
 

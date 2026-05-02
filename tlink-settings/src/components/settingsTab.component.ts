@@ -92,7 +92,7 @@ export class SettingsTabComponent extends BaseTabComponent {
         // (active session) so a user inspecting Settings sees what they're
         // signed in as; fall back to `lastSignInEmail` after a wipe / first
         // launch since restart so they don't have to retype it.
-        this.licenseEmailInput = licenseSvc.userEmail ?? licenseSvc.lastSignInEmail ?? ''
+        this.licenseEmailInput = licenseSvc.userEmail ?? licenseSvc.lastSignInEmail
         this.settingsProviders = config.enabledServices(this.settingsProviders)
         this.settingsProviders = this.settingsProviders.filter(x => {
             const componentType = x.getComponentType()
@@ -209,18 +209,28 @@ export class SettingsTabComponent extends BaseTabComponent {
     }
 
     async activateLicense () {
+        if (this.licenseSigningIn) {return}
         this.licenseError = ''
         this.licenseSuccess = ''
         if (!this.licenseEmailInput.trim() || !this.licensePasswordInput) {
             this.licenseError = 'Please enter your email and password'
             return
         }
-        const result = await this.licenseSvc.activateLicense(this.licenseEmailInput.trim(), this.licensePasswordInput)
-        if (result.success) {
-            this.licenseSuccess = result.message || 'Signed in successfully!'
-            this.licensePasswordInput = ''
-        } else {
-            this.licenseError = result.message || 'Sign in failed'
+        this.licenseSigningIn = true
+        try {
+            const result = await this.licenseSvc.activateLicense(this.licenseEmailInput.trim(), this.licensePasswordInput)
+            if (result.success) {
+                this.licenseSuccess = result.message || 'Signed in successfully!'
+                this.licensePasswordInput = ''
+                // Auto-collapse the form on successful sign-in so the user
+                // sees the slim "Signed in as …" row rather than the form
+                // still sitting open.
+                this.showSignInForm = false
+            } else {
+                this.licenseError = result.message || 'Sign in failed'
+            }
+        } finally {
+            this.licenseSigningIn = false
         }
     }
 
@@ -272,6 +282,65 @@ export class SettingsTabComponent extends BaseTabComponent {
     }
 
     /**
+     * In-flight flag for the Sign-in button — flips while activate is
+     * pending so the button can show a spinner + disabled state. The
+     * existing `activateLicense()` method awaits the service call,
+     * so we just bracket the await with set/clear.
+     */
+    licenseSigningIn = false
+
+    /**
+     * Render the heartbeat history ring buffer as a fixed-width
+     * polyline `points` attribute for an inline SVG sparkline. Returns
+     * empty string when there's nothing to draw so the template can
+     * `*ngIf` the SVG out entirely. Caches the input identity so we're
+     * not re-stringifying the array on every CD pass.
+     */
+    private heartbeatSparklineCache: { samples: number[]; svg: string } = { samples: [], svg: '' }
+    heartbeatSparklinePoints (): string {
+        const samples = this.licenseSvc.heartbeatRecentDurations
+        if (!samples.length) {return ''}
+        // Cheap reference equality first — same array, same string.
+        if (samples === this.heartbeatSparklineCache.samples) {
+            return this.heartbeatSparklineCache.svg
+        }
+        // Length-aware compare for the proxy case (returns a fresh array
+        // copy each call) — only recompute on real change.
+        const prev = this.heartbeatSparklineCache.samples
+        if (samples.length === prev.length && samples.every((v, i) => v === prev[i])) {
+            this.heartbeatSparklineCache.samples = samples
+            return this.heartbeatSparklineCache.svg
+        }
+        const W = 80
+        const H = 18
+        const max = Math.max(...samples, 1)
+        const step = samples.length > 1 ? W / (samples.length - 1) : 0
+        const svg = samples
+            .map((ms, i) => {
+                const x = (i * step).toFixed(1)
+                // Invert Y so taller bars = slower; clamp 1px floor so a
+                // 0ms cached response still draws something.
+                const y = (H - Math.max(1, (ms / max) * H)).toFixed(1)
+                return `${x},${y}`
+            })
+            .join(' ')
+        this.heartbeatSparklineCache = { samples, svg }
+        return svg
+    }
+
+    /**
+     * Trial progress as a percentage (0-100). Used to fill the linear
+     * progress bar in the status card when on a local trial. Returns
+     * 0 when not on trial or no telemetry available.
+     */
+    trialProgressPercent (): number {
+        const total = this.licenseSvc.trialDurationDays
+        if (!total) {return 0}
+        const used = total - this.licenseSvc.trialDaysRemaining
+        return Math.min(100, Math.max(0, (used / total) * 100))
+    }
+
+    /**
      * Friendly expiry copy for the status card. Turns the ISO
      * "2027-05-02" into "May 2, 2027 · 365 days left" so the user
      * doesn't have to do date math. Returns '—' when no expiry
@@ -279,14 +348,14 @@ export class SettingsTabComponent extends BaseTabComponent {
      */
     formatExpiry (): string {
         const iso = this.licenseSvc.endDate
-        if (!iso) return '—'
+        if (!iso) {return '—'}
         const d = new Date(iso)
-        if (Number.isNaN(d.getTime())) return iso
+        if (Number.isNaN(d.getTime())) {return iso}
         const pretty = d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
         const days = Math.floor((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-        if (days < 0) return `${pretty} · expired ${Math.abs(days)}d ago`
-        if (days === 0) return `${pretty} · expires today`
-        if (days === 1) return `${pretty} · 1 day left`
+        if (days < 0) {return `${pretty} · expired ${Math.abs(days)}d ago`}
+        if (days === 0) {return `${pretty} · expires today`}
+        if (days === 1) {return `${pretty} · 1 day left`}
         return `${pretty} · ${days} days left`
     }
 
@@ -308,12 +377,12 @@ export class SettingsTabComponent extends BaseTabComponent {
 
     /** Pretty-print the configured heartbeat interval (e.g. "4h", "30m", "45s"). */
     formatHeartbeatInterval (): string {
-        const ms = this.licenseSvc.heartbeatIntervalMs ?? 0
-        if (ms <= 0) return '—'
+        const ms = this.licenseSvc.heartbeatIntervalMs
+        if (ms <= 0) {return '—'}
         const sec = Math.round(ms / 1000)
-        if (sec < 60) return `${sec}s`
+        if (sec < 60) {return `${sec}s`}
         const min = Math.round(sec / 60)
-        if (min < 60) return `${min}m`
+        if (min < 60) {return `${min}m`}
         const hr = Math.round((min / 60) * 10) / 10
         return `${hr}h`
     }
@@ -331,7 +400,7 @@ export class SettingsTabComponent extends BaseTabComponent {
 
     private heartbeatTickerStarted = false
     private startHeartbeatTickerOnce () {
-        if (this.heartbeatTickerStarted) return
+        if (this.heartbeatTickerStarted) {return}
         this.heartbeatTickerStarted = true
         const refresh = () => {
             const at = this.licenseSvc.heartbeatLastRunAt
@@ -340,9 +409,7 @@ export class SettingsTabComponent extends BaseTabComponent {
                 return
             }
             const ageSec = Math.max(0, Math.round((Date.now() - at.getTime()) / 1000))
-            if (ageSec < 60) this.heartbeatLastRunFormatted = `${ageSec}s ago`
-            else if (ageSec < 3600) this.heartbeatLastRunFormatted = `${Math.round(ageSec / 60)}m ago`
-            else this.heartbeatLastRunFormatted = `${Math.round(ageSec / 360) / 10}h ago`
+            if (ageSec < 60) {this.heartbeatLastRunFormatted = `${ageSec}s ago`} else if (ageSec < 3600) {this.heartbeatLastRunFormatted = `${Math.round(ageSec / 60)}m ago`} else {this.heartbeatLastRunFormatted = `${Math.round(ageSec / 360) / 10}h ago`}
         }
         refresh()
         // 1Hz is plenty for human-readable "N seconds ago" text.
@@ -356,7 +423,7 @@ export class SettingsTabComponent extends BaseTabComponent {
 
     triggerHeartbeatRunning = false
     async triggerHeartbeat () {
-        if (this.triggerHeartbeatRunning) return
+        if (this.triggerHeartbeatRunning) {return}
         this.triggerHeartbeatRunning = true
         try {
             await this.licenseSvc.triggerHeartbeat()
