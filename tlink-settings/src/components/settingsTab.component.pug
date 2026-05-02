@@ -305,7 +305,9 @@
                             )
                                 | {{ triggerHeartbeatRunning ? 'Running…' : (licenseSvc.heartbeatDisabled ? 'Disabled' : 'Run now') }}
                     .small.mt-1.text-warning(*ngIf='licenseSvc.heartbeatDisabled')
-                        | Heartbeat disabled — this license server requires full credentials to validate. Tokens stay valid until you sign out.
+                        | Heartbeat disabled — server requires password on every check-in. Tokens stay valid until you sign out.
+                        |
+                        a.ms-1(href='javascript:void(0)', (click)='licenseSvc.resetHeartbeatBackoff()', translate) Try again
                     .small.mt-1.d-flex.flex-wrap(style='gap:18px; opacity:0.8')
                         span
                             strong Interval:

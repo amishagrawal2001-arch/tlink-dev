@@ -1266,7 +1266,38 @@ export class TlinkLicenseService implements OnDestroy {
         this.lastServerContactAt = new Date()
         this.offlineGrace = false
         this.licenseStatus = 'active'
+        // A successful envelope (activate / refresh / validate) PROVES the
+        // server accepts our credentials right now. Clear any stale
+        // sticky-disable from a prior session before we got the body
+        // shape right. Without this, a user who was bitten by the old
+        // over-eager disable logic would keep seeing "Heartbeat
+        // disabled" forever even though everything works now.
+        if (this.heartbeatDisabledByServer) {
+            // eslint-disable-next-line no-console
+            console.info('%c[license:heartbeat] re-enabled — server accepted our credentials',
+                'color:#16a34a;font-weight:600')
+            this.heartbeatDisabledByServer = false
+            this.startHeartbeat()
+        }
         this.emit()
+    }
+
+    /**
+     * Manual escape hatch: clear the sticky heartbeat-disabled flag and
+     * restart the timer. Useful from the Settings UI when the user
+     * thinks the server has been fixed and wants to retry without
+     * re-activating. No-op if the flag wasn't set.
+     */
+    resetHeartbeatBackoff (): void {
+        if (this.proxy) {return this.proxy.resetHeartbeatBackoff()}
+        if (!this.heartbeatDisabledByServer) return
+        this.heartbeatDisabledByServer = false
+        this.heartbeatLastError = null
+        this.heartbeatLastStatus = null
+        this.startHeartbeat()
+        this.emit()
+        // eslint-disable-next-line no-console
+        console.info('[license:heartbeat] backoff cleared by user')
     }
 
     private applyHeartbeat (h: HeartbeatEnvelope): void {
