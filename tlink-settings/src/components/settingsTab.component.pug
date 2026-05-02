@@ -153,6 +153,7 @@
                         [class.card-expired]='licenseSvc.licenseStatus !== "active"'
                     )
                         .d-flex.align-items-center
+                            span.live-dot(*ngIf='licenseSvc.licenseStatus === "active"', title='Heartbeat active')
                             span.license-tier-badge(
                                 [class.badge-trial]='licenseSvc.billingType === "TRIAL" && licenseSvc.licenseStatus === "active"',
                                 [class.badge-pro]='licenseSvc.licenseType === "INDIVIDUAL" && licenseSvc.billingType === "PAID" && licenseSvc.licenseStatus === "active"',
@@ -178,8 +179,12 @@
                                 small.text-muted(*ngIf='licenseSvc.licenseStatus === "active" && licenseSvc.endDate') Expires {{ licenseSvc.endDate }}
                                 small.text-muted(*ngIf='licenseSvc.licenseStatus !== "active"') Please sign in to continue
 
-                    h5.mt-4(*ngIf='!licenseSvc.userEmail', translate) Sign in
-                    h5.mt-4(*ngIf='licenseSvc.userEmail', translate) Switch account
+                    h5.mt-4(*ngIf='!licenseSvc.userEmail')
+                        i.fas.fa-sign-in-alt
+                        span(translate) Sign in
+                    h5.mt-4(*ngIf='licenseSvc.userEmail')
+                        i.fas.fa-user-edit
+                        span(translate) Switch account
                     .form-line
                         .header
                             .title(translate) Email
@@ -205,7 +210,9 @@
                     .text-danger.mt-1.small(*ngIf='licenseError') {{ licenseError }}
                     .text-success.mt-1.small(*ngIf='licenseSuccess') {{ licenseSuccess }}
 
-                    h5.mt-4(translate) License Details
+                    h5.mt-4
+                        i.fas.fa-id-card
+                        span(translate) License Details
                     .form-line
                         .header
                             .title(translate) Status
@@ -258,7 +265,9 @@
                                 i.fas.me-1([class.fa-check]='fingerprintCopied', [class.fa-copy]='!fingerprintCopied')
                                 | {{ fingerprintCopied ? 'Copied' : 'Copy' }}
 
-                    h5.mt-4(translate) License Server
+                    h5.mt-4
+                        i.fas.fa-server
+                        span(translate) License Server
                     .form-line
                         .header
                             .title(translate) Server URL
@@ -290,13 +299,16 @@
                             button.btn.btn-primary.license-btn((click)='saveProductCode()') Save
                     .small.mt-1.text-success(*ngIf='productCodeSaved', translate) Saved
 
+                    h5.mt-4
+                        i.fas.fa-heartbeat
+                        span(translate) Heartbeat
                     //- Heartbeat observability — read-only counters + a
                     //- "Run heartbeat now" button so users can verify the
                     //- license server is reachable on the configured cadence
                     //- without waiting up to 4h for the next periodic tick.
                     .form-line
                         .header
-                            .title(translate) Heartbeat
+                            .title(translate) Status check
                             .description(translate) Periodic check-in to the license server. Triggers token rotation and revocation propagation.
                         .license-input-row
                             button.btn.btn-secondary.license-btn(
@@ -304,35 +316,35 @@
                                 [disabled]='triggerHeartbeatRunning || licenseSvc.heartbeatDisabled'
                             )
                                 | {{ triggerHeartbeatRunning ? 'Running…' : (licenseSvc.heartbeatDisabled ? 'Disabled' : 'Run now') }}
-                    .small.mt-1.text-warning(*ngIf='licenseSvc.heartbeatDisabled')
-                        | Heartbeat disabled — server requires password on every check-in. Tokens stay valid until you sign out.
-                        |
-                        a.ms-1(href='javascript:void(0)', (click)='licenseSvc.resetHeartbeatBackoff()', translate) Try again
-                    .small.mt-1.d-flex.flex-wrap(style='gap:18px; opacity:0.8')
-                        span
-                            strong Interval:
-                            |  {{ formatHeartbeatInterval() }}
-                        span
-                            strong Attempts:
-                            |  {{ licenseSvc.heartbeatAttemptCount }}
-                        span(*ngIf='licenseSvc.heartbeatSuccesses > 0')
-                            strong.text-success OK:
-                            |  {{ licenseSvc.heartbeatSuccesses }}
-                        span(*ngIf='licenseSvc.heartbeatFailures > 0')
-                            strong.text-danger Failed:
-                            |  {{ licenseSvc.heartbeatFailures }}
-                        span(*ngIf='licenseSvc.heartbeatLastRunAt')
-                            strong Last run:
-                            |  {{ formatHeartbeatLastRun() }}
-                        span(*ngIf='licenseSvc.heartbeatLastResult.status === "ok"')
-                            strong.text-success Last result:
-                            |  OK ({{ licenseSvc.heartbeatLastResult.durationMs }}ms)
-                        span(*ngIf='licenseSvc.heartbeatLastResult.status === "unreachable"')
-                            strong.text-warning Last result:
-                            |  Unreachable
-                        span(*ngIf='licenseSvc.heartbeatLastResult.status === "invalid"')
-                            strong.text-danger Last result:
-                            |  Invalid ({{ licenseSvc.heartbeatLastResult.reason }})
+                    .license-inline-notice.notice-warn(*ngIf='licenseSvc.heartbeatDisabled')
+                        i.fas.fa-exclamation-triangle.me-1
+                        span Heartbeat disabled — server requires password on every check-in. Tokens stay valid until you sign out.
+                        a(href='javascript:void(0)', (click)='licenseSvc.resetHeartbeatBackoff()', translate) Try again
+                    .heartbeat-stats
+                        span.stat-chip
+                            span.stat-label Interval
+                            span.stat-value {{ formatHeartbeatInterval() }}
+                        span.stat-chip
+                            span.stat-label Attempts
+                            span.stat-value {{ licenseSvc.heartbeatAttemptCount }}
+                        span.stat-chip.stat-ok(*ngIf='licenseSvc.heartbeatSuccesses > 0')
+                            span.stat-label OK
+                            span.stat-value {{ licenseSvc.heartbeatSuccesses }}
+                        span.stat-chip.stat-error(*ngIf='licenseSvc.heartbeatFailures > 0')
+                            span.stat-label Failed
+                            span.stat-value {{ licenseSvc.heartbeatFailures }}
+                        span.stat-chip(*ngIf='licenseSvc.heartbeatLastRunAt')
+                            span.stat-label Last run
+                            span.stat-value {{ formatHeartbeatLastRun() }}
+                        span.stat-chip.stat-ok(*ngIf='licenseSvc.heartbeatLastResult.status === "ok"')
+                            span.stat-label Last
+                            span.stat-value OK ({{ licenseSvc.heartbeatLastResult.durationMs }}ms)
+                        span.stat-chip.stat-warn(*ngIf='licenseSvc.heartbeatLastResult.status === "unreachable"')
+                            span.stat-label Last
+                            span.stat-value Unreachable
+                        span.stat-chip.stat-error(*ngIf='licenseSvc.heartbeatLastResult.status === "invalid"')
+                            span.stat-label Last
+                            span.stat-value Invalid ({{ licenseSvc.heartbeatLastResult.reason }})
 
                     .d-flex.gap-3.mt-4
                         //- Manual refresh — hits /api/licenses/refresh right now

@@ -74,42 +74,91 @@ textarea {
     min-height: 120px;
 }
 
+// ─── License-section visibility polish ─────────────────────────────────
+//
+// Goal: turn the dense text-row layout into a scannable card-based
+// panel — status visible at a glance, sections clearly divided,
+// heartbeat stats as chips instead of inline text. All structural
+// (no markup additions beyond a couple of small <i> icons in pug).
+// Pure SCSS so the rest of the form rows keep their existing
+// behaviour.
+
 .license-status-card {
-    padding: 16px 20px;
-    border-radius: 8px;
-    background: rgba(102, 126, 234, 0.1);
-    border: 1px solid rgba(102, 126, 234, 0.25);
+    position: relative;
+    padding: 22px 24px;
+    border-radius: 12px;
+    background: linear-gradient(135deg,
+        rgba(102, 126, 234, 0.14) 0%,
+        rgba(102, 126, 234, 0.06) 100%);
+    border: 1px solid rgba(102, 126, 234, 0.3);
+    box-shadow: 0 4px 18px -8px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+
+    // Subtle accent stripe on the left edge — gives the card more
+    // presence than a plain tinted band.
+    &::before {
+        content: '';
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 4px;
+        background: rgba(102, 126, 234, 0.7);
+    }
 
     &.card-trial {
-        background: rgba(217, 119, 6, 0.12);
-        border-color: rgba(217, 119, 6, 0.3);
+        background: linear-gradient(135deg, rgba(217, 119, 6, 0.16), rgba(217, 119, 6, 0.05));
+        border-color: rgba(217, 119, 6, 0.35);
+        &::before { background: rgba(217, 119, 6, 0.85); }
     }
     &.card-pro {
-        background: rgba(37, 99, 235, 0.12);
-        border-color: rgba(37, 99, 235, 0.3);
+        background: linear-gradient(135deg, rgba(37, 99, 235, 0.16), rgba(37, 99, 235, 0.05));
+        border-color: rgba(37, 99, 235, 0.35);
+        &::before { background: rgba(37, 99, 235, 0.85); }
     }
     &.card-enterprise {
-        background: rgba(124, 58, 237, 0.12);
-        border-color: rgba(124, 58, 237, 0.3);
+        background: linear-gradient(135deg, rgba(124, 58, 237, 0.16), rgba(124, 58, 237, 0.05));
+        border-color: rgba(124, 58, 237, 0.35);
+        &::before { background: rgba(124, 58, 237, 0.85); }
     }
     &.card-expired {
-        background: rgba(220, 38, 38, 0.12);
-        border-color: rgba(220, 38, 38, 0.3);
+        background: linear-gradient(135deg, rgba(220, 38, 38, 0.16), rgba(220, 38, 38, 0.05));
+        border-color: rgba(220, 38, 38, 0.35);
+        &::before { background: rgba(220, 38, 38, 0.85); }
+    }
+
+    // Pulsing live-status dot — placed adjacent to the tier badge
+    // when the license is active. Tells the user "we're checking in".
+    .live-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #22c55e;
+        margin-right: 8px;
+        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.8);
+        animation: pulse-live 2s infinite;
     }
 }
 
+@keyframes pulse-live {
+    0%   { box-shadow: 0 0 0 0    rgba(34, 197, 94, 0.7); }
+    70%  { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);   }
+    100% { box-shadow: 0 0 0 0    rgba(34, 197, 94, 0);   }
+}
+
 .license-tier-badge {
-    display: inline-block;
-    padding: 5px 14px;
-    border-radius: 5px;
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 1px;
+    display: inline-flex;
+    align-items: center;
+    padding: 7px 18px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
     color: #fff;
-    &.badge-trial { background: #d97706; }
-    &.badge-pro { background: #2563eb; }
-    &.badge-enterprise { background: #7c3aed; }
-    &.badge-expired { background: #dc2626; }
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.4);
+    &.badge-trial      { background: linear-gradient(135deg, #f59e0b, #d97706); }
+    &.badge-pro        { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+    &.badge-enterprise { background: linear-gradient(135deg, #a855f7, #7c3aed); }
+    &.badge-expired    { background: linear-gradient(135deg, #ef4444, #dc2626); }
 }
 
 .license-status-text {
@@ -199,4 +248,133 @@ textarea {
 
 .license-status-text {
     color: var(--bs-secondary-color, rgba(128, 128, 128, 0.8));
+}
+
+// ─── License-section heading + spacing polish ──────────────────────────
+//
+// Constrain these styles to the License panel only by nesting under the
+// existing #license-tab-pane scope OR by relying on Angular's
+// view-encapsulation default. Settings tab content is wrapped in
+// .content-box per .pug template; we leverage that.
+
+.content-box {
+    // Bigger, more presence on the section headers ("License Server",
+    // "License Details", "Sign in", etc.). Bootstrap's h5 was too
+    // close in weight to the body text — the eye couldn't tell where
+    // a section started. Now they read like clear section breaks.
+    h5 {
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: var(--bs-secondary-color, rgba(128, 128, 128, 0.85));
+        margin-top: 28px;
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--bs-border-color, rgba(128, 128, 128, 0.18));
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        i {
+            font-size: 12px;
+            opacity: 0.7;
+        }
+    }
+
+    // Form rows in the License panel — give each one breathing room and
+    // a faint separator. Without this they all blend.
+    > .form-line {
+        padding: 14px 0;
+        border-bottom: 1px solid var(--bs-border-color, rgba(128, 128, 128, 0.08));
+        &:last-child {
+            border-bottom: none;
+        }
+        .header .title {
+            font-weight: 600;
+            font-size: 13.5px;
+        }
+        .header .description {
+            font-size: 12px;
+            opacity: 0.7;
+            margin-top: 2px;
+        }
+    }
+}
+
+// Heartbeat stats — render the inline numbers as chips instead of
+// run-on text. Same data, way easier to scan.
+.heartbeat-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+
+    .stat-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 10px;
+        background: rgba(128, 128, 128, 0.1);
+        border: 1px solid rgba(128, 128, 128, 0.18);
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        white-space: nowrap;
+
+        .stat-label {
+            color: var(--bs-secondary-color, rgba(128, 128, 128, 0.7));
+            font-weight: 500;
+        }
+        .stat-value {
+            color: var(--bs-body-color, currentColor);
+        }
+
+        &.stat-ok {
+            background: rgba(22, 163, 74, 0.12);
+            border-color: rgba(22, 163, 74, 0.35);
+            .stat-label, .stat-value { color: #16a34a; }
+        }
+        &.stat-error {
+            background: rgba(220, 38, 38, 0.12);
+            border-color: rgba(220, 38, 38, 0.35);
+            .stat-label, .stat-value { color: #dc2626; }
+        }
+        &.stat-warn {
+            background: rgba(217, 119, 6, 0.12);
+            border-color: rgba(217, 119, 6, 0.35);
+            .stat-label, .stat-value { color: #d97706; }
+        }
+    }
+}
+
+// Inline status banner used by the heartbeat-disabled warning + the
+// product-code-saved confirmation. Visual lift over plain .text-warning
+// / .text-success spans.
+.license-inline-notice {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+
+    &.notice-warn {
+        background: rgba(217, 119, 6, 0.12);
+        border: 1px solid rgba(217, 119, 6, 0.3);
+        color: #d97706;
+    }
+    &.notice-ok {
+        background: rgba(22, 163, 74, 0.12);
+        border: 1px solid rgba(22, 163, 74, 0.3);
+        color: #16a34a;
+    }
+
+    a {
+        color: inherit;
+        text-decoration: underline;
+        font-weight: 700;
+        margin-left: 4px;
+    }
 }
