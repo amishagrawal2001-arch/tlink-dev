@@ -332,15 +332,40 @@ export class SettingsTabComponent extends BaseTabComponent {
         return `${hr}h`
     }
 
-    /** "12s ago", "3m ago", "—" when no heartbeat has fired. Refreshes on
-     *  each Angular change-detection pass; cheap enough to inline-call. */
+    /**
+     * Cached "N seconds/minutes/hours ago" text for the most recent
+     * heartbeat. Recomputed once per second by `heartbeatTickerStarted`
+     * below, NOT on every change-detection pass. Computing on every CD
+     * pass triggered NG0100 (ExpressionChangedAfterItHasBeenChecked)
+     * because Date.now() ticked between Angular's check and re-check
+     * inside the same tick — "2s ago" → "3s ago" was the classic
+     * symptom.
+     */
+    heartbeatLastRunFormatted = '—'
+
+    private heartbeatTickerStarted = false
+    private startHeartbeatTickerOnce () {
+        if (this.heartbeatTickerStarted) return
+        this.heartbeatTickerStarted = true
+        const refresh = () => {
+            const at = this.licenseSvc.heartbeatLastRunAt
+            if (!at) {
+                this.heartbeatLastRunFormatted = '—'
+                return
+            }
+            const ageSec = Math.max(0, Math.round((Date.now() - at.getTime()) / 1000))
+            if (ageSec < 60) this.heartbeatLastRunFormatted = `${ageSec}s ago`
+            else if (ageSec < 3600) this.heartbeatLastRunFormatted = `${Math.round(ageSec / 60)}m ago`
+            else this.heartbeatLastRunFormatted = `${Math.round(ageSec / 360) / 10}h ago`
+        }
+        refresh()
+        // 1Hz is plenty for human-readable "N seconds ago" text.
+        setInterval(refresh, 1000)
+    }
+
     formatHeartbeatLastRun (): string {
-        const at = this.licenseSvc.heartbeatLastRunAt
-        if (!at) return '—'
-        const ageSec = Math.max(0, Math.round((Date.now() - at.getTime()) / 1000))
-        if (ageSec < 60) return `${ageSec}s ago`
-        if (ageSec < 3600) return `${Math.round(ageSec / 60)}m ago`
-        return `${Math.round(ageSec / 360) / 10}h ago`
+        this.startHeartbeatTickerOnce()
+        return this.heartbeatLastRunFormatted
     }
 
     triggerHeartbeatRunning = false

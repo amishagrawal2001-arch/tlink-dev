@@ -74,6 +74,16 @@ export class TlinkLicenseService implements OnDestroy {
     private heartbeatLastReason: ReasonCode | null = null
     private heartbeatLastDurationMs: number | null = null
     private heartbeatLastError: string | null = null
+    /**
+     * Set to true when the server returns 422 with a "missing email" /
+     * "missing password" detail — indicating the heartbeat endpoint is
+     * actually a re-authentication endpoint (AWS API-Gateway shape) and
+     * doesn't support token-only check-ins. Once flipped, we stop the
+     * timer and skip future ticks; the user stays signed in on the
+     * tokens they got at activate-time. They'll need to sign in again
+     * if those expire / get revoked.
+     */
+    private heartbeatDisabledByServer = false
 
     /**
      * When each plugin webpack-bundles its own copy of this file (tlink-core
@@ -957,6 +967,34 @@ export class TlinkLicenseService implements OnDestroy {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ refresh_token: this.refreshToken, device_fingerprint_hash: fp }),
             })
+            // Same defense as callHeartbeat: a non-2xx is NOT a license-
+            // revocation signal. Returning null routes the caller through
+            // the unreachable / grace branches instead of clearing the
+            // session. Also auto-disable refresh on the AWS shape that
+            // demands credentials we don't have.
+            if (!res.ok) {
+                const bodyText = await res.text().catch(() => '')
+                const looksLikeMissingCreds = res.status === 422 &&
+                    /"loc":\s*\[\s*"body",\s*"(email|password|product_code)"/i.test(bodyText)
+                if (looksLikeMissingCreds && !this.heartbeatDisabledByServer) {
+                    this.heartbeatDisabledByServer = true
+                    this.stopHeartbeat()
+                    if (this.refreshTimer) {
+                        clearTimeout(this.refreshTimer)
+                        this.refreshTimer = null
+                    }
+                    // eslint-disable-next-line no-console
+                    console.warn(
+                        '%c[license:refresh] disabled — server requires full credentials (no token-only refresh)',
+                        'color:#f59e0b;font-weight:700',
+                        { note: 'Sticking with the access token from activate; sign in again when it expires.' })
+                }
+                // eslint-disable-next-line no-console
+                console.error('%c[license:refresh] HTTP error — treating as transient (NOT logging out)',
+                    'color:#dc2626;font-weight:700',
+                    { status: res.status, body: bodyText })
+                return null
+            }
             return this.normalizeEnvelope(await res.json())
         } catch {
             return null
@@ -1011,10 +1049,32 @@ export class TlinkLicenseService implements OnDestroy {
             // through the "unreachable" branch which is offline-grace
             // tolerant and won't sign the user out.
             if (!res.ok) {
+                const bodyText = await res.text().catch(() => '')
+                // Sticky-disable detection: AWS-style /validate-as-activate
+                // returns 422 with a "missing email"/"missing password"
+                // body when we send token-only. The server fundamentally
+                // doesn't support periodic check-ins; future ticks would
+                // just produce the same noise. Stop the timer and surface
+                // this clearly. Activation tokens stay valid until the
+                // user signs out or restarts.
+                const looksLikeMissingCreds = res.status === 422 &&
+                    /"loc":\s*\[\s*"body",\s*"(email|password|product_code)"/i.test(bodyText)
+                if (looksLikeMissingCreds && !this.heartbeatDisabledByServer) {
+                    this.heartbeatDisabledByServer = true
+                    this.stopHeartbeat()
+                    // eslint-disable-next-line no-console
+                    console.warn(
+                        '%c[license:heartbeat] disabled — server requires full credentials (no token-only refresh)',
+                        'color:#f59e0b;font-weight:700',
+                        {
+                            url,
+                            note: 'This is the AWS /validate-as-activate shape. Heartbeat + scheduled-refresh are turned off for this session; tokens stay valid until you sign out or restart. Settings → License → "Run now" will be a no-op.',
+                        })
+                }
                 // eslint-disable-next-line no-console
                 console.error('%c[license:heartbeat] HTTP error — treating as transient (NOT logging out)',
                     'color:#dc2626;font-weight:700',
-                    { status: res.status, body: await res.text().catch(() => null) })
+                    { status: res.status, body: bodyText })
                 return null
             }
             const rawJson = await res.json()
@@ -1319,13 +1379,34 @@ export class TlinkLicenseService implements OnDestroy {
             await this.persist()
             this.scheduleRefresh()
         } else if (envelope) {
-            // Server said INVALID — block and clear.
-            await this.handleInvalid(envelope.reason_code)
+            // Server returned a structurally-INVALID envelope. Only clear
+            // the session if it's tagged with a known revocation reason —
+            // anything else (server bug, malformed response, unknown
+            // status) is treated as transient. Same policy as
+            // heartbeatTick.
+            const REVOCATION_CODES = new Set<string>([
+                'LICENSE_EXPIRED', 'SEAT_REVOKED', 'DEVICE_LIMIT_REACHED',
+                'DEVICE_MISMATCH', 'SIGNATURE_INVALID', 'PRODUCT_NOT_ENTITLED',
+                'APP_VERSION_BLOCKED', 'INVALID_CREDENTIALS',
+            ])
+            if (envelope.reason_code && REVOCATION_CODES.has(envelope.reason_code)) {
+                await this.handleInvalid(envelope.reason_code)
+            } else {
+                // eslint-disable-next-line no-console
+                console.warn('[license:refresh] INVALID without revocation reason — keeping session',
+                    { reason: envelope.reason_code })
+            }
         }
         // envelope === null → unreachable, rely on grace window; will retry next heartbeat.
     }
 
     private async heartbeatTick (): Promise<void> {
+        if (this.heartbeatDisabledByServer) {
+            // Sticky off after a 422 "missing credentials" response —
+            // server doesn't support token-only check-ins. Don't even
+            // log on subsequent ticks; the warn at disable-time covered it.
+            return
+        }
         // Increment count + start timer up front so even an exception in
         // callHeartbeat() leaves the observability state consistent.
         this.heartbeatCount += 1
@@ -1479,6 +1560,18 @@ export class TlinkLicenseService implements OnDestroy {
     async triggerHeartbeat (): Promise<void> {
         if (this.proxy) return this.proxy.triggerHeartbeat()
         await this.heartbeatTick()
+    }
+
+    /**
+     * True after the server returned 422 "missing credentials" once —
+     * meaning periodic heartbeat / refresh aren't supported on this
+     * deployment. The Settings UI can use this to show a "disabled"
+     * badge instead of letting the user wonder why "Run now" does
+     * nothing on subsequent clicks.
+     */
+    get heartbeatDisabled (): boolean {
+        if (this.proxy) return this.proxy.heartbeatDisabled
+        return this.heartbeatDisabledByServer
     }
 
     // Guards against concurrent invalidation: heartbeat + refresh + self-service
