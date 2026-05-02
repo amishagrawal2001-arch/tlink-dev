@@ -957,14 +957,34 @@ export class TlinkLicenseService implements OnDestroy {
     }
 
     private async callHeartbeat (): Promise<HeartbeatEnvelope | null> {
-        if (!this.accessToken || !this.deviceId || !this.licenseId) {return null}
+        // Pre-flight: missing credentials means the user isn't activated yet
+        // (or activation got cleared). Surface this clearly so the user can
+        // tell "heartbeat isn't running because there's no session" apart
+        // from "heartbeat is running but failing".
+        if (!this.accessToken || !this.deviceId || !this.licenseId) {
+            // eslint-disable-next-line no-console
+            console.warn('%c[license:heartbeat] skipped — no active session',
+                'color:#f59e0b;font-weight:600',
+                {
+                    hasAccessToken: !!this.accessToken,
+                    hasDeviceId: !!this.deviceId,
+                    hasLicenseId: !!this.licenseId,
+                    licenseStatus: this.licenseStatus,
+                })
+            return null
+        }
         try {
             const body: any = { device_id: this.deviceId, license_id: this.licenseId }
             if (this.isAccessExpired()) {
                 // Let heartbeat rotate tokens inline.
                 body.refresh_token = this.refreshToken
             }
-            const res = await this.loggedFetch('licenses/heartbeat', this.licenseEndpoint('heartbeat'), {
+            const url = this.licenseEndpoint('heartbeat')
+            // eslint-disable-next-line no-console
+            console.info('%c[license:heartbeat] sending',
+                'color:#3b82f6;font-weight:600',
+                { url, accessExpired: this.isAccessExpired(), inlineRefresh: !!body.refresh_token })
+            const res = await this.loggedFetch('licenses/heartbeat', url, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -972,8 +992,26 @@ export class TlinkLicenseService implements OnDestroy {
                 },
                 body: JSON.stringify(body),
             })
-            return this.normalizeHeartbeat(await res.json())
-        } catch {
+            const envelope = this.normalizeHeartbeat(await res.json())
+            // eslint-disable-next-line no-console
+            console.info('%c[license:heartbeat] response',
+                envelope.status === 'VALID' ? 'color:#16a34a;font-weight:600' : 'color:#dc2626;font-weight:600',
+                {
+                    status: envelope.status,
+                    reason: envelope.reason_code,
+                    rotatedAccessToken: !!envelope.access_token,
+                    rotatedRefreshToken: !!envelope.refresh_token,
+                })
+            return envelope
+        } catch (e: any) {
+            // eslint-disable-next-line no-console
+            console.error('%c[license:heartbeat] FAILED',
+                'color:#dc2626;font-weight:700',
+                {
+                    error: e?.message || String(e),
+                    name: e?.name,
+                    stack: e?.stack,
+                })
             return null
         }
     }
@@ -1263,11 +1301,16 @@ export class TlinkLicenseService implements OnDestroy {
         // callHeartbeat() leaves the observability state consistent.
         this.heartbeatCount += 1
         const startedAt = Date.now()
+        // eslint-disable-next-line no-console
+        console.group(`%c[license:heartbeat] tick #${this.heartbeatCount}`,
+            'color:#3b82f6;font-weight:600')
         let h: HeartbeatEnvelope | null = null
         try {
             h = await this.callHeartbeat()
         } catch (e: any) {
             this.heartbeatLastError = e?.message || String(e ?? '')
+            // eslint-disable-next-line no-console
+            console.error('[license:heartbeat] uncaught exception in callHeartbeat', e)
         }
         this.heartbeatLastAt = new Date()
         this.heartbeatLastDurationMs = Date.now() - startedAt
@@ -1278,13 +1321,28 @@ export class TlinkLicenseService implements OnDestroy {
             this.heartbeatFailureCount += 1
             this.heartbeatLastStatus = 'unreachable'
             this.heartbeatLastReason = null
-            if (this.lastServerContactAt && this.isWithinGrace(this.lastServerContactAt.getTime())) {
+            const withinGrace = this.lastServerContactAt && this.isWithinGrace(this.lastServerContactAt.getTime())
+            // eslint-disable-next-line no-console
+            console.warn(`%c[license:heartbeat] tick #${this.heartbeatCount} → UNREACHABLE`,
+                'color:#f59e0b;font-weight:700',
+                {
+                    durationMs: this.heartbeatLastDurationMs,
+                    error: this.heartbeatLastError,
+                    lastServerContactAt: this.lastServerContactAt?.toISOString() ?? null,
+                    gracePeriodHours: this.config.gracePeriodHours,
+                    withinGrace,
+                })
+            if (withinGrace) {
                 this.offlineGrace = true
                 this.emit()
             } else if (this.lastServerContactAt) {
                 // Beyond grace — hard-block.
+                // eslint-disable-next-line no-console
+                console.error('[license:heartbeat] beyond grace window — clearing session')
                 await this.handleInvalid(null)
             }
+            // eslint-disable-next-line no-console
+            console.groupEnd()
             return
         }
         if (h.status === 'VALID') {
@@ -1292,14 +1350,32 @@ export class TlinkLicenseService implements OnDestroy {
             this.heartbeatLastStatus = 'ok'
             this.heartbeatLastReason = h.reason_code ?? null
             this.heartbeatLastError = null
+            // eslint-disable-next-line no-console
+            console.info(`%c[license:heartbeat] tick #${this.heartbeatCount} → OK`,
+                'color:#16a34a;font-weight:700',
+                {
+                    durationMs: this.heartbeatLastDurationMs,
+                    reason: h.reason_code,
+                    rotatedAccessToken: !!h.access_token,
+                    rotatedRefreshToken: !!h.refresh_token,
+                })
             this.applyHeartbeat(h)
             await this.persist()
         } else {
             this.heartbeatFailureCount += 1
             this.heartbeatLastStatus = 'invalid'
             this.heartbeatLastReason = h.reason_code ?? null
+            // eslint-disable-next-line no-console
+            console.error(`%c[license:heartbeat] tick #${this.heartbeatCount} → INVALID`,
+                'color:#dc2626;font-weight:700',
+                {
+                    durationMs: this.heartbeatLastDurationMs,
+                    reason: h.reason_code,
+                })
             await this.handleInvalid(h.reason_code ?? null)
         }
+        // eslint-disable-next-line no-console
+        console.groupEnd()
     }
 
     // ─── Heartbeat observability (read-only getters for the Settings UI) ──
