@@ -45,9 +45,6 @@ export class SettingsTabComponent extends BaseTabComponent {
     updateAvailable = false
     showConfigDefaults = false
     licenseEmailInput = ''
-    // Self-service device list.
-    myDevices: any[] = []
-    devicesLoading = false
     licensePasswordInput = ''
     licenseError = ''
     licenseSuccess = ''
@@ -249,48 +246,6 @@ export class SettingsTabComponent extends BaseTabComponent {
             }
         } finally {
             this.licenseRefreshing = false
-        }
-    }
-
-    // Self-service device management.
-
-    // Row id currently being deactivated — binds to [disabled] on the per-row
-    // button so double-clicks during the in-flight request are ignored.
-    deactivatingDeviceId: string | null = null
-
-    async loadMyDevices () {
-        if (this.devicesLoading) {return}
-        this.devicesLoading = true
-        try {
-            this.myDevices = await this.licenseSvc.listMyDevices()
-        } finally {
-            this.devicesLoading = false
-        }
-    }
-
-    async deactivateMyDevice (device: any) {
-        if (this.deactivatingDeviceId) {return}
-        if (device.is_current) {
-            if (!confirm('This is THIS device. Deactivating will sign you out. Continue?')) {return}
-        } else {
-            if (!confirm('Deactivate this device? It will be signed out on next check.')) {return}
-        }
-        this.deactivatingDeviceId = String(device.id)
-        try {
-            const ok = await this.licenseSvc.deactivateMyDevice(device.id)
-            if (ok) {
-                await this.loadMyDevices()
-                if (device.is_current) {
-                    // Server row already deactivated — pass skipServerCall=true so
-                    // we don't make a second /deactivate call with a now-invalid
-                    // token (which would 403).
-                    await this.licenseSvc.deactivateLicense(true)
-                }
-            } else {
-                alert('Could not deactivate that device.')
-            }
-        } finally {
-            this.deactivatingDeviceId = null
         }
     }
 

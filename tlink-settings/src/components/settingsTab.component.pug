@@ -1,5 +1,5 @@
 .content
-    ul.nav-pills(ngbNav, #nav='ngbNav', [activeId]='activeTab', orientation='vertical', (navChange)='$event.nextId === "license" && loadMyDevices()')
+    ul.nav-pills(ngbNav, #nav='ngbNav', [activeId]='activeTab', orientation='vertical')
         li(ngbNavItem='application')
             a(ngbNavLink)
                 i.fas.fa-fw.fa-window-maximize.me-2
@@ -333,55 +333,6 @@
                         span(*ngIf='licenseSvc.heartbeatLastResult.status === "invalid"')
                             strong.text-danger Last result:
                             |  Invalid ({{ licenseSvc.heartbeatLastResult.reason }})
-
-                    //- Self-service device portal — lists all devices this
-                    //- account is signed in on and lets the user deactivate
-                    //- any seat without admin involvement.
-                    h5.mt-4(*ngIf='licenseSvc.licenseStatus === "active" && !licenseSvc.isLocalTrial', translate) My Devices
-                    .d-flex.align-items-center.mb-2(*ngIf='licenseSvc.licenseStatus === "active" && !licenseSvc.isLocalTrial')
-                        .small.text-muted(style='flex:1') Every device your account has activated. Click Deactivate to free a seat.
-                        button.btn.btn-sm.btn-outline-secondary(
-                            [disabled]='devicesLoading',
-                            (click)='loadMyDevices()'
-                        )
-                            i.fas.me-1([class.fa-sync-alt]='!devicesLoading', [class.fa-spinner]='devicesLoading', [class.fa-spin]='devicesLoading')
-                            | {{ devicesLoading ? 'Loading…' : 'Refresh' }}
-
-                    table.table.table-sm.small(
-                        *ngIf='licenseSvc.licenseStatus === "active" && !licenseSvc.isLocalTrial && myDevices.length',
-                        style='font-size:12px'
-                    )
-                        thead
-                            tr
-                                th Product
-                                th Platform
-                                th App version
-                                th Last seen
-                                th Status
-                                th
-                        tbody
-                            tr(*ngFor='let d of myDevices')
-                                td
-                                    code(style='font-size:11px') {{ d.product_code }}
-                                    span.badge.bg-primary.ms-1(*ngIf='d.is_current', style='font-size:9px') THIS DEVICE
-                                td {{ d.platform }} {{ d.os_version }}
-                                td {{ d.app_version }}
-                                td {{ d.last_seen_at ? (d.last_seen_at | date:'short') : '—' }}
-                                td
-                                    span.badge.bg-success(*ngIf='!d.deactivated_at', style='font-size:10px') active
-                                    span.badge.bg-secondary(*ngIf='d.deactivated_at', style='font-size:10px') deactivated
-                                td(style='white-space:nowrap')
-                                    button.btn.btn-sm.btn-outline-danger(
-                                        *ngIf='!d.deactivated_at',
-                                        [disabled]='deactivatingDeviceId === d.id',
-                                        (click)='deactivateMyDevice(d)'
-                                    )
-                                        i.fas.fa-spinner.fa-spin.me-1(*ngIf='deactivatingDeviceId === d.id')
-                                        | {{ deactivatingDeviceId === d.id ? 'Deactivating…' : 'Deactivate' }}
-
-                    .small.text-muted(
-                        *ngIf='licenseSvc.licenseStatus === "active" && !licenseSvc.isLocalTrial && !myDevices.length && !devicesLoading'
-                    ) No devices found. Try Refresh.
 
                     .d-flex.gap-3.mt-4
                         //- Manual refresh — hits /api/licenses/refresh right now
