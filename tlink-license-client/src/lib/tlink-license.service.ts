@@ -62,6 +62,19 @@ export class TlinkLicenseService implements OnDestroy {
     private heartbeatTimer: ReturnType<typeof setInterval> | null = null
     private refreshTimer: ReturnType<typeof setTimeout> | null = null
 
+    // Heartbeat observability — exposed via getters so the Settings UI can
+    // surface "your client has heartbeated N times, last at T, status OK".
+    // Helps users (and us) confirm the license server is reachable on
+    // schedule without poking through dev-tools logs.
+    private heartbeatCount = 0
+    private heartbeatSuccessCount = 0
+    private heartbeatFailureCount = 0
+    private heartbeatLastAt: Date | null = null
+    private heartbeatLastStatus: 'ok' | 'unreachable' | 'invalid' | null = null
+    private heartbeatLastReason: ReasonCode | null = null
+    private heartbeatLastDurationMs: number | null = null
+    private heartbeatLastError: string | null = null
+
     /**
      * When each plugin webpack-bundles its own copy of this file (tlink-core
      * and tlink-settings both import via relative path), Angular's DI creates
@@ -1246,9 +1259,25 @@ export class TlinkLicenseService implements OnDestroy {
     }
 
     private async heartbeatTick (): Promise<void> {
-        const h = await this.callHeartbeat()
+        // Increment count + start timer up front so even an exception in
+        // callHeartbeat() leaves the observability state consistent.
+        this.heartbeatCount += 1
+        const startedAt = Date.now()
+        let h: HeartbeatEnvelope | null = null
+        try {
+            h = await this.callHeartbeat()
+        } catch (e: any) {
+            this.heartbeatLastError = e?.message || String(e ?? '')
+        }
+        this.heartbeatLastAt = new Date()
+        this.heartbeatLastDurationMs = Date.now() - startedAt
+        this.emit()
+
         if (!h) {
             // Unreachable. Flip to offline-grace if we're still within window.
+            this.heartbeatFailureCount += 1
+            this.heartbeatLastStatus = 'unreachable'
+            this.heartbeatLastReason = null
             if (this.lastServerContactAt && this.isWithinGrace(this.lastServerContactAt.getTime())) {
                 this.offlineGrace = true
                 this.emit()
@@ -1259,11 +1288,69 @@ export class TlinkLicenseService implements OnDestroy {
             return
         }
         if (h.status === 'VALID') {
+            this.heartbeatSuccessCount += 1
+            this.heartbeatLastStatus = 'ok'
+            this.heartbeatLastReason = h.reason_code ?? null
+            this.heartbeatLastError = null
             this.applyHeartbeat(h)
             await this.persist()
         } else {
+            this.heartbeatFailureCount += 1
+            this.heartbeatLastStatus = 'invalid'
+            this.heartbeatLastReason = h.reason_code ?? null
             await this.handleInvalid(h.reason_code ?? null)
         }
+    }
+
+    // ─── Heartbeat observability (read-only getters for the Settings UI) ──
+
+    /** Configured heartbeat interval in ms. Read from merged config. */
+    get heartbeatIntervalMs (): number {
+        if (this.proxy) return this.proxy.heartbeatIntervalMs
+        return this.config.heartbeatIntervalMs
+    }
+
+    /** Total heartbeat attempts made this process run. Resets on app restart. */
+    get heartbeatAttemptCount (): number {
+        if (this.proxy) return this.proxy.heartbeatAttemptCount
+        return this.heartbeatCount
+    }
+
+    get heartbeatSuccesses (): number {
+        if (this.proxy) return this.proxy.heartbeatSuccesses
+        return this.heartbeatSuccessCount
+    }
+
+    get heartbeatFailures (): number {
+        if (this.proxy) return this.proxy.heartbeatFailures
+        return this.heartbeatFailureCount
+    }
+
+    /** Wall-clock of the most recent heartbeat attempt, or null if none yet. */
+    get heartbeatLastRunAt (): Date | null {
+        if (this.proxy) return this.proxy.heartbeatLastRunAt
+        return this.heartbeatLastAt
+    }
+
+    get heartbeatLastResult (): { status: 'ok' | 'unreachable' | 'invalid' | null; reason: ReasonCode | null; durationMs: number | null; error: string | null } {
+        if (this.proxy) return this.proxy.heartbeatLastResult
+        return {
+            status: this.heartbeatLastStatus,
+            reason: this.heartbeatLastReason,
+            durationMs: this.heartbeatLastDurationMs,
+            error: this.heartbeatLastError,
+        }
+    }
+
+    /**
+     * Manually fire a heartbeat right now. Useful from the Settings UI to
+     * verify reachability without waiting up to `heartbeatIntervalMs` (4h
+     * by default). Caller can `await` to know when the result is in.
+     * Doesn't disturb the periodic timer.
+     */
+    async triggerHeartbeat (): Promise<void> {
+        if (this.proxy) return this.proxy.triggerHeartbeat()
+        await this.heartbeatTick()
     }
 
     // Guards against concurrent invalidation: heartbeat + refresh + self-service

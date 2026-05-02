@@ -290,6 +290,46 @@
                             button.btn.btn-primary.license-btn((click)='saveProductCode()') Save
                     .small.mt-1.text-success(*ngIf='productCodeSaved', translate) Saved
 
+                    //- Heartbeat observability — read-only counters + a
+                    //- "Run heartbeat now" button so users can verify the
+                    //- license server is reachable on the configured cadence
+                    //- without waiting up to 4h for the next periodic tick.
+                    .form-line
+                        .header
+                            .title(translate) Heartbeat
+                            .description(translate) Periodic check-in to the license server. Triggers token rotation and revocation propagation.
+                        .license-input-row
+                            button.btn.btn-secondary.license-btn(
+                                (click)='triggerHeartbeat()',
+                                [disabled]='triggerHeartbeatRunning'
+                            )
+                                | {{ triggerHeartbeatRunning ? 'Running…' : 'Run now' }}
+                    .small.mt-1.d-flex.flex-wrap(style='gap:18px; opacity:0.8')
+                        span
+                            strong Interval:
+                            |  {{ formatHeartbeatInterval() }}
+                        span
+                            strong Attempts:
+                            |  {{ licenseSvc.heartbeatAttemptCount }}
+                        span(*ngIf='licenseSvc.heartbeatSuccesses > 0')
+                            strong.text-success OK:
+                            |  {{ licenseSvc.heartbeatSuccesses }}
+                        span(*ngIf='licenseSvc.heartbeatFailures > 0')
+                            strong.text-danger Failed:
+                            |  {{ licenseSvc.heartbeatFailures }}
+                        span(*ngIf='licenseSvc.heartbeatLastRunAt')
+                            strong Last run:
+                            |  {{ formatHeartbeatLastRun() }}
+                        span(*ngIf='licenseSvc.heartbeatLastResult.status === "ok"')
+                            strong.text-success Last result:
+                            |  OK ({{ licenseSvc.heartbeatLastResult.durationMs }}ms)
+                        span(*ngIf='licenseSvc.heartbeatLastResult.status === "unreachable"')
+                            strong.text-warning Last result:
+                            |  Unreachable
+                        span(*ngIf='licenseSvc.heartbeatLastResult.status === "invalid"')
+                            strong.text-danger Last result:
+                            |  Invalid ({{ licenseSvc.heartbeatLastResult.reason }})
+
                     //- Self-service device portal — lists all devices this
                     //- account is signed in on and lets the user deactivate
                     //- any seat without admin involvement.

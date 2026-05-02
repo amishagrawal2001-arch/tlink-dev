@@ -317,4 +317,40 @@ export class SettingsTabComponent extends BaseTabComponent {
         this.productCodeSaved = true
         setTimeout(() => { this.productCodeSaved = false }, 2000)
     }
+
+    // ─── Heartbeat observability helpers (Settings → License) ──────────
+
+    /** Pretty-print the configured heartbeat interval (e.g. "4h", "30m", "45s"). */
+    formatHeartbeatInterval (): string {
+        const ms = this.licenseSvc.heartbeatIntervalMs ?? 0
+        if (ms <= 0) return '—'
+        const sec = Math.round(ms / 1000)
+        if (sec < 60) return `${sec}s`
+        const min = Math.round(sec / 60)
+        if (min < 60) return `${min}m`
+        const hr = Math.round((min / 60) * 10) / 10
+        return `${hr}h`
+    }
+
+    /** "12s ago", "3m ago", "—" when no heartbeat has fired. Refreshes on
+     *  each Angular change-detection pass; cheap enough to inline-call. */
+    formatHeartbeatLastRun (): string {
+        const at = this.licenseSvc.heartbeatLastRunAt
+        if (!at) return '—'
+        const ageSec = Math.max(0, Math.round((Date.now() - at.getTime()) / 1000))
+        if (ageSec < 60) return `${ageSec}s ago`
+        if (ageSec < 3600) return `${Math.round(ageSec / 60)}m ago`
+        return `${Math.round(ageSec / 360) / 10}h ago`
+    }
+
+    triggerHeartbeatRunning = false
+    async triggerHeartbeat () {
+        if (this.triggerHeartbeatRunning) return
+        this.triggerHeartbeatRunning = true
+        try {
+            await this.licenseSvc.triggerHeartbeat()
+        } finally {
+            this.triggerHeartbeatRunning = false
+        }
+    }
 }
