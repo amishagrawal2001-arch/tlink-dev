@@ -384,9 +384,13 @@
                     .d-flex.gap-3.mt-4
                         //- Manual refresh — hits /api/licenses/refresh right now
                         //- instead of waiting for the ~13-min preemptive timer.
+                        //- Grey + retitle when the server already proved it
+                        //- doesn't support token-only refresh, so the user
+                        //- isn't tempted to repeatedly click a doomed button.
                         button.btn.btn-outline-secondary(
                             *ngIf='licenseSvc.licenseStatus === "active" && !licenseSvc.isLocalTrial',
-                            [disabled]='licenseRefreshing',
+                            [disabled]='licenseRefreshing || licenseSvc.heartbeatDisabled',
+                            [title]='licenseSvc.heartbeatDisabled ? "This server requires sign-in to refresh." : ""',
                             (click)='refreshLicense()'
                         )
                             i.fas.me-2(
@@ -394,7 +398,7 @@
                                 [class.fa-spinner]='licenseRefreshing',
                                 [class.fa-spin]='licenseRefreshing'
                             )
-                            | {{ licenseRefreshing ? 'Refreshing…' : 'Refresh license' }}
+                            | {{ licenseRefreshing ? 'Refreshing…' : (licenseSvc.heartbeatDisabled ? 'Refresh unavailable' : 'Refresh license') }}
 
                         //- Always visible so users can reset local state even
                         //- when there's no active session (useful when the

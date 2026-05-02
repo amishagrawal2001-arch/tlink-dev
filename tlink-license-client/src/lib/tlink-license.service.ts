@@ -695,8 +695,29 @@ export class TlinkLicenseService implements OnDestroy {
         if (!this.refreshToken) {
             return { success: false, message: 'Not signed in — nothing to refresh.' }
         }
+        // If the server already proved it doesn't support token-only
+        // refresh (sticky flag set after a previous 422 detected
+        // missing-credentials body), return a clear message instead of
+        // making a doomed HTTP call. Caller's UI button can also bind
+        // to `heartbeatDisabled` to hide / grey the button.
+        if (this.heartbeatDisabledByServer) {
+            return {
+                success: false,
+                message: 'This license server requires sign-in to refresh — your current tokens stay valid until you sign out.',
+            }
+        }
         const envelope = await this.callRefresh()
         if (!envelope) {
+            // callRefresh might have set heartbeatDisabledByServer just now
+            // if THIS call detected the missing-credentials shape. Return a
+            // matching message so the user sees the same explanation
+            // whether they hit the button before or after the auto-detect.
+            if (this.heartbeatDisabledByServer) {
+                return {
+                    success: false,
+                    message: 'This license server requires sign-in to refresh — your current tokens stay valid until you sign out.',
+                }
+            }
             return { success: false, message: 'License server unreachable.' }
         }
         if (envelope.license_status === 'VALID') {
@@ -705,9 +726,19 @@ export class TlinkLicenseService implements OnDestroy {
             this.scheduleRefresh()
             return { success: true, message: 'License refreshed.', reasonCode: 'OK' }
         }
-        // INVALID — mirror the behaviour of an adverse heartbeat so the user
-        // is forced back to the sign-in gate cleanly.
-        await this.handleInvalid(envelope.reason_code)
+        // INVALID — only treat as a real revocation when the reason_code
+        // matches a known revocation. Same policy as refreshTick /
+        // heartbeatTick: a malformed INVALID with no/unknown reason
+        // doesn't sign the user out. Returns an error message but keeps
+        // the session.
+        const REVOCATION_CODES = new Set<string>([
+            'LICENSE_EXPIRED', 'SEAT_REVOKED', 'DEVICE_LIMIT_REACHED',
+            'DEVICE_MISMATCH', 'SIGNATURE_INVALID', 'PRODUCT_NOT_ENTITLED',
+            'APP_VERSION_BLOCKED', 'INVALID_CREDENTIALS',
+        ])
+        if (envelope.reason_code && REVOCATION_CODES.has(envelope.reason_code)) {
+            await this.handleInvalid(envelope.reason_code)
+        }
         return { success: false, message: this.humanReason(envelope.reason_code), reasonCode: envelope.reason_code }
     }
 
