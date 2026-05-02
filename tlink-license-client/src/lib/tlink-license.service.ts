@@ -357,7 +357,14 @@ export class TlinkLicenseService implements OnDestroy {
      * extend this map then.
      */
     private translateActionForBase (action: string, kind: 'bare' | 'versioned' | 'licenses'): string {
-        if (kind !== 'bare' && (action === 'refresh' || action === 'activate')) return 'validate'
+        // AWS API Gateway exposes a single /validate endpoint that handles
+        // initial activation, token refresh, AND periodic heartbeat —
+        // distinguishing them by request-body shape. Calling /heartbeat
+        // there returns 422 ("Unprocessable Content") because the route
+        // doesn't exist (or the validator rejects the bare body).
+        if (kind !== 'bare' && (action === 'refresh' || action === 'activate' || action === 'heartbeat')) {
+            return 'validate'
+        }
         return action
     }
 
@@ -974,16 +981,21 @@ export class TlinkLicenseService implements OnDestroy {
             return null
         }
         try {
+            const url = this.licenseEndpoint('heartbeat')
+            // When the heartbeat alias points at /validate (cloud), the
+            // endpoint expects the same body shape as refresh — i.e. a
+            // refresh_token. Send it always for cloud bases so AWS doesn't
+            // 422 us. For bare-host (local Express server) keep the original
+            // shape, only attaching refresh_token when access has expired.
+            const cloudBase = this.classifyBase(this.trimmedServerUrl()) !== 'bare'
             const body: any = { device_id: this.deviceId, license_id: this.licenseId }
-            if (this.isAccessExpired()) {
-                // Let heartbeat rotate tokens inline.
+            if (cloudBase || this.isAccessExpired()) {
                 body.refresh_token = this.refreshToken
             }
-            const url = this.licenseEndpoint('heartbeat')
             // eslint-disable-next-line no-console
             console.info('%c[license:heartbeat] sending',
                 'color:#3b82f6;font-weight:600',
-                { url, accessExpired: this.isAccessExpired(), inlineRefresh: !!body.refresh_token })
+                { url, accessExpired: this.isAccessExpired(), inlineRefresh: !!body.refresh_token, cloudBase })
             const res = await this.loggedFetch('licenses/heartbeat', url, {
                 method: 'POST',
                 headers: {
@@ -992,7 +1004,24 @@ export class TlinkLicenseService implements OnDestroy {
                 },
                 body: JSON.stringify(body),
             })
-            const envelope = this.normalizeHeartbeat(await res.json())
+            // Hard-stop: if the HTTP layer returned non-2xx, do NOT treat
+            // the body as a license envelope. A 4xx/5xx means the server
+            // rejected our REQUEST shape (or had an internal error) — it's
+            // NOT a license-revocation signal. Returning null routes us
+            // through the "unreachable" branch which is offline-grace
+            // tolerant and won't sign the user out.
+            if (!res.ok) {
+                // eslint-disable-next-line no-console
+                console.error('%c[license:heartbeat] HTTP error — treating as transient (NOT logging out)',
+                    'color:#dc2626;font-weight:700',
+                    { status: res.status, body: await res.text().catch(() => null) })
+                return null
+            }
+            const rawJson = await res.json()
+            // Cloud /validate response is a full LicenseEnvelope, not the
+            // slim HeartbeatEnvelope. normalizeHeartbeat is permissive
+            // enough to pull the status + tokens out regardless.
+            const envelope = this.normalizeHeartbeat(rawJson)
             // eslint-disable-next-line no-console
             console.info('%c[license:heartbeat] response',
                 envelope.status === 'VALID' ? 'color:#16a34a;font-weight:600' : 'color:#dc2626;font-weight:600',
@@ -1373,14 +1402,29 @@ export class TlinkLicenseService implements OnDestroy {
             this.heartbeatFailureCount += 1
             this.heartbeatLastStatus = 'invalid'
             this.heartbeatLastReason = h.reason_code ?? null
+            // Only ACTUALLY log the user out for license-revocation reason
+            // codes. Anything else (server returned INVALID with no reason,
+            // or with a code that means "your request was malformed" rather
+            // than "your license is dead") is treated as transient. Loud
+            // log either way so a real revocation is still obvious.
+            const REVOCATION_CODES = new Set<string>([
+                'LICENSE_EXPIRED', 'SEAT_REVOKED', 'DEVICE_LIMIT_REACHED',
+                'DEVICE_MISMATCH', 'SIGNATURE_INVALID', 'PRODUCT_NOT_ENTITLED',
+                'APP_VERSION_BLOCKED', 'INVALID_CREDENTIALS',
+            ])
+            const reason = h.reason_code ?? null
+            const shouldLogOut = !!reason && REVOCATION_CODES.has(reason)
             // eslint-disable-next-line no-console
             console.error(`%c[license:heartbeat] tick #${this.heartbeatCount} → INVALID`,
                 'color:#dc2626;font-weight:700',
                 {
                     durationMs: this.heartbeatLastDurationMs,
-                    reason: h.reason_code,
+                    reason,
+                    action: shouldLogOut ? 'CLEARING SESSION' : 'keeping session (no revocation reason)',
                 })
-            await this.handleInvalid(h.reason_code ?? null)
+            if (shouldLogOut) {
+                await this.handleInvalid(reason)
+            }
         }
         // eslint-disable-next-line no-console
         console.groupEnd()
