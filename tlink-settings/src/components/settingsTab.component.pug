@@ -176,66 +176,71 @@
                                 strong.license-account(*ngIf='licenseSvc.licenseStatus === "active" && licenseSvc.isLocalTrial') Local trial — not signed in
                                 //- All non-active states.
                                 strong.license-account(*ngIf='licenseSvc.licenseStatus !== "active"') Not signed in
-                                small.text-muted(*ngIf='licenseSvc.licenseStatus === "active" && licenseSvc.endDate') Expires {{ licenseSvc.endDate }}
+                                small.text-muted(*ngIf='licenseSvc.licenseStatus === "active" && licenseSvc.endDate') Expires {{ formatExpiry() }}
                                 small.text-muted(*ngIf='licenseSvc.licenseStatus !== "active"') Please sign in to continue
 
-                    h5.mt-4(*ngIf='!licenseSvc.userEmail')
-                        i.fas.fa-sign-in-alt
-                        span(translate) Sign in
-                    h5.mt-4(*ngIf='licenseSvc.userEmail')
-                        i.fas.fa-user-edit
-                        span(translate) Switch account
-                    .form-line
-                        .header
-                            .title(translate) Email
-                        .license-input-row
-                            input.form-control(
-                                type='email',
-                                autocomplete='email',
-                                [(ngModel)]='licenseEmailInput',
-                                placeholder='you@example.com'
-                            )
-                    .form-line
-                        .header
-                            .title(translate) Password
-                        .license-input-row
-                            input.form-control(
-                                type='password',
-                                autocomplete='current-password',
-                                [(ngModel)]='licensePasswordInput',
-                                placeholder='Your password',
-                                (keydown.enter)='activateLicense()'
-                            )
-                            button.btn.btn-primary.license-btn((click)='activateLicense()') Sign in
-                    .text-danger.mt-1.small(*ngIf='licenseError') {{ licenseError }}
-                    .text-success.mt-1.small(*ngIf='licenseSuccess') {{ licenseSuccess }}
+                    //- Sign-in form is heavy (two big inputs + button). When
+                    //- the user is already signed in, hide it behind a
+                    //- "Switch account" button so it doesn't dominate the
+                    //- panel for users who just want to glance at status.
+                    //- Fresh launch with no session → form stays expanded
+                    //- (showSignInForm initialized from !userEmail in TS).
+                    .d-flex.align-items-center.justify-content-between.mt-3(*ngIf='licenseSvc.userEmail && !showSignInForm')
+                        .small.text-muted Signed in as <strong>{{ licenseSvc.userEmail }}</strong>
+                        button.btn.btn-sm.btn-outline-secondary((click)='toggleSignInForm()')
+                            i.fas.fa-user-edit.me-1
+                            | Switch account
 
-                    h5.mt-4
+                    ng-container(*ngIf='showSignInForm')
+                        h5.mt-4(*ngIf='!licenseSvc.userEmail')
+                            i.fas.fa-sign-in-alt
+                            span(translate) Sign in
+                        h5.mt-4(*ngIf='licenseSvc.userEmail')
+                            i.fas.fa-user-edit
+                            span(translate) Switch account
+                        .form-line
+                            .header
+                                .title(translate) Email
+                            .license-input-row
+                                input.form-control(
+                                    type='email',
+                                    autocomplete='email',
+                                    [(ngModel)]='licenseEmailInput',
+                                    placeholder='you@example.com'
+                                )
+                        .form-line
+                            .header
+                                .title(translate) Password
+                            .license-input-row
+                                input.form-control(
+                                    type='password',
+                                    autocomplete='current-password',
+                                    [(ngModel)]='licensePasswordInput',
+                                    placeholder='Your password',
+                                    (keydown.enter)='activateLicense()'
+                                )
+                                button.btn.btn-primary.license-btn((click)='activateLicense()') Sign in
+                                button.btn.btn-link.btn-sm(*ngIf='licenseSvc.userEmail', (click)='toggleSignInForm()') Cancel
+                        .text-danger.mt-1.small(*ngIf='licenseError') {{ licenseError }}
+                        .text-success.mt-1.small(*ngIf='licenseSuccess') {{ licenseSuccess }}
+
+                    //- License Details — used to repeat Status / Account /
+                    //- License / Expires that already live in the status
+                    //- card above. Trimmed to JUST the device-bound fields
+                    //- (Device ID + fingerprint) which the card has no
+                    //- room to show. Offline-grace flag is the one bit
+                    //- that needs surfacing here when active, since the
+                    //- status card doesn't communicate it.
+                    h5.mt-4(*ngIf='licenseSvc.deviceId || true')
                         i.fas.fa-id-card
-                        span(translate) License Details
-                    .form-line
+                        span(translate) Device
+
+                    .form-line(*ngIf='licenseSvc.offlineGrace')
                         .header
                             .title(translate) Status
-                        span.license-detail-badge(
-                            [class.detail-active]='licenseSvc.licenseStatus === "active"',
-                            [class.detail-trial]='licenseSvc.billingType === "TRIAL" && licenseSvc.licenseStatus === "active"',
-                            [class.detail-expired]='licenseSvc.licenseStatus === "expired"'
-                        ) {{ licenseSvc.licenseStatus | uppercase }}{{ licenseSvc.offlineGrace ? ' (OFFLINE)' : '' }}
-
-                    .form-line(*ngIf='licenseSvc.userEmail')
-                        .header
-                            .title(translate) Account
-                        span {{ licenseSvc.userEmail }}
-
-                    .form-line(*ngIf='licenseSvc.licenseStatus === "active"')
-                        .header
-                            .title(translate) License
-                        span {{ licenseSvc.licenseType }} / {{ licenseSvc.billingType }}
-
-                    .form-line(*ngIf='licenseSvc.licenseStatus === "active" && licenseSvc.endDate')
-                        .header
-                            .title(translate) Expires
-                        span {{ licenseSvc.endDate }}
+                        span.license-detail-badge.detail-trial
+                            i.fas.fa-triangle-exclamation.me-1
+                            | OFFLINE GRACE
 
                     .form-line(*ngIf='licenseSvc.deviceId')
                         .header

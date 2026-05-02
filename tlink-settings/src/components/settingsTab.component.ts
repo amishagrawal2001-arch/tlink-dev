@@ -259,6 +259,37 @@ export class SettingsTabComponent extends BaseTabComponent {
         }
     }
 
+    /**
+     * Toggle for the Sign-in / Switch-account form. When the user is
+     * already signed in, the form sits collapsed behind a "Switch
+     * account" expander button — no need to render two big inputs all
+     * the time. Defaults to TRUE on a fresh launch with no session,
+     * so first-time users still see the form immediately.
+     */
+    showSignInForm = !this.licenseSvc.userEmail
+    toggleSignInForm () {
+        this.showSignInForm = !this.showSignInForm
+    }
+
+    /**
+     * Friendly expiry copy for the status card. Turns the ISO
+     * "2027-05-02" into "May 2, 2027 · 365 days left" so the user
+     * doesn't have to do date math. Returns '—' when no expiry
+     * (offline grace, perpetual license, etc).
+     */
+    formatExpiry (): string {
+        const iso = this.licenseSvc.endDate
+        if (!iso) return '—'
+        const d = new Date(iso)
+        if (Number.isNaN(d.getTime())) return iso
+        const pretty = d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+        const days = Math.floor((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+        if (days < 0) return `${pretty} · expired ${Math.abs(days)}d ago`
+        if (days === 0) return `${pretty} · expires today`
+        if (days === 1) return `${pretty} · 1 day left`
+        return `${pretty} · ${days} days left`
+    }
+
     saveServerUrl () {
         this.licenseSvc.serverUrl = this.serverUrl
         localStorage.setItem('tlink-license-server-url', this.serverUrl)
