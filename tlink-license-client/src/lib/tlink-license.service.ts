@@ -988,26 +988,63 @@ export class TlinkLicenseService implements OnDestroy {
 
     // ─── Internal server calls ────────────────────────────────────────────
 
+    /**
+     * Build the refresh / heartbeat request body. On bare-host (local
+     * Express server) the slim `{ refresh_token, device_fingerprint_hash }`
+     * shape is accepted. On cloud bases (AWS /validate) the same endpoint
+     * that handles activation strictly validates a richer body — server
+     * still uses `refresh_token` for identity, but won't dispatch the
+     * route until email/product_code/etc. parse cleanly. We have all of
+     * those except password (deliberately never persisted), and the
+     * refresh_token replaces password as the auth secret.
+     */
+    private async buildTokenAuthBody (): Promise<Record<string, any>> {
+        const fp = await this.fingerprint.get()
+        const cloud = this.classifyBase(this.trimmedServerUrl()) !== 'bare'
+        if (!cloud) {
+            return { refresh_token: this.refreshToken, device_fingerprint_hash: fp }
+        }
+        return {
+            email: this.userEmail ?? '',
+            refresh_token: this.refreshToken,
+            product_code: this.productCode,
+            device_fingerprint_hash: fp,
+            device_id: this.deviceId ?? '',
+            license_id: this.licenseId ?? '',
+            platform: this.fingerprint.getPlatform(),
+            os_version: this.fingerprint.getOsVersion(),
+            app_version: this.config.appVersion,
+            mac_address: this.fingerprint.getPrimaryMac(),
+        }
+    }
+
     /** Uses the stored refresh_token to obtain a fresh access/refresh pair. */
     private async callRefresh (): Promise<LicenseEnvelope | null> {
         if (!this.refreshToken) {return null}
         try {
-            const fp = await this.fingerprint.get()
+            const body = await this.buildTokenAuthBody()
             const res = await this.loggedFetch('licenses/refresh', this.licenseEndpoint('refresh'), {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ refresh_token: this.refreshToken, device_fingerprint_hash: fp }),
+                headers: {
+                    'Content-Type': 'application/json',
+                    // Send the access token as a bearer too — AWS may
+                    // authenticate via header AND validate body shape.
+                    ...(this.accessToken ? { Authorization: `Bearer ${this.accessToken}` } : {}),
+                },
+                body: JSON.stringify(body),
             })
-            // Same defense as callHeartbeat: a non-2xx is NOT a license-
-            // revocation signal. Returning null routes the caller through
-            // the unreachable / grace branches instead of clearing the
-            // session. Also auto-disable refresh on the AWS shape that
-            // demands credentials we don't have.
+            // Defense: non-2xx is NOT a license-revocation signal. Return
+            // null and let the caller route through unreachable/grace.
+            // ONLY auto-disable when the 422 specifically demands a
+            // password (which we never have post-activate) — anything
+            // else (missing email / product_code / device_fingerprint
+            // hash) we now SEND in the rich body, so a 422 there is a
+            // server-config bug rather than a fundamental incompatibility.
             if (!res.ok) {
                 const bodyText = await res.text().catch(() => '')
-                const looksLikeMissingCreds = res.status === 422 &&
-                    /"loc":\s*\[\s*"body",\s*"(email|password|product_code)"/i.test(bodyText)
-                if (looksLikeMissingCreds && !this.heartbeatDisabledByServer) {
+                const demandsPassword = res.status === 422 &&
+                    /"loc":\s*\[\s*"body",\s*"password"/i.test(bodyText)
+                if (demandsPassword && !this.heartbeatDisabledByServer) {
                     this.heartbeatDisabledByServer = true
                     this.stopHeartbeat()
                     if (this.refreshTimer) {
@@ -1016,9 +1053,9 @@ export class TlinkLicenseService implements OnDestroy {
                     }
                     // eslint-disable-next-line no-console
                     console.warn(
-                        '%c[license:refresh] disabled — server requires full credentials (no token-only refresh)',
+                        '%c[license:refresh] disabled — server requires password on every refresh',
                         'color:#f59e0b;font-weight:700',
-                        { note: 'Sticking with the access token from activate; sign in again when it expires.' })
+                        { note: 'Tokens stay valid until you sign out. Re-enter password to get a fresh session.' })
                 }
                 // eslint-disable-next-line no-console
                 console.error('%c[license:refresh] HTTP error — treating as transient (NOT logging out)',
@@ -1051,14 +1088,16 @@ export class TlinkLicenseService implements OnDestroy {
         }
         try {
             const url = this.licenseEndpoint('heartbeat')
-            // When the heartbeat alias points at /validate (cloud), the
-            // endpoint expects the same body shape as refresh — i.e. a
-            // refresh_token. Send it always for cloud bases so AWS doesn't
-            // 422 us. For bare-host (local Express server) keep the original
-            // shape, only attaching refresh_token when access has expired.
+            // On cloud bases (AWS /validate) the heartbeat alias expects
+            // the same rich body that activate sent — minus password —
+            // because /validate strictly validates the route schema. The
+            // refresh_token authenticates instead. On bare-host the slim
+            // legacy shape works.
             const cloudBase = this.classifyBase(this.trimmedServerUrl()) !== 'bare'
-            const body: any = { device_id: this.deviceId, license_id: this.licenseId }
-            if (cloudBase || this.isAccessExpired()) {
+            const body: any = cloudBase
+                ? await this.buildTokenAuthBody()
+                : { device_id: this.deviceId, license_id: this.licenseId }
+            if (!cloudBase && this.isAccessExpired()) {
                 body.refresh_token = this.refreshToken
             }
             // eslint-disable-next-line no-console
@@ -1081,25 +1120,25 @@ export class TlinkLicenseService implements OnDestroy {
             // tolerant and won't sign the user out.
             if (!res.ok) {
                 const bodyText = await res.text().catch(() => '')
-                // Sticky-disable detection: AWS-style /validate-as-activate
-                // returns 422 with a "missing email"/"missing password"
-                // body when we send token-only. The server fundamentally
-                // doesn't support periodic check-ins; future ticks would
-                // just produce the same noise. Stop the timer and surface
-                // this clearly. Activation tokens stay valid until the
-                // user signs out or restarts.
-                const looksLikeMissingCreds = res.status === 422 &&
-                    /"loc":\s*\[\s*"body",\s*"(email|password|product_code)"/i.test(bodyText)
-                if (looksLikeMissingCreds && !this.heartbeatDisabledByServer) {
+                // Sticky-disable ONLY when the server demands a password —
+                // we never persist passwords (security boundary), so a
+                // password-required server can't be heartbeated without
+                // re-prompting the user. Anything else (missing email /
+                // product_code / device_fingerprint_hash) is now
+                // populated in buildTokenAuthBody, so a 422 there is a
+                // server-config issue we should retry not give up on.
+                const demandsPassword = res.status === 422 &&
+                    /"loc":\s*\[\s*"body",\s*"password"/i.test(bodyText)
+                if (demandsPassword && !this.heartbeatDisabledByServer) {
                     this.heartbeatDisabledByServer = true
                     this.stopHeartbeat()
                     // eslint-disable-next-line no-console
                     console.warn(
-                        '%c[license:heartbeat] disabled — server requires full credentials (no token-only refresh)',
+                        '%c[license:heartbeat] disabled — server requires password on every check-in',
                         'color:#f59e0b;font-weight:700',
                         {
                             url,
-                            note: 'This is the AWS /validate-as-activate shape. Heartbeat + scheduled-refresh are turned off for this session; tokens stay valid until you sign out or restart. Settings → License → "Run now" will be a no-op.',
+                            note: 'Tokens stay valid until you sign out. Re-enter password to get a fresh session.',
                         })
                 }
                 // eslint-disable-next-line no-console
