@@ -263,28 +263,34 @@ textarea {
     // close in weight to the body text — the eye couldn't tell where
     // a section started. Now they read like clear section breaks.
     h5 {
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 700;
-        letter-spacing: 1.5px;
+        letter-spacing: 1.4px;
         text-transform: uppercase;
         color: var(--bs-secondary-color, rgba(128, 128, 128, 0.85));
-        margin-top: 28px;
-        margin-bottom: 12px;
-        padding-bottom: 8px;
+        // Tighter section gap — was 28/12/8, eye now skims sections
+        // instead of scrolling past them.
+        margin-top: 16px;
+        margin-bottom: 6px;
+        padding-bottom: 4px;
         border-bottom: 1px solid var(--bs-border-color, rgba(128, 128, 128, 0.18));
         display: flex;
         align-items: center;
         gap: 8px;
         i {
-            font-size: 12px;
+            font-size: 11px;
             opacity: 0.7;
         }
     }
 
-    // Form rows in the License panel — give each one breathing room and
-    // a faint separator. Without this they all blend.
+    // Form rows in the License panel — faint separator + minimal padding
+    // so the panel reads as a tight list rather than a scroll-heavy form.
+    // .form-line itself has min-height: 64px applied globally; we shrink
+    // it locally with !important so the override sticks (the global
+    // selector is the same specificity but earlier in the cascade).
     > .form-line {
-        padding: 14px 0;
+        min-height: 0 !important;
+        padding: 6px 0;
         border-bottom: 1px solid var(--bs-border-color, rgba(128, 128, 128, 0.08));
         &:last-child {
             border-bottom: none;
