@@ -265,6 +265,14 @@ textarea {
 // view-encapsulation default. Settings tab content is wrapped in
 // .content-box per .pug template; we leverage that.
 
+// Widen the License panel beyond the global 600px cap. Sign-in form,
+// device-fingerprint URL, the heartbeat-disabled inline notice, and the
+// stat chips all need roughly 880px to render in one line each. Other
+// settings tabs keep the global narrower default.
+.content-box.license-content {
+    max-width: 880px;
+}
+
 .content-box {
     // Bigger, more presence on the section headers ("License Server",
     // "License Details", "Sign in", etc.). Bootstrap's h5 was too
@@ -388,5 +396,6 @@ textarea {
         text-decoration: underline;
         font-weight: 700;
         margin-left: 4px;
+        white-space: nowrap;
     }
 }
