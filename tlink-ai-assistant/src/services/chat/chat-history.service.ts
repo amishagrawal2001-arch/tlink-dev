@@ -144,6 +144,26 @@ export class ChatHistoryService {
     }
 
     /**
+     * Return every message across every saved session, flat-mapped.
+     * Used by the cost / usage aggregator widgets in Settings → Data
+     * to compute "today's spend" / "lifetime tokens" / "per-provider
+     * spend" without each caller having to re-walk the sessions
+     * collection. Materialized once on call; for large histories this
+     * is O(N messages) but stays cheap because messages are
+     * pre-loaded in memory by the saveSession path.
+     */
+    getAllMessages(): ChatMessage[] {
+        const sessions = this.sessionsSubject.value;
+        const out: ChatMessage[] = [];
+        for (const s of sessions) {
+            if (s.messages && s.messages.length) {
+                out.push(...s.messages);
+            }
+        }
+        return out;
+    }
+
+    /**
      * 获取会话统计
      */
     getStatistics(): {

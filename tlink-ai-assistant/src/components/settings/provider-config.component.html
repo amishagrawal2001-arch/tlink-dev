@@ -329,6 +329,17 @@
                             <i class="fa fa-bolt"></i>
                             unavailable · retry in {{ getBreakerCooldownSec(providerName) }}s
                         </span>
+                        <!-- Per-provider lifetime usage — quiet footer
+                             showing total tokens (and cost when known).
+                             Hidden when no usage recorded for this
+                             provider so unused providers don't show
+                             a misleading "0 tokens" badge. -->
+                        <span class="lifetime-badge" *ngIf="getProviderLifetimeUsage(providerName) as agg"
+                              [title]="agg.messageCount + ' AI messages · ' + agg.promptTokens + ' in · ' + agg.completionTokens + ' out'">
+                            <i class="fa fa-chart-line"></i>
+                            {{ agg.totalTokens | number }} tokens
+                            <strong *ngIf="formatProviderCost(providerName)">· {{ formatProviderCost(providerName) }}</strong>
+                        </span>
                     </div>
                     <div class="expand-icon">
                         <i class="fa" [ngClass]="expandedProvider === providerName ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
@@ -681,6 +692,16 @@
                                   (click)="resetBreaker(providerName); $event.stopPropagation()">
                                 <i class="fa fa-bolt"></i>
                                 unavailable · retry in {{ getBreakerCooldownSec(providerName) }}s
+                            </span>
+                            <!-- Per-provider lifetime usage. Local
+                                 providers (vLLM, Ollama, Tabby) show
+                                 tokens but no cost (the helper returns
+                                 empty for self-hosted pricing). -->
+                            <span class="lifetime-badge" *ngIf="getProviderLifetimeUsage(providerName) as agg"
+                                  [title]="agg.messageCount + ' AI messages · ' + agg.promptTokens + ' in · ' + agg.completionTokens + ' out'">
+                                <i class="fa fa-chart-line"></i>
+                                {{ agg.totalTokens | number }} tokens
+                                <strong *ngIf="formatProviderCost(providerName)">· {{ formatProviderCost(providerName) }}</strong>
                             </span>
                         </div>
                     </div>

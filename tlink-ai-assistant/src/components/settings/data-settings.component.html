@@ -96,6 +96,42 @@
                 </div>
             </div>
 
+            <!-- AI usage + cost rollup widget -->
+            <!-- Walks every saved session, sums tokens + cost over
+                 today / last 7d / this month / lifetime. Closes the
+                 cost-visibility loop: per-message footers + per-session
+                 header badge + this rolling panel. -->
+            <div class="data-actions" style="margin-top: 24px"
+                 *ngIf="usageLifetime.totalTokens > 0">
+                <h4>AI usage &amp; cost</h4>
+                <div class="usage-rollup-grid">
+                    <div class="usage-rollup-cell">
+                        <span class="usage-rollup-label">Today</span>
+                        <span class="usage-rollup-value">{{ usageToday.totalTokens | number }} tokens</span>
+                        <span class="usage-rollup-cost"
+                              *ngIf="formatAggregateCost(usageToday)">{{ formatAggregateCost(usageToday) }}</span>
+                    </div>
+                    <div class="usage-rollup-cell">
+                        <span class="usage-rollup-label">Last 7 days</span>
+                        <span class="usage-rollup-value">{{ usageLast7d.totalTokens | number }} tokens</span>
+                        <span class="usage-rollup-cost"
+                              *ngIf="formatAggregateCost(usageLast7d)">{{ formatAggregateCost(usageLast7d) }}</span>
+                    </div>
+                    <div class="usage-rollup-cell">
+                        <span class="usage-rollup-label">This month</span>
+                        <span class="usage-rollup-value">{{ usageMonth.totalTokens | number }} tokens</span>
+                        <span class="usage-rollup-cost"
+                              *ngIf="formatAggregateCost(usageMonth)">{{ formatAggregateCost(usageMonth) }}</span>
+                    </div>
+                    <div class="usage-rollup-cell">
+                        <span class="usage-rollup-label">Lifetime</span>
+                        <span class="usage-rollup-value">{{ usageLifetime.totalTokens | number }} tokens</span>
+                        <span class="usage-rollup-cost"
+                              *ngIf="formatAggregateCost(usageLifetime)">{{ formatAggregateCost(usageLifetime) }}</span>
+                    </div>
+                </div>
+            </div>
+
             <!-- AI debug log (request-log.service ring buffer) -->
             <!-- Persistent (IndexedDB) record of recent provider requests
                  / responses / errors, scrubbed at write time. Designed

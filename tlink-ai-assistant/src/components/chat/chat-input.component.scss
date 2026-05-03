@@ -1,34 +1,38 @@
+/* Chat input — compact pass.
+   Was 1rem outer padding + 0.75rem/1rem textarea padding + 0.75rem
+   bottom margin = ~70px tall input area before any text is typed.
+   Now 0.625rem outer + 0.5rem/0.75rem textarea + 0.5rem margin =
+   ~52px tall. Frees ~18px for the message thread above. */
 .chat-input-container {
-    padding: 1rem;
+    padding: 0.625rem 0.875rem;
     background-color: var(--ai-bg-secondary);
 }
 
-/* 输入区域 */
 .input-wrapper {
     position: relative;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.5rem;
 
     .chat-textarea {
         width: 100%;
-        min-height: 44px;
+        min-height: 36px;
         max-height: 120px;
-        padding: 0.75rem 1rem;
-        padding-right: 4rem; // 为字符计数留出空间
-        border: 2px solid var(--ai-border);
-        border-radius: 0.75rem;
+        padding: 0.5rem 0.75rem;
+        padding-right: 3.5rem; // room for char counter
+        border: 1px solid var(--ai-border);
+        border-radius: 0.5rem;
         background-color: var(--ai-bg-primary);
         color: var(--ai-text-primary);
         font-family: inherit;
         font-size: 14px;
-        line-height: 1.5;
+        line-height: 1.45;
         resize: none;
-        transition: all 0.2s;
-        overflow-y: hidden; // 初始隐藏滚动条
+        transition: border-color 0.15s, box-shadow 0.15s;
+        overflow-y: hidden;
 
         &:focus {
             outline: none;
             border-color: var(--ai-primary);
-            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.15);
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.18);
         }
 
         &:disabled {

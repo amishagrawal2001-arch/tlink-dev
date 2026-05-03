@@ -10,6 +10,8 @@ import { ConsentManagerService } from '../../services/security/consent-manager.s
 import { LoggerService } from '../../services/core/logger.service';
 import { ToastService } from '../../services/core/toast.service';
 import { RequestLogService } from '../../services/core/request-log.service';
+import { UsageAggregatorService, UsageAggregate } from '../../services/core/usage-aggregator.service';
+import { formatCost } from '../../utils/cost.utils';
 
 /**
  * 数据文件信息
@@ -247,6 +249,46 @@ export interface DataFileInfo {
             border-left: 3px solid #f59e0b;
         }
 
+        /* Usage rollup grid — 4 windows × {tokens, cost}. Tabular
+           numerics so the digits align across cells. Cost line is
+           hidden when zero (all-local-provider sessions) so cells
+           don't show "$0.00" misleading-looking placeholders. */
+        .usage-rollup-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px;
+        }
+
+        .usage-rollup-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 8px 10px;
+            background: var(--background-secondary);
+            border-radius: 6px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .usage-rollup-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            font-weight: 600;
+        }
+
+        .usage-rollup-value {
+            font-size: 14px;
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .usage-rollup-cost {
+            font-size: 12px;
+            color: #16a34a;
+            font-weight: 600;
+        }
+
         .note-content {
             display: flex;
             align-items: flex-start;
@@ -287,6 +329,14 @@ export class DataSettingsComponent implements OnInit, OnDestroy {
     /** Most recent persisted-log entry count, refreshed on demand. */
     requestLogCount = 0;
 
+    /** Aggregated AI usage / cost over rolling time windows.
+     *  Recomputed on tab open + on demand. Renders the
+     *  "Today / Last 7d / This month" rollup widget. */
+    usageToday: UsageAggregate = { messageCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, totalCost: 0 };
+    usageLast7d: UsageAggregate = { messageCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, totalCost: 0 };
+    usageMonth: UsageAggregate = { messageCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, totalCost: 0 };
+    usageLifetime: UsageAggregate = { messageCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, totalCost: 0 };
+
     constructor(
         private fileStorage: FileStorageService,
         private memory: Memory,
@@ -297,6 +347,7 @@ export class DataSettingsComponent implements OnInit, OnDestroy {
         private logger: LoggerService,
         private toast: ToastService,
         private requestLog: RequestLogService,
+        private usageAggregator: UsageAggregatorService,
     ) {}
 
     ngOnInit(): void {
@@ -305,6 +356,36 @@ export class DataSettingsComponent implements OnInit, OnDestroy {
         this.loadStatistics();
         this.checkMigrationStatus();
         this.loadRequestLogCount();
+        this.loadUsageRollups();
+    }
+
+    /**
+     * Walk every saved chat session, sum AI-message usage stats by
+     * time window. Cheap (~1ms even for hundreds of sessions because
+     * the messages are already in memory). Recomputed on tab open;
+     * doesn't auto-refresh — call again after a chat finishes if the
+     * UI ever needs live updates here.
+     */
+    private loadUsageRollups(): void {
+        const all = this.chatHistoryService.getAllMessages();
+
+        const now = new Date();
+        const startOfToday = new Date(now);
+        startOfToday.setHours(0, 0, 0, 0);
+
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        this.usageToday = this.usageAggregator.aggregateSince(all, startOfToday);
+        this.usageLast7d = this.usageAggregator.aggregateSince(all, sevenDaysAgo);
+        this.usageMonth = this.usageAggregator.aggregateSince(all, startOfMonth);
+        this.usageLifetime = this.usageAggregator.aggregate(all);
+    }
+
+    /** Pretty-format an aggregate's cost. Empty when zero so the UI
+     *  hides the dollar line on all-local-provider sessions. */
+    formatAggregateCost(agg: UsageAggregate): string {
+        return agg.totalCost > 0 ? formatCost(agg.totalCost) : '';
     }
 
     /**

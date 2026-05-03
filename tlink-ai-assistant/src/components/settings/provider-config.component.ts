@@ -8,6 +8,9 @@ import { ToastService } from '../../services/core/toast.service';
 import { TranslateService } from '../../i18n';
 import { AiAssistantService } from '../../services/core/ai-assistant.service';
 import { AiProviderManagerService } from '../../services/core/ai-provider-manager.service';
+import { ChatHistoryService } from '../../services/chat/chat-history.service';
+import { UsageAggregatorService, UsageAggregate } from '../../services/core/usage-aggregator.service';
+import { formatCost } from '../../utils/cost.utils';
 import { OllamaModelService, OllamaModel, ModelPullProgress } from '../../services/ollama/ollama-model.service';
 import { CircuitBreakerSnapshot } from '../../services/providers/circuit-breaker';
 import { DocViewerComponent } from '../doc-viewer/doc-viewer.component';
@@ -333,8 +336,59 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
         private aiService: AiAssistantService,
         private modal: NgbModal,
         private providerManager: AiProviderManagerService,
+        private chatHistory: ChatHistoryService,
+        private usageAggregator: UsageAggregatorService,
     ) {
         this.t = this.translate.t;
+    }
+
+    /**
+     * Per-provider lifetime usage cache. Built once per ngOnInit by
+     * walking the entire chat history; pricing is computed via the
+     * usage aggregator's per-message provider+model stamping. Reading
+     * a provider's value during render is O(1) — the work happens
+     * upfront, not per CD pass.
+     */
+    private providerUsageCache: Map<string, UsageAggregate> = new Map();
+
+    /**
+     * Build the lifetime-usage cache from the saved chat sessions.
+     * Called from ngOnInit. Cheap (~1ms even for hundreds of
+     * sessions) because all messages are already in memory.
+     */
+    private rebuildProviderUsageCache(): void {
+        const all = this.chatHistory.getAllMessages();
+        // Group messages by provider name, then aggregate each bucket.
+        const byProvider: Record<string, typeof all> = {};
+        for (const m of all) {
+            const provider = m.metadata?.['provider'] as string | undefined;
+            if (!provider) {continue;}
+            if (!byProvider[provider]) {byProvider[provider] = [];}
+            byProvider[provider].push(m);
+        }
+        this.providerUsageCache.clear();
+        for (const [providerName, messages] of Object.entries(byProvider)) {
+            this.providerUsageCache.set(providerName, this.usageAggregator.aggregate(messages));
+        }
+    }
+
+    /**
+     * Lifetime usage for a single provider. Returns null when there's
+     * no recorded usage so the template can `*ngIf` the footer out
+     * entirely (avoids a misleading "0 tokens · $0.00" badge).
+     */
+    getProviderLifetimeUsage(providerName: string): UsageAggregate | null {
+        const agg = this.providerUsageCache.get(providerName);
+        if (!agg || agg.totalTokens === 0) {return null;}
+        return agg;
+    }
+
+    /** Pretty-format the lifetime cost string ("$1.23") for the
+     *  template. Empty when zero (self-hosted providers). */
+    formatProviderCost(providerName: string): string {
+        const agg = this.providerUsageCache.get(providerName);
+        if (!agg || agg.totalCost <= 0) {return '';}
+        return formatCost(agg.totalCost);
     }
 
     /**
@@ -436,6 +490,7 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
             this.t = translation;
         });
 
+        this.rebuildProviderUsageCache();
         this.loadConfigs();
         // Preload cloud model lists when keys are present
         this.preloadOpenAiModels();

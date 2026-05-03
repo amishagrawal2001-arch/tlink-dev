@@ -184,6 +184,37 @@
     }
 }
 
+/* Per-provider lifetime usage — quiet neutral pill next to the
+   status badges in the card header. Cost portion gets a soft green
+   accent (matches the per-message + per-session cost styling
+   elsewhere) so the dollar amount is the eye-grabbing bit. Hidden
+   entirely when there's no recorded usage for this provider. */
+.lifetime-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--ai-text-secondary);
+    font-size: 10.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+
+    i {
+        font-size: 9px;
+        opacity: 0.7;
+    }
+
+    strong {
+        color: #16a34a;
+        font-weight: 600;
+    }
+}
+
 /* Circuit-breaker "provider unavailable" badge — sits next to the
    status-badge. Click-to-reset-breaker is wired in the template;
    the cursor + hover treatment signals that affordance. */
