@@ -13,6 +13,10 @@ export class SSHHotkeyProvider extends HotkeyProvider {
             id: 'launch-winscp',
             name: this.translate.instant('Launch WinSCP for current SSH session'),
         },
+        {
+            id: 'ssh-snippets',
+            name: this.translate.instant('Open network-vendor snippet picker'),
+        },
     ]
 
     constructor (private translate: TranslateService) { super() }

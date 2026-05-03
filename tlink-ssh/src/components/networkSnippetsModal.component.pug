@@ -1,0 +1,62 @@
+.modal-header
+    h5.modal-title
+        i.fas.fa-bolt.me-2
+        | Network snippets
+        span.platform-pill.ms-2(*ngIf='selectedPlatform', [style.background-color]='selectedPlatform.color')
+            i.fa.me-1([ngClass]='selectedPlatform.icon')
+            | {{ selectedPlatform.name }}
+    button.btn-close((click)='cancel()')
+
+.modal-body.snippets-modal-body
+    .picker-controls
+        .input-group.input-group-sm.flex-grow-1
+            span.input-group-text
+                i.fas.fa-search
+            input.form-control(
+                type='text',
+                placeholder='Filter snippets…',
+                [(ngModel)]='searchQuery',
+                (input)='onSearchInput()',
+                (keydown)='onKeydown($event)',
+                #searchInput,
+                autofocus,
+            )
+        select.form-select.form-select-sm.platform-select(
+            [(ngModel)]='selectedPlatformId',
+            (change)='onPlatformChange()',
+            title='Override the auto-detected platform',
+        )
+            option(*ngFor='let p of allPlatforms', [value]='p.id')
+                | {{ p.name }}
+                span(*ngIf='isDetectedPlatform(p.id)') &nbsp;(detected)
+            option(value='generic') Generic
+
+    .snippets-list(*ngIf='visibleSnippets.length > 0')
+        button.snippet-row(
+            *ngFor='let snippet of visibleSnippets; let i = index',
+            type='button',
+            [class.highlight]='i === highlightIndex',
+            (mouseenter)='highlightIndex = i',
+            (click)='choose(snippet)',
+        )
+            .snippet-row-main
+                code.snippet-label {{ snippet.label }}
+                .snippet-tags(*ngIf='snippet.tags && snippet.tags.length')
+                    span.snippet-tag(*ngFor='let tag of snippet.tags') {{ tag }}
+            .snippet-template
+                | {{ snippet.template }}
+            .snippet-desc {{ snippet.description }}
+
+    .empty-state(*ngIf='visibleSnippets.length === 0')
+        i.fas.fa-search.empty-icon
+        p No snippets match "{{ searchQuery }}"
+
+.modal-footer.snippets-modal-footer
+    .footer-hints
+        kbd ↑↓
+        span navigate
+        kbd Enter
+        span insert
+        kbd Esc
+        span close
+    button.btn.btn-sm.btn-secondary((click)='cancel()') Cancel

@@ -5,6 +5,7 @@ import { LogService } from 'tlink-core'
 import { BaseSession, UTF8SplitterMiddleware, InputProcessor } from 'tlink-terminal'
 import { SSHSession } from './ssh'
 import { SSHProfile } from '../api'
+import { NetworkPlatformService } from '../services/networkPlatform.service'
 import * as russh from 'russh'
 
 
@@ -14,6 +15,11 @@ export class SSHShellSession extends BaseSession {
     get serviceMessage$ (): Observable<string> { return this.serviceMessage }
     private serviceMessage = new Subject<string>()
     private ssh: SSHSession|null
+    private platformService: NetworkPlatformService | null = null
+    /** Stable id used by NetworkPlatformService to key the detected
+     *  platform per session. Reusing the host:port pair feels more
+     *  durable than `this` reference (which churns on reconnect). */
+    readonly platformSessionId: string
 
     constructor (
         injector: Injector,
@@ -22,6 +28,14 @@ export class SSHShellSession extends BaseSession {
     ) {
         super(injector.get(LogService).create(`ssh-shell-${profile.options.host}-${profile.options.port}`))
         this.ssh = ssh
+        this.platformSessionId = `${profile.options.host}:${profile.options.port}:${Date.now()}`
+        try {
+            this.platformService = injector.get(NetworkPlatformService)
+        } catch {
+            // DI lookup can fail in test fixtures that don't provide
+            // the service. Graceful no-op detection in that case.
+            this.platformService = null
+        }
         this.setLoginScriptsOptions(this.profile.options)
         this.ssh.serviceMessage$.subscribe(m => this.serviceMessage.next(m))
         this.middleware.push(new UTF8SplitterMiddleware())
@@ -58,6 +72,16 @@ export class SSHShellSession extends BaseSession {
             this.lastDataTime = Date.now()
             this.emitOutput(Buffer.from(data))
         })
+
+        // Network-vendor detection — feed early session output into
+        // NetworkPlatformService. Service self-bounds: stops scanning
+        // once it matches OR after the buffer/timeout caps. The
+        // BaseSession's output$ emits decoded UTF-8 strings (ANSI is
+        // stripped inside feedOutput), so this picks up the MOTD /
+        // banner / prompt regardless of the shell type.
+        if (this.platformService) {
+            this.platformService.attach(this.platformSessionId, this.output$)
+        }
 
         this.shell.eof$.subscribe(() => {
             this.logger.info('Shell session ended')
@@ -97,6 +121,8 @@ export class SSHShellSession extends BaseSession {
         this.kill()
         this.ssh?.unref()
         this.ssh = null
+        // Free the platform-detection bookkeeping for this session.
+        this.platformService?.forget(this.platformSessionId)
         await super.destroy()
     }
 

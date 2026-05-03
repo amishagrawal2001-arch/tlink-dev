@@ -10,9 +10,11 @@ import { BaseTerminalTabComponent, ConnectableTerminalTabComponent } from 'tlink
 import { SSHService } from '../services/ssh.service'
 import { KeyboardInteractivePrompt, SSHSession } from '../session/ssh'
 import { SSHPortForwardingModalComponent } from './sshPortForwardingModal.component'
+import { NetworkSnippetsModalComponent } from './networkSnippetsModal.component'
 import { SSHProfile } from '../api'
 import { SSHShellSession } from '../session/shell'
 import { SSHMultiplexerService } from '../services/sshMultiplexer.service'
+import { NetworkSnippet } from '../services/networkSnippets'
 
 /** @hidden */
 @Component({
@@ -49,6 +51,7 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
     bytesReceived = 0
     bytesSent = 0
 
+    // eslint-disable-next-line @typescript-eslint/max-params -- Angular DI constructor; refactoring would split the class apart
     constructor (
         injector: Injector,
         public ssh: SSHService,
@@ -65,8 +68,8 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
                 this.startDurationTracking()
                 this.startHealthCheck()
                 // Track bandwidth
-                this.session.binaryOutput$?.subscribe(data => {
-                    this.bytesReceived += data?.length ?? 0
+                this.session.binaryOutput$.subscribe(data => {
+                    this.bytesReceived += data.length
                 })
             } else {
                 this.stopHealthCheck()
@@ -98,6 +101,9 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
                         this.ssh.launchWinSCP(this.sshSession)
                     }
                     break
+                case 'ssh-snippets':
+                    this.showSnippetPicker()
+                    break
             }
         })
 
@@ -127,9 +133,9 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
         if (!this.aiSidebarService || !this.aiChatSessionService) {
             return
         }
-        const selection = this.frontend?.getSelection?.() ?? ''
+        const selection = this.frontend?.getSelection() ?? ''
         const lastLines = selection.trim() || 'No text selected. Please select terminal output first.'
-        const host = this.profile.options.host?.trim()
+        const host = this.profile.options.host.trim()
         if (lastLines) {
             this.aiSidebarService.show()
             this.aiChatSessionService.sendMessage(
@@ -201,7 +207,8 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
     private resolveLogDirectory (): string {
         const baseDir = this.getBaseDirectory()
         const settings = this.profile.sessionLog
-        let resolved = settings?.directory?.trim() || path.join(baseDir, 'session-logs')
+        const trimmed = settings?.directory?.trim() ?? ''
+        let resolved = trimmed.length > 0 ? trimmed : path.join(baseDir, 'session-logs')
         resolved = this.expandPathVars(resolved)
         if (!path.isAbsolute(resolved)) {
             resolved = path.join(baseDir, resolved)
@@ -211,7 +218,7 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
 
     private expandPathVars (value: string): string {
         let result = value
-        const home = process.env.HOME || process.env.USERPROFILE
+        const home = process.env.HOME ?? process.env.USERPROFILE
         if (home && result.startsWith('~')) {
             result = path.join(home, result.slice(1))
         }
@@ -252,7 +259,7 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
             .map(line => line.replace(/([#*=\-_])\1{5,}/g, '…'))
             .map(line => line.trim())
             .filter(Boolean)
-        if (lines.length === 0) return ''
+        if (lines.length === 0) {return ''}
         const head = lines.slice(0, 3).join(' · ')
         const more = lines.length > 3 ? ` (+${lines.length - 3} more lines)` : ''
         const out = head + more
@@ -264,7 +271,7 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
         if (configPath) {
             return path.dirname(configPath)
         }
-        const home = process.env.HOME || process.env.USERPROFILE
+        const home = process.env.HOME ?? process.env.USERPROFILE
         if (home) {
             return path.join(home, '.tlink')
         }
@@ -360,7 +367,7 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
 
         this.attachSessionHandler(session.banner$, banner => {
             const trimmed = banner.trim()
-            if (!trimmed) return
+            if (!trimmed) {return}
             // Notification toast renders inline and word-wraps badly when a
             // full corporate AUP banner with ASCII-art separators arrives —
             // long runs of `#` / `=` get wrapped into "# #" garbage that
@@ -402,6 +409,7 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
                 }
             }
 
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- TS narrows .open to false here, but it flips to true inside session.start()
             if (session.open) {
                 this.sshMultiplexer.addSession(session)
             }
@@ -413,7 +421,7 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
 
         // Display connection info banner
         if (session.open && this.frontendIsReady) {
-            const host = session.profile.options.host
+            const { host } = session.profile.options
             const port = session.profile.options.port ?? 22
             this.write(`\r${colors.black.bgGreen(' Connected ')} ${host}:${port}\r\n`)
         }
@@ -495,14 +503,14 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
             if (this.frontendIsReady) {
                 this.write(`\r${colors.black.bgWhite(' SSH ')} ${msg}\r\n`)
             }
-            if (this.size?.columns && this.size?.rows) {
+            if (this.size.columns && this.size.rows) {
                 session.resize(this.size.columns, this.size.rows)
             }
         })
 
         await session.start()
 
-        if (this.size?.columns && this.size?.rows) {
+        if (this.size.columns && this.size.rows) {
             this.session?.resize(this.size.columns, this.size.rows)
         }
     }
@@ -521,6 +529,7 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
             return this.initializationPromise
         }
         this.initializationPromise = (async () => {
+            // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- boolean OR on two booleans; ?? would short-circuit on `false`
             if (this.session?.open || this.sshSession?.open) {
                 return
             }
@@ -566,6 +575,40 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
         modal.session = this.sshSession!
     }
 
+    /**
+     * Open the network-vendor snippet picker for the active session.
+     *
+     * Wired to:
+     *  - the `ssh-snippets` hotkey (registered in hotkeys.ts)
+     *  - the toolbar button on the SSH tab
+     *
+     * The modal reads the auto-detected platform via NetworkPlatformService
+     * (keyed by SSHShellSession.platformSessionId) and lets the user pick
+     * a curated command. We insert the chosen template at the prompt — we
+     * intentionally DON'T append a newline so the user can review / tweak
+     * before pressing Enter (these are mostly platform commands that
+     * affect running config; surprise-execute would be hostile).
+     */
+    showSnippetPicker (): void {
+        if (!this.session?.open) {
+            return
+        }
+        const ref = this.ngbModal.open(NetworkSnippetsModalComponent, { size: 'lg' })
+        const modal = ref.componentInstance as NetworkSnippetsModalComponent
+        modal.sessionId = this.session.platformSessionId
+        ref.result.then(
+            (result: { snippet: NetworkSnippet } | null) => {
+                if (!result?.snippet || !this.session?.open) {
+                    return
+                }
+                // Stage the command at the prompt without auto-running it.
+                this.session.write(Buffer.from(result.snippet.template))
+                this.frontend?.focus()
+            },
+            () => { /* dismissed — no-op */ },
+        )
+    }
+
     async canClose (): Promise<boolean> {
         if (!this.session?.open) {
             return true
@@ -606,7 +649,7 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
                 const m = Math.floor((elapsed % 3600000) / 60000)
                 const s = Math.floor((elapsed % 60000) / 1000)
                 const duration = h > 0 ? `${h}h${m}m` : `${m}m${s}s`
-                this.setTitle(`SSH: ${this.profile.options.user?.trim()}@${this.profile.options.host?.trim()} [${duration}]`)
+                this.setTitle(`SSH: ${this.profile.options.user.trim()}@${this.profile.options.host.trim()} [${duration}]`)
             }
         }, 10000) // Update every 10 seconds
     }
@@ -652,8 +695,8 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
 
     getFormattedBandwidth (): string {
         const format = (bytes: number) => {
-            if (bytes < 1024) return `${bytes}B`
-            if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)}KB`
+            if (bytes < 1024) {return `${bytes}B`}
+            if (bytes < 1048576) {return `${(bytes / 1024).toFixed(1)}KB`}
             return `${(bytes / 1048576).toFixed(1)}MB`
         }
         return `${format(this.bytesReceived)} / ${format(this.bytesSent)}`

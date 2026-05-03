@@ -55,6 +55,17 @@ terminal-toolbar([tab]='this')
     )
         i.fas.fa-plug
 
+    //- Network-vendor snippet picker. Always available on an open shell;
+    //- the modal itself shows a "(detected)" hint and lets the user
+    //- override the platform if auto-detect missed.
+    button.btn.btn-sm.btn-link(
+        *ngIf='session && session.open',
+        (click)='showSnippetPicker()',
+        [ngbTooltip]='"Network snippets"|translate',
+        container='body'
+    )
+        i.fas.fa-bolt
+
     button.btn.btn-sm.btn-link(
         *ngIf='aiAvailable && session && session.open',
         (click)='askAI()',
