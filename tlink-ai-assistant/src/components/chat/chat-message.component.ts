@@ -1,6 +1,7 @@
 import { Component, Input, Output, EventEmitter, ViewEncapsulation } from '@angular/core';
 import { ChatMessage } from '../../types/ai.types';
 import { ToastService } from '../../services/core/toast.service';
+import { calculateCost, formatCost, AIProvider } from '../../utils/cost.utils';
 
 @Component({
     selector: 'app-chat-message',
@@ -95,5 +96,30 @@ export class ChatMessageComponent {
      */
     isSystemMessage(): boolean {
         return this.message.role === 'system';
+    }
+
+    /**
+     * Format the cost of this message's token usage as a short USD
+     * string ("$0.0023" / "$1.45"). Returns empty when:
+     *   - the message has no usage stats (provider didn't supply them)
+     *   - the message has no provider/model context stamped on it
+     *     (older messages from before the cost-stamp landed)
+     *   - the provider is one we don't price (returns 0 → empty)
+     *
+     * The chat-message template hides the cost span when this is empty
+     * so older messages just show tokens, no broken "$0.0000" text.
+     */
+    getFormattedCost(): string {
+        const usage = this.message.metadata?.usage;
+        const provider = this.message.metadata?.provider as AIProvider | undefined;
+        const model = this.message.metadata?.model as string | undefined;
+        if (!usage || !provider || !model) {return '';}
+
+        const result = calculateCost(provider, model, {
+            inputTokens: usage.promptTokens ?? 0,
+            outputTokens: usage.completionTokens ?? 0,
+        });
+        if (!result.totalCost) {return '';}   // self-hosted / unknown provider
+        return formatCost(result.totalCost);
     }
 }

@@ -176,6 +176,19 @@ export interface UIAgentDoneEvent extends UIStreamEvent {
     totalRounds: number;
     /** 完成摘要 */
     summary?: string;
+    /**
+     * Cumulative token usage across all rounds of the agent loop.
+     * Pulled from the underlying AgentStreamEvent.usage which is
+     * populated by the loop's per-round message_end accumulator.
+     * Surfaced here so the chat-interface can render a cost / token
+     * footer on the AI message bubble. Optional — older provider /
+     * config combinations may not emit usage stats.
+     */
+    usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+    };
 }
 
 /**

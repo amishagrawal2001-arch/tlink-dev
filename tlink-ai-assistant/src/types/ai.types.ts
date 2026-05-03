@@ -435,6 +435,18 @@ export interface AgentStreamEvent {
 
     // message_end reserved
     message?: ChatMessage;
+
+    /**
+     * Cumulative token usage across all rounds of the agent loop.
+     * Surfaced on `agent_complete` (and optionally on `round_end`).
+     * Provider-supplied; missing if the upstream didn't emit usage
+     * stats. Mirror of StreamEvent.usage but summed across rounds.
+     */
+    usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+    };
 }
 
 // Agent loop configuration
@@ -481,6 +493,19 @@ export interface AgentState {
      * budget.
      */
     emptyRoundRetries?: number;
+
+    /**
+     * Cumulative token usage across all rounds of this agent loop.
+     * Updated on every `message_end` from the provider that carries
+     * usage stats. Read at `agent_complete` time so we can surface a
+     * single total to the UI rather than per-round numbers (which
+     * users typically don't care about).
+     */
+    usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+    };
 }
 
 // Tool call record

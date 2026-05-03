@@ -1501,6 +1501,23 @@ export class AiAssistantService {
                                     }
                                     break;
 
+                                case 'message_end':
+                                    // Provider supplied usage stats for this
+                                    // round (OpenAI/Groq via stream_options
+                                    // .include_usage, Anthropic via
+                                    // message_delta.usage). Accumulate into
+                                    // agentState.usage so the cumulative
+                                    // total can be emitted on agent_complete.
+                                    if (event.usage) {
+                                        const prev = agentState.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+                                        agentState.usage = {
+                                            promptTokens: prev.promptTokens + (event.usage.promptTokens ?? 0),
+                                            completionTokens: prev.completionTokens + (event.usage.completionTokens ?? 0),
+                                            totalTokens: prev.totalTokens + (event.usage.totalTokens ?? 0),
+                                        };
+                                    }
+                                    break;
+
                                 case 'error':
                                     subscriber.next({ type: 'error', error: event.error });
                                     break;
@@ -1603,9 +1620,10 @@ export class AiAssistantService {
                                     this.logger.info('Agent terminated by smart detector', { reason: termination.reason });
                                     subscriber.next({
                                         type: 'agent_complete',
+                        usage: agentState.usage,
                                         reason: termination.reason,
                                         totalRounds: agentState.currentRound,
-                                        terminationMessage: termination.message
+                                        terminationMessage: termination.message,
                                     });
                                     callbacks.onAgentComplete?.(termination.reason, agentState.currentRound);
                                     subscriber.complete();
@@ -1632,6 +1650,7 @@ export class AiAssistantService {
                                             });
                                             subscriber.next({
                                                 type: 'agent_complete',
+                        usage: agentState.usage,
                                                 reason: 'no_tools',
                                                 totalRounds: agentState.currentRound,
                                                 terminationMessage: 'Simple conversation, invalid tool call ignored'
@@ -1679,6 +1698,7 @@ export class AiAssistantService {
                                         this.logger.info('Agent terminated after tool execution', { reason: postToolTermination.reason });
                                         subscriber.next({
                                             type: 'agent_complete',
+                        usage: agentState.usage,
                                             reason: postToolTermination.reason,
                                             totalRounds: agentState.currentRound,
                                             terminationMessage: postToolTermination.message
@@ -1760,6 +1780,7 @@ export class AiAssistantService {
                                         });
                                         subscriber.next({
                                             type: 'agent_complete',
+                        usage: agentState.usage,
                                             reason: 'no_tools',
                                             totalRounds: agentState.currentRound,
                                             terminationMessage: warning
@@ -1778,6 +1799,7 @@ export class AiAssistantService {
                                         });
                                         subscriber.next({
                                             type: 'agent_complete',
+                        usage: agentState.usage,
                                             reason: 'no_tools',
                                             totalRounds: agentState.currentRound,
                                             terminationMessage: warning
@@ -1805,6 +1827,7 @@ export class AiAssistantService {
                                             });
                                             subscriber.next({
                                                 type: 'agent_complete',
+                        usage: agentState.usage,
                                                 reason: 'no_tools',
                                                 totalRounds: agentState.currentRound,
                                                 terminationMessage: warning
@@ -1837,6 +1860,7 @@ export class AiAssistantService {
                                         this.logger.info(`Agent completed: ${agentState.currentRound} rounds, reason: ${termination.reason}`);
                                         subscriber.next({
                                             type: 'agent_complete',
+                        usage: agentState.usage,
                                             reason: termination.reason,
                                             totalRounds: agentState.currentRound,
                                             terminationMessage: termination.message
@@ -2148,6 +2172,21 @@ export class AiAssistantService {
                                         subscriber.next({ type: 'tool_use_end', toolCall: event.toolCall });
                                     }
                                     break;
+                                case 'message_end':
+                                    // Mirrors the legacy-loop accumulator —
+                                    // sum each round's provider-supplied
+                                    // usage onto agentState.usage so the
+                                    // langGraph loop emits a cumulative
+                                    // total at agent_complete.
+                                    if (event.usage) {
+                                        const prev = agentState.usage ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+                                        agentState.usage = {
+                                            promptTokens: prev.promptTokens + (event.usage.promptTokens ?? 0),
+                                            completionTokens: prev.completionTokens + (event.usage.completionTokens ?? 0),
+                                            totalTokens: prev.totalTokens + (event.usage.totalTokens ?? 0),
+                                        };
+                                    }
+                                    break;
                                 case 'error':
                                     subscriber.next({ type: 'error', error: event.error });
                                     break;
@@ -2297,6 +2336,7 @@ export class AiAssistantService {
                     this.logger.info('Agent terminated by smart detector', { reason: termination.reason });
                     subscriber.next({
                         type: 'agent_complete',
+                        usage: agentState.usage,
                         reason: termination.reason,
                         totalRounds: agentState.currentRound,
                         terminationMessage: termination.message
@@ -2505,6 +2545,7 @@ export class AiAssistantService {
                     });
                     subscriber.next({
                         type: 'agent_complete',
+                        usage: agentState.usage,
                         reason: 'no_tools',
                         totalRounds: agentState.currentRound,
                         terminationMessage: warning
@@ -2540,6 +2581,7 @@ export class AiAssistantService {
                         });
                         subscriber.next({
                             type: 'agent_complete',
+                        usage: agentState.usage,
                             reason: 'no_tools',
                             totalRounds: agentState.currentRound,
                             terminationMessage: warning
@@ -2580,7 +2622,8 @@ export class AiAssistantService {
                     type: 'agent_complete',
                     reason: termination.reason,
                     totalRounds: agentState.currentRound,
-                    terminationMessage: termination.message
+                    terminationMessage: termination.message,
+                    usage: agentState.usage,
                 });
                 callbacks.onAgentComplete?.(termination.reason, agentState.currentRound);
 
@@ -2669,6 +2712,7 @@ export class AiAssistantService {
                     this.logger.info('Agent terminated after tool execution', { reason: postToolTermination.reason });
                     subscriber.next({
                         type: 'agent_complete',
+                        usage: agentState.usage,
                         reason: postToolTermination.reason,
                         totalRounds: agentState.currentRound,
                         terminationMessage: postToolTermination.message
@@ -2739,6 +2783,7 @@ export class AiAssistantService {
                         };
                         subscriber.next({
                             type: 'agent_complete',
+                        usage: agentState.usage,
                             reason: termination.reason,
                             totalRounds: agentState.currentRound,
                             terminationMessage: termination.message

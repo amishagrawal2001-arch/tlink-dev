@@ -5,8 +5,25 @@
 
 /**
  * AI提供商类型
+ *
+ * Provider list mirrors the registered providers in
+ * src/services/providers/ — adding a new provider here without
+ * adding it to DEFAULT_PRICING below means the cost calculator
+ * silently returns 0 for that provider's calls. Acceptable; we
+ * prefer "no cost shown" over "made-up cost".
  */
-export type AIProvider = 'openai' | 'anthropic' | 'minimax' | 'glm' | 'openai-compatible';
+export type AIProvider =
+    | 'openai'
+    | 'anthropic'
+    | 'minimax'
+    | 'glm'
+    | 'groq'
+    | 'vllm'
+    | 'ollama'
+    | 'tabby'
+    | 'tlink-agent'
+    | 'tlink-proxy'
+    | 'openai-compatible';
 
 /**
  * 模型定价信息
@@ -38,29 +55,56 @@ export interface CostResult {
 }
 
 /**
- * 默认模型定价表（2024年最新价格）
+ * Default per-million-token pricing in USD. Numbers track public list
+ * prices from each provider's docs. Prefix matching is allowed (see
+ * `getModelPricing`) so "gpt-4o-2024-08-06" gracefully resolves to the
+ * "gpt-4o" entry below — provider model SKUs change versions often
+ * and we'd rather show approximate cost than $0.
  */
 const DEFAULT_PRICING: ModelPricing[] = [
-    // OpenAI
-    { provider: 'openai', model: 'gpt-4', inputPricePerMillion: 30, outputPricePerMillion: 60 },
+    // OpenAI — pricing as of late 2024.
+    { provider: 'openai', model: 'gpt-4o', inputPricePerMillion: 2.5, outputPricePerMillion: 10 },
+    { provider: 'openai', model: 'gpt-4o-mini', inputPricePerMillion: 0.15, outputPricePerMillion: 0.6 },
     { provider: 'openai', model: 'gpt-4-turbo', inputPricePerMillion: 10, outputPricePerMillion: 30 },
-    { provider: 'openai', model: 'gpt-4o', inputPricePerMillion: 5, outputPricePerMillion: 15 },
+    { provider: 'openai', model: 'gpt-4', inputPricePerMillion: 30, outputPricePerMillion: 60 },
     { provider: 'openai', model: 'gpt-3.5-turbo', inputPricePerMillion: 0.5, outputPricePerMillion: 1.5 },
+    { provider: 'openai', model: 'o1', inputPricePerMillion: 15, outputPricePerMillion: 60 },
+    { provider: 'openai', model: 'o1-mini', inputPricePerMillion: 3, outputPricePerMillion: 12 },
 
-    // Anthropic
-    { provider: 'anthropic', model: 'claude-3-5-sonnet-20241022', inputPricePerMillion: 3, outputPricePerMillion: 15 },
-    { provider: 'anthropic', model: 'claude-3-opus-20240229', inputPricePerMillion: 15, outputPricePerMillion: 75 },
-    { provider: 'anthropic', model: 'claude-3-haiku-20240307', inputPricePerMillion: 0.25, outputPricePerMillion: 1.25 },
+    // Anthropic — pricing as of late 2024 / early 2025.
+    { provider: 'anthropic', model: 'claude-3-5-sonnet', inputPricePerMillion: 3, outputPricePerMillion: 15 },
+    { provider: 'anthropic', model: 'claude-3-5-haiku', inputPricePerMillion: 0.8, outputPricePerMillion: 4 },
+    { provider: 'anthropic', model: 'claude-3-opus', inputPricePerMillion: 15, outputPricePerMillion: 75 },
+    { provider: 'anthropic', model: 'claude-3-sonnet', inputPricePerMillion: 3, outputPricePerMillion: 15 },
+    { provider: 'anthropic', model: 'claude-3-haiku', inputPricePerMillion: 0.25, outputPricePerMillion: 1.25 },
+    { provider: 'anthropic', model: 'claude-sonnet-4', inputPricePerMillion: 3, outputPricePerMillion: 15 },
+    { provider: 'anthropic', model: 'claude-opus-4', inputPricePerMillion: 15, outputPricePerMillion: 75 },
 
-    // Minimax (智谱AI)
+    // Groq — published list prices, mostly llama variants.
+    { provider: 'groq', model: 'llama-3.3-70b', inputPricePerMillion: 0.59, outputPricePerMillion: 0.79 },
+    { provider: 'groq', model: 'llama-3.1-70b', inputPricePerMillion: 0.59, outputPricePerMillion: 0.79 },
+    { provider: 'groq', model: 'llama-3.1-8b', inputPricePerMillion: 0.05, outputPricePerMillion: 0.08 },
+    { provider: 'groq', model: 'mixtral-8x7b', inputPricePerMillion: 0.24, outputPricePerMillion: 0.24 },
+
+    // Minimax
     { provider: 'minimax', model: 'abab6.5s-chat', inputPricePerMillion: 0.3, outputPricePerMillion: 0.3 },
     { provider: 'minimax', model: 'abab6.5-chat', inputPricePerMillion: 0.5, outputPricePerMillion: 0.5 },
     { provider: 'minimax', model: 'abab5.5-chat', inputPricePerMillion: 1, outputPricePerMillion: 1 },
+    { provider: 'minimax', model: 'MiniMax-M2', inputPricePerMillion: 0.2, outputPricePerMillion: 0.2 },
 
-    // GLM (智谱AI)
+    // GLM (智谱)
+    { provider: 'glm', model: 'glm-4.6', inputPricePerMillion: 0.6, outputPricePerMillion: 2 },
     { provider: 'glm', model: 'glm-4', inputPricePerMillion: 0.5, outputPricePerMillion: 1.5 },
     { provider: 'glm', model: 'glm-4v', inputPricePerMillion: 0.5, outputPricePerMillion: 1.5 },
     { provider: 'glm', model: 'glm-3-turbo', inputPricePerMillion: 0.1, outputPricePerMillion: 0.1 },
+
+    // Self-hosted / local providers — zero cost (you're paying for the
+    // hardware/electricity, not per-token). Listed explicitly so the
+    // fallback in getDefaultPricingForProvider doesn't accidentally
+    // report a non-zero number for these.
+    { provider: 'vllm', model: 'default', inputPricePerMillion: 0, outputPricePerMillion: 0 },
+    { provider: 'ollama', model: 'default', inputPricePerMillion: 0, outputPricePerMillion: 0 },
+    { provider: 'tabby', model: 'default', inputPricePerMillion: 0, outputPricePerMillion: 0 },
 ];
 
 // 自定义定价表（可扩展）
@@ -75,22 +119,30 @@ export function setCustomPricing(pricing: ModelPricing[]): void {
 
 /**
  * 获取模型定价信息
+ *
+ * Lookup order:
+ *   1. Exact match on customPricing
+ *   2. Exact match on DEFAULT_PRICING
+ *   3. Prefix match on DEFAULT_PRICING (handles SKU drift like
+ *      "claude-3-5-sonnet-20241022" → "claude-3-5-sonnet" entry)
+ *   4. Provider-level default
+ *   5. undefined (caller surfaces $0)
  */
 export function getModelPricing(provider: AIProvider, model: string): ModelPricing | undefined {
-    // 首先查找自定义定价
     const custom = customPricing.find(p => p.provider === provider && p.model === model);
-    if (custom) {
-        return custom;
-    }
+    if (custom) {return custom;}
 
-    // 然后查找默认定价
-    const defaultPricing = DEFAULT_PRICING.find(p => p.provider === provider && p.model === model);
+    const exact = DEFAULT_PRICING.find(p => p.provider === provider && p.model === model);
+    if (exact) {return exact;}
 
-    if (defaultPricing) {
-        return defaultPricing;
-    }
+    // Prefix match — sorted by descending model-name length so the
+    // longest match wins ("claude-3-5-sonnet" beats "claude-3" for a
+    // SKU like "claude-3-5-sonnet-20241022").
+    const candidates = DEFAULT_PRICING
+        .filter(p => p.provider === provider && model.toLowerCase().startsWith(p.model.toLowerCase()))
+        .sort((a, b) => b.model.length - a.model.length);
+    if (candidates.length > 0) {return candidates[0];}
 
-    // 返回该提供商的通用定价
     return getDefaultPricingForProvider(provider);
 }
 
@@ -98,11 +150,23 @@ export function getModelPricing(provider: AIProvider, model: string): ModelPrici
  * 获取提供商的默认定价
  */
 function getDefaultPricingForProvider(provider: AIProvider): ModelPricing | undefined {
+    // Conservative defaults — when we have no specific model match,
+    // fall back to a number that's roughly representative of the
+    // provider's mid-tier model. Self-hosted providers (vllm/ollama/
+    // tabby) report 0 because the user is paying for hardware/power,
+    // not per-token. tlink-* are routed through our own cloud and
+    // billed via the user's Tlink plan, not by-token here.
     const providerDefaults: Record<AIProvider, Partial<ModelPricing>> = {
-        'openai': { inputPricePerMillion: 5, outputPricePerMillion: 15 },
+        'openai': { inputPricePerMillion: 2.5, outputPricePerMillion: 10 },
         'anthropic': { inputPricePerMillion: 3, outputPricePerMillion: 15 },
+        'groq': { inputPricePerMillion: 0.59, outputPricePerMillion: 0.79 },
         'minimax': { inputPricePerMillion: 0.5, outputPricePerMillion: 0.5 },
         'glm': { inputPricePerMillion: 0.5, outputPricePerMillion: 1 },
+        'vllm': { inputPricePerMillion: 0, outputPricePerMillion: 0 },
+        'ollama': { inputPricePerMillion: 0, outputPricePerMillion: 0 },
+        'tabby': { inputPricePerMillion: 0, outputPricePerMillion: 0 },
+        'tlink-agent': { inputPricePerMillion: 0, outputPricePerMillion: 0 },
+        'tlink-proxy': { inputPricePerMillion: 0, outputPricePerMillion: 0 },
         'openai-compatible': { inputPricePerMillion: 1, outputPricePerMillion: 2 }
     };
 

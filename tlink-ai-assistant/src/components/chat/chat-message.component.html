@@ -66,13 +66,19 @@
              usage stats with `message_end`. OpenAI, Groq, OpenAI-compat,
              vLLM (with stream_options.include_usage) and Anthropic (via
              message_delta.usage) all populate this. Lets the user see
-             at a glance how big this turn was. -->
+             at a glance how big this turn was, and how much it cost. -->
         <div *ngIf="message.metadata?.usage" class="message-usage"
              [title]="'prompt: ' + message.metadata.usage.promptTokens + ' tokens · completion: ' + message.metadata.usage.completionTokens + ' tokens'">
             <i class="icon-zap"></i>
             {{ message.metadata.usage.totalTokens }} tokens
             <span class="message-usage-detail">
                 ({{ message.metadata.usage.promptTokens }} in · {{ message.metadata.usage.completionTokens }} out)
+            </span>
+            <!-- Cost surfaces only for cloud providers we have pricing
+                 for. Self-hosted (vLLM/Ollama/Tabby) return $0 and the
+                 helper returns empty string, hiding the dot+price. -->
+            <span class="message-usage-cost" *ngIf="getFormattedCost()">
+                · <strong>{{ getFormattedCost() }}</strong>
             </span>
         </div>
     </div>

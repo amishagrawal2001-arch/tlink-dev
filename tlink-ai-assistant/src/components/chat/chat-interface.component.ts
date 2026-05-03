@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked, 
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ChatMessage, MessageRole, StreamEvent, AgentStreamEvent } from '../../types/ai.types';
+import { AiProviderManagerService } from '../../services/core/ai-provider-manager.service';
 import { AiAssistantService } from '../../services/core/ai-assistant.service';
 import { ConfigProviderService } from '../../services/core/config-provider.service';
 import { LoggerService } from '../../services/core/logger.service';
@@ -48,9 +49,33 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
         private modal: NgbModal,
         private chatHistory: ChatHistoryService,
         private translate: TranslateService,
-        private toolStreamProcessor: ToolStreamProcessorService
+        private toolStreamProcessor: ToolStreamProcessorService,
+        private providerManager: AiProviderManagerService,
     ) {
         this.t = this.translate.t;
+    }
+
+    /**
+     * Stamp the active provider's name + model onto a message's
+     * metadata so chat-message can later compute cost via cost.utils
+     * `getModelPricing(provider, model)`. Called at usage-capture
+     * time (message_end and agent_done) so old messages stay
+     * historically accurate even if the user later switches provider.
+     */
+    private stampProviderContext(message: ChatMessage): void {
+        try {
+            const active = this.providerManager.getActiveProvider();
+            if (active) {
+                message.metadata = {
+                    ...message.metadata,
+                    provider: active.name,
+                    model: (active.getConfig?.()?.model) || undefined,
+                };
+            }
+        } catch {
+            // Provider-context stamp is purely informational; never
+            // gate the streaming path on its success.
+        }
     }
 
     ngOnInit(): void {
@@ -308,6 +333,18 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
                     text: event.reasonText,
                     rounds: event.totalRounds
                 });
+                // Mirror the chatStream-direct path: agent loops
+                // accumulate usage across rounds and emit a cumulative
+                // total here. Stash on metadata so chat-message can
+                // render the same token footer it shows on simpler
+                // (single-shot) chats.
+                if ((event as any).usage) {
+                    message.metadata = {
+                        ...message.metadata,
+                        usage: (event as any).usage,
+                    };
+                    this.stampProviderContext(message);
+                }
                 break;
 
             case 'error':
@@ -462,6 +499,7 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
                                 ...aiMessage.metadata,
                                 usage: (event as any).usage,
                             };
+                            this.stampProviderContext(aiMessage);
                         }
                         this.logger.info('Stream completed', { usage: (event as any).usage });
                         this.playNotificationSound();

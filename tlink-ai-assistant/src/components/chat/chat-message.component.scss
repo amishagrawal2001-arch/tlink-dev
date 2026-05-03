@@ -189,6 +189,15 @@
             opacity: 0.7;
             font-size: 0.65rem;
         }
+
+        /* Cost portion gets a slight emphasis (strong + accent color)
+           so the user's eye lands on the dollar amount when it's
+           there — that's the most decision-relevant number. */
+        .message-usage-cost strong {
+            color: #16a34a;
+            font-weight: 600;
+            opacity: 0.9;
+        }
     }
 }
 

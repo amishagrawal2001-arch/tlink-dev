@@ -376,18 +376,24 @@ export class ToolStreamProcessorService {
         this.emitAgentDone(
             event.reason as AgentDoneReason || 'no_tools',
             event.totalRounds || 0,
-            event.terminationMessage
+            event.terminationMessage,
+            event.usage,
         );
     }
 
     /**
      * 发送 Agent 完成事件
      */
-    private emitAgentDone(reason: AgentDoneReason, totalRounds: number, summary?: string): void {
+    private emitAgentDone(
+        reason: AgentDoneReason,
+        totalRounds: number,
+        summary?: string,
+        usage?: AgentStreamEvent['usage'],
+    ): void {
         if (!this.uiEventSubject) return;
 
         const reasonInfo = this.getReasonInfo(reason);
-        
+
         const uiEvent: UIAgentDoneEvent = {
             type: 'agent_done',
             timestamp: Date.now(),
@@ -395,7 +401,8 @@ export class ToolStreamProcessorService {
             reasonText: reasonInfo.text,
             reasonIcon: reasonInfo.icon,
             totalRounds,
-            summary
+            summary,
+            ...(usage ? { usage } : {}),
         };
 
         this.uiEventSubject.next(uiEvent);
