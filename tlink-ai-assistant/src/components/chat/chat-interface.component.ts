@@ -3,6 +3,8 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ChatMessage, MessageRole, StreamEvent, AgentStreamEvent } from '../../types/ai.types';
 import { AiProviderManagerService } from '../../services/core/ai-provider-manager.service';
+import { UsageAggregatorService, UsageAggregate } from '../../services/core/usage-aggregator.service';
+import { formatCost } from '../../utils/cost.utils';
 import { AiAssistantService } from '../../services/core/ai-assistant.service';
 import { ConfigProviderService } from '../../services/core/config-provider.service';
 import { LoggerService } from '../../services/core/logger.service';
@@ -51,8 +53,28 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
         private translate: TranslateService,
         private toolStreamProcessor: ToolStreamProcessorService,
         private providerManager: AiProviderManagerService,
+        private usageAggregator: UsageAggregatorService,
     ) {
         this.t = this.translate.t;
+    }
+
+    /**
+     * Cumulative usage for the current chat session — sums across every
+     * AI message that carries usage stats. Recomputed on every CD pass
+     * (cheap; messages.length is bounded). Drives the small token / cost
+     * badge in the chat header so users can see "this conversation has
+     * cost me $0.03 across 8 messages" at a glance.
+     */
+    getSessionUsage(): UsageAggregate {
+        return this.usageAggregator.aggregate(this.messages);
+    }
+
+    /** Pretty-print session cost — empty when below the meaningful
+     *  threshold so a fresh session doesn't show "$0.0000". */
+    getSessionCostFormatted(): string {
+        const agg = this.getSessionUsage();
+        if (agg.totalCost <= 0) {return '';}
+        return formatCost(agg.totalCost);
     }
 
     /**

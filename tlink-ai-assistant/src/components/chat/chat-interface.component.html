@@ -10,6 +10,17 @@
                 <i class="fa fa-cloud"></i>
                 {{ currentProvider }}
             </span>
+            <!-- Session usage badge — sums tokens + cost across every
+                 AI message in this conversation. Hidden on fresh
+                 sessions (totalTokens=0). Hover bubble shows the
+                 prompt/completion split for the curious. -->
+            <span class="session-usage-badge"
+                  *ngIf="getSessionUsage().totalTokens > 0"
+                  [title]="'session: ' + getSessionUsage().messageCount + ' AI messages · ' + getSessionUsage().promptTokens + ' in · ' + getSessionUsage().completionTokens + ' out'">
+                <i class="fa fa-bolt"></i>
+                {{ getSessionUsage().totalTokens }} tokens
+                <strong *ngIf="getSessionCostFormatted()">· {{ getSessionCostFormatted() }}</strong>
+            </span>
         </div>
         <div class="header-actions">
             <button class="btn-icon" (click)="switchProvider()" [title]="t.chatInterface.switchProvider">
