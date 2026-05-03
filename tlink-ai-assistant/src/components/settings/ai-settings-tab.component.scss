@@ -222,33 +222,14 @@
     }
 }
 
-/* Compact-pass override for child .settings-section blocks. ng's
-   default ViewEncapsulation scopes child styles, so we use ::ng-deep
-   to reach into them. Each child .settings-section was 1.5rem/2rem
-   margin+padding; here we knock that down ~30% so the tabs read as
-   denser without per-child file edits. */
-.settings-content ::ng-deep .settings-section {
-    margin-bottom: 1rem;
-    padding: 0.875rem 1rem;
-    border-radius: 8px;
-
-    h3 {
-        margin: 0 0 0.75rem 0;
-        font-size: 1.05rem;
-    }
-
-    h4 {
-        margin: 0 0 0.625rem 0;
-        font-size: 0.95rem;
-    }
-}
-
-/* Top-level h3 (the tab title shown by some children) — same compact
-   sizing as section headers. */
-.settings-content ::ng-deep > .tab-content > * > h3 {
-    margin: 0 0 0.875rem 0;
-    font-size: 1.1rem;
-}
+// Note: each child settings tab now owns its own compact .settings-
+// section styling (general-settings, chat-settings, security-settings,
+// context-settings, data-settings have all been individually
+// compacted). The previous `::ng-deep .settings-section` override
+// here was a stop-gap before that work landed; removing it lets each
+// child's own SCSS take effect (general-settings switched to flat,
+// borderless sections — that intent was being overridden by the
+// padded+bordered rule that used to live here).
 
 /* Advanced settings tab (rendered inline in this template, not via a
    child component) — match the same compact density. */

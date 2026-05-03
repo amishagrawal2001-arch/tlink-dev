@@ -1,47 +1,64 @@
 .general-settings {
     max-width: 1000px;
 
-    /* Compact h3 — was 1.25rem with 1.5rem margin (~50px tall block).
-       Now 1.05rem / 0.875rem (~28px). Same hierarchy, less air. */
+    /* Top-of-tab title. */
     h3 {
-        margin: 0 0 0.875rem 0;
+        margin: 0 0 0.5rem 0;
         font-size: 1.05rem;
         font-weight: 600;
         color: var(--ai-text-primary);
     }
 
-    .settings-section {
-        margin-bottom: 1rem;
-        padding: 0.875rem 1rem;
-        background-color: var(--ai-bg-secondary);
-        border-radius: 8px;
-        border: 1px solid var(--ai-border);
+    /* Section blocks — was 4 stacked cards with their own background +
+       border + 0.875rem padding. The card chrome made the panel feel
+       non-compact even after the inner controls tightened: 4 cards =
+       4 borders + 4 padded gutters + 4 background fills, all competing
+       with the actual content.
 
+       Now flat: no background, no border, just a thin top divider
+       between sections (skipped on the first one). The h4 eyebrow-cap
+       does the section-break work that the borders used to do. */
+    .settings-section {
+        padding: 0.5rem 0 0.75rem;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+
+        & + .settings-section {
+            border-top: 1px solid var(--ai-border);
+        }
+
+        /* Eyebrow-cap section header. Same pattern as provider-config:
+           uppercase + letter-spaced + small reads as a section break,
+           not a heading level. */
         h4 {
-            margin: 0 0 0.625rem 0;
-            font-size: 0.95rem;
-            font-weight: 600;
-            color: var(--ai-text-primary);
+            margin: 0 0 0.5rem 0;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: var(--ai-text-secondary);
+            opacity: 0.85;
         }
 
         .section-header {
             display: flex;
-            align-items: center;
+            align-items: baseline;
             justify-content: space-between;
-            margin-bottom: 0.625rem;
+            margin-bottom: 0.5rem;
             flex-wrap: wrap;
             gap: 6px;
 
-            h4 {
-                margin: 0;
-            }
+            h4 { margin: 0; }
 
             .section-info {
-                font-size: 0.8rem;
+                font-size: 0.75rem;
                 color: var(--ai-text-secondary);
+                opacity: 0.85;
 
                 strong {
                     color: var(--ai-primary);
+                    font-weight: 600;
                 }
             }
         }
