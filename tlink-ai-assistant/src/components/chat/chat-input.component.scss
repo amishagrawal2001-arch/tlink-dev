@@ -6,6 +6,55 @@
 .chat-input-container {
     padding: 0.625rem 0.875rem;
     background-color: var(--ai-bg-secondary);
+    position: relative;
+}
+
+/* Slash-command picker — appears above the input when the user
+   types `/`. Arrow keys navigate, Enter / click selects, Tab
+   autocompletes. Subtle hover-and-keyboard highlight pattern. */
+.slash-picker {
+    margin-bottom: 0.4rem;
+    border: 1px solid var(--ai-border);
+    border-radius: 6px;
+    background: var(--ai-bg-primary);
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+
+    .slash-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.35rem 0.625rem;
+        cursor: pointer;
+        font-size: 0.85rem;
+        transition: background-color 0.1s;
+
+        i {
+            font-size: 0.8rem;
+            color: var(--ai-text-secondary);
+            opacity: 0.85;
+            width: 1rem;
+            text-align: center;
+        }
+
+        .slash-label {
+            font-family: 'SF Mono', 'Consolas', monospace;
+            font-weight: 600;
+            color: var(--ai-primary);
+            min-width: 60px;
+        }
+
+        .slash-desc {
+            color: var(--ai-text-secondary);
+            font-size: 0.78rem;
+            opacity: 0.85;
+        }
+
+        &.highlight,
+        &:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+    }
 }
 
 .input-wrapper {

@@ -537,6 +537,84 @@
     }
 }
 
+/* In-session search bar — sticky below the header. Opens via
+   Cmd/Ctrl+F when focus is inside the chat panel. The matching
+   .message-item gets a soft yellow tint; the currently-active match
+   gets a ring + brighter tint. */
+.search-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    background: var(--ai-bg-secondary);
+    border-bottom: 1px solid var(--ai-border);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+
+    > i.fa-search {
+        font-size: 0.85rem;
+        color: var(--ai-text-secondary);
+        opacity: 0.7;
+    }
+
+    input {
+        flex: 1;
+        background: var(--ai-bg-primary);
+        border: 1px solid var(--ai-border);
+        border-radius: 4px;
+        padding: 0.3rem 0.5rem;
+        color: var(--ai-text-primary);
+        font-size: 0.85rem;
+
+        &:focus {
+            outline: none;
+            border-color: var(--ai-primary);
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.18);
+        }
+    }
+
+    .search-count {
+        font-size: 0.75rem;
+        color: var(--ai-text-secondary);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    .btn-icon {
+        background: transparent;
+        border: 0;
+        color: var(--ai-text-secondary);
+        cursor: pointer;
+        padding: 0.2rem 0.4rem;
+        border-radius: 4px;
+        font-size: 0.8rem;
+
+        &:hover:not(:disabled) {
+            color: var(--ai-text-primary);
+            background: rgba(255, 255, 255, 0.06);
+        }
+        &:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+    }
+}
+
+/* Search-match highlights on the message-items. Yellow tint for
+   any match; ring+brighter for the active one. */
+.message-item.search-match {
+    background: rgba(250, 204, 21, 0.08);
+    border-radius: 6px;
+    padding: 2px 4px;
+    margin-left: -4px;
+    margin-right: -4px;
+}
+.message-item.search-match-active {
+    background: rgba(250, 204, 21, 0.18);
+    box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.45);
+}
+
 /* Keyboard-shortcuts overlay — modal scrim + centered panel.
    Backdrop click + Esc both close (the latter via the host's keyboard
    listener); panel content stops propagation so clicks inside stay. */

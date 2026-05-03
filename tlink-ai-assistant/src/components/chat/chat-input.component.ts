@@ -21,6 +21,11 @@ export class ChatInputComponent implements OnInit, OnDestroy {
     @Input() streaming = false;
     @Output() send = new EventEmitter<string>();
     @Output() stop = new EventEmitter<void>();
+    /** Fires when the user picks a slash command from the picker.
+     *  Parent (chat-interface) handles the verb (clear, export, etc).
+     *  Returning true from the handler tells chat-input to clear
+     *  the slash text from the input. */
+    @Output() slashCommand = new EventEmitter<string>();
 
     @ViewChild('textInput', { static: false }) textInput!: ElementRef<HTMLTextAreaElement>;
 
@@ -38,6 +43,31 @@ export class ChatInputComponent implements OnInit, OnDestroy {
     // 智能建议相关
     suggestions: string[] = [];
     showSuggestions = false;
+
+    /**
+     * Slash-command picker. Triggered when the input starts with `/`.
+     * Each command has a verb (handler key), a label (what the user
+     * sees), and a description. The list is rendered as an autocomplete
+     * panel above the textarea; arrow keys navigate, Enter selects.
+     */
+    readonly slashCommands: { verb: string; label: string; desc: string; icon: string }[] = [
+        { verb: 'clear',  label: '/clear',  desc: 'Clear the chat history',          icon: 'fa-broom' },
+        { verb: 'export', label: '/export', desc: 'Export this chat to a file',       icon: 'fa-download' },
+        { verb: 'model',  label: '/model',  desc: 'Switch the active AI provider',    icon: 'fa-exchange' },
+        { verb: 'cost',   label: '/cost',   desc: 'Show this session\'s token + cost', icon: 'fa-chart-line' },
+        { verb: 'help',   label: '/help',   desc: 'Open the keyboard-shortcuts overlay', icon: 'fa-keyboard' },
+        { verb: 'regen',  label: '/regen',  desc: 'Regenerate the last AI response',  icon: 'fa-redo' },
+    ];
+    showSlashPicker = false;
+    slashFilter = '';
+    slashHighlightIndex = 0;
+
+    /** Filter the slash-command list against whatever text the user
+     *  has typed after `/`. Case-insensitive prefix match on verb. */
+    get visibleSlashCommands(): typeof this.slashCommands {
+        const filter = this.slashFilter.toLowerCase();
+        return this.slashCommands.filter(c => c.verb.startsWith(filter));
+    }
 
     constructor(
         private config: ConfigProviderService,
@@ -129,6 +159,40 @@ export class ChatInputComponent implements OnInit, OnDestroy {
      * 处理键盘事件
      */
     onKeydown(event: KeyboardEvent): void {
+        // Slash picker open: Up / Down navigate, Enter picks, Esc closes.
+        if (this.showSlashPicker) {
+            const visible = this.visibleSlashCommands;
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                this.slashHighlightIndex = (this.slashHighlightIndex + 1) % visible.length;
+                return;
+            }
+            if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                this.slashHighlightIndex = (this.slashHighlightIndex - 1 + visible.length) % visible.length;
+                return;
+            }
+            if (event.key === 'Enter' && !event.shiftKey && !this.isComposing) {
+                event.preventDefault();
+                const cmd = visible[this.slashHighlightIndex];
+                if (cmd) {this.selectSlashCommand(cmd.verb);}
+                return;
+            }
+            if (event.key === 'Tab' && visible.length > 0) {
+                event.preventDefault();
+                const cmd = visible[this.slashHighlightIndex] || visible[0];
+                this.inputValue = '/' + cmd.verb + ' ';
+                this.showSlashPicker = false;
+                this.autoResize();
+                return;
+            }
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                this.showSlashPicker = false;
+                return;
+            }
+        }
+
         // Enter 发送（根据配置决定）
         if (event.key === 'Enter' && !event.shiftKey && !this.isComposing) {
             if (this.enterToSend) {
@@ -147,7 +211,35 @@ export class ChatInputComponent implements OnInit, OnDestroy {
         this.inputValue = target.value;
         this.inputSubject.next(this.inputValue);
         this.draftSubject.next(this.inputValue);
+        this.updateSlashPicker();
         this.autoResize();
+    }
+
+    /**
+     * Open / filter / close the slash-command picker based on the
+     * current input value. Picker activates only when `/` is the
+     * very first character (so a forward-slash mid-sentence doesn't
+     * spuriously trigger it).
+     */
+    private updateSlashPicker(): void {
+        if (this.inputValue.startsWith('/') && !this.inputValue.includes(' ')) {
+            this.slashFilter = this.inputValue.slice(1);
+            this.showSlashPicker = this.visibleSlashCommands.length > 0;
+            this.slashHighlightIndex = 0;
+        } else {
+            this.showSlashPicker = false;
+            this.slashFilter = '';
+        }
+    }
+
+    /** Pick a slash command — emits to parent + clears the input. */
+    selectSlashCommand(verb: string): void {
+        this.slashCommand.emit(verb);
+        this.inputValue = '';
+        this.showSlashPicker = false;
+        try { localStorage.removeItem(ChatInputComponent.DRAFT_STORAGE_KEY); } catch { /* ignore */ }
+        setTimeout(() => this.autoResize(), 0);
+        this.textInput?.nativeElement.focus();
     }
 
     /**

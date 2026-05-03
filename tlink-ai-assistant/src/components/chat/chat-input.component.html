@@ -1,4 +1,19 @@
 <div class="chat-input-container">
+    <!-- Slash-command picker. Renders above the input when the user
+         types `/` as the first char. Arrow keys navigate, Enter
+         selects, Tab autocompletes, Esc closes. -->
+    <div *ngIf="showSlashPicker" class="slash-picker">
+        <div *ngFor="let cmd of visibleSlashCommands; let i = index"
+             class="slash-row"
+             [class.highlight]="i === slashHighlightIndex"
+             (click)="selectSlashCommand(cmd.verb)"
+             (mouseenter)="slashHighlightIndex = i">
+            <i class="fa" [ngClass]="cmd.icon"></i>
+            <span class="slash-label">{{ cmd.label }}</span>
+            <span class="slash-desc">{{ cmd.desc }}</span>
+        </div>
+    </div>
+
     <!-- 输入区域 -->
     <div class="input-wrapper">
         <textarea #textInput class="chat-textarea" [(ngModel)]="inputValue" [placeholder]="placeholder"

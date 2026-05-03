@@ -260,6 +260,88 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
     }
 
     /**
+     * In-session message search. Triggered by Cmd/Ctrl+F (when
+     * focused inside the chat panel). Renders a sticky search bar
+     * at the top of the messages container with a query input + a
+     * count + Next / Prev navigation. Matches highlight in-place via
+     * a CSS class on the message-item.
+     */
+    showSearchBar = false;
+    searchQuery = '';
+    searchMatches: string[] = []; // message ids in document order
+    searchActiveIndex = 0;
+
+    toggleSearchBar(): void {
+        this.showSearchBar = !this.showSearchBar;
+        if (!this.showSearchBar) {
+            this.searchQuery = '';
+            this.searchMatches = [];
+            this.searchActiveIndex = 0;
+        } else {
+            // Focus the search input after Angular renders it.
+            setTimeout(() => {
+                const inp = this.elementRef.nativeElement.querySelector<HTMLInputElement>('.search-bar input');
+                inp?.focus();
+            }, 0);
+        }
+    }
+
+    /** Recompute matches as the user types. */
+    onSearchInput(): void {
+        const q = this.searchQuery.trim().toLowerCase();
+        if (!q) {
+            this.searchMatches = [];
+            this.searchActiveIndex = 0;
+            return;
+        }
+        this.searchMatches = this.messages
+            .filter(m => (m.content || '').toLowerCase().includes(q))
+            .map(m => m.id);
+        this.searchActiveIndex = 0;
+        this.scrollToActiveMatch();
+    }
+
+    isSearchMatch(messageId: string): boolean {
+        return this.searchMatches.includes(messageId);
+    }
+
+    isActiveSearchMatch(messageId: string): boolean {
+        return this.searchMatches[this.searchActiveIndex] === messageId;
+    }
+
+    nextSearchMatch(): void {
+        if (!this.searchMatches.length) {return;}
+        this.searchActiveIndex = (this.searchActiveIndex + 1) % this.searchMatches.length;
+        this.scrollToActiveMatch();
+    }
+
+    prevSearchMatch(): void {
+        if (!this.searchMatches.length) {return;}
+        this.searchActiveIndex = (this.searchActiveIndex - 1 + this.searchMatches.length) % this.searchMatches.length;
+        this.scrollToActiveMatch();
+    }
+
+    private scrollToActiveMatch(): void {
+        const id = this.searchMatches[this.searchActiveIndex];
+        if (!id) {return;}
+        setTimeout(() => {
+            const el = this.elementRef.nativeElement.querySelector<HTMLElement>(`[data-message-id="${id}"]`);
+            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 0);
+    }
+
+    onSearchKeydown(event: KeyboardEvent): void {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            if (event.shiftKey) {this.prevSearchMatch();}
+            else {this.nextSearchMatch();}
+        } else if (event.key === 'Escape') {
+            event.preventDefault();
+            this.toggleSearchBar();
+        }
+    }
+
+    /**
      * Whether the keyboard-shortcuts overlay is open. Triggered by
      * pressing `?` (when not focused in an input) or via the help
      * button in the chat header.
@@ -273,9 +355,66 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
     }
 
     /**
+     * Route a slash-command verb (emitted by chat-input's
+     * (slashCommand) event) to its handler. New verbs added here +
+     * also added to chat-input's `slashCommands` list — the picker
+     * is the source of truth for what's available.
+     */
+    handleSlashCommand(verb: string): void {
+        switch (verb) {
+            case 'clear':
+                this.clearChat();
+                break;
+            case 'export':
+                this.exportChat();
+                break;
+            case 'model':
+                this.switchProvider();
+                break;
+            case 'cost': {
+                const agg = this.getSessionUsage();
+                const costStr = this.getSessionCostFormatted();
+                const note = costStr
+                    ? `**Session usage**: ${agg.totalTokens} tokens (${agg.promptTokens} in · ${agg.completionTokens} out) · ${costStr}`
+                    : `**Session usage**: ${agg.totalTokens} tokens (${agg.promptTokens} in · ${agg.completionTokens} out)`;
+                this.messages.push({
+                    id: this.generateId(),
+                    role: MessageRole.SYSTEM,
+                    content: note,
+                    timestamp: new Date(),
+                });
+                this.shouldScrollToBottom = true;
+                break;
+            }
+            case 'help':
+                this.showShortcutsOverlay = true;
+                break;
+            case 'regen': {
+                // Find the last user message and re-send it. We pop
+                // both the trailing assistant + the trailing user so
+                // onSendMessage's normal path re-adds them; otherwise
+                // we'd see a duplicate user bubble.
+                const lastUserIdx = [...this.messages].reverse().findIndex(m => m.role === MessageRole.USER);
+                if (lastUserIdx < 0) {break;}
+                const lastUser = this.messages[this.messages.length - 1 - lastUserIdx];
+                if (lastUser) {
+                    // Drop everything after (and including) the last
+                    // user message. onSendMessage will re-push.
+                    this.messages = this.messages.slice(0, this.messages.length - 1 - lastUserIdx);
+                    this.onSendMessage(lastUser.content);
+                }
+                break;
+            }
+            default:
+                this.logger.warn(`Unknown slash command: /${verb}`);
+        }
+    }
+
+    /**
      * Global keyboard shortcuts. `?` opens the overlay (when the user
-     * isn't typing in an input). `Escape` closes any open overlay.
-     * Stop-stream + send are handled inside chat-input.
+     * isn't typing in an input). Cmd/Ctrl+F opens search anywhere,
+     * even from the input. `Escape` closes any open overlay. Stop-
+     * stream + send are handled inside chat-input.
      */
     @HostListener('document:keydown', ['$event'])
     onGlobalKeydown(event: KeyboardEvent): void {
@@ -287,10 +426,31 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
             target.isContentEditable
         );
 
-        if (event.key === 'Escape' && this.showShortcutsOverlay) {
-            this.showShortcutsOverlay = false;
-            event.preventDefault();
-            return;
+        // Cmd/Ctrl+F → in-session search. Works inside the input too,
+        // since "find in chat" is a different workflow from typing.
+        if ((event.metaKey || event.ctrlKey) && event.key === 'f') {
+            // Only intercept when the chat panel is in the active
+            // viewport — let the browser's native page-find run
+            // elsewhere. We check by seeing if our root contains the
+            // active element.
+            if (this.elementRef.nativeElement.contains(document.activeElement)) {
+                event.preventDefault();
+                this.toggleSearchBar();
+                return;
+            }
+        }
+
+        if (event.key === 'Escape') {
+            if (this.showShortcutsOverlay) {
+                this.showShortcutsOverlay = false;
+                event.preventDefault();
+                return;
+            }
+            if (this.showSearchBar) {
+                this.toggleSearchBar();
+                event.preventDefault();
+                return;
+            }
         }
 
         if (event.key === '?' && !inEditable && !event.ctrlKey && !event.metaKey) {
