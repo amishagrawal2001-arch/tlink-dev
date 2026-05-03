@@ -187,6 +187,41 @@
                             .trial-progress-label
                                 | {{ licenseSvc.trialDaysRemaining }} of {{ licenseSvc.trialDurationDays }} trial days left
 
+                    //- Working-offline notice — calmer messaging when a paid
+                    //- user is in offlineGrace inside their subscription
+                    //- period. Their endDate is the actual validity boundary;
+                    //- the server just hasn't been reachable lately. Avoids
+                    //- the alarming amber-triangle look that suggests "your
+                    //- license has a problem".
+                    .license-inline-notice.notice-info(
+                        *ngIf='licenseSvc.offlineGrace && licenseSvc.paidAndWithinSubscription'
+                    )
+                        i.fas.fa-cloud.me-1
+                        span Working offline — license valid through {{ formatExpiryDateOnly() }}.
+                        span.notice-detail.ms-2(*ngIf='licenseSvc.lastServerContactAt') Last sync {{ formatLastServerContact() }}
+
+                    //- Generic offline-grace warning — covers trial users in
+                    //- offline grace (still need a server check-in to extend
+                    //- past the 48h window) and any other case where we
+                    //- don't have a paid endDate to fall back on.
+                    .license-inline-notice.notice-warn(
+                        *ngIf='licenseSvc.offlineGrace && !licenseSvc.paidAndWithinSubscription'
+                    )
+                        i.fas.fa-triangle-exclamation.me-1
+                        span Server unreachable — running on cached credentials.
+                        span.notice-detail.ms-2(*ngIf='licenseSvc.lastServerContactAt') Last sync {{ formatLastServerContact() }}
+
+                    //- Approaching-expiry nudge — paid users in their last 14
+                    //- days. Trials get the trial-progress bar above; this is
+                    //- the equivalent for paid subscriptions so renewals don't
+                    //- catch the user off guard.
+                    .license-inline-notice.notice-warn.mt-2(*ngIf='showExpiryWarning()')
+                        i.fas.fa-clock.me-1
+                        span(*ngIf='daysUntilEndDate() === 0') Your license expires today.
+                        span(*ngIf='daysUntilEndDate() === 1') Your license expires tomorrow.
+                        span(*ngIf='daysUntilEndDate() > 1') Your license expires in {{ daysUntilEndDate() }} days.
+                        a(href='https://tlink.io/buy', target='_blank') Renew
+
                     //- Sign-in form is heavy (two big inputs + button). When
                     //- the user is already signed in, hide it behind a
                     //- "Switch account" button so it doesn't dominate the
@@ -261,13 +296,6 @@
                     h5.mt-4(*ngIf='licenseSvc.deviceId || true')
                         i.fas.fa-id-card
                         span(translate) Device
-
-                    .form-line(*ngIf='licenseSvc.offlineGrace')
-                        .header
-                            .title(translate) Status
-                        span.license-detail-badge.detail-trial
-                            i.fas.fa-triangle-exclamation.me-1
-                            | OFFLINE GRACE
 
                     .form-line(*ngIf='licenseSvc.deviceId')
                         .header

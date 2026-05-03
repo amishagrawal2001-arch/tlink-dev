@@ -528,6 +528,25 @@ textarea {
         border: 1px solid rgba(22, 163, 74, 0.3);
         color: #16a34a;
     }
+    // Calmer informational variant — used when the user is offline but
+    // their license is independently valid (paid + within endDate). Blue
+    // tone signals "informational" rather than "something's wrong"; the
+    // amber notice-warn is reserved for cases that genuinely need user
+    // attention.
+    &.notice-info {
+        background: rgba(59, 130, 246, 0.12);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        color: #2563eb;
+    }
+
+    // Smaller secondary text inside the notice — used to surface "Last
+    // sync 4h ago" alongside the main message without competing with
+    // it visually.
+    .notice-detail {
+        opacity: 0.75;
+        font-weight: 400;
+        font-size: 11px;
+    }
 
     a {
         color: inherit;

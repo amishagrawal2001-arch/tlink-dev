@@ -1808,6 +1808,17 @@ export class TlinkLicenseService implements OnDestroy {
         return this.heartbeatDisabledByServer
     }
 
+    /**
+     * Public mirror of `isPaidWithinSubscription()` — UIs use this to
+     * paint a calmer message when offlineGrace is active for a paid
+     * user inside their subscription period. The internal helper
+     * stays private; this getter re-exposes it through the proxy.
+     */
+    get paidAndWithinSubscription (): boolean {
+        if (this.proxy) {return this.proxy.paidAndWithinSubscription}
+        return this.isPaidWithinSubscription()
+    }
+
     // Guards against concurrent invalidation: heartbeat + refresh + self-service
     // endpoints can all trip a 401 in the same few-millisecond window. Only the
     // first caller runs the async clear; subsequent callers short-circuit.

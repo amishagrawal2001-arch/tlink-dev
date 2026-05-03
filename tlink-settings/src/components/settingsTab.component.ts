@@ -352,11 +352,52 @@ export class SettingsTabComponent extends BaseTabComponent {
         const d = new Date(iso)
         if (Number.isNaN(d.getTime())) {return iso}
         const pretty = d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
-        const days = Math.floor((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+        const days = this.daysUntilEndDate()
+        if (days === null) {return pretty}
         if (days < 0) {return `${pretty} · expired ${Math.abs(days)}d ago`}
         if (days === 0) {return `${pretty} · expires today`}
         if (days === 1) {return `${pretty} · 1 day left`}
         return `${pretty} · ${days} days left`
+    }
+
+    /**
+     * Just the date portion of `formatExpiry()` — "May 2, 2027" — for
+     * inline messaging like the offline-grace banner that already
+     * provides its own framing copy.
+     */
+    formatExpiryDateOnly (): string {
+        const iso = this.licenseSvc.endDate
+        if (!iso) {return '—'}
+        const d = new Date(iso)
+        if (Number.isNaN(d.getTime())) {return iso}
+        return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+    }
+
+    /**
+     * Whole-day count between now and `endDate`. Negative when expired,
+     * 0 on the last day, null when no endDate is set.
+     */
+    daysUntilEndDate (): number | null {
+        const iso = this.licenseSvc.endDate
+        if (!iso) {return null}
+        const d = new Date(iso)
+        if (Number.isNaN(d.getTime())) {return null}
+        return Math.floor((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    }
+
+    /**
+     * Surface the approaching-expiry nudge for paid users in the last
+     * 14 days of their subscription. Excludes trials (the trial bar
+     * covers them), excludes already-expired (status will be 'expired'
+     * and a different code path takes over).
+     */
+    showExpiryWarning (): boolean {
+        if (this.licenseSvc.licenseStatus !== 'active') {return false}
+        if (this.licenseSvc.isLocalTrial) {return false}
+        if (this.licenseSvc.billingType !== 'PAID') {return false}
+        const days = this.daysUntilEndDate()
+        if (days === null) {return false}
+        return days >= 0 && days <= 14
     }
 
     saveServerUrl () {
@@ -397,19 +438,31 @@ export class SettingsTabComponent extends BaseTabComponent {
      * symptom.
      */
     heartbeatLastRunFormatted = '—'
+    /**
+     * "Last successful contact" relative-time string. Driven by the
+     * same 1Hz interval as `heartbeatLastRunFormatted` so the OFFLINE
+     * GRACE banner can show "Last sync: 4h ago" without triggering
+     * NG0100 ExpressionChangedAfterItHasBeenChecked.
+     */
+    lastServerContactFormatted = '—'
+
+    /** Render a Date as a "Ns ago" / "Nm ago" / "Nh ago" string. */
+    private static formatRelativeAge (at: Date | null): string {
+        if (!at) {return '—'}
+        const ageSec = Math.max(0, Math.round((Date.now() - at.getTime()) / 1000))
+        if (ageSec < 60) {return `${ageSec}s ago`}
+        if (ageSec < 3600) {return `${Math.round(ageSec / 60)}m ago`}
+        if (ageSec < 86400) {return `${Math.round(ageSec / 360) / 10}h ago`}
+        return `${Math.round(ageSec / 8640) / 10}d ago`
+    }
 
     private heartbeatTickerStarted = false
     private startHeartbeatTickerOnce () {
         if (this.heartbeatTickerStarted) {return}
         this.heartbeatTickerStarted = true
         const refresh = () => {
-            const at = this.licenseSvc.heartbeatLastRunAt
-            if (!at) {
-                this.heartbeatLastRunFormatted = '—'
-                return
-            }
-            const ageSec = Math.max(0, Math.round((Date.now() - at.getTime()) / 1000))
-            if (ageSec < 60) {this.heartbeatLastRunFormatted = `${ageSec}s ago`} else if (ageSec < 3600) {this.heartbeatLastRunFormatted = `${Math.round(ageSec / 60)}m ago`} else {this.heartbeatLastRunFormatted = `${Math.round(ageSec / 360) / 10}h ago`}
+            this.heartbeatLastRunFormatted = SettingsTabComponent.formatRelativeAge(this.licenseSvc.heartbeatLastRunAt)
+            this.lastServerContactFormatted = SettingsTabComponent.formatRelativeAge(this.licenseSvc.lastServerContactAt)
         }
         refresh()
         // 1Hz is plenty for human-readable "N seconds ago" text.
@@ -419,6 +472,11 @@ export class SettingsTabComponent extends BaseTabComponent {
     formatHeartbeatLastRun (): string {
         this.startHeartbeatTickerOnce()
         return this.heartbeatLastRunFormatted
+    }
+
+    formatLastServerContact (): string {
+        this.startHeartbeatTickerOnce()
+        return this.lastServerContactFormatted
     }
 
     triggerHeartbeatRunning = false
