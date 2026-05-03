@@ -6,6 +6,7 @@ import { BaseAiProvider } from './base-provider.service';
 import { ProviderCapability, ValidationResult } from '../../types/provider.types';
 import { ChatRequest, ChatResponse, CommandRequest, CommandResponse, ExplainRequest, ExplainResponse, AnalysisRequest, AnalysisResponse, MessageRole, StreamEvent } from '../../types/ai.types';
 import { LoggerService } from '../core/logger.service';
+import { parseSseStream, AnthropicToolCallAccumulator } from './streaming';
 
 /**
  * GLM (ChatGLM) AI提供商
@@ -267,9 +268,7 @@ export class GlmProviderService extends BaseAiProvider {
                         temperature: request.temperature || 0.95
                     });
 
-                    let currentToolId = '';
-                    let currentToolName = '';
-                    let currentToolInput = '';
+                    const accumulator = new AnthropicToolCallAccumulator();
                     let fullContent = '';
 
                     for await (const event of stream) {
@@ -277,52 +276,24 @@ export class GlmProviderService extends BaseAiProvider {
 
                         this.logger.debug('Stream event', { type: event.type });
 
-                        if (event.type === 'content_block_delta') {
-                            const delta = event.delta as any;
-                            if (delta.type === 'text_delta') {
-                                fullContent += delta.text;
-                                subscriber.next({ type: 'text_delta', textDelta: delta.text });
-                            } else if (delta.type === 'input_json_delta') {
-                                currentToolInput += delta.partial_json || '';
-                            }
-                        } else if (event.type === 'content_block_start') {
-                            const block = event.content_block as any;
-                            if (block.type === 'tool_use') {
-                                currentToolId = block.id;
-                                currentToolName = block.name;
-                                currentToolInput = '';
-                                subscriber.next({
-                                    type: 'tool_use_start',
-                                    toolCall: { id: currentToolId, name: currentToolName, input: {} }
-                                });
-                                this.logger.debug('Stream event', { type: 'tool_use_start', name: currentToolName });
-                            }
-                        } else if (event.type === 'content_block_stop') {
-                            if (currentToolId && currentToolName) {
-                                let parsedInput = {};
-                                try {
-                                    parsedInput = JSON.parse(currentToolInput || '{}');
-                                } catch (e) {
-                                    // Malformed JSON tool input — emit an empty
-                                    // object so downstream tool dispatch still
-                                    // fires, but log the raw string so we can
-                                    // diagnose model-output drift later.
-                                    this.logger.warn('GLM tool_use input was not valid JSON — dispatching with empty args', {
-                                        tool: currentToolName,
-                                        rawInput: String(currentToolInput).substring(0, 300),
-                                        error: e instanceof Error ? e.message : String(e),
-                                    });
-                                }
-                                subscriber.next({
-                                    type: 'tool_use_end',
-                                    toolCall: { id: currentToolId, name: currentToolName, input: parsedInput }
-                                });
-                                this.logger.debug('Stream event', { type: 'tool_use_end', name: currentToolName });
-                                currentToolId = '';
-                                currentToolName = '';
-                                currentToolInput = '';
-                            }
+                        // Text deltas handled inline; tool lifecycle goes to
+                        // the shared accumulator.
+                        if (
+                            event.type === 'content_block_delta' &&
+                            (event.delta as any)?.type === 'text_delta'
+                        ) {
+                            const textDelta = (event.delta as any).text;
+                            fullContent += textDelta;
+                            subscriber.next({ type: 'text_delta', textDelta });
+                            continue;
                         }
+                        for (const ev of accumulator.feed(event)) {
+                            subscriber.next(ev);
+                            this.logger.debug('Stream event', { type: ev.type, name: ev.toolCall?.name });
+                        }
+                    }
+                    for (const ev of accumulator.flush()) {
+                        subscriber.next(ev);
                     }
 
                     const finalMessage = await stream.finalMessage();
@@ -363,16 +334,15 @@ export class GlmProviderService extends BaseAiProvider {
 
             this.logRequest(request);
 
-            let currentToolId = '';
-            let currentToolName = '';
-            let currentToolInput = '';
             let fullContent = '';
 
             const abortController = new AbortController();
 
             const runStream = async () => {
                 try {
-                    // 使用 responseType: 'text' 而非 'stream' (浏览器兼容)
+                    // responseType: 'text' instead of 'stream' for browser
+                    // compatibility — axios in the browser doesn't support
+                    // 'stream'. parseSseStream handles either.
                     const response = await this.axiosClient!.post('/chat/completions', {
                         model: this.config?.model || 'glm-4',
                         messages: request.messages.map(msg => ({
@@ -383,65 +353,38 @@ export class GlmProviderService extends BaseAiProvider {
                         temperature: request.temperature || 0.95,
                         stream: true
                     }, {
-                        responseType: 'text'  // 关键修复: 浏览器不支持 'stream'
+                        responseType: 'text'
                     });
 
                     const stream = response.data;
-                    let buffer = '';
 
-                    for await (const chunk of stream) {
-                        if (abortController.signal.aborted) break;
+                    for await (const { data } of parseSseStream(stream, { signal: abortController.signal })) {
+                        try {
+                            const parsed = JSON.parse(data);
+                            const choice = parsed.choices?.[0];
+                            if (!choice) continue;
 
-                        let chunkStr: string;
-                        if (typeof chunk === 'string') {
-                            chunkStr = chunk;
-                        } else if (chunk instanceof Buffer) {
-                            chunkStr = chunk.toString('utf-8');
-                        } else if (chunk instanceof Uint8Array) {
-                            chunkStr = new TextDecoder().decode(chunk);
-                        } else if (chunk instanceof ArrayBuffer) {
-                            chunkStr = new TextDecoder().decode(chunk);
-                        } else {
-                            chunkStr = String(chunk);
-                        }
-
-                        buffer += chunkStr;
-                        const lines = buffer.split('\n');
-                        buffer = lines.pop() || '';
-
-                        for (const line of lines) {
-                            if (line.startsWith('data:')) {
-                                const data = line.slice(5).trim();
-                                if (data === '[DONE]') continue;
-
-                                try {
-                                    const parsed = JSON.parse(data);
-                                    const choice = parsed.choices?.[0];
-                                    if (!choice) continue;
-
-                                    const delta = choice.delta?.content || '';
-                                    if (delta) {
-                                        fullContent += delta;
-                                        subscriber.next({ type: 'text_delta', textDelta: delta });
-                                    }
-
-                                    if (choice.finish_reason) {
-                                        subscriber.next({
-                                            type: 'message_end',
-                                            message: {
-                                                id: this.generateId(),
-                                                role: MessageRole.ASSISTANT,
-                                                content: fullContent,
-                                                timestamp: new Date()
-                                            }
-                                        });
-                                        this.logger.debug('Stream event', { type: 'message_end', contentLength: fullContent.length });
-                                        subscriber.complete();
-                                    }
-                                } catch (e) {
-                                    // 忽略解析错误
-                                }
+                            const delta = choice.delta?.content || '';
+                            if (delta) {
+                                fullContent += delta;
+                                subscriber.next({ type: 'text_delta', textDelta: delta });
                             }
+
+                            if (choice.finish_reason) {
+                                subscriber.next({
+                                    type: 'message_end',
+                                    message: {
+                                        id: this.generateId(),
+                                        role: MessageRole.ASSISTANT,
+                                        content: fullContent,
+                                        timestamp: new Date()
+                                    }
+                                });
+                                this.logger.debug('Stream event', { type: 'message_end', contentLength: fullContent.length });
+                                subscriber.complete();
+                            }
+                        } catch {
+                            // Keep-alive frame or unparseable line — skip.
                         }
                     }
 

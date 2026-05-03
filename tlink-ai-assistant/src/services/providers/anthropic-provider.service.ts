@@ -5,6 +5,7 @@ import { BaseAiProvider } from './base-provider.service';
 import { ProviderCapability, ValidationResult } from '../../types/provider.types';
 import { ChatRequest, ChatResponse, CommandRequest, CommandResponse, ExplainRequest, ExplainResponse, AnalysisRequest, AnalysisResponse, MessageRole, StreamEvent } from '../../types/ai.types';
 import { LoggerService } from '../core/logger.service';
+import { AnthropicToolCallAccumulator } from './streaming';
 
 /**
  * Anthropic Claude AI提供商
@@ -109,9 +110,7 @@ export class AnthropicProviderService extends BaseAiProvider {
                 return;
             }
 
-            let currentToolId = '';
-            let currentToolName = '';
-            let currentToolInput = '';
+            const accumulator = new AnthropicToolCallAccumulator();
             let fullContent = '';
 
             const abortController = new AbortController();
@@ -142,57 +141,28 @@ export class AnthropicProviderService extends BaseAiProvider {
                         const eventAny = event as any;
                         this.logger.debug('Stream event', { type: event.type });
 
-                        // 处理文本增量
+                        // Text deltas — handled inline since they're not part
+                        // of the tool-call state machine.
                         if (event.type === 'content_block_delta' && eventAny.delta?.type === 'text_delta') {
                             const textDelta = eventAny.delta.text;
                             fullContent += textDelta;
-                            subscriber.next({
-                                type: 'text_delta',
-                                textDelta
-                            });
+                            subscriber.next({ type: 'text_delta', textDelta });
+                            continue;
                         }
-                        // 处理工具调用开始
-                        else if (event.type === 'content_block_start' && eventAny.content_block?.type === 'tool_use') {
-                            currentToolId = eventAny.content_block.id || `tool_${Date.now()}`;
-                            currentToolName = eventAny.content_block.name;
-                            currentToolInput = '';
-                            subscriber.next({
-                                type: 'tool_use_start',
-                                toolCall: {
-                                    id: currentToolId,
-                                    name: currentToolName,
-                                    input: {}
-                                }
-                            });
-                            this.logger.debug('Stream event', { type: 'tool_use_start', name: currentToolName });
+
+                        // Tool-use lifecycle (content_block_start.tool_use,
+                        // content_block_delta.input_json_delta,
+                        // content_block_stop) — fully delegated to the
+                        // shared accumulator.
+                        for (const ev of accumulator.feed(event)) {
+                            subscriber.next(ev);
+                            this.logger.debug('Stream event', { type: ev.type, name: ev.toolCall?.name });
                         }
-                        // 处理工具调用参数
-                        else if (event.type === 'content_block_delta' && eventAny.delta?.type === 'input_json_delta') {
-                            currentToolInput += eventAny.delta.partial_json || '';
-                        }
-                        // 处理工具调用结束
-                        else if (event.type === 'content_block_stop') {
-                            if (currentToolId && currentToolName) {
-                                let parsedInput = {};
-                                try {
-                                    parsedInput = JSON.parse(currentToolInput || '{}');
-                                } catch (e) {
-                                    // 使用原始输入
-                                }
-                                subscriber.next({
-                                    type: 'tool_use_end',
-                                    toolCall: {
-                                        id: currentToolId,
-                                        name: currentToolName,
-                                        input: parsedInput
-                                    }
-                                });
-                                this.logger.debug('Stream event', { type: 'tool_use_end', name: currentToolName });
-                                currentToolId = '';
-                                currentToolName = '';
-                                currentToolInput = '';
-                            }
-                        }
+                    }
+                    // Stream-end safety net — emits a closing tool_use_end if
+                    // the upstream dropped mid-tool (network blip, abort).
+                    for (const ev of accumulator.flush()) {
+                        subscriber.next(ev);
                     }
 
                     subscriber.next({

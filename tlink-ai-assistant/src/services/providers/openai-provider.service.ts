@@ -1,10 +1,11 @@
 import { Injectable } from '@angular/core';
-import { Observable, Observer } from 'rxjs';
+import { Observable } from 'rxjs';
 import axios, { AxiosInstance } from 'axios';
 import { BaseAiProvider } from './base-provider.service';
 import { ProviderCapability, ValidationResult } from '../../types/provider.types';
 import { ChatRequest, ChatResponse, CommandRequest, CommandResponse, ExplainRequest, ExplainResponse, AnalysisRequest, AnalysisResponse, MessageRole, StreamEvent } from '../../types/ai.types';
 import { LoggerService } from '../core/logger.service';
+import { parseSseStream, OpenAiToolCallAccumulator } from './streaming';
 
 /**
  * OpenAI AI提供商
@@ -140,122 +141,49 @@ export class OpenAiProviderService extends BaseAiProvider {
                     });
 
                     const stream = response.data;
-                    let currentToolCallId = '';
-                    let currentToolCallName = '';
-                    let currentToolInput = '';
-                    let currentToolIndex = -1;
+                    const accumulator = new OpenAiToolCallAccumulator();
                     let fullContent = '';
 
-                    const processChunk = (chunk: any) => {
-                        const text = chunk?.toString ? chunk.toString() : String(chunk || '');
-                        const lines = text.split('\n').filter(Boolean);
-
-                        for (const line of lines) {
-                            if (line.startsWith('data: ')) {
-                                const data = line.slice(6);
-                                if (data === '[DONE]') continue;
-
-                                try {
-                                    const parsed = JSON.parse(data);
-                                    const choice = parsed.choices?.[0];
-
-                                    this.logger.debug('Stream event', { type: 'delta', hasToolCalls: !!choice?.delta?.tool_calls });
-
-                                    // 处理工具调用块
-                                    if (choice?.delta?.tool_calls?.length > 0) {
-                                        for (const toolCall of choice.delta.tool_calls) {
-                                            const index = toolCall.index || 0;
-
-                                            // 新工具调用开始
-                                            if (currentToolIndex !== index) {
-                                                if (currentToolIndex >= 0) {
-                                                    // 发送前一个工具调用的结束事件
-                                                    let parsedInput = {};
-                                                    try {
-                                                        parsedInput = JSON.parse(currentToolInput || '{}');
-                                                    } catch (e) {
-                                                        // 使用原始输入
-                                                    }
-                                                    subscriber.next({
-                                                        type: 'tool_use_end',
-                                                        toolCall: {
-                                                            id: currentToolCallId,
-                                                            name: currentToolCallName,
-                                                            input: parsedInput
-                                                        }
-                                                    });
-                                                    this.logger.debug('Stream event', { type: 'tool_use_end', name: currentToolCallName });
-                                                }
-
-                                                currentToolIndex = index;
-                                                currentToolCallId = toolCall.id || `tool_${Date.now()}_${index}`;
-                                                currentToolCallName = toolCall.function?.name || '';
-                                                currentToolInput = toolCall.function?.arguments || '';
-
-                                                // 发送工具调用开始事件
-                                                subscriber.next({
-                                                    type: 'tool_use_start',
-                                                    toolCall: {
-                                                        id: currentToolCallId,
-                                                        name: currentToolCallName,
-                                                        input: {}
-                                                    }
-                                                });
-                                                this.logger.debug('Stream event', { type: 'tool_use_start', name: currentToolCallName });
-                                            } else {
-                                                // 继续累积参数
-                                                if (toolCall.function?.arguments) {
-                                                    currentToolInput += toolCall.function.arguments;
-                                                }
-                                            }
-                                        }
-                                    }
-                                    // 处理文本增量
-                                    else if (choice?.delta?.content) {
-                                        const textDelta = choice.delta.content;
-                                        fullContent += textDelta;
-                                        subscriber.next({
-                                            type: 'text_delta',
-                                            textDelta
-                                        });
-                                    }
-                                } catch (e) {
-                                    // 忽略解析错误
-                                }
-                            }
-                        }
-                    };
-
-                    // 浏览器环境无法使用 responseType=stream，改为一次性文本解析
-                    if (typeof stream === 'string') {
-                        processChunk(stream);
-                    } else if (stream?.[Symbol.asyncIterator]) {
-                        for await (const chunk of stream) {
-                            if (abortController.signal.aborted) break;
-                            processChunk(chunk);
-                        }
-                    } else {
-                        // 兜底：无法流式时直接返回错误
+                    // Browser axios buffers the whole SSE response into a single
+                    // string; Node yields an async-iterable. parseSseStream
+                    // accepts both — caller doesn't have to branch.
+                    const sseSource: AsyncIterable<unknown> | string =
+                        typeof stream === 'string'
+                            ? stream
+                            : stream?.[Symbol.asyncIterator]
+                                ? stream
+                                : null as any;
+                    if (sseSource === null) {
                         throw new Error('Streaming not supported in this environment');
                     }
 
-                    // 发送最后一个工具调用的结束事件
-                    if (currentToolIndex >= 0) {
-                        let parsedInput = {};
+                    for await (const { data } of parseSseStream(sseSource, { signal: abortController.signal })) {
                         try {
-                            parsedInput = JSON.parse(currentToolInput || '{}');
-                        } catch (e) {
-                            // 使用原始输入
-                        }
-                        subscriber.next({
-                            type: 'tool_use_end',
-                            toolCall: {
-                                id: currentToolCallId,
-                                name: currentToolCallName,
-                                input: parsedInput
+                            const parsed = JSON.parse(data);
+                            const choice = parsed.choices?.[0];
+
+                            this.logger.debug('Stream event', { type: 'delta', hasToolCalls: !!choice?.delta?.tool_calls });
+
+                            if (choice?.delta?.tool_calls?.length > 0) {
+                                for (const ev of accumulator.feed(choice.delta.tool_calls)) {
+                                    subscriber.next(ev);
+                                    this.logger.debug('Stream event', { type: ev.type, name: ev.toolCall?.name });
+                                }
+                            } else if (choice?.delta?.content) {
+                                const textDelta = choice.delta.content;
+                                fullContent += textDelta;
+                                subscriber.next({ type: 'text_delta', textDelta });
                             }
-                        });
-                        this.logger.debug('Stream event', { type: 'tool_use_end', name: currentToolCallName });
+                        } catch {
+                            // Ignore lines we can't JSON.parse — usually keep-
+                            // alive comments or partial frames the SSE buffer
+                            // hasn't reassembled yet.
+                        }
+                    }
+
+                    for (const ev of accumulator.flush()) {
+                        subscriber.next(ev);
+                        this.logger.debug('Stream event', { type: ev.type, name: ev.toolCall?.name });
                     }
 
                     subscriber.next({

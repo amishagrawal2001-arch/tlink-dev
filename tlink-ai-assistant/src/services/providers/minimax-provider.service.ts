@@ -5,6 +5,7 @@ import { BaseAiProvider } from './base-provider.service';
 import { ProviderCapability, ValidationResult } from '../../types/provider.types';
 import { ChatRequest, ChatResponse, CommandRequest, CommandResponse, ExplainRequest, ExplainResponse, AnalysisRequest, AnalysisResponse, MessageRole, StreamEvent } from '../../types/ai.types';
 import { LoggerService } from '../core/logger.service';
+import { AnthropicToolCallAccumulator } from './streaming';
 
 /**
  * Minimax AI提供商
@@ -144,73 +145,32 @@ export class MinimaxProviderService extends BaseAiProvider {
                         tools: request.tools  // 流式 API 支持工具调用
                     });
 
-                    // 累积工具调用数据
-                    let currentToolId = '';
-                    let currentToolName = '';
-                    let currentToolInput = '';
+                    const accumulator = new AnthropicToolCallAccumulator();
 
                     for await (const event of stream) {
                         if (abortController.signal.aborted) break;
 
                         this.logger.debug('Stream event', { type: event.type });
 
-                        if (event.type === 'content_block_delta') {
-                            const delta = event.delta as any;
-                            // 文本增量
-                            if (delta.type === 'text_delta') {
-                                subscriber.next({
-                                    type: 'text_delta',
-                                    textDelta: delta.text
-                                });
-                            }
-                            // 工具输入增量
-                            else if (delta.type === 'input_json_delta') {
-                                currentToolInput += delta.partial_json || '';
-                            }
+                        // Text deltas handled inline; tool lifecycle goes
+                        // to the shared accumulator.
+                        if (
+                            event.type === 'content_block_delta' &&
+                            (event.delta as any)?.type === 'text_delta'
+                        ) {
+                            subscriber.next({
+                                type: 'text_delta',
+                                textDelta: (event.delta as any).text
+                            });
+                            continue;
                         }
-                        // 工具调用开始
-                        else if (event.type === 'content_block_start') {
-                            const block = event.content_block as any;
-                            if (block.type === 'tool_use') {
-                                currentToolId = block.id;
-                                currentToolName = block.name;
-                                currentToolInput = '';
-                                subscriber.next({
-                                    type: 'tool_use_start',
-                                    toolCall: {
-                                        id: currentToolId,
-                                        name: currentToolName,
-                                        input: {}
-                                    }
-                                });
-                                this.logger.debug('Stream event', { type: 'tool_use_start', name: currentToolName });
-                            }
+                        for (const ev of accumulator.feed(event)) {
+                            subscriber.next(ev);
+                            this.logger.debug('Stream event', { type: ev.type, name: ev.toolCall?.name });
                         }
-                        // 内容块结束
-                        else if (event.type === 'content_block_stop') {
-                            // 如果有工具调用，发送完整的工具调用
-                            if (currentToolId && currentToolName) {
-                                let parsedInput = {};
-                                try {
-                                    parsedInput = JSON.parse(currentToolInput || '{}');
-                                } catch (e) {
-                                    this.logger.warn('Failed to parse tool input', { input: currentToolInput });
-                                }
-                                subscriber.next({
-                                    type: 'tool_use_end',
-                                    toolCall: {
-                                        id: currentToolId,
-                                        name: currentToolName,
-                                        input: parsedInput
-                                    }
-                                });
-                                this.logger.debug('Stream event', { type: 'tool_use_end', name: currentToolName });
-                                // 重置
-                                currentToolId = '';
-                                currentToolName = '';
-                                currentToolInput = '';
-                            }
-                        }
+                    }
+                    for (const ev of accumulator.flush()) {
+                        subscriber.next(ev);
                     }
 
                     // 获取最终消息

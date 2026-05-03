@@ -5,6 +5,7 @@ import { BaseAiProvider } from './base-provider.service';
 import { ProviderCapability, ValidationResult } from '../../types/provider.types';
 import { ChatRequest, ChatResponse, CommandRequest, CommandResponse, ExplainRequest, ExplainResponse, AnalysisRequest, AnalysisResponse, MessageRole, StreamEvent } from '../../types/ai.types';
 import { LoggerService } from '../core/logger.service';
+import { parseSseStream, OpenAiToolCallAccumulator } from './streaming';
 
 /**
  * Groq AI Provider
@@ -256,110 +257,34 @@ export class GroqProviderService extends BaseAiProvider {
                     }
 
                     const stream = response.data;
-                    let currentToolCallId = '';
-                    let currentToolCallName = '';
-                    let currentToolInput = '';
-                    let currentToolIndex = -1;
+                    const accumulator = new OpenAiToolCallAccumulator();
                     let fullContent = '';
 
-                    for await (const chunk of stream) {
-                        if (abortController.signal.aborted) break;
+                    for await (const { data } of parseSseStream(stream, { signal: abortController.signal })) {
+                        try {
+                            const parsed = JSON.parse(data);
+                            const choice = parsed.choices?.[0];
 
-                        const lines = chunk.toString().split('\n').filter(Boolean);
+                            this.logger.debug('Stream event', { type: 'delta', hasToolCalls: !!choice?.delta?.tool_calls });
 
-                        for (const line of lines) {
-                            if (line.startsWith('data: ')) {
-                                const data = line.slice(6);
-                                if (data === '[DONE]') continue;
-
-                                try {
-                                    const parsed = JSON.parse(data);
-                                    const choice = parsed.choices?.[0];
-
-                                    this.logger.debug('Stream event', { type: 'delta', hasToolCalls: !!choice?.delta?.tool_calls });
-
-                                    // Handle tool calling blocks
-                                    if (choice?.delta?.tool_calls?.length > 0) {
-                                        for (const toolCall of choice.delta.tool_calls) {
-                                            const index = toolCall.index || 0;
-
-                                            // New tool call starts
-                                            if (currentToolIndex !== index) {
-                                                if (currentToolIndex >= 0) {
-                                                    // Send previous tool call end event
-                                                    let parsedInput = {};
-                                                    try {
-                                                        parsedInput = JSON.parse(currentToolInput || '{}');
-                                                    } catch (e) {
-                                                        // Use raw input
-                                                    }
-                                                    subscriber.next({
-                                                        type: 'tool_use_end',
-                                                        toolCall: {
-                                                            id: currentToolCallId,
-                                                            name: currentToolCallName,
-                                                            input: parsedInput
-                                                        }
-                                                    });
-                                                    this.logger.debug('Stream event', { type: 'tool_use_end', name: currentToolCallName });
-                                                }
-
-                                                currentToolIndex = index;
-                                                currentToolCallId = toolCall.id || `tool_${Date.now()}_${index}`;
-                                                currentToolCallName = toolCall.function?.name || '';
-                                                currentToolInput = toolCall.function?.arguments || '';
-
-                                                // Send tool call start event
-                                                subscriber.next({
-                                                    type: 'tool_use_start',
-                                                    toolCall: {
-                                                        id: currentToolCallId,
-                                                        name: currentToolCallName,
-                                                        input: {}
-                                                    }
-                                                });
-                                                this.logger.debug('Stream event', { type: 'tool_use_start', name: currentToolCallName });
-                                            } else {
-                                                // Continue accumulating parameters
-                                                if (toolCall.function?.arguments) {
-                                                    currentToolInput += toolCall.function.arguments;
-                                                }
-                                            }
-                                        }
-                                    }
-                                    // Handle text delta
-                                    else if (choice?.delta?.content) {
-                                        const textDelta = choice.delta.content;
-                                        fullContent += textDelta;
-                                        subscriber.next({
-                                            type: 'text_delta',
-                                            textDelta
-                                        });
-                                    }
-                                } catch (e) {
-                                    // Ignore parsing errors
+                            if (choice?.delta?.tool_calls?.length > 0) {
+                                for (const ev of accumulator.feed(choice.delta.tool_calls)) {
+                                    subscriber.next(ev);
+                                    this.logger.debug('Stream event', { type: ev.type, name: ev.toolCall?.name });
                                 }
+                            } else if (choice?.delta?.content) {
+                                const textDelta = choice.delta.content;
+                                fullContent += textDelta;
+                                subscriber.next({ type: 'text_delta', textDelta });
                             }
+                        } catch {
+                            // Keep-alive frame or unparseable line — skip.
                         }
                     }
 
-                    // Send last tool call end event
-                    if (currentToolIndex >= 0) {
-                        let parsedInput = {};
-                        try {
-                            parsedInput = JSON.parse(currentToolInput || '{}');
-                        } catch (e) {
-                            // Use raw input
-                        }
-                        subscriber.next({
-                            type: 'tool_use_end',
-                            toolCall: {
-                                id: currentToolCallId,
-                                name: currentToolCallName,
-                                input: parsedInput
-                            }
-                        });
-                        this.logger.debug('Stream event', { type: 'tool_use_end', name: currentToolCallName });
+                    for (const ev of accumulator.flush()) {
+                        subscriber.next(ev);
+                        this.logger.debug('Stream event', { type: ev.type, name: ev.toolCall?.name });
                     }
 
                     subscriber.next({

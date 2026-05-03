@@ -5,6 +5,7 @@ import { BaseAiProvider } from './base-provider.service';
 import { ProviderCapability, ValidationResult } from '../../types/provider.types';
 import { ChatRequest, ChatResponse, CommandRequest, CommandResponse, ExplainRequest, ExplainResponse, AnalysisRequest, AnalysisResponse, MessageRole, StreamEvent } from '../../types/ai.types';
 import { LoggerService } from '../core/logger.service';
+import { parseSseStream, OpenAiToolCallAccumulator } from './streaming';
 
 /**
  * OpenAI兼容AI提供商
@@ -301,118 +302,43 @@ export class OpenAiCompatibleProviderService extends BaseAiProvider {
 
                     const stream = response.data;
 
-                    // 如果响应已缓冲为文本（常见于浏览器 axios），直接解析 SSE 文本
-                    if (typeof stream === 'string') {
-                        this.logger.info('Received buffered SSE response, parsing as text');
-                        this.processBufferedSse(stream, subscriber);
-                        return;
-                    }
-                    // 如果不是异步可迭代，尝试转为字符串解析
-                    if (!stream || typeof (stream as any)[Symbol.asyncIterator] !== 'function') {
-                        this.logger.info('Buffered (non-iterable) SSE response, coercing to text');
-                        this.processBufferedSse(stream?.toString?.() || '', subscriber);
-                        return;
-                    }
+                    // The shared parseSseStream accepts string OR async-iterable;
+                    // unify the two upstream paths into one loop.
+                    const sseSource: AsyncIterable<unknown> | string =
+                        typeof stream === 'string'
+                            ? (this.logger.info('Received buffered SSE response, parsing as text'), stream)
+                            : (stream && typeof (stream as any)[Symbol.asyncIterator] === 'function')
+                                ? stream
+                                : (this.logger.info('Buffered (non-iterable) SSE response, coercing to text'), stream?.toString?.() || '');
 
-                    let currentToolCallId = '';
-                    let currentToolCallName = '';
-                    let currentToolInput = '';
-                    let currentToolIndex = -1;
+                    const accumulator = new OpenAiToolCallAccumulator();
                     let fullContent = '';
 
-                    for await (const chunk of stream) {
-                        if (abortController.signal.aborted) break;
+                    for await (const { data } of parseSseStream(sseSource, { signal: abortController.signal })) {
+                        try {
+                            const parsed = JSON.parse(data);
+                            const choice = parsed.choices?.[0];
 
-                        const lines = chunk.toString().split('\n').filter(Boolean);
+                            this.logger.debug('Stream event', { type: 'delta', hasToolCalls: !!choice?.delta?.tool_calls });
 
-                        for (const line of lines) {
-                            if (line.startsWith('data: ')) {
-                                const data = line.slice(6);
-                                if (data === '[DONE]') continue;
-
-                                try {
-                                    const parsed = JSON.parse(data);
-                                    const choice = parsed.choices?.[0];
-
-                                    this.logger.debug('Stream event', { type: 'delta', hasToolCalls: !!choice?.delta?.tool_calls });
-
-                                    // 处理工具调用块
-                                    if (choice?.delta?.tool_calls?.length > 0) {
-                                        for (const toolCall of choice.delta.tool_calls) {
-                                            const index = toolCall.index || 0;
-
-                                            if (currentToolIndex !== index) {
-                                                if (currentToolIndex >= 0) {
-                                                    let parsedInput = {};
-                                                    try {
-                                                        parsedInput = JSON.parse(currentToolInput || '{}');
-                                                    } catch (e) {
-                                                        // 使用原始输入
-                                                    }
-                                                    subscriber.next({
-                                                        type: 'tool_use_end',
-                                                        toolCall: {
-                                                            id: currentToolCallId,
-                                                            name: currentToolCallName,
-                                                            input: parsedInput
-                                                        }
-                                                    });
-                                                    this.logger.debug('Stream event', { type: 'tool_use_end', name: currentToolCallName });
-                                                }
-
-                                                currentToolIndex = index;
-                                                currentToolCallId = toolCall.id || `tool_${Date.now()}_${index}`;
-                                                currentToolCallName = toolCall.function?.name || '';
-                                                currentToolInput = toolCall.function?.arguments || '';
-
-                                                subscriber.next({
-                                                    type: 'tool_use_start',
-                                                    toolCall: {
-                                                        id: currentToolCallId,
-                                                        name: currentToolCallName,
-                                                        input: {}
-                                                    }
-                                                });
-                                                this.logger.debug('Stream event', { type: 'tool_use_start', name: currentToolCallName });
-                                            } else {
-                                                if (toolCall.function?.arguments) {
-                                                    currentToolInput += toolCall.function.arguments;
-                                                }
-                                            }
-                                        }
-                                    }
-                                    // 处理文本增量
-                                    else if (choice?.delta?.content) {
-                                        const textDelta = choice.delta.content;
-                                        fullContent += textDelta;
-                                        subscriber.next({
-                                            type: 'text_delta',
-                                            textDelta
-                                        });
-                                    }
-                                } catch (e) {
-                                    // 忽略解析错误
+                            if (choice?.delta?.tool_calls?.length > 0) {
+                                for (const ev of accumulator.feed(choice.delta.tool_calls)) {
+                                    subscriber.next(ev);
+                                    this.logger.debug('Stream event', { type: ev.type, name: ev.toolCall?.name });
                                 }
+                            } else if (choice?.delta?.content) {
+                                const textDelta = choice.delta.content;
+                                fullContent += textDelta;
+                                subscriber.next({ type: 'text_delta', textDelta });
                             }
+                        } catch {
+                            // Keep-alive frame or unparseable line — skip.
                         }
                     }
 
-                    if (currentToolIndex >= 0) {
-                        let parsedInput = {};
-                        try {
-                            parsedInput = JSON.parse(currentToolInput || '{}');
-                        } catch (e) {
-                            // 使用原始输入
-                        }
-                        subscriber.next({
-                            type: 'tool_use_end',
-                            toolCall: {
-                                id: currentToolCallId,
-                                name: currentToolCallName,
-                                input: parsedInput
-                            }
-                        });
-                        this.logger.debug('Stream event', { type: 'tool_use_end', name: currentToolCallName });
+                    for (const ev of accumulator.flush()) {
+                        subscriber.next(ev);
+                        this.logger.debug('Stream event', { type: ev.type, name: ev.toolCall?.name });
                     }
 
                     subscriber.next({
@@ -439,104 +365,6 @@ export class OpenAiCompatibleProviderService extends BaseAiProvider {
 
             return () => abortController.abort();
         });
-    }
-
-    /**
-     * Parses a buffered SSE payload (string) when the HTTP client does not expose a real stream.
-     */
-    private processBufferedSse(text: string, subscriber: Observer<StreamEvent>) {
-        let fullContent = '';
-        let currentToolCallId = '';
-        let currentToolCallName = '';
-        let currentToolInput = '';
-        let currentToolIndex = -1;
-
-        const lines = text.split('\n').filter(Boolean);
-        for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            const data = line.slice(6);
-            if (data === '[DONE]') continue;
-
-            try {
-                const parsed = JSON.parse(data);
-                const choice = parsed.choices?.[0];
-
-                if (choice?.delta?.tool_calls?.length > 0) {
-                    for (const toolCall of choice.delta.tool_calls) {
-                        const index = toolCall.index || 0;
-                        if (currentToolIndex !== index) {
-                            if (currentToolIndex >= 0) {
-                                let parsedInput = {};
-                                try {
-                                    parsedInput = JSON.parse(currentToolInput || '{}');
-                                } catch {
-                                    // ignore
-                                }
-                                subscriber.next({
-                                    type: 'tool_use_end',
-                                    toolCall: {
-                                        id: currentToolCallId,
-                                        name: currentToolCallName,
-                                        input: parsedInput
-                                    }
-                                });
-                            }
-                            currentToolIndex = index;
-                            currentToolCallId = toolCall.id || `tool_${Date.now()}_${index}`;
-                            currentToolCallName = toolCall.function?.name || '';
-                            currentToolInput = toolCall.function?.arguments || '';
-                            subscriber.next({
-                                type: 'tool_use_start',
-                                toolCall: {
-                                    id: currentToolCallId,
-                                    name: currentToolCallName,
-                                    input: {}
-                                }
-                            });
-                        } else if (toolCall.function?.arguments) {
-                            currentToolInput += toolCall.function.arguments;
-                        }
-                    }
-                } else if (choice?.delta?.content) {
-                    const textDelta = choice.delta.content;
-                    fullContent += textDelta;
-                    subscriber.next({
-                        type: 'text_delta',
-                        textDelta
-                    });
-                }
-            } catch {
-                // ignore parse errors
-            }
-        }
-
-        if (currentToolIndex >= 0) {
-            let parsedInput = {};
-            try {
-                parsedInput = JSON.parse(currentToolInput || '{}');
-            } catch {
-                // ignore
-            }
-            subscriber.next({
-                type: 'tool_use_end',
-                toolCall: {
-                    id: currentToolCallId,
-                    name: currentToolCallName,
-                    input: parsedInput
-                }
-            });
-        }
-
-        subscriber.next({
-            type: 'message_end',
-            message: {
-                id: this.generateId(),
-                role: MessageRole.ASSISTANT,
-                content: fullContent,
-                timestamp: new Date()
-            }
-        });
-        subscriber.complete();
     }
 
     async generateCommand(request: CommandRequest): Promise<CommandResponse> {
