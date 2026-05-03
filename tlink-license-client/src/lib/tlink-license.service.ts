@@ -85,6 +85,21 @@ export class TlinkLicenseService implements OnDestroy {
     private static readonly HEARTBEAT_HISTORY_SIZE = 24
     private heartbeatHistory: number[] = []
     /**
+     * Number of consecutive failed heartbeats required before we flip
+     * `offlineGrace = true` (showing the yellow OFFLINE GRACE banner).
+     * A single transient blip — DNS hiccup, brief server reboot, VPN
+     * dropout — should NOT alarm a user whose license endDate is months
+     * in the future. Three misses at the default 4h cadence ≈ 12h of
+     * sustained unreachability before we change the badge.
+     */
+    private static readonly OFFLINE_GRACE_TRIGGER_FAILURES = 3
+    /**
+     * Running tally of consecutive heartbeat failures. Reset to 0 on
+     * any successful heartbeat / refresh / activate (i.e. every code
+     * path that goes through applyHeartbeat / applyEnvelope).
+     */
+    private consecutiveHeartbeatFailures = 0
+    /**
      * Set to true when the server returns 422 with a "missing email" /
      * "missing password" detail — indicating the heartbeat endpoint is
      * actually a re-authentication endpoint (AWS API-Gateway shape) and
@@ -1280,6 +1295,7 @@ export class TlinkLicenseService implements OnDestroy {
         this.lastReasonCode = e.reason_code
         this.lastServerContactAt = new Date()
         this.offlineGrace = false
+        this.consecutiveHeartbeatFailures = 0
         this.licenseStatus = 'active'
         // A successful envelope (activate / refresh / validate) PROVES the
         // server accepts our credentials right now. Clear any stale
@@ -1323,6 +1339,7 @@ export class TlinkLicenseService implements OnDestroy {
         this.lastReasonCode = h.reason_code
         this.lastServerContactAt = new Date()
         this.offlineGrace = false
+        this.consecutiveHeartbeatFailures = 0
         this.emit()
     }
 
@@ -1374,6 +1391,7 @@ export class TlinkLicenseService implements OnDestroy {
         this.lastServerContactAt = null
         this.isLocalTrial = false
         this.trialStartAt = null
+        this.consecutiveHeartbeatFailures = 0
     }
 
     private isAccessExpired (): boolean {
@@ -1550,12 +1568,17 @@ export class TlinkLicenseService implements OnDestroy {
         this.emit()
 
         if (!h) {
-            // Unreachable. Flip to offline-grace if we're still within window.
+            // Unreachable. Flip to offline-grace ONLY after several consecutive
+            // misses — a single transient blip (DNS hiccup, server reboot,
+            // VPN dropout) shouldn't alarm a user whose license endDate is
+            // months in the future.
             this.heartbeatFailureCount += 1
+            this.consecutiveHeartbeatFailures += 1
             this.heartbeatLastStatus = 'unreachable'
             this.heartbeatLastReason = null
             const withinGrace = !!(this.lastServerContactAt && this.isWithinGrace(this.lastServerContactAt.getTime()))
             const noSession = !this.accessToken || !this.deviceId || !this.licenseId
+            const overFailureThreshold = this.consecutiveHeartbeatFailures >= TlinkLicenseService.OFFLINE_GRACE_TRIGGER_FAILURES
             // eslint-disable-next-line no-console
             console.warn(`%c[license:heartbeat] tick #${this.heartbeatCount} → UNREACHABLE`,
                 'color:#f59e0b;font-weight:700',
@@ -1570,13 +1593,23 @@ export class TlinkLicenseService implements OnDestroy {
                     lastServerContactAt: this.lastServerContactAt?.toISOString() ?? null,
                     gracePeriodHours: this.config.gracePeriodHours,
                     withinGrace,
+                    consecutiveFailures: this.consecutiveHeartbeatFailures,
+                    failureThreshold: TlinkLicenseService.OFFLINE_GRACE_TRIGGER_FAILURES,
+                    overFailureThreshold,
                     serverUrl: this.serverUrl,
                     heartbeatUrl: this.licenseEndpoint('heartbeat'),
                 })
-            if (withinGrace) {
-                this.offlineGrace = true
-                this.emit()
-            } else if (this.lastServerContactAt) {
+            if (withinGrace && overFailureThreshold) {
+                // Sustained unreachability AND still within grace window →
+                // flag the session as "offline-but-still-valid" so the UI
+                // can communicate the situation. Below threshold we stay
+                // silent: the license remains active locally and a single
+                // network blip shouldn't trigger an alarm.
+                if (!this.offlineGrace) {
+                    this.offlineGrace = true
+                    this.emit()
+                }
+            } else if (!withinGrace && this.lastServerContactAt) {
                 // Beyond grace — hard-block.
                 // eslint-disable-next-line no-console
                 console.error('[license:heartbeat] beyond grace window — clearing session')
