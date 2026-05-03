@@ -1,41 +1,47 @@
-/* Provider Configuration Styles */
+/* Provider Configuration — compact pass.
+   Was 320px-min cards in 16px grid w/ 16px header padding & 44px icon
+   tile. At a typical Settings panel width ~700-900px that's only 2-3
+   cards per row. The compact pass drops to 240px-min, 8px gap, 10px
+   header padding, 32px icon — fits 4-5 cards per row in the same
+   viewport with the same scannability. */
 .provider-config {
     max-width: 1100px;
 
     h3 {
-        margin: 0 0 1.5rem 0;
-        font-size: 1.25rem;
+        margin: 0 0 0.875rem 0;
+        font-size: 1.05rem;
         font-weight: 600;
         color: var(--ai-text-primary);
     }
 }
 
-/* 分组样式 */
 .provider-section {
-    margin-bottom: 32px;
+    margin-bottom: 18px;
 
     .section-header {
         display: flex;
         align-items: center;
-        gap: 12px;
-        margin-bottom: 16px;
+        gap: 8px;
+        margin-bottom: 8px;
 
         i {
-            font-size: 20px;
+            font-size: 14px;
             color: var(--ai-primary);
         }
 
         h4 {
             margin: 0;
-            font-size: 18px;
+            font-size: 13px;
             font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
             color: var(--ai-text-primary);
         }
 
         .section-desc {
             color: var(--ai-text-secondary);
-            font-size: 13px;
-            opacity: 0.8;
+            font-size: 11.5px;
+            opacity: 0.7;
         }
     }
 
@@ -44,49 +50,43 @@
     }
 
     &.tabby-server-section {
-        .section-header i {
-            color: #ff9800;
-        }
+        .section-header i { color: #ff9800; }
 
         .tabby-server-card {
             background: var(--ai-bg-secondary);
             border: 1px solid var(--ai-border);
-            border-radius: 12px;
-            padding: 0 16px 16px;
+            border-radius: 8px;
+            padding: 0 12px 12px;
         }
 
-        .tabby-server-config {
-            padding-top: 16px;
-        }
+        .tabby-server-config { padding-top: 12px; }
     }
 }
 
-/* 卡片网格 */
 .providers-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 8px;
 }
 
-/* 卡片样式 */
 .provider-card {
     background: var(--ai-bg-secondary);
     border: 1px solid var(--ai-border);
-    border-radius: 12px;
+    border-radius: 8px;
     overflow: hidden;
-    transition: all 0.3s ease;
+    transition: border-color 0.15s;
 
     &:hover {
-        border-color: rgba(255, 255, 255, 0.2);
+        border-color: rgba(255, 255, 255, 0.18);
     }
 
     &.configured {
         border-color: var(--ai-primary);
-        border-width: 2px;
     }
 
     &.expanded {
         grid-column: 1 / -1;
+        border-color: var(--ai-primary);
 
         .card-body {
             display: block;
@@ -94,23 +94,22 @@
     }
 }
 
-/* 卡片头部 */
 .card-header {
     display: flex;
     align-items: center;
-    padding: 16px;
+    padding: 8px 10px;
     cursor: pointer;
-    gap: 12px;
-    transition: background-color 0.2s;
+    gap: 8px;
+    transition: background-color 0.15s;
 
     &:hover {
-        background-color: rgba(255, 255, 255, 0.05);
+        background-color: rgba(255, 255, 255, 0.04);
     }
 
     .provider-icon {
-        width: 44px;
-        height: 44px;
-        border-radius: 10px;
+        width: 32px;
+        height: 32px;
+        border-radius: 7px;
         background: rgba(0, 123, 255, 0.15);
         display: flex;
         align-items: center;
@@ -118,16 +117,13 @@
         flex-shrink: 0;
 
         i {
-            font-size: 20px;
+            font-size: 14px;
             color: var(--ai-primary);
         }
 
         &.local {
             background: rgba(0, 188, 212, 0.15);
-
-            i {
-                color: #00bcd4;
-            }
+            i { color: #00bcd4; }
         }
     }
 
@@ -136,50 +132,55 @@
         min-width: 0;
 
         h5 {
-            margin: 0 0 4px 0;
-            font-size: 16px;
+            margin: 0 0 2px 0;
+            font-size: 13px;
             font-weight: 600;
             color: var(--ai-text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .status-row {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 8px;
+            flex-wrap: wrap;
         }
     }
 
     .expand-icon {
         color: var(--ai-text-secondary);
-        font-size: 14px;
-        padding: 8px;
+        font-size: 12px;
+        padding: 4px;
     }
 }
 
-/* 状态徽章 */
+/* 状态徽章 — tighter pill */
 .status-badge {
     display: inline-block;
-    font-size: 12px;
-    padding: 2px 8px;
-    border-radius: 4px;
-    background: rgba(255, 255, 255, 0.1);
+    font-size: 10.5px;
+    padding: 1px 7px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.08);
     color: var(--ai-text-secondary);
+    font-weight: 500;
+    letter-spacing: 0.2px;
 
     &.active {
-        background: rgba(76, 175, 80, 0.2);
+        background: rgba(76, 175, 80, 0.18);
         color: #4caf50;
     }
 }
 
-/* 在线状态 */
 .online-status {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    font-size: 12px;
+    gap: 3px;
+    font-size: 11px;
 
     i {
-        font-size: 8px;
+        font-size: 7px;
     }
 }
 

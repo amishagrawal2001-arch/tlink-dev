@@ -28,25 +28,29 @@ export interface DataFileInfo {
     selector: 'app-data-settings',
     templateUrl: './data-settings.component.html',
     styles: [`
+        /* Compact pass — was 20px outer padding + 20px section gaps,
+           now ~12px throughout. Same scannability, ~30% less air. */
         .data-settings {
-            padding: 20px;
+            padding: 0;
         }
 
         .data-settings h3 {
-            margin-bottom: 8px;
+            margin-bottom: 6px;
+            font-size: 1.05rem;
             color: var(--text-primary);
         }
 
         .description {
             color: var(--text-secondary);
-            margin-bottom: 20px;
+            margin-bottom: 12px;
+            font-size: 0.85rem;
         }
 
         .data-location {
             background: var(--background-secondary);
-            padding: 16px;
+            padding: 10px 12px;
             border-radius: 8px;
-            margin-bottom: 20px;
+            margin-bottom: 12px;
         }
 
         .info-row {
@@ -71,11 +75,12 @@ export interface DataFileInfo {
         }
 
         .data-files {
-            margin-bottom: 20px;
+            margin-bottom: 12px;
         }
 
         .data-files h4 {
-            margin-bottom: 12px;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
             color: var(--text-primary);
         }
 
@@ -126,61 +131,67 @@ export interface DataFileInfo {
         }
 
         .data-statistics {
-            margin-bottom: 20px;
+            margin-bottom: 12px;
         }
 
         .data-statistics h4 {
-            margin-bottom: 12px;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
             color: var(--text-primary);
         }
 
+        /* Stats grid — was 150px min, 16px gap, 16px padding, 24px
+           values. Now 120px min / 8px gap / 10px padding / 18px
+           values. Same prominence on the numbers, less wasted card
+           space. */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 16px;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px;
         }
 
         .stat-item {
             background: var(--background-secondary);
-            padding: 16px;
+            padding: 10px;
             border-radius: 8px;
             text-align: center;
         }
 
         .stat-value {
             display: block;
-            font-size: 24px;
-            font-weight: bold;
+            font-size: 18px;
+            font-weight: 700;
             color: var(--primary);
-            margin-bottom: 4px;
+            margin-bottom: 2px;
         }
 
         .stat-label {
-            font-size: 12px;
+            font-size: 11px;
             color: var(--text-secondary);
         }
 
         .data-actions h4 {
-            margin-bottom: 12px;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
             color: var(--text-primary);
         }
 
         .button-group {
             display: flex;
             flex-wrap: wrap;
-            gap: 12px;
+            gap: 8px;
         }
 
         .btn {
             display: inline-flex;
             align-items: center;
-            gap: 8px;
-            padding: 10px 16px;
+            gap: 6px;
+            padding: 7px 12px;
             border: none;
             border-radius: 6px;
-            font-size: 14px;
+            font-size: 0.85rem;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: background 0.15s;
         }
 
         .btn-primary {
@@ -220,8 +231,8 @@ export interface DataFileInfo {
         }
 
         .btn-small {
-            padding: 6px 12px;
-            font-size: 12px;
+            padding: 4px 10px;
+            font-size: 11px;
         }
 
         .btn-danger.btn-small {
@@ -229,11 +240,11 @@ export interface DataFileInfo {
         }
 
         .migration-note {
-            margin-top: 20px;
-            padding: 16px;
+            margin-top: 12px;
+            padding: 10px 12px;
             background: #fef3c7;
             border-radius: 8px;
-            border-left: 4px solid #f59e0b;
+            border-left: 3px solid #f59e0b;
         }
 
         .note-content {
