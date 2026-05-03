@@ -1,4 +1,4 @@
-import { Injectable, Optional } from '@angular/core';
+import { Injectable } from '@angular/core';
 import { scrubSecrets } from '../security/secret-scrubber';
 
 /**
@@ -70,10 +70,26 @@ export class RequestLogService {
      *  the same maxEntries cap so this can't grow without limit. */
     private memory: RequestLogEntry[] = []
     private dbPromise: Promise<IDBDatabase | null> | null = null
-    private readonly maxEntries: number
+    private maxEntries = DEFAULT_MAX_ENTRIES
 
-    constructor (@Optional() options?: { maxEntries?: number }) {
-        this.maxEntries = options?.maxEntries ?? DEFAULT_MAX_ENTRIES
+    // Parameter-less constructor — Angular DI couldn't resolve the
+    // previous `@Optional() options?: { maxEntries?: number }` because
+    // that's a structural type with no runtime token. Tests that need
+    // a smaller buffer call `setMaxEntries(n)` directly; production
+    // uses the default.
+    constructor () {}
+
+    /**
+     * Adjust the ring-buffer cap. Intended for tests + the (future)
+     * settings UI; production uses the constant default. Call BEFORE
+     * the first `record()` for predictable behavior — already-written
+     * entries aren't pruned retroactively beyond the natural eviction
+     * that happens on the next insert.
+     */
+    setMaxEntries (n: number): void {
+        if (Number.isFinite(n) && n > 0) {
+            this.maxEntries = Math.floor(n)
+        }
     }
 
     /**

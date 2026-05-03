@@ -6,7 +6,7 @@ import { RequestLogService } from '../src/services/core/request-log.service'
 
 describe('RequestLogService (in-memory fallback)', () => {
     test('records entries in chronological order', async () => {
-        const log = new RequestLogService({ maxEntries: 5 })
+        const log = new RequestLogService(); log.setMaxEntries(5)
         await log.record({ timestamp: 1, provider: 'openai', kind: 'request', payload: { a: 1 } })
         await log.record({ timestamp: 2, provider: 'openai', kind: 'response', payload: { ok: true } })
         const entries = await log.recent()
@@ -15,7 +15,7 @@ describe('RequestLogService (in-memory fallback)', () => {
     })
 
     test('caps the ring buffer at maxEntries (oldest dropped)', async () => {
-        const log = new RequestLogService({ maxEntries: 3 })
+        const log = new RequestLogService(); log.setMaxEntries(3)
         for (let i = 1; i <= 5; i++) {
             await log.record({ timestamp: i, provider: 'p', kind: 'request', payload: i })
         }
@@ -26,7 +26,7 @@ describe('RequestLogService (in-memory fallback)', () => {
     })
 
     test('recent(limit) returns the last N entries', async () => {
-        const log = new RequestLogService({ maxEntries: 10 })
+        const log = new RequestLogService(); log.setMaxEntries(10)
         for (let i = 1; i <= 5; i++) {
             await log.record({ timestamp: i, provider: 'p', kind: 'request', payload: i })
         }
