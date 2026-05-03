@@ -29,30 +29,31 @@
                     [class.disabled]="!provider.enabled"
                     (click)="updateDefaultProvider(provider.name)"
                     [title]="provider.enabled ? 'Click to set as default provider' : 'Provider is disabled'">
+                    <!-- Single-row header: icon + name + status + check.
+                         Status moved here from a third row so the most
+                         decision-relevant signals (name + connectivity)
+                         show on one glance. Description below in a
+                         dimmer second line. -->
                     <div class="provider-header">
                         <i class="fa" [ngClass]="provider.isLocal ? 'fa-server' : 'fa-cloud'"></i>
                         <h5>{{ t.providerNames[provider.name] || provider.displayName }}</h5>
+                        <ng-container *ngIf="provider.isLocal; else cloudStatus">
+                            <span class="status-dot" [style.color]="getLocalProviderStatus(provider.name).color"
+                                  [title]="getLocalProviderStatus(provider.name).text">
+                                <i class="fa" [ngClass]="getLocalProviderStatus(provider.name).icon"></i>
+                            </span>
+                        </ng-container>
+                        <ng-template #cloudStatus>
+                            <span class="status-dot" [style.color]="getProviderStatus(provider.name).color"
+                                  [title]="getProviderStatus(provider.name).text">
+                                <i class="fa" [ngClass]="getProviderStatus(provider.name).icon"></i>
+                            </span>
+                        </ng-template>
                         <span class="selection-indicator" *ngIf="selectedProvider === provider.name">
                             <i class="fa fa-check-circle"></i>
                         </span>
                     </div>
-                    <div class="provider-body">
-                        <p class="provider-desc">{{ provider.description || t.providers.notConfigured }}</p>
-                        <div class="provider-meta">
-                            <ng-container *ngIf="provider.isLocal; else cloudStatus">
-                                <span class="status-badge" [style.color]="getLocalProviderStatus(provider.name).color">
-                                    <i class="fa" [ngClass]="getLocalProviderStatus(provider.name).icon"></i>
-                                    {{ getLocalProviderStatus(provider.name).text }}
-                                </span>
-                            </ng-container>
-                            <ng-template #cloudStatus>
-                                <span class="status-badge" [style.color]="getProviderStatus(provider.name).color">
-                                    <i class="fa" [ngClass]="getProviderStatus(provider.name).icon"></i>
-                                    {{ getProviderStatus(provider.name).text }}
-                                </span>
-                            </ng-template>
-                        </div>
-                    </div>
+                    <p class="provider-desc">{{ provider.description || t.providers.notConfigured }}</p>
                 </div>
             </div>
         </div>
