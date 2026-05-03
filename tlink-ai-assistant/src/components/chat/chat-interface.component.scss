@@ -537,6 +537,138 @@
     }
 }
 
+/* User message edit mode — bubble swaps for an inline textarea +
+   Save/Cancel buttons. The pencil icon shows on hover of any user
+   message bubble (when not currently streaming). Cmd+Enter submits,
+   Esc cancels. */
+.user-text-wrapper {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+    position: relative;
+
+    .user-text-content {
+        flex: 1;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+
+    .user-edit-btn {
+        background: transparent;
+        border: 0;
+        color: rgba(255, 255, 255, 0.65);
+        cursor: pointer;
+        padding: 2px 6px;
+        border-radius: 4px;
+        opacity: 0;
+        transition: opacity 0.15s, color 0.15s, background-color 0.15s;
+        font-size: 0.75rem;
+        flex-shrink: 0;
+
+        &:hover {
+            color: white;
+            background: rgba(255, 255, 255, 0.15);
+        }
+    }
+}
+
+.user-message:hover .user-edit-btn {
+    opacity: 0.8;
+}
+
+.user-edit-mode {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    width: 100%;
+
+    textarea {
+        width: 100%;
+        min-height: 4em;
+        padding: 0.4rem 0.6rem;
+        border: 1px solid var(--ai-border);
+        border-radius: 6px;
+        background: var(--ai-bg-primary);
+        color: var(--ai-text-primary);
+        font-family: inherit;
+        font-size: 0.9rem;
+        line-height: 1.45;
+        resize: vertical;
+
+        &:focus {
+            outline: none;
+            border-color: var(--ai-primary);
+            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.18);
+        }
+    }
+
+    .user-edit-actions {
+        display: flex;
+        gap: 0.4rem;
+        justify-content: flex-end;
+
+        .btn-edit-save,
+        .btn-edit-cancel {
+            font-size: 0.78rem;
+            padding: 0.3rem 0.7rem;
+            border: 1px solid var(--ai-border);
+            border-radius: 4px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .btn-edit-save {
+            background: var(--ai-primary);
+            color: white;
+            border-color: var(--ai-primary);
+
+            &:hover { background: #0069d9; }
+        }
+
+        .btn-edit-cancel {
+            background: transparent;
+            color: var(--ai-text-secondary);
+
+            &:hover {
+                color: var(--ai-text-primary);
+                background: rgba(255, 255, 255, 0.06);
+            }
+        }
+    }
+}
+
+/* Retry button rendered inside an errored AI message bubble.
+   The streamError flag is set by handleStreamError / the chatStream
+   error callback. */
+.message-retry {
+    margin-top: 0.4rem;
+
+    .btn-retry {
+        background: transparent;
+        border: 1px solid var(--ai-danger, #dc3545);
+        color: var(--ai-danger, #dc3545);
+        font-size: 0.78rem;
+        padding: 0.25rem 0.7rem;
+        border-radius: 4px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        transition: background-color 0.15s, color 0.15s;
+
+        &:hover:not(:disabled) {
+            background: var(--ai-danger, #dc3545);
+            color: white;
+        }
+        &:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    }
+}
+
 /* In-session search bar — sticky below the header. Opens via
    Cmd/Ctrl+F when focus is inside the chat panel. The matching
    .message-item gets a soft yellow tint; the currently-active match

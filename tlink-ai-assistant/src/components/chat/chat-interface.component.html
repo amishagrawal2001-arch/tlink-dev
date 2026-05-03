@@ -158,9 +158,34 @@
                         <!-- 消息内容 -->
                         <div class="message-content">
                             <div class="message-bubble">
-                                <!-- 用户消息 -->
-                                <div *ngIf="message.role === 'user'" class="message-text">
-                                    {{ message.content }}
+                                <!-- User message — supports inline edit
+                                     mode. Click the pencil icon to
+                                     swap the bubble for a textarea;
+                                     Cmd/Ctrl+Enter saves and resends
+                                     (drops every message after this
+                                     one), Esc cancels. -->
+                                <div *ngIf="message.role === 'user' && editingMessageId !== message.id" class="message-text user-text-wrapper">
+                                    <span class="user-text-content">{{ message.content }}</span>
+                                    <button class="user-edit-btn"
+                                            *ngIf="!isLoading"
+                                            (click)="startEditMessage(message); $event.stopPropagation()"
+                                            title="Edit and resend">
+                                        <i class="fa fa-pencil-alt"></i>
+                                    </button>
+                                </div>
+                                <div *ngIf="message.role === 'user' && editingMessageId === message.id" class="message-text user-edit-mode">
+                                    <textarea [(ngModel)]="editingDraft"
+                                              (keydown)="onEditDraftKeydown($event)"
+                                              rows="3"
+                                              autofocus></textarea>
+                                    <div class="user-edit-actions">
+                                        <button class="btn-edit-save" (click)="saveAndResendEditedMessage()" title="Save and resend (Cmd+Enter)">
+                                            <i class="fa fa-paper-plane"></i> Save & resend
+                                        </button>
+                                        <button class="btn-edit-cancel" (click)="cancelEditMessage()" title="Cancel (Esc)">
+                                            Cancel
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <!-- AI message — rendered as sanitized
@@ -233,6 +258,18 @@
                                 <div *ngIf="message.role === 'system'" class="message-text system">
                                     <i class="fa fa-exclamation-triangle"></i>
                                     {{ message.content }}
+                                </div>
+
+                                <!-- Stream-error retry. Set on the
+                                     errored AI message by the
+                                     handleStreamError / chatStream
+                                     error callbacks. Click pops the
+                                     failed AI + last user and
+                                     re-sends. -->
+                                <div *ngIf="message.role === 'assistant' && message.metadata?.streamError" class="message-retry">
+                                    <button class="btn-retry" (click)="retryLastMessage()" [disabled]="isLoading" title="Retry">
+                                        <i class="fa fa-redo"></i> Retry
+                                    </button>
                                 </div>
                             </div>
 

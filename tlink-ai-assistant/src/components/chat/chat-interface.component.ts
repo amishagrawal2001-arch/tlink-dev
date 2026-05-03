@@ -342,6 +342,72 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
     }
 
     /**
+     * Edit-and-resubmit state. The user clicks the pencil icon on a
+     * user message; that message's id is set as `editingMessageId`
+     * and the original text moves into `editingDraft`. Saving re-
+     * sends from that point: every message AFTER the edited one is
+     * dropped, the edited content becomes the user message, and the
+     * stream begins again.
+     */
+    editingMessageId: string | null = null;
+    editingDraft = '';
+
+    startEditMessage(message: ChatMessage): void {
+        if (this.isLoading) {return;}
+        if (message.role !== MessageRole.USER) {return;}
+        this.editingMessageId = message.id;
+        this.editingDraft = message.content || '';
+    }
+
+    cancelEditMessage(): void {
+        this.editingMessageId = null;
+        this.editingDraft = '';
+    }
+
+    saveAndResendEditedMessage(): void {
+        if (!this.editingMessageId) {return;}
+        const idx = this.messages.findIndex(m => m.id === this.editingMessageId);
+        if (idx < 0) {return;}
+        const newContent = this.editingDraft.trim();
+        if (!newContent) {return;}
+        // Drop everything from this user message onward — onSendMessage
+        // will re-push the (edited) user message + a fresh AI response.
+        this.messages = this.messages.slice(0, idx);
+        const draft = newContent;
+        this.editingMessageId = null;
+        this.editingDraft = '';
+        this.onSendMessage(draft);
+    }
+
+    onEditDraftKeydown(event: KeyboardEvent): void {
+        if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+            event.preventDefault();
+            this.saveAndResendEditedMessage();
+        } else if (event.key === 'Escape') {
+            event.preventDefault();
+            this.cancelEditMessage();
+        }
+    }
+
+    /**
+     * Retry-on-failure state. When a stream errors out, we mark the
+     * trailing AI message as errored and surface a "Retry" button
+     * inside the bubble. Clicking it pops the failed AI message and
+     * re-sends the prior user message.
+     */
+    retryLastMessage(): void {
+        if (this.isLoading) {return;}
+        const lastUserIdx = [...this.messages].reverse().findIndex(m => m.role === MessageRole.USER);
+        if (lastUserIdx < 0) {return;}
+        const lastUser = this.messages[this.messages.length - 1 - lastUserIdx];
+        if (!lastUser) {return;}
+        // Drop everything from the last user message onward — same
+        // shape as /regen.
+        this.messages = this.messages.slice(0, this.messages.length - 1 - lastUserIdx);
+        this.onSendMessage(lastUser.content);
+    }
+
+    /**
      * Whether the keyboard-shortcuts overlay is open. Triggered by
      * pressing `?` (when not focused in an input) or via the help
      * button in the chat header.
@@ -773,6 +839,13 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
     private handleStreamError(error: any, message: ChatMessage): void {
         this.logger.error('Agent stream error', error);
         message.content += `\n\n❌ ${this.t.chatInterface.errorPrefix}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        // Mark this message as errored so the template can render a
+        // "Retry" button inside the bubble. The retry handler pops
+        // the failed AI + last user message and re-sends.
+        message.metadata = {
+            ...message.metadata,
+            streamError: error instanceof Error ? error.message : String(error),
+        };
         this.isLoading = false;
         this.shouldScrollToBottom = true;
         this.saveChatHistory();
@@ -926,6 +999,13 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
                 error: (error) => {
                     this.logger.error('Stream error', error);
                     aiMessage.content += `\n\n${this.t.chatInterface.errorPrefix}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+                    // Mark errored so the bubble template can render
+                    // a Retry button — same pattern as the agent
+                    // loop's handleStreamError.
+                    aiMessage.metadata = {
+                        ...aiMessage.metadata,
+                        streamError: error instanceof Error ? error.message : String(error),
+                    };
                     this.isLoading = false;
                     this.shouldScrollToBottom = true;
                     this.saveChatHistory();
