@@ -1,7 +1,8 @@
-import { Injectable } from '@angular/core';
+import { Injectable, Optional } from '@angular/core';
 import { Subject, Observable } from 'rxjs';
 import { BaseAiProvider, ProviderManager, ProviderInfo, ProviderEvent, HealthStatus } from '../../types/provider.types';
 import { LoggerService } from './logger.service';
+import { RequestLogService } from './request-log.service';
 
 /**
  * 健康Check cache项
@@ -30,7 +31,10 @@ export class AiProviderManagerService implements ProviderManager {
     // 正在进行的健康检查（防止并发重复检查）
     private pendingHealthChecks = new Map<string, Promise<HealthStatus>>();
 
-    constructor(private logger: LoggerService) {}
+    constructor(
+        private logger: LoggerService,
+        @Optional() private requestLog?: RequestLogService,
+    ) {}
 
     /**
      * 注册AI提供商
@@ -38,6 +42,14 @@ export class AiProviderManagerService implements ProviderManager {
     registerProvider(provider: BaseAiProvider, setAsActiveIfFirst: boolean = false): void {
         if (this.providers.has(provider.name)) {
             this.logger.warn(`Provider ${provider.name} is already registered, replacing...`);
+        }
+
+        // Inject the persistent request-log sink so the BaseAiProvider's
+        // logRequest/logResponse/logError hooks land entries on disk for
+        // support-debug exports. Setter pattern keeps the BaseAiProvider
+        // constructor signature stable across the 13 subclasses.
+        if (this.requestLog && typeof (provider as any).setRequestLog === 'function') {
+            (provider as any).setRequestLog(this.requestLog);
         }
 
         this.providers.set(provider.name, provider);

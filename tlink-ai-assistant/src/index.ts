@@ -21,6 +21,7 @@ import { AiAssistantService } from './services/core/ai-assistant.service';
 import { AiProviderManagerService } from './services/core/ai-provider-manager.service';
 import { ConfigProviderService } from './services/core/config-provider.service';
 import { LoggerService } from './services/core/logger.service';
+import { RequestLogService } from './services/core/request-log.service';
 
 // Providers
 import { BaseAiProvider } from './services/providers/base-provider.service';
@@ -127,6 +128,7 @@ import { AiAssistantCLIHandler } from './cli';
         AiProviderManagerService,
         ConfigProviderService,
         LoggerService,
+        RequestLogService,
 
         // i18n Services
         TranslateService,

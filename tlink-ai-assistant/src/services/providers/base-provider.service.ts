@@ -1,10 +1,11 @@
-import { Injectable } from '@angular/core';
+import { Injectable, Optional } from '@angular/core';
 import { Observable, of } from 'rxjs';
 import { IBaseAiProvider, ProviderConfig, AuthConfig, ProviderCapability, HealthStatus, ValidationResult, ProviderInfo, PROVIDER_DEFAULTS } from '../../types/provider.types';
 import { ChatRequest, ChatResponse, CommandRequest, CommandResponse, ExplainRequest, ExplainResponse, AnalysisRequest, AnalysisResponse, StreamEvent, MessageRole } from '../../types/ai.types';
 import { LoggerService } from '../core/logger.service';
 import { scrubSecrets, scrubSecretString } from '../security/secret-scrubber';
 import { CircuitBreaker, CircuitBreakerSnapshot, CircuitOpenError } from './circuit-breaker';
+import { RequestLogService } from '../core/request-log.service';
 
 /**
  * 基础AI提供商抽象类
@@ -29,7 +30,26 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
      */
     protected readonly breaker = new CircuitBreaker();
 
+    /**
+     * Persistent request-log sink. Optional — providers that don't have
+     * it set still log to console via the LoggerService below; this is
+     * an additional persistent channel for support-debug exports. Set
+     * post-construction via `setRequestLog` (the provider manager wires
+     * it up so subclasses don't have to touch their constructors).
+     */
+    protected requestLog?: RequestLogService
+
     constructor(protected logger: LoggerService) {}
+
+    /**
+     * Inject the persistent request-log sink. Called once after DI
+     * construction by AiProviderManagerService — keeps the BaseAiProvider
+     * constructor signature stable so the 13 subclasses don't need
+     * touched.
+     */
+    setRequestLog (requestLog: RequestLogService): void {
+        this.requestLog = requestLog;
+    }
 
     /**
      * 配置提供商
@@ -415,18 +435,33 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
      * 记录请求
      */
     protected logRequest(request: any): void {
-        this.logger.debug(`[${this.name}] Request`, {
-            request: this.sanitizeRequest(request)
-        });
+        const sanitized = this.sanitizeRequest(request);
+        this.logger.debug(`[${this.name}] Request`, { request: sanitized });
+        // Fire-and-forget — the persistent log shouldn't gate the
+        // request path on its own success. The service does its own
+        // scrub-at-write (defensive) so even if `sanitized` somehow
+        // missed something, the on-disk store is still safe.
+        this.requestLog?.record({
+            timestamp: Date.now(),
+            provider: this.name,
+            kind: 'request',
+            label: this.kindOf(request),
+            payload: sanitized,
+        }).catch(() => { /* logging is best-effort */ });
     }
 
     /**
      * 记录响应
      */
     protected logResponse(response: any): void {
-        this.logger.debug(`[${this.name}] Response`, {
-            response: this.sanitizeResponse(response)
-        });
+        const sanitized = this.sanitizeResponse(response);
+        this.logger.debug(`[${this.name}] Response`, { response: sanitized });
+        this.requestLog?.record({
+            timestamp: Date.now(),
+            provider: this.name,
+            kind: 'response',
+            payload: sanitized,
+        }).catch(() => { /* logging is best-effort */ });
     }
 
     /**
@@ -438,11 +473,33 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
         // rather than maintaining a parallel narrower copy here. The
         // shared one covers Groq, xAI, HuggingFace, Replicate, JWTs, etc.
         // — everything the providers under this base class talk to.
-        this.logger.error(`[${this.name}] Error`, {
+        const scrubbed = {
             error: scrubSecretString(raw),
             stack: error instanceof Error ? scrubSecretString(error.stack ?? '') : undefined,
-            context
-        });
+            context,
+        };
+        this.logger.error(`[${this.name}] Error`, scrubbed);
+        this.requestLog?.record({
+            timestamp: Date.now(),
+            provider: this.name,
+            kind: 'error',
+            payload: scrubbed,
+        }).catch(() => { /* logging is best-effort */ });
+    }
+
+    /**
+     * Best-effort label for a request — a short string like "chat",
+     * "chatStream", "generateCommand". Used in the persistent log so a
+     * dev scanning the export can filter by request type. Falls back
+     * to "unknown" when we can't tell — better that than nothing.
+     */
+    private kindOf(request: any): string | undefined {
+        if (!request || typeof request !== 'object') return undefined;
+        if (Array.isArray((request as any).messages)) return 'chat';
+        if ((request as any).command) return 'explainCommand';
+        if ((request as any).prompt) return 'generateCommand';
+        if ((request as any).result) return 'analyzeResult';
+        return undefined;
     }
 
     /**
