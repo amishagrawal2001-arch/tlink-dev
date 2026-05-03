@@ -478,6 +478,31 @@ export class TlinkLicenseService implements OnDestroy {
                 return this.licenseStatus
             }
 
+            // Past 48h grace, BUT a paid user inside their subscription period
+            // shouldn't be kicked out for transient unreachability. Their
+            // endDate IS the local validity boundary — that's what they paid
+            // for. Stay active in offline-grace mode and let the heartbeat
+            // keep retrying in the background; server-side revocations will
+            // propagate the next time we successfully reach the server.
+            // Only applies when the server was UNREACHABLE (envelope === null).
+            // An explicit revocation envelope still goes through the hard-stop
+            // path below.
+            if (!envelope && this.isPaidWithinSubscription()) {
+                // eslint-disable-next-line no-console
+                console.warn('%c[license:bootstrap] past 48h grace BUT paid + within endDate — staying active',
+                    'color:#f59e0b;font-weight:700',
+                    {
+                        endDate: this.endDate,
+                        lastServerContactAt: this.lastServerContactAt?.toISOString() ?? null,
+                        gracePeriodHours: this.config.gracePeriodHours,
+                    })
+                this.offlineGrace = true
+                this.licenseStatus = 'active'
+                this.emit()
+                this.startHeartbeat()
+                return this.licenseStatus
+            }
+
             // Grace expired AND server either unreachable or said INVALID.
             // A known-paid user doesn't fall back to trial — that would be the
             // same loophole we already closed on sign-out. Go straight to the
@@ -1404,6 +1429,30 @@ export class TlinkLicenseService implements OnDestroy {
         return ageHours <= this.config.gracePeriodHours
     }
 
+    /**
+     * True for a paid (non-trial) user whose subscription `endDate` is
+     * still in the future. For these users, `endDate` itself IS the
+     * local validity boundary — server unreachability shouldn't kick
+     * them out partway through a paid period. The 48h `gracePeriodHours`
+     * window only governs how long we suppress the OFFLINE GRACE banner;
+     * this method governs whether we hard-block at all.
+     *
+     * Server-side revocations (SEAT_REVOKED, DEVICE_LIMIT_REACHED, etc.)
+     * still take effect the next time the device successfully contacts
+     * the server. Until then the cached state stands — the same
+     * tradeoff as any offline-tolerant system.
+     */
+    private isPaidWithinSubscription (): boolean {
+        if (this.billingType !== 'PAID') {return false}
+        if (this.isLocalTrial) {return false}
+        if (!this.endDate) {return false}
+        // endDate is YYYY-MM-DD; compare as midnight UTC. Add a 24h cushion
+        // so the user keeps working through the last day of their period.
+        const endMs = Date.parse(`${this.endDate}T23:59:59Z`)
+        if (!Number.isFinite(endMs)) {return false}
+        return Date.now() <= endMs
+    }
+
     private humanReason (code: ReasonCode): string {
         switch (code) {
             case 'INVALID_CREDENTIALS': return 'Incorrect email or password.'
@@ -1599,18 +1648,26 @@ export class TlinkLicenseService implements OnDestroy {
                     serverUrl: this.serverUrl,
                     heartbeatUrl: this.licenseEndpoint('heartbeat'),
                 })
-            if (withinGrace && overFailureThreshold) {
-                // Sustained unreachability AND still within grace window →
-                // flag the session as "offline-but-still-valid" so the UI
-                // can communicate the situation. Below threshold we stay
-                // silent: the license remains active locally and a single
+            const paidWithinSubscription = this.isPaidWithinSubscription()
+            if ((withinGrace || paidWithinSubscription) && overFailureThreshold) {
+                // Sustained unreachability AND we have a reason to keep
+                // trusting the cached state (either the 48h network grace
+                // is intact, OR this is a paid user still within their
+                // subscription endDate). Flip the offline-grace banner so
+                // the UI communicates "we haven't reached the server in a
+                // while" without kicking the user out.
+                //
+                // Below the failure threshold we stay silent: a single
                 // network blip shouldn't trigger an alarm.
                 if (!this.offlineGrace) {
                     this.offlineGrace = true
                     this.emit()
                 }
-            } else if (!withinGrace && this.lastServerContactAt) {
-                // Beyond grace — hard-block.
+            } else if (!withinGrace && !paidWithinSubscription && this.lastServerContactAt) {
+                // Beyond 48h grace AND not protected by a paid endDate
+                // → hard-block. (Trial users hit this; paid users within
+                // their subscription period stay on the offlineGrace
+                // path above and never get here.)
                 // eslint-disable-next-line no-console
                 console.error('[license:heartbeat] beyond grace window — clearing session')
                 await this.handleInvalid(null)
