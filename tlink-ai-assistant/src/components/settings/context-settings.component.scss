@@ -1,9 +1,12 @@
+/* Context Settings — compact pass.
+   Aligns with the rest of the AI Assistant settings density: tighter
+   sections, smaller form controls, slimmer action buttons. */
 .context-settings {
     max-width: 800px;
 
     h3 {
-        margin: 0 0 1.5rem 0;
-        font-size: 1.25rem;
+        margin: 0 0 0.875rem 0;
+        font-size: 1.05rem;
         font-weight: 600;
         color: var(--ai-text-primary);
     }
@@ -12,66 +15,69 @@
 .provider-context-info {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 12px;
+    gap: 6px;
+    padding: 6px 10px;
     background: var(--ai-bg-tertiary, #f0f4f8);
     border: 1px solid var(--ai-primary, #3b82f6);
-    border-radius: 8px;
-    margin-bottom: 16px;
-    font-size: 0.9em;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    font-size: 0.8rem;
     color: var(--ai-text-secondary, #64748b);
 
     i {
         color: var(--ai-primary, #3b82f6);
-        font-size: 1.1em;
+        font-size: 0.9rem;
     }
 }
 
 .setting-section {
-    margin-bottom: 24px;
-    padding: 16px;
+    margin-bottom: 12px;
+    padding: 0.875rem 1rem;
     background: var(--ai-bg-secondary);
     border: 1px solid var(--ai-border);
-    border-radius: 12px;
+    border-radius: 8px;
 
     .section-header h4 {
-        margin: 0 0 16px 0;
-        font-size: 16px;
+        margin: 0 0 0.625rem 0;
+        font-size: 0.95rem;
         font-weight: 600;
         color: var(--ai-text-primary);
     }
 }
 
 .setting-item {
-    margin-bottom: 16px;
+    margin-bottom: 0.75rem;
 
     label {
         display: block;
         font-weight: 500;
-        margin-bottom: 6px;
+        margin-bottom: 0.3rem;
+        font-size: 0.85rem;
         color: var(--ai-text-primary);
     }
 
     .setting-desc {
-        font-size: 0.85em;
+        font-size: 0.75rem;
         color: var(--ai-text-secondary);
-        margin-top: 4px;
+        margin-top: 0.2rem;
         margin-bottom: 0;
+        opacity: 0.85;
     }
 
     .form-control, .form-range {
         width: 100%;
-        max-width: 300px;
-        padding: 8px 12px;
+        max-width: 280px;
+        padding: 0.4rem 0.625rem;
         border: 1px solid var(--ai-border);
-        border-radius: 8px;
+        border-radius: 6px;
         background: var(--ai-bg-primary);
         color: var(--ai-text-primary);
+        font-size: 13px;
     }
 
     .form-range {
         padding: 0;
-        height: 6px;
+        height: 5px;
         cursor: pointer;
     }
 }
@@ -79,11 +85,11 @@
 .toggle-switch {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
 
     input[type="checkbox"] {
-        width: 18px;
-        height: 18px;
+        width: 16px;
+        height: 16px;
         accent-color: var(--ai-primary);
         cursor: pointer;
     }
@@ -91,43 +97,38 @@
     label {
         margin: 0;
         font-weight: normal;
+        font-size: 0.85rem;
         cursor: pointer;
     }
 }
 
 .form-actions {
     display: flex;
-    gap: 12px;
-    margin-top: 24px;
+    gap: 0.5rem;
+    margin-top: 1rem;
 
     .btn {
-        padding: 10px 20px;
+        padding: 0.4rem 1rem;
         border: none;
-        border-radius: 8px;
+        border-radius: 6px;
         cursor: pointer;
         display: inline-flex;
         align-items: center;
-        gap: 8px;
-        font-size: 14px;
+        gap: 6px;
+        font-size: 0.85rem;
         font-weight: 500;
-        transition: all 0.2s;
+        transition: background-color 0.15s, color 0.15s;
 
         &.btn-primary {
             background-color: var(--ai-primary);
             color: white;
-
-            &:hover {
-                background-color: var(--ai-primary-hover);
-            }
+            &:hover { background-color: var(--ai-primary-hover); }
         }
 
         &.btn-secondary {
             background-color: var(--ai-secondary);
             color: white;
-
-            &:hover {
-                filter: brightness(0.9);
-            }
+            &:hover { filter: brightness(0.9); }
         }
     }
 }

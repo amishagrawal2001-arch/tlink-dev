@@ -214,11 +214,13 @@
     }
 }
 
-/* 卡片内容 */
+/* Card body — tighter padding to match the card-header compact pass.
+   Was 16px outer, now 10px/12px. Removed the slide-down animation
+   since the card-header click is already an instant state change;
+   the animation made the panel feel laggy by ~300ms. */
 .card-body {
-    padding: 0 16px 16px;
+    padding: 0 12px 12px;
     border-top: 1px solid var(--ai-border);
-    animation: slideDown 0.3s ease;
 }
 
 @keyframes slideDown {
@@ -232,9 +234,9 @@
     }
 }
 
-/* 配置表单 */
+/* Config form (inside expanded provider card) */
 .config-form {
-    padding-top: 16px;
+    padding-top: 10px;
 
     .doc-link {
         display: inline-flex;
@@ -538,45 +540,46 @@
     .form-row {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 16px;
-        margin-bottom: 16px;
+        gap: 10px;
+        margin-bottom: 10px;
     }
 
     .form-group {
-        margin-bottom: 16px;
+        margin-bottom: 10px;
 
         label {
             display: block;
             font-weight: 500;
-            margin-bottom: 6px;
+            margin-bottom: 4px;
             color: var(--ai-text-primary);
-            font-size: 0.875rem;
+            font-size: 0.8rem;
 
             .required {
                 color: var(--ai-danger);
-                margin-left: 4px;
+                margin-left: 3px;
             }
         }
 
         .form-control {
             width: 100%;
-            padding: 10px 12px;
+            padding: 0.4rem 0.625rem;
             border: 1px solid var(--ai-border);
-            border-radius: 8px;
+            border-radius: 6px;
             background-color: var(--ai-bg-primary);
             color: var(--ai-text-primary);
-            font-size: 0.875rem;
-            transition: border-color 0.2s, box-shadow 0.2s;
+            font-size: 0.8rem;
+            line-height: 1.4;
+            transition: border-color 0.15s, box-shadow 0.15s;
 
             &:focus {
                 outline: none;
                 border-color: var(--ai-primary);
-                box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15);
+                box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.18);
             }
 
             &::placeholder {
                 color: var(--ai-text-secondary);
-                opacity: 0.6;
+                opacity: 0.55;
             }
         }
     }
@@ -584,40 +587,40 @@
     .toggle-switch {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 6px;
 
         input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
+            width: 16px;
+            height: 16px;
             accent-color: var(--ai-primary);
         }
 
         label {
             margin: 0;
             font-weight: normal;
-            font-size: 14px;
+            font-size: 0.8rem;
         }
     }
 }
 
-/* 操作按钮 */
+/* Form action footer — match the rest of the AI settings density. */
 .form-actions {
     display: flex;
-    gap: 12px;
-    margin-top: 20px;
-    padding-top: 16px;
+    gap: 0.5rem;
+    margin-top: 0.875rem;
+    padding-top: 0.625rem;
     border-top: 1px solid var(--ai-border);
 
     .btn {
-        padding: 10px 20px;
+        padding: 0.4rem 1rem;
         border: none;
-        border-radius: 8px;
+        border-radius: 6px;
         cursor: pointer;
-        transition: all 0.2s;
+        transition: background-color 0.15s, color 0.15s, border-color 0.15s;
         display: inline-flex;
         align-items: center;
-        gap: 8px;
-        font-size: 14px;
+        gap: 6px;
+        font-size: 0.8rem;
         font-weight: 500;
 
         &.btn-primary {
