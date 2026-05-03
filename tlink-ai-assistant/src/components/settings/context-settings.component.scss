@@ -30,18 +30,28 @@
     }
 }
 
+/* Context settings — flat-section compact pass to match
+   general-settings + chat-settings rhythm. Was card-style
+   (background + border + 0.875rem padding); now flat horizontal
+   slices with eyebrow-cap h4 + 1px top divider. */
 .setting-section {
-    margin-bottom: 12px;
-    padding: 0.875rem 1rem;
-    background: var(--ai-bg-secondary);
-    border: 1px solid var(--ai-border);
-    border-radius: 8px;
+    padding: 0.5rem 0 0.75rem;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+
+    & + .setting-section {
+        border-top: 1px solid var(--ai-border);
+    }
 
     .section-header h4 {
-        margin: 0 0 0.625rem 0;
-        font-size: 0.95rem;
-        font-weight: 600;
-        color: var(--ai-text-primary);
+        margin: 0 0 0.5rem 0;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: var(--ai-text-secondary);
+        opacity: 0.85;
     }
 }
 

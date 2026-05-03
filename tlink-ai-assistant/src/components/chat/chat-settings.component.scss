@@ -1,33 +1,37 @@
-/* Chat Settings — compact pass.
-   Same density target as the other AI settings tabs: ~30% less air,
-   sharper hierarchy, no animation bling on what's a config tree. */
+/* Chat Settings — flat-section compact pass.
+   Was 4-stacked cards (background + border + radius + 0.875rem
+   padding). Now flat horizontal slices with eyebrow-cap headings and
+   1px top dividers — same pattern as general-settings, consistent
+   visual rhythm across all AI Assistant settings tabs. */
 .chat-settings {
     padding: 0;
     max-width: 900px;
 
     h3 {
-        margin: 0 0 0.875rem 0;
+        margin: 0 0 0.5rem 0;
         font-size: 1.05rem;
         font-weight: 600;
         color: var(--ai-text-primary);
     }
 
     .settings-section {
-        margin-bottom: 1rem;
-        padding: 0.875rem 1rem;
-        background-color: var(--ai-bg-secondary);
-        border-radius: 8px;
-        border: 1px solid var(--ai-border);
+        padding: 0.5rem 0 0.75rem;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
 
-        &:last-child {
-            border-bottom: none;
+        & + .settings-section {
+            border-top: 1px solid var(--ai-border);
         }
 
         h4 {
-            margin: 0 0 0.625rem 0;
-            font-size: 0.95rem;
-            font-weight: 600;
-            color: var(--ai-text-primary);
+            margin: 0 0 0.5rem 0;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: var(--ai-text-secondary);
+            opacity: 0.85;
         }
 
         .form-group {
