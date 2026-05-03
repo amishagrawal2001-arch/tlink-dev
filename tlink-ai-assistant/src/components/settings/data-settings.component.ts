@@ -42,22 +42,22 @@ export interface DataFileInfo {
 
         .description {
             color: var(--text-secondary);
-            margin-bottom: 12px;
+            margin-bottom: 8px;
             font-size: 0.85rem;
         }
 
         .data-location {
             background: var(--background-secondary);
-            padding: 10px 12px;
+            padding: 6px 10px;
             border-radius: 8px;
-            margin-bottom: 12px;
+            margin-bottom: 8px;
         }
 
         .info-row {
             display: flex;
             align-items: center;
             gap: 12px;
-            margin-bottom: 12px;
+            margin-bottom: 8px;
         }
 
         .info-row label {
@@ -75,7 +75,7 @@ export interface DataFileInfo {
         }
 
         .data-files {
-            margin-bottom: 12px;
+            margin-bottom: 8px;
         }
 
         .data-files h4 {
@@ -131,7 +131,7 @@ export interface DataFileInfo {
         }
 
         .data-statistics {
-            margin-bottom: 12px;
+            margin-bottom: 8px;
         }
 
         .data-statistics h4 {
@@ -152,8 +152,8 @@ export interface DataFileInfo {
 
         .stat-item {
             background: var(--background-secondary);
-            padding: 10px;
-            border-radius: 8px;
+            padding: 6px 8px;
+            border-radius: 6px;
             text-align: center;
         }
 
