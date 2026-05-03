@@ -503,14 +503,21 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
             if (this.frontendIsReady) {
                 this.write(`\r${colors.black.bgWhite(' SSH ')} ${msg}\r\n`)
             }
-            if (this.size.columns && this.size.rows) {
+            // `this.size` is only populated after the frontend mounts +
+            // measures itself; during session-startup it can still be
+            // undefined. Lint flagged the optional chain as redundant
+            // because the *type* is non-optional, but runtime says
+            // otherwise — keep the guard.
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+            if (this.size?.columns && this.size?.rows) {
                 session.resize(this.size.columns, this.size.rows)
             }
         })
 
         await session.start()
 
-        if (this.size.columns && this.size.rows) {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (this.size?.columns && this.size?.rows) {
             this.session?.resize(this.size.columns, this.size.rows)
         }
     }
