@@ -5,6 +5,9 @@ import { ChatMessage, MessageRole, StreamEvent, AgentStreamEvent } from '../../t
 import { AiProviderManagerService } from '../../services/core/ai-provider-manager.service';
 import { UsageAggregatorService, UsageAggregate } from '../../services/core/usage-aggregator.service';
 import { formatCost } from '../../utils/cost.utils';
+import { renderChatMarkdown } from '../../utils/markdown.utils';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { TerminalManagerService } from '../../services/terminal/terminal-manager.service';
 import { AiAssistantService } from '../../services/core/ai-assistant.service';
 import { ConfigProviderService } from '../../services/core/config-provider.service';
 import { LoggerService } from '../../services/core/logger.service';
@@ -64,6 +67,9 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
         private toolStreamProcessor: ToolStreamProcessorService,
         private providerManager: AiProviderManagerService,
         private usageAggregator: UsageAggregatorService,
+        private sanitizer: DomSanitizer,
+        private terminalManager: TerminalManagerService,
+        private elementRef: ElementRef<HTMLElement>,
     ) {
         this.t = this.translate.t;
     }
@@ -102,6 +108,155 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
         this.isLoading = false;
         this.activeAbortController = null;
         this.saveChatHistory();
+    }
+
+    /**
+     * Memoized rendered-HTML cache, keyed by message id. Recomputed
+     * when the underlying message.content changes (streaming AI
+     * responses). Cheap (marked is fast) but caching avoids
+     * re-parsing the same string on every CD pass.
+     */
+    private renderedHtmlCache = new Map<string, { content: string; html: SafeHtml }>();
+    /** Tracker for ngAfterViewChecked: which messages have already
+     *  had code-action toolbars wired up. */
+    private codeActionsAttachedFor = new Map<string, string>();
+
+    /**
+     * Render an AI message's content as sanitized markdown HTML.
+     * Used by the [innerHTML] binding on the AI message div in the
+     * template. Memoized per-message so streaming re-renders only on
+     * actual content change.
+     */
+    getMarkdownHtml(message: ChatMessage): SafeHtml {
+        return this.renderMarkdownCached(message.id, message.content || '');
+    }
+
+    /**
+     * Render an arbitrary block's text content as markdown — used
+     * for agent-loop uiBlocks of type='text' which carry partial
+     * messages. Cache key is `${messageId}-text-${blockIndex}` if
+     * the caller provides a unique id, otherwise `${messageId}-text`.
+     */
+    getMarkdownHtmlForBlock(messageId: string, content: string): SafeHtml {
+        return this.renderMarkdownCached(messageId + '-text', content);
+    }
+
+    private renderMarkdownCached(cacheKey: string, content: string): SafeHtml {
+        const cached = this.renderedHtmlCache.get(cacheKey);
+        if (cached && cached.content === content) {
+            return cached.html;
+        }
+        const html = renderChatMarkdown(content);
+        const safe = this.sanitizer.bypassSecurityTrustHtml(html);
+        this.renderedHtmlCache.set(cacheKey, { content, html: safe });
+        // New render → re-attach code-action toolbars on next CD pass.
+        this.codeActionsAttachedFor.delete(cacheKey);
+        return safe;
+    }
+
+    /**
+     * After Angular paints, walk freshly-rendered AI messages and
+     * inject the Copy / Run / Save toolbar onto each .code-block-
+     * wrapper. Idempotent — keyed by (messageId, content) so a
+     * subsequent CD pass over the same DOM doesn't double-wire.
+     * Called from the existing ngAfterViewChecked hook below.
+     */
+    private attachCodeActionsToMessages(): void {
+        const root = this.elementRef.nativeElement;
+        for (const message of this.messages) {
+            if (message.role !== MessageRole.ASSISTANT) continue;
+            const lastAttached = this.codeActionsAttachedFor.get(message.id);
+            if (lastAttached === message.content) continue;
+            const messageEl = root.querySelector<HTMLElement>(`[data-message-id="${message.id}"]`);
+            if (!messageEl) continue;
+            const wrappers = messageEl.querySelectorAll<HTMLElement>('.code-block-wrapper:not([data-actions-attached])');
+            wrappers.forEach(w => this.attachCodeActions(w));
+            this.codeActionsAttachedFor.set(message.id, message.content || '');
+        }
+    }
+
+    private attachCodeActions(wrapper: HTMLElement): void {
+        wrapper.setAttribute('data-actions-attached', 'true');
+        const lang = wrapper.getAttribute('data-lang') || 'text';
+        const codeEl = wrapper.querySelector('code');
+        if (!codeEl) return;
+
+        const toolbar = document.createElement('div');
+        toolbar.className = 'code-block-actions';
+        toolbar.innerHTML = `
+            <span class="code-block-lang">${lang.replace(/[<>"]/g, '')}</span>
+            <button class="code-block-btn code-block-copy" type="button" title="Copy code">
+                <i class="fa fa-copy"></i> Copy
+            </button>
+            <button class="code-block-btn code-block-run" type="button" title="Run in active terminal">
+                <i class="fa fa-terminal"></i> Run
+            </button>
+            <button class="code-block-btn code-block-save" type="button" title="Save as file">
+                <i class="fa fa-download"></i> Save
+            </button>
+        `;
+        wrapper.insertBefore(toolbar, wrapper.firstChild);
+
+        const code = codeEl.textContent || '';
+        toolbar.querySelector('.code-block-copy')?.addEventListener('click', e => {
+            e.stopPropagation();
+            this.copyCodeToClipboard(code);
+        });
+        toolbar.querySelector('.code-block-run')?.addEventListener('click', e => {
+            e.stopPropagation();
+            this.runCodeInActiveTerminal(code);
+        });
+        toolbar.querySelector('.code-block-save')?.addEventListener('click', e => {
+            e.stopPropagation();
+            this.saveCodeAsFile(code, lang);
+        });
+    }
+
+    private async copyCodeToClipboard(code: string): Promise<void> {
+        try {
+            await navigator.clipboard.writeText(code);
+            this.logger.info('Code block copied to clipboard');
+        } catch (e) {
+            this.logger.warn('Code block copy failed', { error: e });
+        }
+    }
+
+    private runCodeInActiveTerminal(code: string): void {
+        try {
+            // Don't auto-execute (execute=false) — paste the code into
+            // the terminal so the user can review + hit Enter manually.
+            // Multi-line snippets with $() / heredocs / shebangs would
+            // be dangerous to auto-run unattended.
+            const ok = this.terminalManager.sendCommand(code, false);
+            if (!ok) {
+                this.logger.warn('No active terminal — code not sent');
+            }
+        } catch (e) {
+            this.logger.error('runCodeInActiveTerminal failed', e);
+        }
+    }
+
+    private saveCodeAsFile(code: string, lang: string): void {
+        const ext = this.langToExtension(lang);
+        const blob = new Blob([code], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `snippet-${new Date().toISOString().replace(/[:.]/g, '-')}.${ext}`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    private langToExtension(lang: string): string {
+        const map: Record<string, string> = {
+            javascript: 'js', typescript: 'ts', python: 'py', bash: 'sh',
+            shell: 'sh', sh: 'sh', zsh: 'sh', html: 'html', css: 'css',
+            scss: 'scss', json: 'json', yaml: 'yaml', yml: 'yml',
+            xml: 'xml', sql: 'sql', go: 'go', rust: 'rs', ruby: 'rb',
+            java: 'java', kotlin: 'kt', swift: 'swift', php: 'php',
+            cpp: 'cpp', c: 'c', csharp: 'cs', markdown: 'md', md: 'md',
+        };
+        return map[lang.toLowerCase()] || 'txt';
     }
 
     /**
@@ -244,6 +399,10 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
             this.performScrollToBottom();
             this.shouldScrollToBottom = false;
         }
+        // Wire Copy/Run/Save toolbars onto any newly-rendered code
+        // blocks. Idempotent + cheap — early-outs when the cache
+        // matches, so steady-state CD passes do nothing here.
+        this.attachCodeActionsToMessages();
     }
 
     /**

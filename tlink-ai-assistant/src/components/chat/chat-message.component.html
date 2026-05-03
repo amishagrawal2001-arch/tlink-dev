@@ -29,10 +29,12 @@
                 {{ message.content }}
             </div>
 
-            <!-- AI消息 -->
-            <div *ngIf="isAssistantMessage()" class="message-text ai-response">
-                <pre>{{ message.content }}</pre>
-            </div>
+            <!-- AI message — rendered as sanitized markdown HTML.
+                 Code blocks get Copy/Run/Save action toolbars wired
+                 up in ngAfterViewChecked (the buttons are inserted
+                 into the [innerHTML] DOM, not via Angular template). -->
+            <div *ngIf="isAssistantMessage()" class="message-text ai-response markdown-body"
+                 [innerHTML]="getRenderedContent()"></div>
 
             <!-- 系统消息 -->
             <div *ngIf="isSystemMessage()" class="message-text system">

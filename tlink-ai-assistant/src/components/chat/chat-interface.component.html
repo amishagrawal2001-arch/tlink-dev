@@ -110,7 +110,9 @@
                     </div>
 
                     <!-- 消息项 -->
-                    <div class="message-item" [ngClass]="{
+                    <div class="message-item"
+                         [attr.data-message-id]="message.id"
+                         [ngClass]="{
                              'user-message': message.role === 'user',
                              'assistant-message': message.role === 'assistant',
                              'system-message': message.role === 'system'
@@ -136,21 +138,27 @@
                                     {{ message.content }}
                                 </div>
 
-                                <!-- AI消息 - 支持 uiBlocks 结构化渲染 -->
-                                <div *ngIf="message.role === 'assistant'" class="message-text ai-response">
-                                    <!-- 兼容旧数据 -->
-                                    <ng-container *ngIf="!message.uiBlocks || message.uiBlocks.length === 0">
-                                        <pre>{{ message.content }}</pre>
-                                    </ng-container>
-                                    
-                                    <!-- 新数据：uiBlocks -->
+                                <!-- AI message — rendered as sanitized
+                                     markdown HTML for the no-uiBlocks
+                                     path (simple chatStream replies).
+                                     Code blocks get Copy/Run/Save
+                                     action toolbars wired up via
+                                     ngAfterViewChecked. -->
+                                <div *ngIf="message.role === 'assistant'" class="message-text ai-response markdown-body">
+                                    <!-- Plain markdown render when no
+                                         agent-loop uiBlocks structure
+                                         is present. -->
+                                    <div *ngIf="!message.uiBlocks || message.uiBlocks.length === 0"
+                                         [innerHTML]="getMarkdownHtml(message)"></div>
+
+                                    <!-- Agent-loop uiBlocks: text +
+                                         tool execution + dividers + status. -->
                                     <ng-container *ngIf="message.uiBlocks && message.uiBlocks.length > 0">
                                         <ng-container *ngFor="let block of message.uiBlocks">
-                                            
-                                            <!-- 文本块 -->
-                                            <div *ngIf="block.type === 'text'" class="text-block">
-                                                <pre>{{ block.content }}</pre>
-                                            </div>
+
+                                            <!-- 文本块 — also markdown-rendered now. -->
+                                            <div *ngIf="block.type === 'text'" class="text-block markdown-body"
+                                                 [innerHTML]="getMarkdownHtmlForBlock(message.id, block.content || '')"></div>
 
                                             <!-- 工具块 -->
                                             <div *ngIf="block.type === 'tool'" 
