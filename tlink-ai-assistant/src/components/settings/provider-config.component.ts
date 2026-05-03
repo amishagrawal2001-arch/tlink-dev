@@ -7,7 +7,9 @@ import { LoggerService } from '../../services/core/logger.service';
 import { ToastService } from '../../services/core/toast.service';
 import { TranslateService } from '../../i18n';
 import { AiAssistantService } from '../../services/core/ai-assistant.service';
+import { AiProviderManagerService } from '../../services/core/ai-provider-manager.service';
 import { OllamaModelService, OllamaModel, ModelPullProgress } from '../../services/ollama/ollama-model.service';
+import { CircuitBreakerSnapshot } from '../../services/providers/circuit-breaker';
 import { DocViewerComponent } from '../doc-viewer/doc-viewer.component';
 // Bundled vLLM setup guide — webpack `asset/source` rule imports it as a
 // raw string. Shipping the text inside the plugin bundle means the in-app
@@ -329,9 +331,57 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
         private translate: TranslateService,
         private ollamaModelService: OllamaModelService,
         private aiService: AiAssistantService,
-        private modal: NgbModal
+        private modal: NgbModal,
+        private providerManager: AiProviderManagerService,
     ) {
         this.t = this.translate.t;
+    }
+
+    /**
+     * Read the per-provider circuit-breaker snapshot for UI badges.
+     * Returns null for providers that aren't registered yet (the manager
+     * only knows about providers wired through `registerProvider`).
+     */
+    getBreakerSnapshot(providerName: string): CircuitBreakerSnapshot | null {
+        try {
+            const provider = this.providerManager.getProvider(providerName);
+            if (!provider || typeof (provider as any).getBreakerSnapshot !== 'function') {
+                return null;
+            }
+            return (provider as any).getBreakerSnapshot();
+        } catch {
+            return null;
+        }
+    }
+
+    /** True when a provider's breaker is OPEN — caller renders the badge. */
+    isBreakerOpen(providerName: string): boolean {
+        return this.getBreakerSnapshot(providerName)?.state === 'open';
+    }
+
+    /**
+     * Approximate cooldown remaining in seconds. Cached fields would
+     * require a 1Hz ticker; the snapshot read is cheap so we just
+     * refresh on every render. Floors to the nearest second so the
+     * badge text doesn't flicker every CD pass.
+     */
+    getBreakerCooldownSec(providerName: string): number {
+        const snap = this.getBreakerSnapshot(providerName);
+        if (!snap || snap.state !== 'open') {return 0;}
+        return Math.max(0, Math.ceil(snap.remainingCooldownMs / 1000));
+    }
+
+    /** Manual reset hook — for the "Retry now" button next to the badge. */
+    resetBreaker(providerName: string): void {
+        try {
+            const provider = this.providerManager.getProvider(providerName);
+            if (provider && typeof (provider as any).resetBreaker === 'function') {
+                (provider as any).resetBreaker();
+                this.toast.success(`${providerName}: circuit breaker reset`);
+            }
+        } catch (e) {
+            this.logger.warn('Failed to reset breaker', { provider: providerName, error: e });
+        }
     }
 
     /**

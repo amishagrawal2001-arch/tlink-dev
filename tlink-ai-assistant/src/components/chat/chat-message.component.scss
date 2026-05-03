@@ -166,6 +166,30 @@
         opacity: 0.6;
         padding: 0 0.5rem;
     }
+
+    /* Token-usage footer for AI messages whose provider supplied usage
+       stats. Subtle muted treatment — informational, not visually
+       loud. Hover reveals the prompt/completion split via the [title]
+       attribute on the parent. */
+    .message-usage {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.7rem;
+        opacity: 0.55;
+        padding: 2px 0.5rem 0;
+        font-variant-numeric: tabular-nums;
+
+        i {
+            font-size: 0.65rem;
+            opacity: 0.7;
+        }
+
+        .message-usage-detail {
+            opacity: 0.7;
+            font-size: 0.65rem;
+        }
+    }
 }
 
 /* 响应式设计 */

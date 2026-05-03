@@ -319,6 +319,16 @@
                         <span class="status-badge" [class.active]="configs[providerName]?.enabled">
                             {{ hasConfig(providerName) ? (configs[providerName]?.enabled ? t.common.enabled : t.common.disabled) : t.common.notConfigured }}
                         </span>
+                        <!-- Circuit-breaker badge: surfaces when this
+                             provider's upstream is hard-down. Lets the
+                             user know "I'm not ignoring you, the server
+                             is broken — failing fast for Xs". -->
+                        <span class="breaker-badge" *ngIf="isBreakerOpen(providerName)"
+                              [title]="'Provider unavailable — failing fast. Click to retry now.'"
+                              (click)="resetBreaker(providerName); $event.stopPropagation()">
+                            <i class="fa fa-bolt"></i>
+                            unavailable · retry in {{ getBreakerCooldownSec(providerName) }}s
+                        </span>
                     </div>
                     <div class="expand-icon">
                         <i class="fa" [ngClass]="expandedProvider === providerName ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
@@ -661,6 +671,16 @@
                             <span class="online-status" [style.color]="getLocalStatus(providerName).color">
                                 <i class="fa" [ngClass]="getLocalStatus(providerName).icon"></i>
                                 {{ getLocalStatus(providerName).text }}
+                            </span>
+                            <!-- Circuit-breaker badge — same as cloud
+                                 providers above. Local providers (vLLM,
+                                 ollama) hit this too when the localhost
+                                 server is down. -->
+                            <span class="breaker-badge" *ngIf="isBreakerOpen(providerName)"
+                                  [title]="'Provider unavailable — failing fast. Click to retry now.'"
+                                  (click)="resetBreaker(providerName); $event.stopPropagation()">
+                                <i class="fa fa-bolt"></i>
+                                unavailable · retry in {{ getBreakerCooldownSec(providerName) }}s
                             </span>
                         </div>
                     </div>

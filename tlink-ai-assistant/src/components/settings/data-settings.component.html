@@ -96,6 +96,41 @@
                 </div>
             </div>
 
+            <!-- AI debug log (request-log.service ring buffer) -->
+            <!-- Persistent (IndexedDB) record of recent provider requests
+                 / responses / errors, scrubbed at write time. Designed
+                 for "paste into a bug report" support flows. -->
+            <div class="data-actions" style="margin-top: 24px">
+                <h4>AI debug log</h4>
+                <p class="description" style="margin-bottom: 12px">
+                    Recent AI provider requests, responses, and errors —
+                    scrubbed of API keys, truncated to the most recent
+                    {{ requestLogCount }} entries. Useful when reporting
+                    issues with the AI assistant.
+                </p>
+                <div class="button-group">
+                    <button class="btn btn-primary"
+                            (click)="copyRequestLog()"
+                            [disabled]="requestLogCount === 0">
+                        <span class="icon">📋</span>
+                        Copy AI debug log
+                        <span *ngIf="requestLogCount > 0">({{ requestLogCount }})</span>
+                    </button>
+                    <button class="btn btn-secondary"
+                            (click)="downloadRequestLog()"
+                            [disabled]="requestLogCount === 0">
+                        <span class="icon">💾</span>
+                        Download as file
+                    </button>
+                    <button class="btn btn-danger"
+                            (click)="clearRequestLog()"
+                            [disabled]="requestLogCount === 0">
+                        <span class="icon">🗑️</span>
+                        Clear AI debug log
+                    </button>
+                </div>
+            </div>
+
             <!-- 数据迁移提示 -->
             <div class="migration-note" *ngIf="needsMigration">
                 <div class="note-content">

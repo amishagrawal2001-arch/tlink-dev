@@ -452,7 +452,18 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
                     }
                     // 消息结束
                     else if (event.type === 'message_end') {
-                        this.logger.info('Stream completed');
+                        // Capture usage stats if the provider supplied them
+                        // (OpenAI/Groq with stream_options.include_usage,
+                        // Anthropic via message_delta.usage, etc.). Stored
+                        // on metadata so chat-message.component can render
+                        // a small "237 tokens" footer on the bubble.
+                        if ((event as any).usage) {
+                            aiMessage.metadata = {
+                                ...aiMessage.metadata,
+                                usage: (event as any).usage,
+                            };
+                        }
+                        this.logger.info('Stream completed', { usage: (event as any).usage });
                         this.playNotificationSound();
                         this.shouldScrollToBottom = true;
                     }

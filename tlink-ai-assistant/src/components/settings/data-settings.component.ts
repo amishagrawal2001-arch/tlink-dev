@@ -9,6 +9,7 @@ import { ConfigProviderService } from '../../services/core/config-provider.servi
 import { ConsentManagerService } from '../../services/security/consent-manager.service';
 import { LoggerService } from '../../services/core/logger.service';
 import { ToastService } from '../../services/core/toast.service';
+import { RequestLogService } from '../../services/core/request-log.service';
 
 /**
  * 数据文件信息
@@ -272,6 +273,9 @@ export class DataSettingsComponent implements OnInit, OnDestroy {
     /** 是否需要从 localStorage 迁移 */
     needsMigration = false;
 
+    /** Most recent persisted-log entry count, refreshed on demand. */
+    requestLogCount = 0;
+
     constructor(
         private fileStorage: FileStorageService,
         private memory: Memory,
@@ -280,7 +284,8 @@ export class DataSettingsComponent implements OnInit, OnDestroy {
         private configProvider: ConfigProviderService,
         private consentManager: ConsentManagerService,
         private logger: LoggerService,
-        private toast: ToastService
+        private toast: ToastService,
+        private requestLog: RequestLogService,
     ) {}
 
     ngOnInit(): void {
@@ -288,6 +293,90 @@ export class DataSettingsComponent implements OnInit, OnDestroy {
         this.loadDataFiles();
         this.loadStatistics();
         this.checkMigrationStatus();
+        this.loadRequestLogCount();
+    }
+
+    /**
+     * Load the count of persisted AI debug-log entries. Used to label
+     * the "Copy AI debug log" button so the user can see how many
+     * recent calls are about to land in their bug report.
+     */
+    private async loadRequestLogCount(): Promise<void> {
+        try {
+            const entries = await this.requestLog.recent();
+            this.requestLogCount = entries.length;
+        } catch (e) {
+            this.logger.warn('Failed to read AI request log count', { error: e });
+            this.requestLogCount = 0;
+        }
+    }
+
+    /**
+     * Copy the persisted AI debug log (last N requests / responses /
+     * errors, scrubbed + truncated) to the clipboard as NDJSON.
+     * Designed for the "paste into a bug report" support flow —
+     * users hit the button right after reproducing the issue, paste
+     * into GitHub / Slack / email, and the dev gets a chronological
+     * log of what the providers actually saw.
+     */
+    async copyRequestLog(): Promise<void> {
+        try {
+            const text = await this.requestLog.exportNdjson();
+            if (!text) {
+                this.toast.info('AI debug log is empty');
+                return;
+            }
+            await navigator.clipboard.writeText(text);
+            this.toast.success(`Copied ${this.requestLogCount} AI debug entries to clipboard`);
+            this.logger.info('AI debug log copied to clipboard', { entries: this.requestLogCount });
+        } catch (e) {
+            this.logger.error('Failed to copy AI debug log', e);
+            this.toast.error('Failed to copy AI debug log');
+        }
+    }
+
+    /**
+     * Download the persisted AI debug log as an NDJSON file. For users
+     * whose clipboard refuses to take a multi-MB blob, or who prefer
+     * to attach a file to the bug report rather than paste.
+     */
+    async downloadRequestLog(): Promise<void> {
+        try {
+            const text = await this.requestLog.exportNdjson();
+            if (!text) {
+                this.toast.info('AI debug log is empty');
+                return;
+            }
+            const blob = new Blob([text], { type: 'application/x-ndjson' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `tlink-ai-debug-${new Date().toISOString().replace(/[:.]/g, '-')}.ndjson`;
+            a.click();
+            URL.revokeObjectURL(url);
+            this.toast.success(`Downloaded ${this.requestLogCount} AI debug entries`);
+        } catch (e) {
+            this.logger.error('Failed to download AI debug log', e);
+            this.toast.error('Failed to download AI debug log');
+        }
+    }
+
+    /**
+     * Wipe the persisted AI debug log. Confirms first since the log is
+     * useful for forensics on issues from earlier in the session.
+     */
+    async clearRequestLog(): Promise<void> {
+        if (!confirm('Clear the AI debug log? Recent provider request/response history will be removed.')) {
+            return;
+        }
+        try {
+            await this.requestLog.clear();
+            this.requestLogCount = 0;
+            this.toast.success('AI debug log cleared');
+        } catch (e) {
+            this.logger.error('Failed to clear AI debug log', e);
+            this.toast.error('Failed to clear AI debug log');
+        }
     }
 
     ngOnDestroy(): void {
