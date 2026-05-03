@@ -256,7 +256,7 @@ export class GlmProviderService extends BaseAiProvider {
 
             this.logRequest(request);
 
-            const abortController = new AbortController();
+            const abortController = this.createLinkedAbortController(request.signal);
 
             const runStream = async () => {
                 try {
@@ -336,7 +336,7 @@ export class GlmProviderService extends BaseAiProvider {
 
             let fullContent = '';
 
-            const abortController = new AbortController();
+            const abortController = this.createLinkedAbortController(request.signal);
 
             const runStream = async () => {
                 try {

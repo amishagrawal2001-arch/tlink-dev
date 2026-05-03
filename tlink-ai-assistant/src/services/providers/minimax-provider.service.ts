@@ -130,7 +130,7 @@ export class MinimaxProviderService extends BaseAiProvider {
 
             this.logRequest(request);
 
-            const abortController = new AbortController();
+            const abortController = this.createLinkedAbortController(request.signal);
 
             const runStream = async () => {
                 try {

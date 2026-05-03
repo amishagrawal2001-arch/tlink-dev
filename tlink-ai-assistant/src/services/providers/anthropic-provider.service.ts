@@ -112,8 +112,15 @@ export class AnthropicProviderService extends BaseAiProvider {
 
             const accumulator = new AnthropicToolCallAccumulator();
             let fullContent = '';
+            // Anthropic emits usage in TWO places: `message_start.message.usage`
+            // carries the input-token count; `message_delta.usage` accumulates
+            // the output-token count. We track both and surface a unified
+            // `usage` object on message_end.
+            let promptTokens = 0;
+            let completionTokens = 0;
+            let sawUsage = false;
 
-            const abortController = new AbortController();
+            const abortController = this.createLinkedAbortController(request.signal);
 
             const runStream = async () => {
                 try {
@@ -140,6 +147,21 @@ export class AnthropicProviderService extends BaseAiProvider {
 
                         const eventAny = event as any;
                         this.logger.debug('Stream event', { type: event.type });
+
+                        // Capture token usage from the Anthropic-shaped
+                        // lifecycle. `message_start` carries input_tokens;
+                        // `message_delta.usage` is cumulative output_tokens.
+                        if (event.type === 'message_start' && eventAny.message?.usage) {
+                            promptTokens = eventAny.message.usage.input_tokens ?? 0;
+                            // Anthropic also surfaces an initial output_tokens
+                            // (usually 0 or the first few) on message_start.
+                            completionTokens = eventAny.message.usage.output_tokens ?? completionTokens;
+                            sawUsage = true;
+                        } else if (event.type === 'message_delta' && eventAny.usage) {
+                            // output_tokens here is the running total.
+                            completionTokens = eventAny.usage.output_tokens ?? completionTokens;
+                            sawUsage = true;
+                        }
 
                         // Text deltas — handled inline since they're not part
                         // of the tool-call state machine.
@@ -172,7 +194,14 @@ export class AnthropicProviderService extends BaseAiProvider {
                             role: MessageRole.ASSISTANT,
                             content: fullContent,
                             timestamp: new Date()
-                        }
+                        },
+                        ...(sawUsage ? {
+                            usage: {
+                                promptTokens,
+                                completionTokens,
+                                totalTokens: promptTokens + completionTokens,
+                            }
+                        } : {})
                     });
                     this.logger.debug('Stream event', { type: 'message_end', contentLength: fullContent.length });
                     subscriber.complete();

@@ -189,7 +189,7 @@ export class TabbyProviderService extends BaseAiProvider {
                 return;
             }
 
-            const abortController = new AbortController();
+            const abortController = this.createLinkedAbortController(request.signal);
 
             const runStream = async () => {
                 try {

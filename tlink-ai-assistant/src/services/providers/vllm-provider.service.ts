@@ -1,9 +1,11 @@
 import { Injectable } from '@angular/core';
 import { Observable, Observer } from 'rxjs';
+import axios, { AxiosInstance } from 'axios';
 import { BaseAiProvider } from './base-provider.service';
-import { ProviderCapability, ValidationResult } from '../../types/provider.types';
+import { ProviderCapability, ValidationResult, HealthStatus } from '../../types/provider.types';
 import { ChatRequest, ChatResponse, StreamEvent, MessageRole, CommandRequest, CommandResponse, ExplainRequest, ExplainResponse, AnalysisRequest, AnalysisResponse } from '../../types/ai.types';
 import { LoggerService } from '../core/logger.service';
+import { parseSseStream, OpenAiToolCallAccumulator } from './streaming';
 
 /**
  * vLLM 本地 AI 提供商
@@ -24,9 +26,48 @@ export class VllmProviderService extends BaseAiProvider {
         credentials: { apiKey: '' }
     };
     private modelsWithoutToolSupport = new Set<string>();
+    /**
+     * Lazily-built axios instance. Re-created when `config` changes
+     * (apiKey, baseURL, timeout). The shared transport keeps vLLM
+     * consistent with the other OpenAI-shape providers — same retry
+     * surface, same circuit breaker, same logging hooks.
+     */
+    private client: AxiosInstance | null = null;
 
     constructor(logger: LoggerService) {
         super(logger);
+    }
+
+    configure(config: any): void {
+        super.configure(config);
+        // Force client rebuild on next request — config may have new
+        // baseURL/apiKey/timeout.
+        this.client = null;
+    }
+
+    private getClient(): AxiosInstance {
+        if (this.client) return this.client;
+        this.client = axios.create({
+            baseURL: this.getApiBaseURL(),
+            timeout: this.getTimeout(),
+            headers: this.getAuthHeaders(),
+        });
+        return this.client;
+    }
+
+    /**
+     * Extract a provider-side error message out of an axios error so
+     * the existing tool-fallback heuristic (`isToolUnsupportedError`)
+     * has the same string shape it had under raw fetch.
+     */
+    private extractAxiosErrorText(error: any): { status: number | undefined; text: string } {
+        const status = error?.response?.status as number | undefined;
+        const data = error?.response?.data;
+        if (typeof data === 'string') return { status, text: data };
+        if (data && typeof data === 'object') {
+            return { status, text: data?.error?.message || data?.message || JSON.stringify(data) };
+        }
+        return { status, text: error?.message || String(error) };
     }
 
     /**
@@ -99,19 +140,6 @@ export class VllmProviderService extends BaseAiProvider {
         };
     }
 
-    private async readErrorText(response: Response): Promise<string> {
-        const raw = await response.text().catch(() => '');
-        if (!raw) {
-            return '';
-        }
-        try {
-            const parsed = JSON.parse(raw);
-            return parsed?.error?.message || parsed?.message || raw;
-        } catch {
-            return raw;
-        }
-    }
-
     private isToolUnsupportedError(message: string): boolean {
         const text = (message || '').toLowerCase();
         if (!text.includes('tool')) {
@@ -147,199 +175,125 @@ export class VllmProviderService extends BaseAiProvider {
         this.logRequest(request);
 
         try {
-            const baseURL = this.getApiBaseURL();
-            const response = await fetch(`${baseURL}/chat/completions`, {
-                method: 'POST',
-                headers: this.getAuthHeaders(),
-                body: JSON.stringify(this.buildChatPayload(request, false))
-            });
-
-            if (!response.ok) {
-                const errorText = await this.readErrorText(response);
-                if (response.status === 400 && request.tools?.length && this.isToolUnsupportedError(errorText)) {
-                    const modelName = this.getModelName(request);
-                    this.modelsWithoutToolSupport.add(modelName);
-                    this.logger.warn('vLLM model does not support tools, retrying without tools', {
-                        model: modelName,
-                        errorText: errorText.substring(0, 200)
-                    });
-                    return this.chat({ ...request, tools: undefined });
-                }
-                throw new Error(`vLLM API error: ${response.status}${errorText ? ` - ${errorText}` : ''}`);
+            const result = await this.withRetry(() =>
+                this.getClient().post('/chat/completions', this.buildChatPayload(request, false))
+            );
+            this.logResponse(result.data);
+            return this.transformChatResponse(result.data);
+        } catch (error: any) {
+            // Tool-fallback heuristic: some vLLM-served models 400 when
+            // they're sent a `tools` field they don't understand. Detect
+            // that specific error string and retry once without tools so
+            // the user gets a successful response instead of a hard fail.
+            const { status, text } = this.extractAxiosErrorText(error);
+            if (status === 400 && request.tools?.length && this.isToolUnsupportedError(text)) {
+                const modelName = this.getModelName(request);
+                this.modelsWithoutToolSupport.add(modelName);
+                this.logger.warn('vLLM model does not support tools, retrying without tools', {
+                    model: modelName,
+                    errorText: text.substring(0, 200)
+                });
+                return this.chat({ ...request, tools: undefined });
             }
-
-            const data = await response.json();
-            this.logResponse(data);
-
-            return {
-                message: {
-                    id: this.generateId(),
-                    role: MessageRole.ASSISTANT,
-                    content: data.choices[0]?.message?.content || '',
-                    timestamp: new Date()
-                },
-                usage: data.usage ? {
-                    promptTokens: data.usage.prompt_tokens,
-                    completionTokens: data.usage.completion_tokens,
-                    totalTokens: data.usage.total_tokens
-                } : undefined
-            };
-        } catch (error) {
             this.logError(error, { request });
             throw new Error(`vLLM chat failed: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
 
     /**
+     * Shared OpenAI-shape response → ChatResponse mapping. Used by chat()
+     * and sendTestRequest().
+     */
+    private transformChatResponse(data: any): ChatResponse {
+        return {
+            message: {
+                id: this.generateId(),
+                role: MessageRole.ASSISTANT,
+                content: data.choices?.[0]?.message?.content || '',
+                timestamp: new Date()
+            },
+            usage: data.usage ? {
+                promptTokens: data.usage.prompt_tokens,
+                completionTokens: data.usage.completion_tokens,
+                totalTokens: data.usage.total_tokens
+            } : undefined
+        };
+    }
+
+    /**
      * 流式聊天功能 - 支持工具调用事件
+     *
+     * Now talks to vLLM via the shared axios + parseSseStream +
+     * OpenAiToolCallAccumulator stack — same transport / SSE handling
+     * / tool-call state machine as the other OpenAI-shape providers
+     * (OpenAI, Groq, OpenAI-compatible). Preserves the
+     * "model-doesn't-support-tools → retry without tools" fallback
+     * specific to vLLM.
      */
     chatStream(request: ChatRequest): Observable<StreamEvent> {
         return new Observable<StreamEvent>((subscriber: Observer<StreamEvent>) => {
-            const abortController = new AbortController();
+            const abortController = this.createLinkedAbortController(request.signal);
             let retriedWithoutTools = false;
 
             this.logRequest(request);
 
             const runStream = async (streamRequest: ChatRequest) => {
                 try {
-                    const baseURL = this.getApiBaseURL();
-                    const response = await fetch(`${baseURL}/chat/completions`, {
-                        method: 'POST',
-                        headers: this.getAuthHeaders(),
-                        body: JSON.stringify(this.buildChatPayload(streamRequest, true)),
-                        signal: abortController.signal
-                    });
+                    const response = await this.getClient().post(
+                        '/chat/completions',
+                        this.buildChatPayload(streamRequest, true),
+                        { signal: abortController.signal as any, responseType: 'stream' as any }
+                    );
 
-                    if (!response.ok) {
-                        const errorText = await this.readErrorText(response);
-                        if (!retriedWithoutTools && response.status === 400 && streamRequest.tools?.length && this.isToolUnsupportedError(errorText)) {
-                            retriedWithoutTools = true;
-                            const modelName = this.getModelName(streamRequest);
-                            this.modelsWithoutToolSupport.add(modelName);
-                            this.logger.warn('vLLM model does not support tools, retrying stream without tools', {
-                                model: modelName,
-                                errorText: errorText.substring(0, 200)
-                            });
-                            await runStream({ ...streamRequest, tools: undefined });
-                            return;
-                        }
-                        throw new Error(`vLLM API error: ${response.status}${errorText ? ` - ${errorText}` : ''}`);
-                    }
-
-                    const reader = response.body?.getReader();
-                    const decoder = new TextDecoder();
-
-                    if (!reader) {
-                        throw new Error('No response body');
-                    }
-
-                    // 工具调用状态跟踪
-                    let currentToolCallId = '';
-                    let currentToolCallName = '';
-                    let currentToolInput = '';
-                    let currentToolIndex = -1;
+                    const stream = response.data;
+                    const accumulator = new OpenAiToolCallAccumulator();
                     let fullContent = '';
+                    // vLLM follows the OpenAI shape — usage in the
+                    // final chunk when stream_options.include_usage is on.
+                    let lastUsage: StreamEvent['usage'] | undefined;
 
-                    while (true) {
-                        if (abortController.signal.aborted) break;
+                    // axios-in-browser delivers a buffered string; axios-in-Node
+                    // delivers an async-iterable. parseSseStream takes either.
+                    const sseSource: AsyncIterable<unknown> | string =
+                        typeof stream === 'string'
+                            ? stream
+                            : (stream && typeof (stream as any)[Symbol.asyncIterator] === 'function')
+                                ? stream
+                                : '';
 
-                        const { done, value } = await reader.read();
-                        if (done) break;
+                    for await (const { data } of parseSseStream(sseSource, { signal: abortController.signal })) {
+                        try {
+                            const parsed = JSON.parse(data);
+                            const choice = parsed.choices?.[0];
 
-                        const chunk = decoder.decode(value, { stream: true });
-                        const lines = chunk.split('\n').filter(line => line.startsWith('data: '));
+                            this.logger.debug('Stream event', { type: 'delta', hasToolCalls: !!choice?.delta?.tool_calls });
 
-                        for (const line of lines) {
-                            const data = line.slice(6);
-                            if (data === '[DONE]') continue;
-
-                            try {
-                                const parsed = JSON.parse(data);
-                                const choice = parsed.choices?.[0];
-
-                                this.logger.debug('Stream event', { type: 'delta', hasToolCalls: !!choice?.delta?.tool_calls });
-
-                                // 处理工具调用块
-                                if (choice?.delta?.tool_calls?.length > 0) {
-                                    for (const toolCall of choice.delta.tool_calls) {
-                                        const index = toolCall.index || 0;
-
-                                        // 新工具调用开始
-                                        if (currentToolIndex !== index) {
-                                            if (currentToolIndex >= 0) {
-                                                // 发送前一个工具调用的结束事件
-                                                let parsedInput = {};
-                                                try {
-                                                    parsedInput = JSON.parse(currentToolInput || '{}');
-                                                } catch (e) {
-                                                    // 使用原始输入
-                                                }
-                                                subscriber.next({
-                                                    type: 'tool_use_end',
-                                                    toolCall: {
-                                                        id: currentToolCallId,
-                                                        name: currentToolCallName,
-                                                        input: parsedInput
-                                                    }
-                                                });
-                                                this.logger.debug('Stream event', { type: 'tool_use_end', name: currentToolCallName });
-                                            }
-
-                                            currentToolIndex = index;
-                                            currentToolCallId = toolCall.id || `tool_${Date.now()}_${index}`;
-                                            currentToolCallName = toolCall.function?.name || '';
-                                            currentToolInput = toolCall.function?.arguments || '';
-
-                                            // 发送工具调用开始事件
-                                            subscriber.next({
-                                                type: 'tool_use_start',
-                                                toolCall: {
-                                                    id: currentToolCallId,
-                                                    name: currentToolCallName,
-                                                    input: {}
-                                                }
-                                            });
-                                            this.logger.debug('Stream event', { type: 'tool_use_start', name: currentToolCallName });
-                                        } else {
-                                            // 继续累积参数
-                                            if (toolCall.function?.arguments) {
-                                                currentToolInput += toolCall.function.arguments;
-                                            }
-                                        }
-                                    }
-                                }
-                                // 处理文本增量
-                                else if (choice?.delta?.content) {
-                                    const delta = choice.delta.content;
-                                    fullContent += delta;
-                                    subscriber.next({
-                                        type: 'text_delta',
-                                        textDelta: delta
-                                    });
-                                }
-                            } catch (e) {
-                                // 忽略解析错误
+                            if (parsed.usage) {
+                                lastUsage = {
+                                    promptTokens: parsed.usage.prompt_tokens ?? 0,
+                                    completionTokens: parsed.usage.completion_tokens ?? 0,
+                                    totalTokens: parsed.usage.total_tokens ?? 0,
+                                };
                             }
+
+                            if (choice?.delta?.tool_calls?.length > 0) {
+                                for (const ev of accumulator.feed(choice.delta.tool_calls)) {
+                                    subscriber.next(ev);
+                                    this.logger.debug('Stream event', { type: ev.type, name: ev.toolCall?.name });
+                                }
+                            } else if (choice?.delta?.content) {
+                                const delta = choice.delta.content;
+                                fullContent += delta;
+                                subscriber.next({ type: 'text_delta', textDelta: delta });
+                            }
+                        } catch {
+                            // Keep-alive frame or unparseable line — skip.
                         }
                     }
 
-                    // 发送最后一个工具调用的结束事件
-                    if (currentToolIndex >= 0) {
-                        let parsedInput = {};
-                        try {
-                            parsedInput = JSON.parse(currentToolInput || '{}');
-                        } catch (e) {
-                            // 使用原始输入
-                        }
-                        subscriber.next({
-                            type: 'tool_use_end',
-                            toolCall: {
-                                id: currentToolCallId,
-                                name: currentToolCallName,
-                                input: parsedInput
-                            }
-                        });
-                        this.logger.debug('Stream event', { type: 'tool_use_end', name: currentToolCallName });
+                    for (const ev of accumulator.flush()) {
+                        subscriber.next(ev);
+                        this.logger.debug('Stream event', { type: ev.type, name: ev.toolCall?.name });
                     }
 
                     subscriber.next({
@@ -349,17 +303,31 @@ export class VllmProviderService extends BaseAiProvider {
                             role: MessageRole.ASSISTANT,
                             content: fullContent,
                             timestamp: new Date()
-                        }
+                        },
+                        ...(lastUsage ? { usage: lastUsage } : {})
                     });
                     this.logger.debug('Stream event', { type: 'message_end', contentLength: fullContent.length });
                     subscriber.complete();
-                } catch (error) {
-                    if ((error as any).name !== 'AbortError') {
-                        const errorMessage = `vLLM stream failed: ${error instanceof Error ? error.message : String(error)}`;
-                        this.logError(error, { request });
-                        subscriber.next({ type: 'error', error: errorMessage });
-                        subscriber.error(new Error(errorMessage));
+                } catch (error: any) {
+                    if (error?.name === 'AbortError' || error?.code === 'ERR_CANCELED') {
+                        return; // user-initiated cancel, no error event
                     }
+                    const { status, text } = this.extractAxiosErrorText(error);
+                    if (!retriedWithoutTools && status === 400 && streamRequest.tools?.length && this.isToolUnsupportedError(text)) {
+                        retriedWithoutTools = true;
+                        const modelName = this.getModelName(streamRequest);
+                        this.modelsWithoutToolSupport.add(modelName);
+                        this.logger.warn('vLLM model does not support tools, retrying stream without tools', {
+                            model: modelName,
+                            errorText: text.substring(0, 200)
+                        });
+                        await runStream({ ...streamRequest, tools: undefined });
+                        return;
+                    }
+                    const errorMessage = `vLLM stream failed: ${error instanceof Error ? error.message : String(error)}`;
+                    this.logError(error, { request });
+                    subscriber.next({ type: 'error', error: errorMessage });
+                    subscriber.error(new Error(errorMessage));
                 }
             };
 
@@ -371,36 +339,28 @@ export class VllmProviderService extends BaseAiProvider {
     }
 
     protected async sendTestRequest(request: ChatRequest): Promise<ChatResponse> {
-        const baseURL = this.getApiBaseURL();
-        const response = await fetch(`${baseURL}/chat/completions`, {
-            method: 'POST',
-            headers: this.getAuthHeaders(),
-            body: JSON.stringify(this.buildChatPayload({
-                ...request,
-                maxTokens: request.maxTokens ?? 1,
-                temperature: request.temperature ?? 0
-            }, false))
-        });
+        const result = await this.getClient().post('/chat/completions', this.buildChatPayload({
+            ...request,
+            maxTokens: request.maxTokens ?? 1,
+            temperature: request.temperature ?? 0
+        }, false));
+        return this.transformChatResponse(result.data);
+    }
 
-        if (!response.ok) {
-            const errorText = await this.readErrorText(response);
-            throw new Error(`vLLM API error: ${response.status}${errorText ? ` - ${errorText}` : ''}`);
+    /** See BaseAiProvider.probeUpstream — vLLM mirrors the OpenAI
+     *  `GET /v1/models` shape on its OpenAI-compatible bridge. */
+    protected async probeUpstream(): Promise<HealthStatus | null> {
+        try {
+            const res = await this.getClient().get('/models', { timeout: 5000 });
+            return res.status >= 200 && res.status < 300
+                ? HealthStatus.HEALTHY
+                : HealthStatus.DEGRADED;
+        } catch (e: any) {
+            const status = e?.response?.status;
+            if (status === 401 || status === 403) return HealthStatus.UNHEALTHY;
+            if (status === 429) return HealthStatus.DEGRADED;
+            return null;
         }
-
-        const data = await response.json();
-        return {
-            message: {
-                id: this.generateId(),
-                role: MessageRole.ASSISTANT,
-                content: data.choices[0]?.message?.content || '',
-                timestamp: new Date()
-            },
-            usage: data.usage ? {
-                promptTokens: data.usage.prompt_tokens,
-                completionTokens: data.usage.completion_tokens,
-                totalTokens: data.usage.total_tokens
-            } : undefined
-        };
     }
 
     /**

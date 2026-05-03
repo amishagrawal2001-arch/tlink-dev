@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import axios, { AxiosInstance } from 'axios';
 import { BaseAiProvider } from './base-provider.service';
-import { ProviderCapability, ValidationResult } from '../../types/provider.types';
+import { ProviderCapability, ValidationResult, HealthStatus } from '../../types/provider.types';
 import { ChatRequest, ChatResponse, CommandRequest, CommandResponse, ExplainRequest, ExplainResponse, AnalysisRequest, AnalysisResponse, MessageRole, StreamEvent } from '../../types/ai.types';
 import { LoggerService } from '../core/logger.service';
 import { parseSseStream, OpenAiToolCallAccumulator } from './streaming';
@@ -122,7 +122,7 @@ export class OpenAiProviderService extends BaseAiProvider {
                 return;
             }
 
-            const abortController = new AbortController();
+            const abortController = this.createLinkedAbortController(request.signal);
 
             const runStream = async () => {
                 try {
@@ -143,6 +143,10 @@ export class OpenAiProviderService extends BaseAiProvider {
                     const stream = response.data;
                     const accumulator = new OpenAiToolCallAccumulator();
                     let fullContent = '';
+                    // OpenAI emits usage in the LAST chunk before [DONE]
+                    // when `stream_options.include_usage: true` is set.
+                    // Capture it so we can surface it on message_end.
+                    let lastUsage: StreamEvent['usage'] | undefined;
 
                     // Browser axios buffers the whole SSE response into a single
                     // string; Node yields an async-iterable. parseSseStream
@@ -163,6 +167,16 @@ export class OpenAiProviderService extends BaseAiProvider {
                             const choice = parsed.choices?.[0];
 
                             this.logger.debug('Stream event', { type: 'delta', hasToolCalls: !!choice?.delta?.tool_calls });
+
+                            // Capture usage if this chunk carries it (final
+                            // chunk when stream_options.include_usage is on).
+                            if (parsed.usage) {
+                                lastUsage = {
+                                    promptTokens: parsed.usage.prompt_tokens ?? 0,
+                                    completionTokens: parsed.usage.completion_tokens ?? 0,
+                                    totalTokens: parsed.usage.total_tokens ?? 0,
+                                };
+                            }
 
                             if (choice?.delta?.tool_calls?.length > 0) {
                                 for (const ev of accumulator.feed(choice.delta.tool_calls)) {
@@ -193,7 +207,8 @@ export class OpenAiProviderService extends BaseAiProvider {
                             role: MessageRole.ASSISTANT,
                             content: fullContent,
                             timestamp: new Date()
-                        }
+                        },
+                        ...(lastUsage ? { usage: lastUsage } : {})
                     });
                     this.logger.debug('Stream event', { type: 'message_end', contentLength: fullContent.length });
                     subscriber.complete();
@@ -293,6 +308,28 @@ export class OpenAiProviderService extends BaseAiProvider {
         });
 
         return this.transformChatResponse(response.data);
+    }
+
+    /**
+     * Free liveness probe via `GET /models` — same auth as a chat call
+     * but no tokens consumed. The endpoint is universal across OpenAI,
+     * Groq, vLLM, and the openai-compatible bases, so we get health
+     * status across all of them without burning budget.
+     */
+    protected async probeUpstream(): Promise<HealthStatus | null> {
+        if (!this.client) return null; // not configured yet
+        try {
+            const res = await this.client.get('/models', { timeout: 5000 });
+            return res.status >= 200 && res.status < 300
+                ? HealthStatus.HEALTHY
+                : HealthStatus.DEGRADED;
+        } catch (e: any) {
+            const status = e?.response?.status;
+            if (status === 401 || status === 403) return HealthStatus.UNHEALTHY;
+            if (status === 429) return HealthStatus.DEGRADED;
+            // Anything else → return null so the chat-probe fallback runs.
+            return null;
+        }
     }
 
     validateConfig(): ValidationResult {

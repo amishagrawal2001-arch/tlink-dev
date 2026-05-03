@@ -115,11 +115,45 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
     }
 
     /**
+     * Free upstream probe — typically a GET to `/models` or similar.
+     * Override in providers that have a token-free way to verify
+     * connectivity + authorization. Returning `null` (the default)
+     * tells `performNetworkHealthCheck` to fall back to the
+     * chat-based probe below, which costs 1+ tokens per call.
+     *
+     * Why this exists: with the 60s health-check cache TTL and a
+     * typical session, a user who has 5 providers configured was
+     * burning ~5 chat tokens / minute on health checks alone. The
+     * `/models` GET endpoint is free on every OpenAI-shape provider
+     * (OpenAI, Groq, vLLM, openai-compatible, etc.) so the chat
+     * probe should be a fallback, not the default path.
+     */
+    protected async probeUpstream(): Promise<HealthStatus | null> {
+        return null;
+    }
+
+    /**
      * 执行网络健康检查 - 发送测试请求
      */
     protected async performNetworkHealthCheck(): Promise<HealthStatus> {
+        // Try the free probe first. Errors here log-and-fall-through
+        // rather than fail the health check — a /models endpoint that
+        // doesn't exist or 404s is just "this provider doesn't support
+        // the cheap probe", not a real outage.
         try {
-            // 发送一个简单的测试请求
+            const probe = await this.probeUpstream();
+            if (probe !== null) {
+                return probe;
+            }
+        } catch (probeErr) {
+            this.logger.debug(`[${this.name}] free probe failed, falling back to chat probe`, {
+                error: probeErr instanceof Error ? probeErr.message : String(probeErr),
+            });
+        }
+
+        try {
+            // Fallback: send a 1-token chat request. Burns a token but
+            // works against any provider that exposes /chat/completions.
             const testRequest: ChatRequest = {
                 messages: [{
                     id: 'health-check',
@@ -400,6 +434,32 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
         }
 
         throw lastError;
+    }
+
+    /**
+     * Build an internal AbortController that's also linked to an
+     * external cancellation signal — typically `request.signal` passed
+     * by the caller. Aborts on either source. Pattern:
+     *
+     *   const ac = this.createLinkedAbortController(request.signal);
+     *   ...
+     *   return () => ac.abort();
+     *
+     * The provider gets its own AbortController for the local
+     * Observable-unsubscribe teardown path AND honors any external
+     * AbortSignal the caller plumbed through `ChatRequest.signal`.
+     * Either side firing aborts the in-flight HTTP request promptly.
+     */
+    protected createLinkedAbortController(externalSignal?: AbortSignal): AbortController {
+        const ac = new AbortController();
+        if (externalSignal) {
+            if (externalSignal.aborted) {
+                ac.abort();
+            } else {
+                externalSignal.addEventListener('abort', () => ac.abort(), { once: true });
+            }
+        }
+        return ac;
     }
 
     /**

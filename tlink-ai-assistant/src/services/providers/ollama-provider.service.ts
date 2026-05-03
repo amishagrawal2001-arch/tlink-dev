@@ -115,6 +115,15 @@ export class OllamaProviderService extends BaseAiProvider {
             
             this.logger.info('Ollama API request', { url, originalBaseURL, cleanBaseURL, useOpenAICompat, configBaseURL: this.config?.baseURL });
             
+            // NOTE: ollama uses raw fetch instead of axios (unlike the other
+            // OpenAI-shape providers) because the native /api/chat endpoint
+            // streams NDJSON via ReadableStream and the model-pull endpoint
+            // emits progress chunks that don't fit axios's response model
+            // cleanly. The non-streaming `chat` path here could move to axios
+            // mechanically, but keeping all 4 ollama HTTP call sites on the
+            // same transport keeps the code less surprising. Test coverage
+            // on the streaming + pull paths is thin; we'll revisit unifying
+            // when those land.
             const response = await fetch(url, {
                 method: 'POST',
                 headers: this.getAuthHeaders(),
@@ -123,7 +132,7 @@ export class OllamaProviderService extends BaseAiProvider {
 
             if (!response.ok) {
                 const errorText = await response.text().catch(() => '');
-                
+
                 // Check if error is about tools not being supported
                 if (response.status === 400 && errorText.includes('does not support tools')) {
                     const modelName = requestBody.model;

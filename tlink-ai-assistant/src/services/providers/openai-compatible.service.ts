@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { Observable, Observer } from 'rxjs';
 import axios, { AxiosInstance } from 'axios';
 import { BaseAiProvider } from './base-provider.service';
-import { ProviderCapability, ValidationResult } from '../../types/provider.types';
+import { ProviderCapability, ValidationResult, HealthStatus } from '../../types/provider.types';
 import { ChatRequest, ChatResponse, CommandRequest, CommandResponse, ExplainRequest, ExplainResponse, AnalysisRequest, AnalysisResponse, MessageRole, StreamEvent } from '../../types/ai.types';
 import { LoggerService } from '../core/logger.service';
 import { parseSseStream, OpenAiToolCallAccumulator } from './streaming';
@@ -192,7 +192,7 @@ export class OpenAiCompatibleProviderService extends BaseAiProvider {
                 return;
             }
 
-            const abortController = new AbortController();
+            const abortController = this.createLinkedAbortController(request.signal);
 
             // 检查是否禁用流式响应
             const useStreaming = !this.config?.disableStreaming;
@@ -313,6 +313,9 @@ export class OpenAiCompatibleProviderService extends BaseAiProvider {
 
                     const accumulator = new OpenAiToolCallAccumulator();
                     let fullContent = '';
+                    // OpenAI-compatible servers usually follow OpenAI's
+                    // `stream_options.include_usage` final-chunk shape.
+                    let lastUsage: StreamEvent['usage'] | undefined;
 
                     for await (const { data } of parseSseStream(sseSource, { signal: abortController.signal })) {
                         try {
@@ -320,6 +323,14 @@ export class OpenAiCompatibleProviderService extends BaseAiProvider {
                             const choice = parsed.choices?.[0];
 
                             this.logger.debug('Stream event', { type: 'delta', hasToolCalls: !!choice?.delta?.tool_calls });
+
+                            if (parsed.usage) {
+                                lastUsage = {
+                                    promptTokens: parsed.usage.prompt_tokens ?? 0,
+                                    completionTokens: parsed.usage.completion_tokens ?? 0,
+                                    totalTokens: parsed.usage.total_tokens ?? 0,
+                                };
+                            }
 
                             if (choice?.delta?.tool_calls?.length > 0) {
                                 for (const ev of accumulator.feed(choice.delta.tool_calls)) {
@@ -348,7 +359,8 @@ export class OpenAiCompatibleProviderService extends BaseAiProvider {
                             role: MessageRole.ASSISTANT,
                             content: fullContent,
                             timestamp: new Date()
-                        }
+                        },
+                        ...(lastUsage ? { usage: lastUsage } : {})
                     });
                     this.logger.debug('Stream event', { type: 'message_end', contentLength: fullContent.length });
                     subscriber.complete();
@@ -425,6 +437,24 @@ export class OpenAiCompatibleProviderService extends BaseAiProvider {
 
         const response = await this.chat(chatRequest);
         return this.parseAnalysisResponse(response.message.content);
+    }
+
+    /** See BaseAiProvider.probeUpstream — most OpenAI-compatible
+     *  servers expose `GET /models`. Falls back to chat probe via
+     *  return-null if not. */
+    protected async probeUpstream(): Promise<HealthStatus | null> {
+        if (!this.client) return null;
+        try {
+            const res = await this.client.get('/models', { timeout: 5000 });
+            return res.status >= 200 && res.status < 300
+                ? HealthStatus.HEALTHY
+                : HealthStatus.DEGRADED;
+        } catch (e: any) {
+            const status = e?.response?.status;
+            if (status === 401 || status === 403) return HealthStatus.UNHEALTHY;
+            if (status === 429) return HealthStatus.DEGRADED;
+            return null;
+        }
     }
 
     protected async sendTestRequest(request: ChatRequest): Promise<ChatResponse> {

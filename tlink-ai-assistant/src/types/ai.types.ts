@@ -69,6 +69,17 @@ export interface ChatRequest {
     intent?: string; // optional routing hint (e.g., code, translate, vision, audio)
     tools?: any[];  // Tool definition list
     enableTools?: boolean;  // Whether to enable tool calls
+    /**
+     * External cancellation. When this fires (or is already aborted at
+     * call-time), the provider tears down its in-flight HTTP request
+     * promptly and emits no further StreamEvents. Independent of the
+     * `subscription.unsubscribe()` path on chatStream's Observable —
+     * use whichever fits the caller's plumbing.
+     *
+     * Existing callers that don't pass a signal continue to work
+     * unchanged; providers fall back to their internal AbortController.
+     */
+    signal?: AbortSignal;
 }
 
 // Chat response
@@ -341,6 +352,20 @@ export interface StreamEvent {
     error?: string;
     // Final message (when message_end)
     message?: ChatMessage;
+    /**
+     * Token-usage stats. Surfaced by providers on `message_end` when
+     * the upstream supplies them (OpenAI emits via `stream_options:
+     * include_usage`, Anthropic via `message_delta.usage`, Groq via
+     * its final chunk, etc). Standardized field names so the UI can
+     * render a live token counter / cost display without per-provider
+     * branching. Optional — older providers / configurations may not
+     * emit it.
+     */
+    usage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+    };
 }
 
 // ============================================================================
