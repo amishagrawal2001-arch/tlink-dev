@@ -210,42 +210,43 @@
             }
         }
 
+        /* Theme picker — was 100px-min cards w/ 56px previews + 2px
+           borders + translate-Y lift. Now 76px-min cards w/ 40px
+           previews + 1px borders + flat hover. Same scannable grid,
+           ~30% less footprint. (Mirrors the chat-settings.scss theme
+           picker — kept consistent so users see the same widget if
+           the picker appears in both surfaces.) */
         .theme-selector {
             display: flex;
-            gap: 1rem;
+            gap: 0.5rem;
             flex-wrap: wrap;
 
             .theme-btn {
-                padding: 0.75rem;
-                border: 2px solid var(--ai-border);
-                border-radius: 12px;
+                padding: 0.4rem 0.5rem;
+                border: 1px solid var(--ai-border);
+                border-radius: 8px;
                 background-color: var(--ai-bg-primary);
                 cursor: pointer;
-                transition: all 0.2s ease;
+                transition: border-color 0.15s, background-color 0.15s;
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                gap: 0.5rem;
-                min-width: 100px;
+                gap: 0.3rem;
+                min-width: 76px;
 
-                &:hover {
-                    border-color: var(--ai-primary);
-                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-                    transform: translateY(-2px);
-                }
+                &:hover { border-color: var(--ai-primary); }
 
                 &.active {
                     border-color: var(--ai-primary);
                     background-color: rgba(0, 123, 255, 0.08);
-                    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.2);
+                    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.18);
                 }
 
                 .theme-preview {
-                    width: 56px;
-                    height: 56px;
-                    border-radius: 8px;
-                    border: 2px solid var(--ai-border);
-                    transition: all 0.2s ease;
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 6px;
+                    border: 1px solid var(--ai-border);
 
                     &[data-theme="light"] {
                         background: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%);
@@ -261,24 +262,24 @@
 
                     &[data-theme="pixel"] {
                         background: #0f380f;
-                        border: 4px solid #9bbc0f;
+                        border: 3px solid #9bbc0f;
                         border-radius: 0;
                         background-image:
                             linear-gradient(90deg, rgba(155, 188, 15, 0.1) 1px, transparent 1px),
                             linear-gradient(rgba(155, 188, 15, 0.1) 1px, transparent 1px);
-                        background-size: 8px 8px;
+                        background-size: 6px 6px;
                     }
 
                     &[data-theme="tech"] {
                         background: #0a0a0f;
                         border: 1px solid #00fff9;
                         border-radius: 4px;
-                        box-shadow: 0 0 10px rgba(0, 255, 249, 0.4);
+                        box-shadow: 0 0 6px rgba(0, 255, 249, 0.4);
                     }
                 }
 
                 span {
-                    font-size: 0.875rem;
+                    font-size: 0.75rem;
                     color: var(--ai-text-primary);
                     font-weight: 500;
                 }
@@ -364,46 +365,38 @@
     }
 }
 
-/* 响应式设计 */
+/* Responsive — narrow viewports stack rows and shrink picker
+   widgets further. Aligned to the new compact desktop scale rather
+   than its own divergent miniaturization. */
 @media (max-width: 768px) {
     .general-settings {
         .settings-section {
-            padding: 1rem;
+            padding: 0.625rem 0.75rem;
 
             .form-row {
                 grid-template-columns: 1fr;
-                gap: 1.5rem;
+                gap: 0.75rem;
             }
 
             .providers-grid {
                 grid-template-columns: 1fr;
             }
 
-            .theme-selector {
-                .theme-btn {
-                    min-width: 80px;
-                    padding: 0.5rem;
+            .theme-selector .theme-btn {
+                min-width: 64px;
+                padding: 0.3rem;
 
-                    .theme-preview {
-                        width: 48px;
-                        height: 48px;
-                    }
-
-                    span {
-                        font-size: 0.8rem;
-                    }
-                }
+                .theme-preview { width: 32px; height: 32px; }
+                span { font-size: 0.7rem; }
             }
 
-            .hotkey-list {
-                .hotkey-item {
-                    flex-direction: column;
-                    align-items: flex-start;
-                    gap: 0.75rem;
+            .hotkey-list .hotkey-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.4rem;
 
-                    .hotkey-keys {
-                        align-self: flex-end;
-                    }
+                .hotkey-keys {
+                    align-self: flex-end;
                 }
             }
         }
