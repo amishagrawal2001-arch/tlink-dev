@@ -27,7 +27,7 @@
 
     textarea.import-textarea(
         [(ngModel)]='text',
-        [placeholder]='selected === "curl" ? "curl https://api.example.com/users -H \"Authorization: Bearer ...\"" : "Paste JSON here…"',
+        [placeholder]='placeholder',
         spellcheck='false',
         autofocus
     )

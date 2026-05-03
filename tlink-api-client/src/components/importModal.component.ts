@@ -45,6 +45,17 @@ export class ImportModalComponent {
         this.selected = kind
     }
 
+    /** Placeholder text for the textarea — kept on the component
+     *  because the cURL example contains nested double quotes that
+     *  break Angular's template expression parser when embedded in
+     *  the pug `[placeholder]` binding directly. */
+    get placeholder (): string {
+        if (this.selected === 'curl') {
+            return 'curl https://api.example.com/users -H \'Authorization: Bearer ...\''
+        }
+        return 'Paste JSON here…'
+    }
+
     submit (): void {
         this.error = null
         this.busy = true
