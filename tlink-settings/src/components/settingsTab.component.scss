@@ -37,34 +37,56 @@
         min-height: 0;
         flex: 1 0 0;
 
+        // Compact pass — was 222px nav with 20px/10px padding. Now
+        // 200px with 12px/8px padding, freeing up ~30px of horizontal
+        // real estate for the actual settings content.
         > .nav {
-            padding: 20px 10px;
-            width: 222px;
+            padding: 12px 8px;
+            width: 200px;
             flex: none;
             overflow-y: auto;
             flex-wrap: nowrap;
         }
 
+        // Tab content gutter: 20px → 12px vertical, 30px → 20px
+        // horizontal. Settings panels now use ~20px less on each
+        // edge, putting more content in the viewport.
         > .tab-content {
             flex: auto;
-            padding: 20px 0;
+            padding: 12px 0;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
 
             > ::ng-deep .tab-pane {
-                padding: 0 30px;
+                padding: 0 20px;
                 min-height: 100%;
 
                 > settings-tab-body > * {
                     display: block;
+                }
+
+                // Tab section headers — Bootstrap's default h3 is
+                // 1.75rem with airy margins. Compact the major-break
+                // headings ("Application settings", "Accessibility",
+                // "License Management", etc.) so they read as section
+                // markers, not page titles. The License panel's h5
+                // eyebrow caps already exist alongside these.
+                > h3 {
+                    font-size: 1.05rem;
+                    font-weight: 600;
+                    margin: 16px 0 8px;
+
+                    &:first-child {
+                        margin-top: 0;
+                    }
                 }
             }
         }
     }
 
     &.pad-window-controls > .content > .nav {
-        padding-top: 40px;
+        padding-top: 32px;
     }
 }
 
@@ -302,12 +324,12 @@ textarea {
     // Form rows in the License panel — minimal padding, no divider.
     // The previous version had a faint separator between every row
     // which made the panel feel like a long ledger; the eyebrow caps
-    // already mark section breaks, so per-row dividers were redundant
-    // visual weight. .form-line has min-height: 64px applied globally;
-    // we shrink it with !important so the override sticks (same
-    // selector specificity, earlier in the cascade).
+    // already mark section breaks, so per-row dividers were redundant.
+    // Even tighter than the global compact .form-line (which is now 6px)
+    // since License-panel rows are uniformly text + a single control —
+    // they don't need the breathing room that, say, a profile-config
+    // row needs.
     > .form-line {
-        min-height: 0 !important;
         padding: 4px 0 !important;
     }
     > .form-line .header .title {

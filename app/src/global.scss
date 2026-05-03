@@ -31,22 +31,35 @@ a, button {
     }
 }
 
+// Settings form rows — compact pass.
+//
+// This rule cascades into EVERY plugin's settings tab (Application,
+// Profiles, License, AI Assistant, Hotkeys, Vault, Workspace, etc.)
+// so any change here affects the whole Settings surface. Was 64px
+// min-height + 10px vertical padding ≈ 84px per row at minimum.
+// Now 6px padding + no min-height → rows hug their content (~36-44px
+// for a typical title+toggle row, ~52px for title+description+toggle).
+// Net effect: settings tabs that previously needed a scroll for 6
+// toggles fit 9-10 in the same viewport. Zero markup changes.
+//
+// The License panel inside settingsTab.component.scss already has its
+// own tighter `.content-box > .form-line` override; this base rule
+// matches that density everywhere else.
 .form-line {
     display: flex;
     align-items: center;
-    padding: 10px 0;
+    padding: 6px 0;
     margin: 0;
-    min-height: 64px;
 
     .header {
         margin-right: auto;
 
-        .title {
-        }
+        .title { font-weight: 500; }
 
         .description {
-            font-size: 13px;
-            opacity: .5;
+            font-size: 12px;
+            opacity: .55;
+            margin-top: 1px;
         }
     }
 

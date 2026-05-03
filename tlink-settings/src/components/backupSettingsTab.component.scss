@@ -1,10 +1,14 @@
+// Backup settings — compact pass.
+// Was 20px content-box padding + 1rem form/alert margins. Now 12px /
+// 0.625rem, matching the rest of the Settings surface. Pure SCSS, no
+// markup changes.
 .content-box {
-    padding: 20px;
+    padding: 12px;
 }
 
 .list-group-item {
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: background-color 0.15s;
 
     &:hover {
         background-color: var(--theme-bg-more);
@@ -17,8 +21,8 @@
     }
 
     h5 {
-        font-size: 14px;
-        margin-bottom: 8px;
+        font-size: 13px;
+        margin-bottom: 4px;
     }
 
     .badge {
@@ -29,17 +33,19 @@
 
 .btn-group-sm {
     .btn {
-        padding: 0.25rem 0.5rem;
-        font-size: 0.875rem;
+        padding: 0.2rem 0.5rem;
+        font-size: 0.8rem;
     }
 }
 
 .form-group {
-    margin-bottom: 1rem;
+    margin-bottom: 0.625rem;
 }
 
 .alert {
-    margin-top: 1rem;
-    margin-bottom: 1rem;
+    margin-top: 0.625rem;
+    margin-bottom: 0.625rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
 }
 
