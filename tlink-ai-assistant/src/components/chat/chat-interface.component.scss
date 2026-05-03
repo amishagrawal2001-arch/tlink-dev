@@ -537,6 +537,114 @@
     }
 }
 
+/* Summary affordance — slim banner that surfaces when a long
+   thread first crosses the SUMMARY_THRESHOLD. Dismisses itself
+   once a summary is generated. */
+.summary-affordance {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    background: rgba(102, 126, 234, 0.1);
+    border-bottom: 1px solid rgba(102, 126, 234, 0.25);
+    font-size: 0.8rem;
+    color: var(--ai-text-secondary);
+
+    > i.fa-magic {
+        color: #a855f7;
+        font-size: 0.85rem;
+    }
+
+    > span { flex: 1; }
+
+    .btn-summarize {
+        background: var(--ai-primary);
+        color: white;
+        border: 0;
+        padding: 0.25rem 0.7rem;
+        border-radius: 4px;
+        font-size: 0.78rem;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+
+        i { font-size: 0.7rem; }
+
+        &:hover:not(:disabled) { background: #0069d9; }
+        &:disabled { opacity: 0.6; cursor: not-allowed; }
+    }
+}
+
+/* Generated summary panel — collapsible, dismissible. Lives at the
+   top of the messages container; sticky-style treatment so a user
+   reading old context can keep glancing back at it. */
+.conversation-summary {
+    border-bottom: 1px solid var(--ai-border);
+    background: linear-gradient(135deg,
+        rgba(168, 85, 247, 0.08) 0%,
+        rgba(102, 126, 234, 0.06) 100%);
+
+    .summary-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.4rem 0.75rem;
+        cursor: pointer;
+        user-select: none;
+        font-size: 0.85rem;
+
+        > i.fa-magic { color: #a855f7; font-size: 0.85rem; }
+
+        strong {
+            font-weight: 600;
+            color: var(--ai-text-primary);
+        }
+
+        .summary-badge {
+            font-size: 0.7rem;
+            color: var(--ai-text-secondary);
+            opacity: 0.8;
+            font-variant-numeric: tabular-nums;
+            margin-left: 0.25rem;
+        }
+
+        > i.fa-magic + strong { flex: none; }
+        .summary-toggle-chevron { margin-left: auto; opacity: 0.6; font-size: 0.7rem; }
+
+        .btn-icon {
+            background: transparent;
+            border: 0;
+            color: var(--ai-text-secondary);
+            cursor: pointer;
+            padding: 0.15rem 0.35rem;
+            border-radius: 3px;
+            font-size: 0.75rem;
+
+            &:hover:not(:disabled) {
+                color: var(--ai-text-primary);
+                background: rgba(255, 255, 255, 0.06);
+            }
+            &:disabled { opacity: 0.5; cursor: not-allowed; }
+        }
+    }
+
+    .summary-body {
+        padding: 0.4rem 0.85rem 0.75rem 0.85rem;
+        font-size: 0.85rem;
+        line-height: 1.5;
+        color: var(--ai-text-primary);
+
+        /* Override compact-pass margins for the markdown rendering
+           so the summary's bullet list reads tightly. */
+        ul, ol {
+            margin: 0.25rem 0;
+            padding-left: 1.1rem;
+        }
+        li { margin-bottom: 0.2rem; }
+    }
+}
+
 /* User message edit mode — bubble swaps for an inline textarea +
    Save/Cancel buttons. The pencil icon shows on hover of any user
    message bubble (when not currently streaming). Cmd+Enter submits,

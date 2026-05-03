@@ -94,6 +94,36 @@
         </div>
     </div>
 
+    <!-- Conversation summary — surfaces when threads pass the
+         SUMMARY_THRESHOLD or after the user explicitly generates one.
+         Collapsible (chevron toggle) so it doesn't dominate the
+         viewport once the user has read it. Dismissible (×). -->
+    <div class="summary-affordance" *ngIf="showSummarizeAffordance()">
+        <i class="fa fa-magic"></i>
+        <span>This conversation is getting long ({{ messages.length }} messages).</span>
+        <button class="btn-summarize" (click)="generateSummary()" [disabled]="summaryGenerating">
+            <i class="fa" [class.fa-magic]="!summaryGenerating" [class.fa-spinner]="summaryGenerating" [class.fa-spin]="summaryGenerating"></i>
+            {{ summaryGenerating ? 'Summarizing…' : 'Summarize' }}
+        </button>
+    </div>
+
+    <div class="conversation-summary" *ngIf="conversationSummary">
+        <div class="summary-header" (click)="toggleSummaryCollapsed()">
+            <i class="fa fa-magic"></i>
+            <strong>Conversation summary</strong>
+            <span class="summary-badge">{{ messages.length }} messages</span>
+            <button class="btn-icon summary-regen" (click)="generateSummary(); $event.stopPropagation()" [disabled]="summaryGenerating" title="Regenerate">
+                <i class="fa" [class.fa-redo]="!summaryGenerating" [class.fa-spinner]="summaryGenerating" [class.fa-spin]="summaryGenerating"></i>
+            </button>
+            <button class="btn-icon summary-dismiss" (click)="dismissSummary(); $event.stopPropagation()" title="Dismiss">
+                <i class="fa fa-times"></i>
+            </button>
+            <i class="fa summary-toggle-chevron" [class.fa-chevron-down]="!summaryCollapsed" [class.fa-chevron-right]="summaryCollapsed"></i>
+        </div>
+        <div class="summary-body markdown-body" *ngIf="!summaryCollapsed"
+             [innerHTML]="getMarkdownHtmlForBlock('__summary__', conversationSummary)"></div>
+    </div>
+
     <!-- In-session search bar — opens via Cmd/Ctrl+F. Sticky below
          the chat header so the messages below scroll under it. -->
     <div class="search-bar" *ngIf="showSearchBar">

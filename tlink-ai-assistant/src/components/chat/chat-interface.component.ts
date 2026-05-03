@@ -408,6 +408,71 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
     }
 
     /**
+     * Conversation summary feature. Long threads (>30 messages) are
+     * hard to pick back up; this lets the user generate a TL;DR via
+     * the active provider and pin it at the top of the panel as a
+     * collapsible header. Stashed on the session bundle so it
+     * persists across reloads.
+     *
+     * Trigger: a "Summarize this chat" chip surfaces in the header
+     * when messages.length > 30 AND no summary exists yet. Click
+     * generates one (separate stream that doesn't pollute the
+     * conversation history). User can collapse / regenerate.
+     */
+    conversationSummary: string | null = null;
+    summaryGenerating = false;
+    summaryCollapsed = false;
+    /** When to surface the "Summarize" affordance. */
+    private readonly SUMMARY_THRESHOLD = 30;
+
+    showSummarizeAffordance(): boolean {
+        return !this.conversationSummary && this.messages.length >= this.SUMMARY_THRESHOLD;
+    }
+
+    async generateSummary(): Promise<void> {
+        if (this.summaryGenerating) {return;}
+        if (this.messages.length < 3) {return;}
+        this.summaryGenerating = true;
+        try {
+            const transcript = this.messages
+                .filter(m => m.role !== MessageRole.SYSTEM)
+                .map(m => `${m.role === MessageRole.USER ? 'User' : 'Assistant'}: ${(m.content || '').slice(0, 1000)}`)
+                .join('\n\n');
+            const prompt: ChatMessage = {
+                id: this.generateId(),
+                role: MessageRole.USER,
+                content: `Summarize the following conversation in 3-5 short bullet points covering the key topics, decisions, and any unresolved questions. Be concise.\n\n--- Conversation ---\n${transcript}`,
+                timestamp: new Date(),
+            };
+            // Run as a one-shot chat (NOT chatStream) — we don't need
+            // to render the summary token-by-token; just want the
+            // final text. Bypasses the agent loop / message history
+            // entirely.
+            const response = await this.aiService.chat({
+                messages: [prompt],
+                maxTokens: 400,
+                temperature: 0.3,
+            });
+            this.conversationSummary = response?.message?.content || '(empty summary)';
+            this.summaryCollapsed = false;
+        } catch (e) {
+            this.logger.error('Summary generation failed', e);
+            this.conversationSummary = `Summary failed: ${e instanceof Error ? e.message : 'Unknown error'}`;
+        } finally {
+            this.summaryGenerating = false;
+        }
+    }
+
+    toggleSummaryCollapsed(): void {
+        this.summaryCollapsed = !this.summaryCollapsed;
+    }
+
+    dismissSummary(): void {
+        this.conversationSummary = null;
+        this.summaryCollapsed = false;
+    }
+
+    /**
      * Whether the keyboard-shortcuts overlay is open. Triggered by
      * pressing `?` (when not focused in an input) or via the help
      * button in the chat header.
