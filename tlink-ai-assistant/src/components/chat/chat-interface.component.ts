@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked, ViewEncapsulation } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked, ViewEncapsulation, HostListener } from '@angular/core';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { ChatMessage, MessageRole, StreamEvent, AgentStreamEvent } from '../../types/ai.types';
@@ -25,6 +25,16 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
 
     messages: ChatMessage[] = [];
     isLoading = false;
+
+    /**
+     * AbortController bound to whatever chat stream is currently in
+     * flight. The `Stop` button on chat-input emits a (stop) event
+     * which calls `cancelActiveStream()` below; that propagates the
+     * abort down through `ChatRequest.signal` so every provider's
+     * createLinkedAbortController tears down its HTTP request promptly.
+     * Reset to null when no stream is active.
+     */
+    private activeAbortController: AbortController | null = null;
     currentProvider: string = '';
     currentSessionId: string = '';
     showScrollTop = false;
@@ -75,6 +85,63 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
         const agg = this.getSessionUsage();
         if (agg.totalCost <= 0) {return '';}
         return formatCost(agg.totalCost);
+    }
+
+    /**
+     * Abort any in-flight chat stream. Wired to chat-input's (stop)
+     * event. The active provider's createLinkedAbortController
+     * forwards the abort to its HTTP request, which tears down
+     * promptly + emits no further StreamEvents to the subscriber.
+     * Safe to call when no stream is active (no-op).
+     */
+    cancelActiveStream(): void {
+        if (this.activeAbortController && !this.activeAbortController.signal.aborted) {
+            this.activeAbortController.abort();
+            this.logger.info('Chat stream cancelled by user');
+        }
+        this.isLoading = false;
+        this.activeAbortController = null;
+        this.saveChatHistory();
+    }
+
+    /**
+     * Whether the keyboard-shortcuts overlay is open. Triggered by
+     * pressing `?` (when not focused in an input) or via the help
+     * button in the chat header.
+     */
+    showShortcutsOverlay = false;
+
+    /** Toggle the shortcuts overlay. Bound to a header button + the
+     *  `?` keyboard listener below. */
+    toggleShortcutsOverlay(): void {
+        this.showShortcutsOverlay = !this.showShortcutsOverlay;
+    }
+
+    /**
+     * Global keyboard shortcuts. `?` opens the overlay (when the user
+     * isn't typing in an input). `Escape` closes any open overlay.
+     * Stop-stream + send are handled inside chat-input.
+     */
+    @HostListener('document:keydown', ['$event'])
+    onGlobalKeydown(event: KeyboardEvent): void {
+        // Don't hijack typing in inputs / textareas / contenteditable.
+        const target = event.target as HTMLElement | null;
+        const inEditable = target && (
+            target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            target.isContentEditable
+        );
+
+        if (event.key === 'Escape' && this.showShortcutsOverlay) {
+            this.showShortcutsOverlay = false;
+            event.preventDefault();
+            return;
+        }
+
+        if (event.key === '?' && !inEditable && !event.ctrlKey && !event.metaKey) {
+            this.toggleShortcutsOverlay();
+            event.preventDefault();
+        }
     }
 
     /**
@@ -278,11 +345,15 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
         this.messages.push(aiMessage);
 
         try {
+            // Bind a fresh AbortController so the Stop button works
+            // for agent-loop streams too.
+            this.activeAbortController = new AbortController();
             // 使用 ToolStreamProcessorService 处理流式事件
             this.toolStreamProcessor.startAgentStream({
                 messages: this.messages.slice(0, -1),
                 maxTokens: 2000,
-                temperature: 0.7
+                temperature: 0.7,
+                signal: this.activeAbortController.signal,
             }, {
                 maxRounds: 5
             }).pipe(
@@ -437,11 +508,16 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy, AfterViewCheck
         let pendingToolCalls: Map<string, { name: string; startTime: number }> = new Map();
 
         try {
+            // Bind a fresh AbortController so the Stop button can
+            // tear this stream down. cancelActiveStream() below
+            // calls .abort() on this.
+            this.activeAbortController = new AbortController();
             // 使用流式 API
             this.aiService.chatStream({
                 messages: this.messages.slice(0, -1),  // 排除刚添加的空 AI 消息
                 maxTokens: 1000,
-                temperature: 0.7
+                temperature: 0.7,
+                signal: this.activeAbortController.signal,
             }).pipe(
                 takeUntil(this.destroy$)
             ).subscribe({

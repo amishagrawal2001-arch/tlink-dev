@@ -13,12 +13,24 @@ import { AiAssistantService } from '../../services/core/ai-assistant.service';
 export class ChatInputComponent implements OnInit, OnDestroy {
     @Input() disabled = false;
     @Input() placeholder = 'Enter your question or describe the command to run...';
+    /**
+     * Set true while a chat stream is in flight. Swaps the Send button
+     * for a "Stop" button that emits `stop`. Wired by chat-interface
+     * which holds the AbortController.
+     */
+    @Input() streaming = false;
     @Output() send = new EventEmitter<string>();
+    @Output() stop = new EventEmitter<void>();
 
     @ViewChild('textInput', { static: false }) textInput!: ElementRef<HTMLTextAreaElement>;
 
+    /** localStorage key for the input draft. Restored on init, cleared
+     *  on send. Survives accidental tab close / app crash. */
+    private static readonly DRAFT_STORAGE_KEY = 'tlink-ai-chat-draft';
+
     inputValue = '';
     private inputSubject = new Subject<string>();
+    private draftSubject = new Subject<string>();
     private destroy$ = new Subject<void>();
     isComposing = false; // 用于处理中文输入法
     enterToSend: boolean = true; // Enter键发送
@@ -36,13 +48,43 @@ export class ChatInputComponent implements OnInit, OnDestroy {
         // 读取 Enter 发送设置
         this.enterToSend = this.config.get<boolean>('ui.enterToSend', true) ?? true;
 
-        // 监听输入变化，实现防抖
+        // Restore the draft from a prior session — accidental tab
+        // close / app crash shouldn't lose what the user was typing.
+        try {
+            const draft = localStorage.getItem(ChatInputComponent.DRAFT_STORAGE_KEY);
+            if (draft) {
+                this.inputValue = draft;
+                // Defer autoResize until the textarea is in the DOM.
+                setTimeout(() => this.autoResize(), 0);
+            }
+        } catch {
+            // localStorage unavailable — non-fatal, drafts just won't persist.
+        }
+
+        // Suggestion pipeline (debounced).
         this.inputSubject.pipe(
             debounceTime(300),
             takeUntil(this.destroy$)
         ).subscribe(value => {
-            // 这里可以触发自动完成或其他功能
             this.onInputChange(value);
+        });
+
+        // Draft persistence pipeline — separate debounce so we save
+        // more often than we suggest. 500ms is fast enough that
+        // most accidental closes preserve work.
+        this.draftSubject.pipe(
+            debounceTime(500),
+            takeUntil(this.destroy$)
+        ).subscribe(value => {
+            try {
+                if (value) {
+                    localStorage.setItem(ChatInputComponent.DRAFT_STORAGE_KEY, value);
+                } else {
+                    localStorage.removeItem(ChatInputComponent.DRAFT_STORAGE_KEY);
+                }
+            } catch {
+                // ignore quota / private mode failures
+            }
         });
     }
 
@@ -104,6 +146,7 @@ export class ChatInputComponent implements OnInit, OnDestroy {
         const target = event.target as HTMLTextAreaElement;
         this.inputValue = target.value;
         this.inputSubject.next(this.inputValue);
+        this.draftSubject.next(this.inputValue);
         this.autoResize();
     }
 
@@ -130,9 +173,21 @@ export class ChatInputComponent implements OnInit, OnDestroy {
         if (message && !this.disabled) {
             this.send.emit(message);
             this.inputValue = '';
+            // Successful send clears the persisted draft.
+            try { localStorage.removeItem(ChatInputComponent.DRAFT_STORAGE_KEY); } catch { /* ignore */ }
             setTimeout(() => this.autoResize(), 0);
             this.textInput?.nativeElement.focus();
         }
+    }
+
+    /**
+     * Cancel the in-flight stream. Wired to the Stop button that
+     * replaces Send while `streaming === true`. The chat-interface
+     * (parent) holds the AbortController and propagates the abort
+     * down through ChatRequest.signal.
+     */
+    onStop(): void {
+        this.stop.emit();
     }
 
     /**

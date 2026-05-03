@@ -98,39 +98,55 @@
     }
 
     .btn-send {
-        min-width: 100px;
-        height: 40px;
-        padding: 0 1rem;
+        min-width: 84px;
+        height: 36px;
+        padding: 0 0.875rem;
         border: none;
         border-radius: 0.5rem;
         background-color: var(--ai-primary);
         color: white;
         font-weight: 500;
         cursor: pointer;
-        transition: all 0.2s;
+        transition: background-color 0.15s;
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 0.5rem;
+        gap: 0.4rem;
 
-        &:hover:not(:disabled) {
-            background-color: #0069d9;
-            transform: translateY(-1px);
-        }
+        &:hover:not(:disabled) { background-color: #0069d9; }
 
         &:disabled {
             opacity: 0.5;
             cursor: not-allowed;
-            transform: none;
         }
 
-        .icon-send {
-            font-size: 1rem;
-        }
+        i { font-size: 0.85rem; }
+        .btn-text { font-size: 0.8rem; }
+    }
 
-        .btn-text {
-            font-size: 0.875rem;
-        }
+    /* Stop button — same geometry as Send so the swap is visually
+       seamless; red treatment makes it unambiguously distinct
+       (clicking by accident still means "cancel" not "send"). */
+    .btn-stop {
+        min-width: 84px;
+        height: 36px;
+        padding: 0 0.875rem;
+        border: none;
+        border-radius: 0.5rem;
+        background-color: var(--ai-danger, #dc3545);
+        color: white;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.15s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.4rem;
+
+        &:hover { background-color: #c82333; }
+
+        i { font-size: 0.85rem; }
+        .btn-text { font-size: 0.8rem; }
     }
 }
 

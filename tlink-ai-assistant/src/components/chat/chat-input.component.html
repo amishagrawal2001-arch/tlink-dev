@@ -18,12 +18,22 @@
     <!-- 操作按钮 -->
     <div class="input-actions">
         <!-- 清空按钮 -->
-        <button *ngIf="inputValue && !disabled" class="btn-icon" (click)="clear()" title="Clear">
+        <button *ngIf="inputValue && !disabled && !streaming" class="btn-icon" (click)="clear()" title="Clear">
             <i class="fa fa-times"></i>
         </button>
 
+        <!-- Stop button — replaces Send while a stream is in flight.
+             Plumbing: chat-interface.streamingActive flag → [streaming]
+             input → (stop) emits → chat-interface aborts the active
+             AbortController → all providers tear down their HTTP
+             requests promptly via the createLinkedAbortController link. -->
+        <button *ngIf="streaming" class="btn-stop" (click)="onStop()" title="Stop generating">
+            <i class="fa fa-stop"></i>
+            <span class="btn-text">Stop</span>
+        </button>
+
         <!-- 发送按钮 -->
-        <button class="btn-send" [disabled]="!inputValue.trim() || disabled || isOverLimit()" (click)="submit()"
+        <button *ngIf="!streaming" class="btn-send" [disabled]="!inputValue.trim() || disabled || isOverLimit()" (click)="submit()"
             title="Send (Enter)">
             <i class="fa fa-paper-plane"></i>
             <span class="btn-text">Send</span>

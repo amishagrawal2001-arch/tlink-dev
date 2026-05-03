@@ -23,6 +23,9 @@
             </span>
         </div>
         <div class="header-actions">
+            <button class="btn-icon" (click)="toggleShortcutsOverlay()" title="Keyboard shortcuts (?)">
+                <i class="fa fa-keyboard"></i>
+            </button>
             <button class="btn-icon" (click)="switchProvider()" [title]="t.chatInterface.switchProvider">
                 <i class="fa fa-exchange"></i>
             </button>
@@ -32,6 +35,62 @@
             <button class="btn-icon danger" (click)="clearChat()" [title]="t.chatInterface.clearChat">
                 <i class="fa fa-trash"></i>
             </button>
+        </div>
+    </div>
+
+    <!-- Keyboard-shortcuts overlay. Triggered by `?` (when not in an
+         input) or the keyboard icon in the header. Esc closes. -->
+    <div class="shortcuts-overlay" *ngIf="showShortcutsOverlay" (click)="showShortcutsOverlay = false">
+        <div class="shortcuts-panel" (click)="$event.stopPropagation()">
+            <div class="shortcuts-header">
+                <h3><i class="fa fa-keyboard"></i> Keyboard shortcuts</h3>
+                <button class="btn-icon" (click)="showShortcutsOverlay = false" title="Close (Esc)">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
+            <div class="shortcuts-body">
+                <div class="shortcuts-section">
+                    <h4>Chat</h4>
+                    <div class="shortcut-row">
+                        <span class="shortcut-label">Send message</span>
+                        <span class="shortcut-keys"><kbd>Enter</kbd></span>
+                    </div>
+                    <div class="shortcut-row">
+                        <span class="shortcut-label">New line in input</span>
+                        <span class="shortcut-keys"><kbd>Shift</kbd>+<kbd>Enter</kbd></span>
+                    </div>
+                    <div class="shortcut-row">
+                        <span class="shortcut-label">Clear input</span>
+                        <span class="shortcut-keys"><kbd>Esc</kbd> in input</span>
+                    </div>
+                </div>
+                <div class="shortcuts-section">
+                    <h4>Navigation</h4>
+                    <div class="shortcut-row">
+                        <span class="shortcut-label">Open this overlay</span>
+                        <span class="shortcut-keys"><kbd>?</kbd></span>
+                    </div>
+                    <div class="shortcut-row">
+                        <span class="shortcut-label">Close overlay / cancel</span>
+                        <span class="shortcut-keys"><kbd>Esc</kbd></span>
+                    </div>
+                </div>
+                <div class="shortcuts-section">
+                    <h4>Global (configurable in Tlink Settings)</h4>
+                    <div class="shortcut-row">
+                        <span class="shortcut-label">Open AI assistant</span>
+                        <span class="shortcut-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd></span>
+                    </div>
+                    <div class="shortcut-row">
+                        <span class="shortcut-label">Generate command</span>
+                        <span class="shortcut-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd></span>
+                    </div>
+                    <div class="shortcut-row">
+                        <span class="shortcut-label">Explain command</span>
+                        <span class="shortcut-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd></span>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -175,7 +234,14 @@
 
     <!-- 输入区域 -->
     <div class="ai-chat-input">
-        <app-chat-input (send)="onSendMessage($event)" [disabled]="isLoading">
+        <!-- chat-input swaps Send for a Stop button while a stream is
+             in flight (driven by isLoading). The (stop) event fires
+             cancelActiveStream which aborts the active controller. -->
+        <app-chat-input
+            (send)="onSendMessage($event)"
+            (stop)="cancelActiveStream()"
+            [disabled]="isLoading && !isLoading"
+            [streaming]="isLoading">
         </app-chat-input>
     </div>
 
