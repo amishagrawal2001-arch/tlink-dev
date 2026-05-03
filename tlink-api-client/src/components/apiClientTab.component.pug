@@ -9,7 +9,7 @@
                 option(*ngFor='let m of methods', [value]='m') {{m}}
 
         .env-switcher(ngbDropdown, container='body', placement='bottom-start')
-            button.env-btn(ngbDropdownToggle, [title]='"Active environment"|translate')
+            button.env-btn(ngbDropdownToggle, title='Active environment')
                 i.fas.fa-layer-group
                 span(*ngIf='envService.active') {{envService.active.name}}
                 span.env-empty(*ngIf='!envService.active') No env
@@ -40,7 +40,7 @@
         )
 
         //- Unresolved tokens chip — surfaces when {{var}} doesn't resolve.
-        .unresolved-chip(*ngIf='unresolvedTokens.length', [title]='"Unresolved variables"|translate')
+        .unresolved-chip(*ngIf='unresolvedTokens.length', title='Unresolved variables')
             i.fas.fa-exclamation-triangle.me-1
             | {{unresolvedTokens.length}} unresolved
 
@@ -61,7 +61,7 @@
 
         //- Overflow menu — imports + code-gen + realtime toggle.
         .overflow-menu(ngbDropdown, container='body', placement='bottom-end')
-            button.icon-btn(ngbDropdownToggle, [title]='"More"|translate')
+            button.icon-btn(ngbDropdownToggle, title='More')
                 i.fas.fa-ellipsis-v
             div(ngbDropdownMenu)
                 button.dropdown-item(ngbDropdownItem, (click)='openImport("curl")')

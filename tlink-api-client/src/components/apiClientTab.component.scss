@@ -37,6 +37,10 @@ $sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: var(--theme-bg-more);
     border-bottom: 1px solid var(--theme-bg-more-2);
     flex-shrink: 0;
+    // Belt-and-suspenders: guarantee the URL bar is visible even if a
+    // child element fails to render. Without this, a broken dropdown or
+    // pipe would leave a 0-height row that hides Send + the URL input.
+    min-height: 56px;
 }
 
 .method-wrapper { flex-shrink: 0; }
@@ -160,6 +164,13 @@ $sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     padding: 0 12px;
     border-bottom: 1px solid var(--theme-bg-more-2);
     flex-shrink: 0;
+    // 12 tabs in the request panel — let them scroll horizontally on
+    // narrower viewports rather than clip Hist/Env off-screen.
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    &::-webkit-scrollbar { height: 4px; }
+    &::-webkit-scrollbar-thumb { background: var(--theme-bg-more-2); border-radius: 2px; }
 }
 
 .panel-tab {
@@ -175,6 +186,9 @@ $sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     border-bottom: 2px solid transparent;
     transition: opacity 0.15s, border-color 0.15s;
     text-transform: capitalize;
+    // Don't let individual tabs shrink — the strip scrolls instead.
+    flex-shrink: 0;
+    white-space: nowrap;
 
     &.active {
         opacity: 1;
