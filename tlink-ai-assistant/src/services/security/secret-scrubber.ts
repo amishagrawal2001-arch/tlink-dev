@@ -17,12 +17,47 @@
  * redaction once is a real data leak. When in doubt, redact.
  */
 
+// Pattern ordering matters here. Specific-prefix patterns (anthropic
+// `sk-ant-`, groq `gsk_`, xai `xai-`, etc.) MUST run BEFORE the more
+// general `Bearer …` and `sk-…` ones — otherwise the general pattern
+// matches first and the specific label is lost. Net redaction security
+// is the same either way (the secret gets replaced regardless), but the
+// scrubbed output keeps useful provenance ("xai-<redacted>" vs the
+// vaguer "Bearer <redacted>") which makes debugging from logs much
+// easier.
 const SECRET_PATTERNS: { label: string; regex: RegExp; replace: (m: string) => string }[] = [
-    // HTTP Authorization: Bearer tokens, including the `Bearer ` prefix.
+    // ── Specific provider keys (run first) ─────────────────────────────
+    // Anthropic `sk-ant-…` covers user keys AND `sk-ant-admin01-…` /
+    // `sk-ant-api03-…` admin / org-scoped variants. Must run before
+    // the generic `sk-` pattern below.
     {
-        label: 'bearer',
-        regex: /\b(Bearer|Token)\s+([A-Za-z0-9\-_.=+/]{8,})/gi,
-        replace: (_m) => `${_m.split(/\s+/)[0]} <redacted>`
+        label: 'anthropic',
+        regex: /\bsk-ant-[A-Za-z0-9_-]{16,}\b/g,
+        replace: () => 'sk-ant-<redacted>'
+    },
+    // Groq (`gsk_…`). 20+ alphanumeric chars after the prefix.
+    {
+        label: 'groq',
+        regex: /\bgsk_[A-Za-z0-9]{20,}\b/g,
+        replace: () => 'gsk_<redacted>'
+    },
+    // xAI Grok (`xai-…`). Underscore-permitted.
+    {
+        label: 'xai',
+        regex: /\bxai-[A-Za-z0-9_-]{20,}\b/g,
+        replace: () => 'xai-<redacted>'
+    },
+    // HuggingFace (`hf_…`). User access tokens for the inference API.
+    {
+        label: 'huggingface',
+        regex: /\bhf_[A-Za-z0-9]{20,}\b/g,
+        replace: () => 'hf_<redacted>'
+    },
+    // Replicate (`r8_…`). 40 chars after the prefix.
+    {
+        label: 'replicate',
+        regex: /\br8_[A-Za-z0-9]{30,}\b/g,
+        replace: () => 'r8_<redacted>'
     },
     // OpenAI-style `sk-…` keys (project keys are longer; this catches both).
     {
@@ -30,11 +65,23 @@ const SECRET_PATTERNS: { label: string; regex: RegExp; replace: (m: string) => s
         regex: /\bsk-[A-Za-z0-9_-]{16,}\b/g,
         replace: () => 'sk-<redacted>'
     },
-    // Anthropic `sk-ant-…`.
+    // JWTs — three base64url segments separated by dots. Common as
+    // session / refresh tokens AND as the offline-license blob format
+    // we use ourselves; either way, redact in logs. Conservative
+    // segment-length floor (10/10/40) avoids false-positives on bare
+    // version triplets like "1.2.345...".
     {
-        label: 'anthropic',
-        regex: /\bsk-ant-[A-Za-z0-9_-]{16,}\b/g,
-        replace: () => 'sk-ant-<redacted>'
+        label: 'jwt',
+        regex: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{40,}\b/g,
+        replace: () => '<redacted-jwt>'
+    },
+    // ── Generic transport patterns (run after the specific ones) ───────
+    // HTTP Authorization: Bearer tokens. Catches anything not already
+    // redacted by a more specific provider pattern above.
+    {
+        label: 'bearer',
+        regex: /\b(Bearer|Token)\s+([A-Za-z0-9\-_.=+/]{8,})/gi,
+        replace: (_m) => `${_m.split(/\s+/)[0]} <redacted>`
     },
     // Google API keys (AIza…).
     {

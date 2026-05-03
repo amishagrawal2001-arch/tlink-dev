@@ -3,7 +3,8 @@ import { Observable, of } from 'rxjs';
 import { IBaseAiProvider, ProviderConfig, AuthConfig, ProviderCapability, HealthStatus, ValidationResult, ProviderInfo, PROVIDER_DEFAULTS } from '../../types/provider.types';
 import { ChatRequest, ChatResponse, CommandRequest, CommandResponse, ExplainRequest, ExplainResponse, AnalysisRequest, AnalysisResponse, StreamEvent, MessageRole } from '../../types/ai.types';
 import { LoggerService } from '../core/logger.service';
-import { scrubSecrets } from '../security/secret-scrubber';
+import { scrubSecrets, scrubSecretString } from '../security/secret-scrubber';
+import { CircuitBreaker, CircuitBreakerSnapshot, CircuitOpenError } from './circuit-breaker';
 
 /**
  * 基础AI提供商抽象类
@@ -19,6 +20,14 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
     protected config: ProviderConfig | null = null;
     protected isInitialized = false;
     protected lastHealthCheck: { status: HealthStatus; timestamp: Date } | null = null;
+
+    /**
+     * Per-provider circuit breaker. Trips after N consecutive non-4xx
+     * failures and short-circuits subsequent calls for `cooldownMs` so
+     * the user doesn't sit through a 14-second exponential-backoff hang
+     * on every chat turn while the upstream is down.
+     */
+    protected readonly breaker = new CircuitBreaker();
 
     constructor(protected logger: LoggerService) {}
 
@@ -291,19 +300,40 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
      * retry — they're auth/validation/not-found errors. Retrying them
      * just hides the real error under an "attempts exhausted" message.
      * Respects Retry-After header on 429.
+     *
+     * Also gated by the per-provider circuit breaker: when an upstream
+     * has been hard-down for `threshold` consecutive non-4xx failures,
+     * subsequent requests fail FAST with `CircuitOpenError` until the
+     * cooldown elapses (one half-open probe is then permitted). 4xx
+     * errors don't trip the breaker — those are user/config issues, not
+     * provider liveness signals.
      */
     protected async withRetry<T>(operation: () => Promise<T>): Promise<T> {
+        // Fail-fast path: if the breaker is open and the cooldown hasn't
+        // elapsed, don't even try the upstream. Saves the 14-second hang
+        // that exponential backoff would otherwise impose.
+        if (this.breaker.shouldShortCircuit()) {
+            const snap = this.breaker.snapshot();
+            throw new CircuitOpenError(this.name, snap.remainingCooldownMs);
+        }
+
         let lastError: Error | null = null;
         const retries = this.getRetries();
 
         for (let attempt = 0; attempt <= retries; attempt++) {
             try {
-                return await operation();
+                const result = await operation();
+                // Success — reset breaker if it was tripped (half-open
+                // probe succeeded) or just affirm the closed state.
+                this.breaker.recordSuccess();
+                return result;
             } catch (error) {
                 lastError = error instanceof Error ? error : new Error(String(error));
 
                 // Non-retriable: 4xx client errors (except 429 rate limit).
-                // These will never succeed on retry — surface immediately.
+                // These will never succeed on retry — surface immediately
+                // and DON'T tell the breaker (user-config errors aren't a
+                // liveness signal).
                 const status = (error as any)?.response?.status;
                 const isClientError = typeof status === 'number' && status >= 400 && status < 500 && status !== 429;
                 if (isClientError) {
@@ -312,6 +342,18 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
                         message: lastError.message
                     });
                     throw lastError;
+                }
+
+                // Real upstream failure (5xx, network, timeout, 429) —
+                // tell the breaker. Log only the first time the breaker
+                // trips, not on every subsequent failure.
+                const tripped = this.breaker.recordFailure();
+                if (tripped) {
+                    const snap = this.breaker.snapshot();
+                    this.logger.warn(
+                        `[${this.name}] circuit breaker OPEN — failing subsequent calls fast for ${Math.ceil(snap.remainingCooldownMs / 1000)}s`,
+                        { state: snap.state, consecutiveFailures: snap.consecutiveFailures }
+                    );
                 }
 
                 if (attempt === retries) {
@@ -338,6 +380,25 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
         }
 
         throw lastError;
+    }
+
+    /**
+     * Read-only snapshot of the breaker state. Useful for the Settings
+     * UI to surface "Provider unavailable" badges, and for the health-
+     * check probe to short-circuit when we already know the upstream
+     * is down.
+     */
+    getBreakerSnapshot (): CircuitBreakerSnapshot {
+        return this.breaker.snapshot();
+    }
+
+    /**
+     * Manual reset — for "I just fixed my API key / VPN / whatever,
+     * retry now" UI buttons. The breaker is otherwise self-healing via
+     * the half-open probe path; this just bypasses the wait.
+     */
+    resetBreaker (): void {
+        this.breaker.reset();
     }
 
     private parseRetryAfter(header: string | number | undefined): number {
@@ -373,33 +434,15 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
      */
     protected logError(error: any, context?: any): void {
         const raw = error instanceof Error ? error.message : String(error);
+        // Use the shared scrubber (in src/services/security/secret-scrubber)
+        // rather than maintaining a parallel narrower copy here. The
+        // shared one covers Groq, xAI, HuggingFace, Replicate, JWTs, etc.
+        // — everything the providers under this base class talk to.
         this.logger.error(`[${this.name}] Error`, {
-            error: this.scrubSecrets(raw),
-            stack: error instanceof Error ? this.scrubSecrets(error.stack ?? '') : undefined,
+            error: scrubSecretString(raw),
+            stack: error instanceof Error ? scrubSecretString(error.stack ?? '') : undefined,
             context
         });
-    }
-
-    /**
-     * Strip anything that looks like an API key or bearer token out of a
-     * free-form string before it hits the logger. Provider error messages
-     * occasionally include request URLs, response bodies, or
-     * `Authorization: Bearer ...` headers in their `.message`; we scrub
-     * defensively so a console dump in a bug report doesn't leak a key.
-     */
-    private scrubSecrets(s: string): string {
-        if (!s) return s;
-        return s
-            // Authorization: Bearer <token>
-            .replace(/(authorization\s*[:=]\s*)(bearer\s+)?[\w\-.~+/=]{12,}/gi, '$1$2***')
-            // OpenAI-style keys: sk-... / sk-proj-... (32+ chars)
-            .replace(/\bsk-[A-Za-z0-9_-]{20,}\b/g, 'sk-***')
-            // Anthropic: sk-ant-... / claude-*
-            .replace(/\bsk-ant-[A-Za-z0-9_-]{20,}\b/g, 'sk-ant-***')
-            // Generic high-entropy key=value in query strings
-            .replace(/([?&](?:api[_-]?key|token|access[_-]?token|refresh[_-]?token)=)[^&\s"']+/gi, '$1***')
-            // Bare `"apiKey": "..."` / `"token": "..."` in JSON-ish blobs
-            .replace(/(["']?(?:api[_-]?key|token|access[_-]?token|refresh[_-]?token|secret)["']?\s*[:=]\s*["'])[^"']+(["'])/gi, '$1***$2');
     }
 
     /**
