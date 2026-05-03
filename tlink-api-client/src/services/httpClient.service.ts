@@ -3,7 +3,10 @@ import * as fs from 'fs'
 import { APIClientOptions, APIResponse } from '../api/interfaces'
 import { EnvironmentService } from './environment.service'
 import { OAuth2Service } from './oauth2.service'
+import { CookiesService } from './cookies.service'
 import { getByPath } from './jsonPath'
+import { signRequest as awsSign } from './awsSigV4'
+import { needsNodeFetch, nodeFetch } from './nodeFetch'
 
 /**
  * HTTP execution layer. Owns the wire format — env-var substitution,
@@ -19,6 +22,7 @@ export class HttpClientService {
     constructor (
         private envService: EnvironmentService,
         private oauth2: OAuth2Service,
+        private cookies: CookiesService,
     ) {}
 
     async execute (options: APIClientOptions): Promise<APIResponse> {
@@ -84,6 +88,24 @@ export class HttpClientService {
             } catch (e: any) {
                 return this.errorResponse(startTime, e?.message ?? 'OAuth2 token acquisition failed')
             }
+        }
+        // AWS SigV4 is signed *after* the body is built (it hashes the
+        // body). Defer until below.
+
+        // Cookie jar — attach matching cookies to outgoing request.
+        if (options.sendCookies !== false) {
+            try {
+                const u = new URL(options.url)
+                const cookieHeader = this.cookies.buildCookieHeader(u.host)
+                if (cookieHeader) {
+                    const existing = Object.keys(headers).find(k => k.toLowerCase() === 'cookie')
+                    if (existing) {
+                        headers[existing] = `${headers[existing]}; ${cookieHeader}`
+                    } else {
+                        headers['Cookie'] = cookieHeader
+                    }
+                }
+            } catch { /* URL not parseable yet */ }
         }
 
         // ---- Body -------------------------------------------------
@@ -172,56 +194,110 @@ export class HttpClientService {
             }
         }
 
+        // ---- AWS SigV4 ------------------------------------------------
+        // Sign *after* the body is built so the body hash is correct.
+        // FormData / Blob bodies aren't signable in the renderer
+        // (no easy way to bytes them); we skip signing and warn.
+        if (options.auth.type === 'awsSigV4' && options.auth.awsSigV4) {
+            try {
+                let bodyForSigning: string | Uint8Array | undefined = undefined
+                if (typeof body === 'string') {
+                    bodyForSigning = body
+                } else if (body instanceof Uint8Array) {
+                    bodyForSigning = body
+                } else if (body instanceof Buffer) {
+                    bodyForSigning = new Uint8Array(body)
+                } else if (body !== undefined) {
+                    // FormData / Blob — can't reliably hash; AWS will
+                    // reject. Surface a clear error rather than silent.
+                    return this.errorResponse(startTime, 'AWS SigV4 cannot sign multipart / blob bodies; use raw JSON or text')
+                }
+                const signed = await awsSign({
+                    method: options.method,
+                    url: options.url,
+                    headers,
+                    body: bodyForSigning,
+                    cfg: options.auth.awsSigV4,
+                })
+                Object.assign(headers, signed.headers)
+                options.url = signed.url
+            } catch (e: any) {
+                return this.errorResponse(startTime, e?.message ?? 'AWS SigV4 signing failed')
+            }
+        }
+
         const timeoutId = setTimeout(() => controller.abort(), options.timeout || 30000)
 
         try {
-            const response = await fetch(options.url, {
+            // Decide between renderer fetch and Node-side fetch. The
+            // Node path handles mTLS, custom CAs, ignore-TLS, and
+            // HTTP proxies — features fetch doesn't expose.
+            const useNode = needsNodeFetch({
                 method: options.method,
                 headers,
                 body,
-                signal: controller.signal,
-                redirect: 'follow',
+                tls: options.tls,
+                proxy: options.proxy,
             })
+
+            let responseStatus = 0
+            let responseStatusText = ''
+            let responseHeaders: Record<string, string> = {}
+            let bodyBytes: Uint8Array = new Uint8Array(0)
+
+            if (useNode) {
+                const r = await nodeFetch(options.url, {
+                    method: options.method,
+                    headers,
+                    body: typeof body === 'string' || body instanceof Uint8Array ? body : undefined,
+                    signal: controller.signal,
+                    tls: options.tls,
+                    proxy: options.proxy,
+                })
+                responseStatus = r.status
+                responseStatusText = r.statusText
+                responseHeaders = r.headers
+                bodyBytes = r.body
+            } else {
+                const response = await fetch(options.url, {
+                    method: options.method,
+                    headers,
+                    body,
+                    signal: controller.signal,
+                    redirect: 'follow',
+                })
+                responseStatus = response.status
+                responseStatusText = response.statusText
+                responseHeaders = {}
+                response.headers.forEach((value, key) => {
+                    responseHeaders[key.toLowerCase()] = value
+                })
+                const buf = await response.arrayBuffer()
+                bodyBytes = new Uint8Array(buf)
+            }
 
             clearTimeout(timeoutId)
             const elapsed = performance.now() - startTime
-
-            const responseHeaders: Record<string, string> = {}
-            response.headers.forEach((value, key) => {
-                responseHeaders[key.toLowerCase()] = value
-            })
             const contentType = responseHeaders['content-type'] ?? ''
-
-            // Capture both bytes and text — text is what we display by
-            // default; bytes are what the user downloads if it's a
-            // binary content-type (image/*, application/pdf, …).
-            let bodyText = ''
-            let bodyBytes: Uint8Array = new Uint8Array(0)
-            try {
-                const buf = await response.arrayBuffer()
-                bodyBytes = new Uint8Array(buf)
-                bodyText = new TextDecoder('utf-8', { fatal: false }).decode(bodyBytes)
-            } catch (e: any) {
-                return {
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: responseHeaders,
-                    body: '',
-                    size: 0,
-                    time: Math.round(elapsed),
-                    error: `Failed to read response body: ${e.message}`,
-                }
-            }
+            const bodyText = new TextDecoder('utf-8', { fatal: false }).decode(bodyBytes)
 
             const apiResponse: APIResponse = {
-                status: response.status,
-                statusText: response.statusText,
+                status: responseStatus,
+                statusText: responseStatusText,
                 headers: responseHeaders,
                 body: bodyText,
                 bodyBytes,
                 contentType,
                 size: bodyBytes.byteLength,
                 time: Math.round(elapsed),
+            }
+
+            // Cookie ingest — Set-Cookie response header(s).
+            if (options.sendCookies !== false) {
+                try {
+                    const u = new URL(options.url)
+                    this.cookies.ingestSetCookie(u.host, responseHeaders['set-cookie'])
+                } catch { /* URL not parseable */ }
             }
 
             // ---- Post-response side effects -------------------------

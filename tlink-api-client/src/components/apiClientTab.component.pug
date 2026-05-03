@@ -319,6 +319,31 @@
                                 i.fas.fa-times.me-1
                                 | Clear
 
+                .auth-form(*ngIf='auth.type === "awsSigV4"')
+                    .field-group
+                        label.field-label Access Key ID
+                        input.field-input(type='text', [(ngModel)]='auth.awsSigV4.accessKeyId', placeholder='AKIA…')
+                    .field-group
+                        label.field-label Secret Access Key
+                        input.field-input(type='password', [(ngModel)]='auth.awsSigV4.secretAccessKey')
+                    .field-group
+                        label.field-label Region
+                        input.field-input(type='text', [(ngModel)]='auth.awsSigV4.region', placeholder='us-east-1')
+                    .field-group
+                        label.field-label Service
+                        input.field-input(type='text', [(ngModel)]='auth.awsSigV4.service', placeholder='execute-api')
+                    .field-group
+                        label.field-label Session token (optional)
+                        input.field-input(type='password', [(ngModel)]='auth.awsSigV4.sessionToken', placeholder='STS / role-assumption token')
+                    .script-hint
+                        | Headers
+                        code Authorization
+                        | ,
+                        code X-Amz-Date
+                        | ,
+                        code X-Amz-Content-Sha256
+                        |  are added on send.
+
                 .empty-state(*ngIf='auth.type === "none"')
                     i.fas.fa-unlock(style='font-size: 20px; opacity: 0.2;')
                     .mt-1 No authentication required
@@ -425,6 +450,11 @@
                             span {{col.name}}
                             span.tab-count.ms-1(*ngIf='col.source') {{col.source}}
                             .ms-auto.d-flex.gap-1
+                                button.icon-btn(
+                                    (click)='addFolder(col)',
+                                    title='Add folder'
+                                )
+                                    i.fas.fa-folder-plus
                                 button.icon-btn.save-btn(
                                     (click)='saveRequestToCollection(col)',
                                     title='Save current request here'
@@ -435,20 +465,119 @@
                                     title='Delete collection'
                                 )
                                     i.fas.fa-trash
-                        .saved-request(
-                            *ngFor='let req of col.requests',
-                            (click)='loadRequest(req)'
-                        )
-                            span.req-method([class]='req.options.method.toLowerCase()') {{req.options.method}}
-                            span.req-name {{req.name}}
-                            button.icon-btn.del-btn.ms-auto(
-                                (click)='deleteRequest(col, req); $event.stopPropagation()'
+
+                        //- Group rendering: root, then folders. Empty groups
+                        //- are shown so users can drop into them via the
+                        //- per-row folder selector.
+                        div(*ngFor='let g of folderedRequests(col)')
+                            .folder-header(*ngIf='g.folder')
+                                i.fas.fa-folder.me-1
+                                span {{g.folder.name}}
+                                button.icon-btn.del-btn.ms-auto(
+                                    (click)='deleteFolder(col, g.folder.id)',
+                                    title='Delete folder'
+                                )
+                                    i.fas.fa-times
+
+                            .saved-request(
+                                *ngFor='let req of g.requests; let idx = index',
+                                (click)='loadRequest(req)'
                             )
-                                i.fas.fa-times
+                                span.req-method([class]='req.options.method.toLowerCase()') {{req.options.method}}
+                                span.req-name {{req.name}}
+                                .ms-auto.d-flex.gap-1
+                                    button.icon-btn(
+                                        (click)='moveRequestUp(col, req); $event.stopPropagation()',
+                                        title='Move up'
+                                    )
+                                        i.fas.fa-arrow-up
+                                    button.icon-btn(
+                                        (click)='moveRequestDown(col, req); $event.stopPropagation()',
+                                        title='Move down'
+                                    )
+                                        i.fas.fa-arrow-down
+                                    select.folder-select(
+                                        [ngModel]='req.folderId',
+                                        (ngModelChange)='moveRequest(req, $event); $event.stopPropagation()',
+                                        (click)='$event.stopPropagation()',
+                                        title='Move to folder'
+                                    )
+                                        option([ngValue]='null') (root)
+                                        option(*ngFor='let f of col.folders', [ngValue]='f.id') {{f.name}}
+                                    button.icon-btn.del-btn(
+                                        (click)='deleteRequest(col, req); $event.stopPropagation()'
+                                    )
+                                        i.fas.fa-times
                         .no-requests(*ngIf='col.requests.length === 0') No saved requests
                 .empty-state(*ngIf='collections.length === 0')
                     i.fas.fa-folder-open(style='font-size: 20px; opacity: 0.2;')
                     .mt-1 Create a collection to save requests
+
+            //- ===== Net (TLS / proxy / cookies toggle) =====
+            .panel-body(*ngIf='activeRequestTab === "net"')
+                .field-group
+                    label
+                        input(type='checkbox', [(ngModel)]='sendCookies')
+                        |  Send + receive cookies for this request
+                .field-group
+                    label.field-label HTTP proxy URL
+                    input.field-input(type='text', [(ngModel)]='proxy', placeholder='http://corp:3128 (leave empty to use system proxy)')
+                .field-group
+                    label
+                        input(type='checkbox', [checked]='tls.rejectUnauthorized === false', (change)='tls.rejectUnauthorized = $event.target.checked ? false : undefined')
+                        |  Ignore TLS certificate errors
+                    .script-hint Only for dev / self-signed targets — dangerous in production.
+                .field-group
+                    label.field-label Client certificate (PEM)
+                    .file-cell
+                        span.file-path([title]='tls.clientCertPath') {{tls.clientCertPath || "(none)"}}
+                        button.body-type-btn((click)='pickClientCert()')
+                            i.fas.fa-folder-open.me-1
+                            | Pick
+                        button.body-type-btn(*ngIf='tls.clientCertPath', (click)='clearTlsPath("cert")')
+                            i.fas.fa-times
+                .field-group
+                    label.field-label Client private key (PEM)
+                    .file-cell
+                        span.file-path([title]='tls.clientKeyPath') {{tls.clientKeyPath || "(none)"}}
+                        button.body-type-btn((click)='pickClientKey()')
+                            i.fas.fa-folder-open.me-1
+                            | Pick
+                        button.body-type-btn(*ngIf='tls.clientKeyPath', (click)='clearTlsPath("key")')
+                            i.fas.fa-times
+                .field-group
+                    label.field-label Custom CA (PEM)
+                    .file-cell
+                        span.file-path([title]='tls.caPath') {{tls.caPath || "(none)"}}
+                        button.body-type-btn((click)='pickCAFile()')
+                            i.fas.fa-folder-open.me-1
+                            | Pick
+                        button.body-type-btn(*ngIf='tls.caPath', (click)='clearTlsPath("ca")')
+                            i.fas.fa-times
+
+            //- ===== Cookies =====
+            .panel-body(*ngIf='activeRequestTab === "cookies"')
+                .history-header
+                    span.text-muted(*ngIf='cookiesService.cookies.length > 0') {{cookiesService.cookies.length}} entries
+                    button.icon-btn.ms-auto((click)='addCookie()', title='Add cookie')
+                        i.fas.fa-plus
+                    button.icon-btn.del-btn(*ngIf='cookiesService.cookies.length > 0', (click)='clearAllCookies()', title='Clear all cookies')
+                        i.fas.fa-trash
+                .env-vars
+                    .cookie-row(*ngFor='let c of cookiesService.cookies')
+                        input(type='checkbox', [(ngModel)]='c.enabled', (ngModelChange)='updateCookie(c)')
+                        input.var-key(type='text', placeholder='domain', [(ngModel)]='c.domain', (ngModelChange)='updateCookie(c)')
+                        input.var-key(type='text', placeholder='name', [(ngModel)]='c.name', (ngModelChange)='updateCookie(c)')
+                        input.var-val(type='text', placeholder='value', [(ngModel)]='c.value', (ngModelChange)='updateCookie(c)')
+                        label.cookie-secure(title='Secure-only')
+                            input(type='checkbox', [(ngModel)]='c.secure', (ngModelChange)='updateCookie(c)')
+                            i.fas.fa-lock(*ngIf='c.secure')
+                            i.fas.fa-lock-open(*ngIf='!c.secure')
+                        button.icon-btn((click)='deleteCookie(c.id)')
+                            i.fas.fa-times
+                .empty-state(*ngIf='cookiesService.cookies.length === 0')
+                    i.fas.fa-cookie-bite(style='font-size: 20px; opacity: 0.2;')
+                    .mt-1 Cookies received from servers appear here
 
             //- ===== History =====
             .panel-body(*ngIf='activeRequestTab === "history"')

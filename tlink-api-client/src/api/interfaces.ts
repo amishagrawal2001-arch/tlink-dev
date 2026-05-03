@@ -2,7 +2,7 @@ import { Profile } from 'tlink-core'
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS'
 export type BodyType = 'none' | 'json' | 'text' | 'form-data' | 'urlencoded' | 'graphql' | 'binary'
-export type AuthType = 'none' | 'bearer' | 'basic' | 'apikey' | 'oauth2'
+export type AuthType = 'none' | 'bearer' | 'basic' | 'apikey' | 'oauth2' | 'awsSigV4'
 export type APIKeyLocation = 'header' | 'query'
 export type OAuth2GrantType = 'authorization_code' | 'client_credentials' | 'password'
 
@@ -36,6 +36,20 @@ export interface AuthConfig {
     /** OAuth2 — once a token is acquired we cache it here so subsequent
      *  sends don't re-prompt. The user can clear via the UI. */
     oauth2?: OAuth2Config
+    /** AWS Signature Version 4 — for SigV4-protected APIs. The session
+     *  token is optional (used by STS / role-assumption credentials). */
+    awsSigV4?: AwsSigV4Config
+}
+
+export interface AwsSigV4Config {
+    accessKeyId: string
+    secretAccessKey: string
+    /** Service name (e.g. `execute-api`, `s3`, `lambda`). */
+    service: string
+    /** AWS region (e.g. `us-east-1`). */
+    region: string
+    /** Optional STS / temporary-credential token. */
+    sessionToken?: string
 }
 
 export interface OAuth2Config {
@@ -118,6 +132,26 @@ export interface APIClientOptions {
     assertions?: ResponseAssertion[]
     /** When true the response body is written to disk on success. */
     saveResponseTo?: string
+    /** Per-request TLS overrides — used for self-signed certs and
+     *  mutual-TLS handshakes. */
+    tls?: TLSConfig
+    /** Per-request HTTP proxy URL (e.g. http://corp:3128). Empty / unset
+     *  means "respect the system proxy". */
+    proxy?: string
+    /** Whether to attach matching cookies from the cookie jar. */
+    sendCookies?: boolean
+}
+
+export interface TLSConfig {
+    /** Skip cert / hostname verification. Surfaced with a red warning
+     *  in the UI — only ever for dev / self-signed targets. */
+    rejectUnauthorized?: boolean
+    /** PEM cert (string) or path to .pem/.crt for mTLS. */
+    clientCertPath?: string
+    /** PEM key (string) or path to .pem/.key for mTLS. */
+    clientKeyPath?: string
+    /** Custom CA bundle path (PEM). */
+    caPath?: string
 }
 
 /** Quick assertion — exists primarily as UI sugar over postScript. */
@@ -165,10 +199,27 @@ export interface SavedRequest {
 }
 
 /** Optional folder under a collection. Flat hierarchy for now (no
- *  nested folders) to keep the UI simple. */
+ *  nested folders) to keep the UI simple. `order` carries the
+ *  user's drag-reordered position; folders without an explicit
+ *  order fall to the bottom of the list. */
 export interface APIFolder {
     id: string
     name: string
+    order?: number
+}
+
+/** Cookie jar entry — domain-scoped, persisted across sessions.
+ *  We deliberately keep this minimal (no Path attribute, no
+ *  Same-Site, no expiry tracking) — full RFC-compliant jars are
+ *  the realm of HttpOnly server-side libs and not worth the
+ *  weight here. The user can edit values directly in the UI. */
+export interface CookieEntry {
+    id: string
+    domain: string
+    name: string
+    value: string
+    enabled: boolean
+    secure: boolean
 }
 
 export interface APICollection {

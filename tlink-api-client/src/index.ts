@@ -18,6 +18,7 @@ import { HistoryService } from './services/history.service'
 import { AssertionsService } from './services/assertions.service'
 import { ScriptService } from './services/script.service'
 import { OAuth2Service } from './services/oauth2.service'
+import { CookiesService } from './services/cookies.service'
 
 @NgModule({
     imports: [
@@ -39,6 +40,7 @@ import { OAuth2Service } from './services/oauth2.service'
         AssertionsService,
         ScriptService,
         OAuth2Service,
+        CookiesService,
     ],
     declarations: [
         APIClientTabComponent,

@@ -8,13 +8,14 @@ import { HistoryService } from '../services/history.service'
 import { AssertionsService } from '../services/assertions.service'
 import { ScriptService } from '../services/script.service'
 import { OAuth2Service } from '../services/oauth2.service'
+import { CookiesService } from '../services/cookies.service'
 import { WebSocketService, RealtimeKind } from '../services/websocket.service'
 import { exportCurl, exportCode, CodeTarget } from '../services/curl'
 import {
     APIClientProfile, APIResponse, HttpMethod, BodyType, AuthType, RequestHeader,
     SavedRequest, APICollection, APIEnvironment, EnvironmentVariable,
     FormDataField, ResponseExtractor, ResponseAssertion, GraphQLPayload, OAuth2Config,
-    APIKeyLocation, OAuth2GrantType,
+    APIKeyLocation, OAuth2GrantType, AwsSigV4Config, TLSConfig, CookieEntry, APIFolder,
 } from '../api/interfaces'
 import { ImportModalComponent, ImportCollectionResult, ImportModalResult } from './importModal.component'
 
@@ -47,7 +48,7 @@ export class APIClientTabComponent extends BaseTabComponent implements OnDestroy
     profile: APIClientProfile
     methods: HttpMethod[] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
     bodyTypes: BodyType[] = ['none', 'json', 'text', 'urlencoded', 'form-data', 'graphql', 'binary']
-    authTypes: AuthType[] = ['none', 'bearer', 'basic', 'apikey', 'oauth2']
+    authTypes: AuthType[] = ['none', 'bearer', 'basic', 'apikey', 'oauth2', 'awsSigV4']
     grantTypes: OAuth2GrantType[] = ['authorization_code', 'client_credentials', 'password']
     codeTargets: CodeTarget[] = ['fetch', 'axios', 'python', 'go']
 
@@ -61,7 +62,9 @@ export class APIClientTabComponent extends BaseTabComponent implements OnDestroy
         { id: 'pre', label: 'Pre' },
         { id: 'post', label: 'Post' },
         { id: 'extract', label: 'Extract' },
+        { id: 'net', label: 'Net' },
         { id: 'collections', label: 'Coll' },
+        { id: 'cookies', label: 'Cookies' },
         { id: 'history', label: 'Hist' },
         { id: 'env', label: 'Env' },
     ]
@@ -73,6 +76,7 @@ export class APIClientTabComponent extends BaseTabComponent implements OnDestroy
             case 'basic': return 'Basic'
             case 'apikey': return 'API Key'
             case 'oauth2': return 'OAuth 2.0'
+            case 'awsSigV4': return 'AWS SigV4'
             default: return type
         }
     }
@@ -111,20 +115,36 @@ export class APIClientTabComponent extends BaseTabComponent implements OnDestroy
 
     auth: { type: AuthType, token: string, username: string, password: string,
         apiKeyName: string, apiKeyValue: string, apiKeyLocation: APIKeyLocation,
-        oauth2: OAuth2Config } = {
+        oauth2: OAuth2Config, awsSigV4: AwsSigV4Config } = {
             type: 'none', token: '', username: '', password: '',
             apiKeyName: '', apiKeyValue: '', apiKeyLocation: 'header',
             oauth2: {
                 grantType: 'authorization_code', tokenUrl: '', clientId: '', usePkce: true,
             },
+            awsSigV4: {
+                accessKeyId: '', secretAccessKey: '', service: 'execute-api', region: 'us-east-1',
+            },
         }
 
     timeout = 30000
 
+    /** Per-request TLS overrides — populated from the Net tab. */
+    tls: TLSConfig = {
+        rejectUnauthorized: undefined,
+        clientCertPath: '',
+        clientKeyPath: '',
+        caPath: '',
+    }
+
+    /** Per-request HTTP proxy override. */
+    proxy = ''
+    /** Whether to attach + ingest cookies for this request. */
+    sendCookies = true
+
     response: APIResponse | null = null
     sending = false
     private currentController: AbortController | null = null
-    activeRequestTab: 'params' | 'headers' | 'body' | 'auth' | 'tests' | 'pre' | 'post' | 'extract' | 'collections' | 'history' | 'env' = 'headers'
+    activeRequestTab: 'params' | 'headers' | 'body' | 'auth' | 'tests' | 'pre' | 'post' | 'extract' | 'collections' | 'history' | 'env' | 'net' | 'cookies' = 'headers'
     activeResponseTab: 'body' | 'headers' | 'raw' | 'preview' | 'tests' = 'body'
 
     /** When true, the response pane shows the realtime timeline instead. */
@@ -160,6 +180,7 @@ export class APIClientTabComponent extends BaseTabComponent implements OnDestroy
     private assertionsService: AssertionsService
     private scriptService: ScriptService
     private oauth2: OAuth2Service
+    cookiesService: CookiesService
     ws: WebSocketService
     private hotkeys: HotkeysService
     private ngbModal: NgbModal
@@ -176,6 +197,7 @@ export class APIClientTabComponent extends BaseTabComponent implements OnDestroy
         this.assertionsService = injector.get(AssertionsService)
         this.scriptService = injector.get(ScriptService)
         this.oauth2 = injector.get(OAuth2Service)
+        this.cookiesService = injector.get(CookiesService)
         this.ws = injector.get(WebSocketService)
         this.hotkeys = injector.get(HotkeysService)
         this.ngbModal = injector.get(NgbModal)
@@ -218,9 +240,15 @@ export class APIClientTabComponent extends BaseTabComponent implements OnDestroy
                     apiKeyValue: a.apiKeyValue ?? '',
                     apiKeyLocation: a.apiKeyLocation ?? 'header',
                     oauth2: a.oauth2 ? JSON.parse(JSON.stringify(a.oauth2)) : this.auth.oauth2,
+                    awsSigV4: a.awsSigV4 ? JSON.parse(JSON.stringify(a.awsSigV4)) : this.auth.awsSigV4,
                 }
             }
             this.timeout = opts.timeout ?? this.timeout
+            if (opts.tls) {
+                this.tls = { ...this.tls, ...opts.tls }
+            }
+            this.proxy = opts.proxy ?? ''
+            this.sendCookies = opts.sendCookies !== false
         }
         this.validateBody()
         this.loadCollections()
@@ -372,6 +400,7 @@ export class APIClientTabComponent extends BaseTabComponent implements OnDestroy
                 apiKeyValue: this.auth.apiKeyValue,
                 apiKeyLocation: this.auth.apiKeyLocation,
                 oauth2: { ...this.auth.oauth2 },
+                awsSigV4: { ...this.auth.awsSigV4 },
             },
             formData: this.formData.map(f => ({ ...f })),
             binaryPath: this.binaryPath || undefined,
@@ -380,6 +409,9 @@ export class APIClientTabComponent extends BaseTabComponent implements OnDestroy
             assertions: this.assertions.map(a => ({ ...a })),
             preScript: this.preScript,
             postScript: this.postScript,
+            tls: { ...this.tls },
+            proxy: this.proxy.trim() || undefined,
+            sendCookies: this.sendCookies,
         }
     }
 
@@ -647,7 +679,11 @@ export class APIClientTabComponent extends BaseTabComponent implements OnDestroy
             apiKeyValue: options.auth?.apiKeyValue ?? '',
             apiKeyLocation: options.auth?.apiKeyLocation ?? 'header',
             oauth2: options.auth?.oauth2 ?? this.auth.oauth2,
+            awsSigV4: options.auth?.awsSigV4 ?? this.auth.awsSigV4,
         }
+        this.tls = { ...this.tls, ...(options.tls ?? {}) }
+        this.proxy = options.proxy ?? ''
+        this.sendCookies = options.sendCookies !== false
         this.validateBody()
     }
 
@@ -820,6 +856,125 @@ export class APIClientTabComponent extends BaseTabComponent implements OnDestroy
 
     removeAssertion (i: number): void {
         this.assertions.splice(i, 1)
+    }
+
+    // ----- TLS / proxy file pickers (Net tab) -------------------------
+
+    async pickClientCert (): Promise<void> {
+        const path = await this.pickOpenPath()
+        if (path) {this.tls.clientCertPath = path}
+    }
+
+    async pickClientKey (): Promise<void> {
+        const path = await this.pickOpenPath()
+        if (path) {this.tls.clientKeyPath = path}
+    }
+
+    async pickCAFile (): Promise<void> {
+        const path = await this.pickOpenPath()
+        if (path) {this.tls.caPath = path}
+    }
+
+    clearTlsPath (which: 'cert' | 'key' | 'ca'): void {
+        if (which === 'cert') {this.tls.clientCertPath = ''}
+        if (which === 'key') {this.tls.clientKeyPath = ''}
+        if (which === 'ca') {this.tls.caPath = ''}
+    }
+
+    // ----- cookies UI helpers ------------------------------------------
+
+    addCookie (): void {
+        this.cookiesService.create({
+            domain: '',
+            name: '',
+            value: '',
+            enabled: true,
+            secure: false,
+        })
+    }
+
+    updateCookie (cookie: CookieEntry): void {
+        this.cookiesService.update(cookie)
+    }
+
+    deleteCookie (id: string): void {
+        this.cookiesService.delete(id)
+    }
+
+    clearAllCookies (): void {
+        this.cookiesService.clearAll()
+    }
+
+    // ----- folders + drag-reorder -------------------------------------
+
+    addFolder (col: APICollection): void {
+        if (!col.folders) {col.folders = []}
+        const name = prompt('Folder name')?.trim()
+        if (!name) {return}
+        col.folders.push({
+            id: `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            name,
+            order: col.folders.length,
+        })
+        this.saveCollections()
+    }
+
+    deleteFolder (col: APICollection, folderId: string): void {
+        if (!col.folders) {return}
+        col.folders = col.folders.filter(f => f.id !== folderId)
+        // Move requests back to root.
+        for (const req of col.requests) {
+            if (req.folderId === folderId) {req.folderId = null}
+        }
+        this.saveCollections()
+    }
+
+    /** Returns the requests grouped by folder (root requests first). */
+    folderedRequests (col: APICollection): { folder: APIFolder | null, requests: SavedRequest[] }[] {
+        const root = col.requests.filter(r => !r.folderId)
+        const groups: { folder: APIFolder | null, requests: SavedRequest[] }[] = [{ folder: null, requests: root }]
+        const folders = [...(col.folders ?? [])].sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
+        for (const f of folders) {
+            groups.push({
+                folder: f,
+                requests: col.requests.filter(r => r.folderId === f.id),
+            })
+        }
+        return groups
+    }
+
+    /** Move a request to a different folder (or root). Called from a
+     *  context-menu / drop target in the UI. */
+    moveRequest (req: SavedRequest, folderId: string | null): void {
+        req.folderId = folderId
+        this.saveCollections()
+    }
+
+    /** Reorder a request within its folder by swapping with the previous /
+     *  next sibling. Drag-and-drop is more polished but a long way off; this
+     *  gets us functional reordering with two arrow buttons per row. */
+    moveRequestUp (col: APICollection, req: SavedRequest): void {
+        const peers = col.requests.filter(r => r.folderId === req.folderId)
+        const idxInPeers = peers.indexOf(req)
+        if (idxInPeers <= 0) {return}
+        const swap = peers[idxInPeers - 1]
+        const fullA = col.requests.indexOf(req)
+        const fullB = col.requests.indexOf(swap)
+        col.requests[fullA] = swap
+        col.requests[fullB] = req
+        this.saveCollections()
+    }
+
+    moveRequestDown (col: APICollection, req: SavedRequest): void {
+        const peers = col.requests.filter(r => r.folderId === req.folderId)
+        const idxInPeers = peers.indexOf(req)
+        if (idxInPeers === -1 || idxInPeers >= peers.length - 1) {return}
+        const swap = peers[idxInPeers + 1]
+        const fullA = col.requests.indexOf(req)
+        const fullB = col.requests.indexOf(swap)
+        col.requests[fullA] = swap
+        col.requests[fullB] = req
+        this.saveCollections()
     }
 
     // ----- history -----------------------------------------------------

@@ -7,6 +7,7 @@ export class APIClientConfigProvider extends ConfigProvider {
             environments: [],
             activeEnvironmentId: null,
             history: [],
+            cookies: [],
             defaultTimeout: 30000,
         },
     }
