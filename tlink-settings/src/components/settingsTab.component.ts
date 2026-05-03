@@ -234,6 +234,56 @@ export class SettingsTabComponent extends BaseTabComponent {
         }
     }
 
+    // ─── Offline activation (Settings panel surface) ───────────────────────
+    //
+    // The activation dialog has a "Have an activation code?" link that pivots
+    // its body into offline-redeem mode. But that dialog only opens when the
+    // user is NOT signed in — a paid user who needs to switch to an offline
+    // session, or a trial user who has a code in hand, has no path. Mirror
+    // the redeem flow here so the Settings panel can drive it too.
+
+    /** Toggleable visibility of the offline-activation form. Hidden by default
+     *  so the panel doesn't show a giant textarea to users who don't need it. */
+    showOfflineActivation = false
+    offlineCodeInput = ''
+    offlineRedeeming = false
+    offlineRedeemError = ''
+    offlineRedeemSuccess = ''
+
+    toggleOfflineActivation () {
+        this.showOfflineActivation = !this.showOfflineActivation
+        if (!this.showOfflineActivation) {
+            this.offlineRedeemError = ''
+            this.offlineRedeemSuccess = ''
+        }
+    }
+
+    async redeemOfflineCode () {
+        if (this.offlineRedeeming) {return}
+        this.offlineRedeemError = ''
+        this.offlineRedeemSuccess = ''
+        const code = this.offlineCodeInput.trim()
+        if (!code) {
+            this.offlineRedeemError = 'Paste an activation code first.'
+            return
+        }
+        this.offlineRedeeming = true
+        try {
+            const result = await this.licenseSvc.redeemOfflineCode(code)
+            if (result.success) {
+                this.offlineRedeemSuccess = result.message || 'Activated.'
+                this.offlineCodeInput = ''
+                // Auto-collapse the form once redemption lands so the user
+                // sees the new active license, not the still-open form.
+                setTimeout(() => { this.showOfflineActivation = false }, 1500)
+            } else {
+                this.offlineRedeemError = result.message || 'Activation failed.'
+            }
+        } finally {
+            this.offlineRedeeming = false
+        }
+    }
+
     async deactivateLicense () {
         await this.licenseSvc.deactivateLicense()
         this.licenseSuccess = ''

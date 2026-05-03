@@ -471,6 +471,45 @@ textarea {
     &.stat-warn .heartbeat-sparkline { color: #d97706; }
 }
 
+// ─── Offline activation form ───────────────────────────────────────────
+//
+// Tucked behind a "I have an activation code" toggle so the textarea
+// doesn't dominate the panel by default. Width fills the form-line slot,
+// monospace font + tight letter-spacing match the look of the JWT-shaped
+// blob the user is pasting.
+.offline-activation-form {
+    width: 100%;
+
+    .offline-code-input {
+        width: 100%;
+        font-family: 'Source Code Pro', monospace;
+        font-size: 11px;
+        letter-spacing: 0.3px;
+        line-height: 1.5;
+        word-break: break-all;
+        background: var(--bs-tertiary-bg, rgba(128, 128, 128, 0.12)) !important;
+        border: 1.5px solid var(--bs-border-color, rgba(128, 128, 128, 0.3)) !important;
+        color: var(--bs-body-color, currentColor) !important;
+        padding: 10px 12px;
+        border-radius: 6px;
+        resize: vertical;
+        min-height: 100px;
+
+        &::placeholder {
+            color: var(--bs-secondary-color, rgba(128, 128, 128, 0.55)) !important;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 13px;
+            letter-spacing: 0;
+        }
+
+        &:focus {
+            border-color: #667eea !important;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.25) !important;
+            outline: none;
+        }
+    }
+}
+
 // ─── License actions footer ────────────────────────────────────────────
 //
 // Bottom-of-panel button toolbar. Two flex groups — secondary actions on

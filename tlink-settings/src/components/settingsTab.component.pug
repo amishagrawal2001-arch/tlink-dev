@@ -327,6 +327,54 @@
                                 i.fas.me-1([class.fa-check]='fingerprintCopied', [class.fa-copy]='!fingerprintCopied')
                                 | {{ fingerprintCopied ? 'Copied' : 'Copy' }}
 
+                    //- Offline activation — for users who can't reach the
+                    //- license server (air-gapped network, blocked corporate
+                    //- VPN, etc.). The activation dialog also exposes this
+                    //- via "Have an activation code?", but the dialog only
+                    //- opens when the user is signed out. Mirroring the
+                    //- redeem flow here lets a trial user paste a code
+                    //- without first signing out, and lets a paid user
+                    //- redeem a refreshed offline code mid-session.
+                    h5.mt-4
+                        i.fas.fa-key
+                        span(translate) Offline Activation
+                    .form-line
+                        .header
+                            .title(translate) Activation code
+                            .description(translate) Paste the code your admin generated for this device's fingerprint above. Verified locally — no network required.
+                        button.btn.btn-outline-secondary(
+                            *ngIf='!showOfflineActivation',
+                            (click)='toggleOfflineActivation()'
+                        )
+                            i.fas.fa-key.me-1
+                            | I have an activation code
+                        .offline-activation-form(*ngIf='showOfflineActivation')
+                            textarea.form-control.offline-code-input(
+                                rows='5',
+                                [(ngModel)]='offlineCodeInput',
+                                placeholder='Paste the long activation code (starts with eyJ…)',
+                                [disabled]='offlineRedeeming'
+                            )
+                            .d-flex.gap-2.mt-2.flex-wrap
+                                button.btn.btn-primary(
+                                    (click)='redeemOfflineCode()',
+                                    [disabled]='offlineRedeeming || !offlineCodeInput.trim()'
+                                )
+                                    i.fas.me-1(
+                                        [class.fa-spinner]='offlineRedeeming',
+                                        [class.fa-spin]='offlineRedeeming',
+                                        [class.fa-check]='!offlineRedeeming'
+                                    )
+                                    | {{ offlineRedeeming ? 'Verifying…' : 'Activate' }}
+                                button.btn.btn-link.btn-sm(
+                                    (click)='toggleOfflineActivation()',
+                                    [disabled]='offlineRedeeming'
+                                ) Cancel
+                            .text-danger.mt-2.small(*ngIf='offlineRedeemError') {{ offlineRedeemError }}
+                            .text-success.mt-2.small(*ngIf='offlineRedeemSuccess')
+                                i.fas.fa-check-circle.me-1
+                                | {{ offlineRedeemSuccess }}
+
                     h5.mt-4
                         i.fas.fa-server
                         span(translate) License Server

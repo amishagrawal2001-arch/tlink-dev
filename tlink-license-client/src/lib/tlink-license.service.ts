@@ -451,6 +451,44 @@ export class TlinkLicenseService implements OnDestroy {
 
         const bundle = await this.storage.load()
 
+        // Offline-session path: a previous launch redeemed an offline activation
+        // code. We stored the JWT blob in the accessToken slot and the sentinel
+        // 'offline' in refreshToken. Re-verify the blob locally — no server
+        // round-trip — and either re-apply or drop back to sign-in.
+        if (bundle && bundle.refreshToken === TlinkLicenseService.OFFLINE_SESSION_SENTINEL) {
+            const verified = await this.verifyOfflineBlob(bundle.accessToken)
+            if (verified.ok) {
+                // eslint-disable-next-line no-console
+                console.info('%c[license:bootstrap] resumed offline session',
+                    'color:#16a34a;font-weight:600',
+                    {
+                        endDate: verified.payload.end_date,
+                        exp: verified.payload.exp,
+                    })
+                await this.applyOfflinePayload(verified.payload, bundle.accessToken, false)
+                // Hydrate the rest of the bundle so the UI shows the cached
+                // user + dates immediately. applyOfflinePayload set most of
+                // this from the freshly-verified payload; we just sync the
+                // remaining bookkeeping.
+                this.lastServerContactAt = bundle.lastServerContactAt ? new Date(bundle.lastServerContactAt) : null
+                // No heartbeat / refresh — there's no server to contact for
+                // this session type. The blob's exp determines validity.
+                return this.licenseStatus
+            }
+            // Blob no longer verifies (expired, key changed, tampered, etc.).
+            // Wipe and drop to sign-in with the specific reason surfaced.
+            // eslint-disable-next-line no-console
+            console.warn('%c[license:bootstrap] stored offline session no longer verifies — clearing',
+                'color:#dc2626;font-weight:700',
+                { reason: verified.message })
+            await this.storage.clear()
+            this.reset()
+            this.licenseStatus = 'unauthenticated'
+            this.lastReasonCode = null
+            this.emit()
+            return this.licenseStatus
+        }
+
         // Fast path: real license bundle exists — try to refresh against server.
         if (bundle) {
             this.hydrateFromBundle(bundle)
@@ -927,24 +965,26 @@ export class TlinkLicenseService implements OnDestroy {
     }
 
     /**
-     * Redeems a signed offline activation code. Verifies the RS256 signature
-     * with Node's crypto module (no external JWT lib needed) and promotes the
-     * local session to `active` using the claims in the blob.
+     * Verify an offline activation JWT. Returns either the parsed payload
+     * (signature good, alg=RS256, payload.typ === 'offline', not expired,
+     * and — if the blob is fingerprint-bound — fingerprint matches this
+     * device) OR an error message describing what went wrong.
      *
-     * The public key is ideally pre-fetched while the user was online; if we
-     * can't fetch it now and we don't have it cached, redemption fails.
+     * Shared between `redeemOfflineCode` (first redemption) and bootstrap
+     * (re-verify on every relaunch). Idempotent — safe to call repeatedly.
      */
-    async redeemOfflineCode (code: string): Promise<ActivationResult> {
-        if (this.proxy) {return this.proxy.redeemOfflineCode(code)}
-        const token = code.trim()
+    private async verifyOfflineBlob (token: string): Promise<
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    { ok: true; payload: any } | { ok: false; message: string }
+    > {
         if (!token || !token.startsWith('eyJ') || token.split('.').length !== 3) {
-            return { success: false, message: 'Invalid activation code format.' }
+            return { ok: false, message: 'Invalid activation code format.' }
         }
 
         const publicKey = this.getOfflinePublicKey()
         if (!publicKey) {
             return {
-                success: false,
+                ok: false,
                 message:
                     'This build of the app has no offline-verification key baked in. ' +
                     'Ask your admin for an app build that includes the public key, or ' +
@@ -955,6 +995,7 @@ export class TlinkLicenseService implements OnDestroy {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let payload: any = null
         try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const crypto = (window as any).require?.('crypto') ?? require('crypto')
             const [headerB64, payloadB64, sigB64] = token.split('.')
 
@@ -964,37 +1005,81 @@ export class TlinkLicenseService implements OnDestroy {
             // and loud on any unexpected header rather than trust the verifier.
             const header = JSON.parse(Buffer.from(headerB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'))
             if (header?.alg !== 'RS256' || header?.typ !== 'JWT') {
-                return { success: false, message: 'Activation code has an unsupported signature algorithm.' }
+                return { ok: false, message: 'Activation code has an unsupported signature algorithm.' }
             }
 
             const input = `${headerB64}.${payloadB64}`
             const signature = Buffer.from(sigB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64')
             if (signature.length === 0) {
-                return { success: false, message: 'Activation code signature is missing.' }
+                return { ok: false, message: 'Activation code signature is missing.' }
             }
             const verifier = crypto.createVerify('RSA-SHA256')
             verifier.update(input)
             if (!verifier.verify(publicKey, signature)) {
-                return { success: false, message: 'Activation code signature is invalid or tampered.' }
+                return { ok: false, message: 'Activation code signature is invalid or tampered.' }
             }
             payload = JSON.parse(Buffer.from(payloadB64.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'))
         } catch (e: any) {
-            return { success: false, message: 'Could not parse activation code: ' + (e?.message || 'unknown error') }
+            return { ok: false, message: 'Could not parse activation code: ' + (e?.message || 'unknown error') }
         }
 
         if (payload.typ !== 'offline') {
-            return { success: false, message: 'Wrong code type — not an offline activation code.' }
+            return { ok: false, message: 'Wrong code type — not an offline activation code.' }
         }
         const now = Math.floor(Date.now() / 1000)
         if (payload.exp && payload.exp < now) {
-            return { success: false, message: 'Activation code has expired. Ask your admin for a new one.' }
+            return { ok: false, message: 'Activation code has expired. Ask your admin for a new one.' }
         }
 
         // If the code was bound to a specific fingerprint, enforce it here.
         const fp = await this.fingerprint.get()
         if (payload.device_fingerprint_hash && payload.device_fingerprint_hash !== fp) {
-            return { success: false, message: 'Activation code is bound to a different device.' }
+            return { ok: false, message: 'Activation code is bound to a different device.' }
         }
+
+        return { ok: true, payload }
+    }
+
+    /**
+     * Sentinel value stored in the `refreshToken` slot to mark a bundle
+     * as an offline-redeemed session. Bootstrap looks for this to skip
+     * the normal token-refresh flow and re-verify the blob locally
+     * instead.
+     */
+    private static readonly OFFLINE_SESSION_SENTINEL = 'offline'
+
+    /**
+     * Redeems a signed offline activation code. Verifies the RS256 signature
+     * with Node's crypto module (no external JWT lib needed) and promotes the
+     * local session to `active` using the claims in the blob.
+     *
+     * The public key is ideally pre-fetched while the user was online; if we
+     * can't fetch it now and we don't have it cached, redemption fails.
+     */
+    async redeemOfflineCode (code: string): Promise<ActivationResult> {
+        if (this.proxy) {return this.proxy.redeemOfflineCode(code)}
+        const token = code.trim()
+        const verified = await this.verifyOfflineBlob(token)
+        if (!verified.ok) {
+            return { success: false, message: verified.message }
+        }
+        await this.applyOfflinePayload(verified.payload, token, true)
+        return { success: true, message: 'Activated with offline code.', reasonCode: 'OK' }
+    }
+
+    /**
+     * Apply a verified offline-blob payload to in-memory state, optionally
+     * persisting the bundle. Shared by `redeemOfflineCode` (first redeem)
+     * and bootstrap (re-verify on relaunch). On relaunch we don't need to
+     * re-write the bundle — it's already stored verbatim.
+     */
+    private async applyOfflinePayload (
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        payload: any,
+        token: string,
+        persist: boolean,
+    ): Promise<void> {
+        const fp = await this.fingerprint.get()
 
         // Apply claims — no tokens are issued (this is a local session). We
         // stash a synthetic "device id" and a unique "license id" so the admin
@@ -1007,6 +1092,11 @@ export class TlinkLicenseService implements OnDestroy {
         this.billingType = payload.billing_type ?? null
         this.startDate = payload.start_date ?? null
         this.endDate = payload.end_date ?? null
+        // We deliberately keep accessToken/refreshToken empty in memory after
+        // an offline redeem so the heartbeat and refresh code paths short-
+        // circuit (they require both). The persisted bundle still carries
+        // the JWT in the accessToken slot for bootstrap re-verification —
+        // see hydrateOfflineSession.
         this.accessToken = null
         this.refreshToken = null
         // The offline session ends when the blob itself expires.
@@ -1018,13 +1108,15 @@ export class TlinkLicenseService implements OnDestroy {
         this.offlineGrace = true
         this.emit()
 
+        if (!persist) {return}
+
         // Persist so the session survives restarts (until the blob expires).
-        // We stash the blob itself in place of tokens; bootstrap will re-verify
-        // on next launch and re-apply or drop back to sign-in.
+        // We stash the blob itself in place of tokens; bootstrap re-verifies
+        // it on next launch and re-applies or drops back to sign-in.
         try {
             await this.storage.save({
                 accessToken: token,        // store the blob here so we can re-verify on load
-                refreshToken: 'offline',   // sentinel — marks this as an offline session
+                refreshToken: TlinkLicenseService.OFFLINE_SESSION_SENTINEL,
                 userEmail: this.userEmail ?? '',
                 deviceId: this.deviceId,
                 licenseId: this.licenseId,
@@ -1034,11 +1126,9 @@ export class TlinkLicenseService implements OnDestroy {
                 endDate: this.endDate,
                 lastServerContactAt: 0,
             } as any)
-        } catch (e) {
+        } catch {
             // Non-fatal — the session still works for this launch.
         }
-
-        return { success: true, message: 'Activated with offline code.', reasonCode: 'OK' }
     }
 
     // ─── Internal server calls ────────────────────────────────────────────
