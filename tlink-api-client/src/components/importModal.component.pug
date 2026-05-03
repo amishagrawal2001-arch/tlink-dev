@@ -1,0 +1,46 @@
+.modal-header
+    h5.modal-title
+        i.fas.fa-file-import.me-2
+        | Import to API client
+    button.btn-close((click)='cancel()')
+
+.modal-body.import-modal-body
+    .import-tabs
+        button.import-tab(
+            *ngFor='let k of ["curl", "postman", "openapi"]',
+            [class.active]='selected === k',
+            (click)='selected = k; error = null'
+        )
+            i.fas.me-1(
+                [class.fa-terminal]='k === "curl"',
+                [class.fa-mail-bulk]='k === "postman"',
+                [class.fa-book]='k === "openapi"'
+            )
+            | {{ k === 'curl' ? 'cURL' : k === 'postman' ? 'Postman v2.1' : 'OpenAPI 3.x' }}
+
+    .import-hint(*ngIf='selected === "curl"')
+        | Paste a cURL command — it'll populate URL, method, headers, body and auth.
+    .import-hint(*ngIf='selected === "postman"')
+        | Paste a Postman v2.1 collection JSON — folders + variables come along.
+    .import-hint(*ngIf='selected === "openapi"')
+        | Paste an OpenAPI 3.x JSON or YAML-converted-to-JSON document.
+
+    textarea.import-textarea(
+        [(ngModel)]='text',
+        [placeholder]='selected === "curl" ? "curl https://api.example.com/users -H \"Authorization: Bearer ...\"" : "Paste JSON here…"',
+        spellcheck='false',
+        autofocus
+    )
+
+    .import-error(*ngIf='error')
+        i.fas.fa-exclamation-circle.me-1
+        | {{ error }}
+
+.modal-footer
+    button.btn.btn-sm.btn-secondary((click)='cancel()') Cancel
+    button.btn.btn-sm.btn-primary(
+        (click)='submit()',
+        [disabled]='busy || !text.trim()'
+    )
+        i.fas.fa-check.me-1
+        | Import

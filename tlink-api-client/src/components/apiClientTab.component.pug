@@ -1,5 +1,5 @@
 .api-client-container
-    //- URL Bar
+    //- URL bar — method, env switcher, URL input, send/cancel, overflow menu.
     .url-bar
         .method-wrapper
             select.method-select(
@@ -7,35 +7,105 @@
                 [class]='method.toLowerCase()'
             )
                 option(*ngFor='let m of methods', [value]='m') {{m}}
+
+        .env-switcher(ngbDropdown, container='body', placement='bottom-start')
+            button.env-btn(ngbDropdownToggle, [title]='"Active environment"|translate')
+                i.fas.fa-layer-group
+                span(*ngIf='envService.active') {{envService.active.name}}
+                span.env-empty(*ngIf='!envService.active') No env
+            div(ngbDropdownMenu)
+                button.dropdown-item(ngbDropdownItem, (click)='setActiveEnv(null)')
+                    i.fas.fa-times.me-1
+                    | No active environment
+                button.dropdown-item(
+                    *ngFor='let env of environments',
+                    ngbDropdownItem,
+                    (click)='setActiveEnv(env.id)',
+                    [class.active]='activeEnvId === env.id'
+                )
+                    i.fas.fa-check.me-1(*ngIf='activeEnvId === env.id')
+                    span(*ngIf='activeEnvId !== env.id', style='display: inline-block; width: 1em;')
+                    | {{env.name}}
+                .dropdown-divider
+                button.dropdown-item(ngbDropdownItem, (click)='activeRequestTab = "env"')
+                    i.fas.fa-cog.me-1
+                    | Manage environments…
+
         input.url-input(
+            #urlInput,
             type='text',
             placeholder='Enter request URL...',
             [(ngModel)]='url',
             (keydown.enter)='send()'
         )
-        button.send-btn(
-            (click)='send()',
-            [disabled]='sending || !url.trim()',
-            [class.sending]='sending'
-        )
-            i.fas.fa-spinner.fa-spin(*ngIf='sending')
-            span {{ sending ? 'Sending...' : 'Send' }}
 
-    //- Main Content — Split Pane
+        //- Unresolved tokens chip — surfaces when {{var}} doesn't resolve.
+        .unresolved-chip(*ngIf='unresolvedTokens.length', [title]='"Unresolved variables"|translate')
+            i.fas.fa-exclamation-triangle.me-1
+            | {{unresolvedTokens.length}} unresolved
+
+        button.send-btn(
+            *ngIf='!sending',
+            (click)='send()',
+            [disabled]='!url.trim()'
+        )
+            i.fas.fa-paper-plane.me-1
+            | Send
+
+        button.cancel-btn(
+            *ngIf='sending',
+            (click)='cancel()'
+        )
+            i.fas.fa-stop.me-1
+            | Cancel
+
+        //- Overflow menu — imports + code-gen + realtime toggle.
+        .overflow-menu(ngbDropdown, container='body', placement='bottom-end')
+            button.icon-btn(ngbDropdownToggle, [title]='"More"|translate')
+                i.fas.fa-ellipsis-v
+            div(ngbDropdownMenu)
+                button.dropdown-item(ngbDropdownItem, (click)='openImport("curl")')
+                    i.fas.fa-terminal.me-1
+                    | Import cURL…
+                button.dropdown-item(ngbDropdownItem, (click)='openImport("postman")')
+                    i.fas.fa-mail-bulk.me-1
+                    | Import Postman v2.1…
+                button.dropdown-item(ngbDropdownItem, (click)='openImport("openapi")')
+                    i.fas.fa-book.me-1
+                    | Import OpenAPI 3.x…
+                .dropdown-divider
+                button.dropdown-item(ngbDropdownItem, (click)='copyAsCurl()')
+                    i.fas.fa-copy.me-1
+                    | Copy as cURL
+                button.dropdown-item(
+                    *ngFor='let t of codeTargets',
+                    ngbDropdownItem,
+                    (click)='copyAsCode(t)'
+                )
+                    i.fas.fa-code.me-1
+                    | Copy as {{t}}
+                .dropdown-divider
+                button.dropdown-item(ngbDropdownItem, (click)='toggleRealtime()')
+                    i.fas.fa-bolt.me-1
+                    | {{realtime ? 'Disable realtime mode' : 'Enable realtime (WS/SSE)'}}
+
     .main-content
-        //- Request Panel
+        //- ============== Request panel ==============
         .request-panel
             .panel-tabs
                 button.panel-tab(
-                    *ngFor='let tab of ["headers", "body", "auth", "collections"]',
-                    [class.active]='activeRequestTab === tab',
-                    (click)='activeRequestTab = tab'
+                    *ngFor='let tab of requestTabs',
+                    [class.active]='activeRequestTab === tab.id',
+                    (click)='activeRequestTab = tab.id'
                 )
-                    | {{tab === 'headers' ? 'Headers' : tab === 'body' ? 'Body' : tab === 'auth' ? 'Auth' : 'Collections'}}
-                    span.tab-count(*ngIf='tab === "headers" && activeHeaderCount > 0') {{activeHeaderCount}}
-                    span.tab-count(*ngIf='tab === "collections" && collections.length > 0') {{collections.length}}
+                    | {{tab.label}}
+                    span.tab-count(*ngIf='tab.id === "headers" && activeHeaderCount > 0') {{activeHeaderCount}}
+                    span.tab-count(*ngIf='tab.id === "tests" && assertions.length > 0') {{assertions.length}}
+                    span.tab-count(*ngIf='tab.id === "extract" && extractors.length > 0') {{extractors.length}}
+                    span.tab-count(*ngIf='tab.id === "collections" && collections.length > 0') {{collections.length}}
+                    span.tab-count(*ngIf='tab.id === "history" && historyService.entries.length > 0') {{historyService.entries.length}}
 
-            //- Headers
+            //- ===== Headers =====
             .panel-body(*ngIf='activeRequestTab === "headers"')
                 .kv-table
                     .kv-header
@@ -57,7 +127,7 @@
                     i.fas.fa-plus.me-1
                     | Add header
 
-            //- Body
+            //- ===== Body =====
             .panel-body(*ngIf='activeRequestTab === "body"')
                 .body-toolbar
                     button.body-type-btn(
@@ -65,11 +135,8 @@
                         [class.active]='bodyType === bt',
                         (click)='setBodyType(bt)'
                     ) {{bt}}
-                    .color-group.ms-auto(*ngIf='bodyType !== "none"')
-                        button.color-btn(
-                            (click)='toggleColorPicker("text", $event)',
-                            title='Text color'
-                        )
+                    .color-group.ms-auto(*ngIf='bodyType === "json" || bodyType === "text" || bodyType === "graphql"')
+                        button.color-btn((click)='toggleColorPicker("text", $event)', title='Text color')
                             span.color-dot([style.background]='bodyColor || "transparent"', [class.empty]='!bodyColor')
                             | Text
                         .color-pop(*ngIf='activeColorPicker === "text"', (click)='$event.stopPropagation()')
@@ -91,46 +158,13 @@
                                         [value]='bodyColor || "#ffffff"',
                                         (input)='onCustomColor("text", $event)'
                                     )
-                                button.reset-color(
-                                    *ngIf='bodyColor',
-                                    (click)='resetColor("text")'
-                                )
+                                button.reset-color(*ngIf='bodyColor', (click)='resetColor("text")')
                                     i.fas.fa-undo.me-1
                                     | Reset
-                    .color-group(*ngIf='bodyType !== "none"')
-                        button.color-btn(
-                            (click)='toggleColorPicker("bg", $event)',
-                            title='Background color'
-                        )
-                            span.color-dot.square([style.background]='bodyBgColor || "transparent"', [class.empty]='!bodyBgColor')
-                            | BG
-                        .color-pop(*ngIf='activeColorPicker === "bg"', (click)='$event.stopPropagation()')
-                            .color-pop-title Background color
-                            .color-pop-grid
-                                button.color-chip(
-                                    *ngFor='let c of bgPresets',
-                                    [style.background]='c',
-                                    [class.selected]='bodyBgColor === c',
-                                    (click)='pickColor("bg", c)',
-                                    [title]='c'
-                                )
-                            .color-pop-actions
-                                label.custom-color
-                                    i.fas.fa-eye-dropper
-                                    | Custom…
-                                    input(
-                                        type='color',
-                                        [value]='bodyBgColor || "#1f2937"',
-                                        (input)='onCustomColor("bg", $event)'
-                                    )
-                                button.reset-color(
-                                    *ngIf='bodyBgColor',
-                                    (click)='resetColor("bg")'
-                                )
-                                    i.fas.fa-undo.me-1
-                                    | Reset
+
+                //- json / text — single textarea
                 textarea.code-editor(
-                    *ngIf='bodyType !== "none"',
+                    *ngIf='bodyType === "json" || bodyType === "text" || bodyType === "urlencoded"',
                     [(ngModel)]='body',
                     (ngModelChange)='validateBody()',
                     [class.invalid]='jsonError',
@@ -142,21 +176,82 @@
                 .json-error(*ngIf='jsonError && bodyType === "json"')
                     i.fas.fa-exclamation-circle.me-1
                     | {{jsonError}}
+
+                //- form-data — structured fields
+                div(*ngIf='bodyType === "form-data"')
+                    .kv-table
+                        .kv-header
+                            .kv-cell.kv-check
+                            .kv-cell.kv-key Key
+                            .kv-cell.kv-val Value
+                            .kv-cell.kv-action
+                        .kv-row(*ngFor='let f of formData; let i = index')
+                            .kv-cell.kv-check
+                                input(type='checkbox', [(ngModel)]='f.enabled')
+                            .kv-cell.kv-key
+                                input(type='text', placeholder='Field name', [(ngModel)]='f.key')
+                            .kv-cell.kv-val
+                                .file-cell(*ngIf='f.kind === "file"')
+                                    span.file-path([title]='f.filePath') {{f.filePath || "(no file)"}}
+                                    button.icon-btn((click)='pickFormDataFile(i)', title='Pick file')
+                                        i.fas.fa-folder-open
+                                input(*ngIf='f.kind === "text"', type='text', placeholder='Value', [(ngModel)]='f.value')
+                            .kv-cell.kv-action
+                                button.icon-btn((click)='removeFormDataField(i)')
+                                    i.fas.fa-times
+                    .add-row-group
+                        .add-row((click)='addFormDataField("text")')
+                            i.fas.fa-plus.me-1
+                            | Add text field
+                        .add-row((click)='addFormDataField("file")')
+                            i.fas.fa-paperclip.me-1
+                            | Add file field
+
+                //- graphql — split editor
+                div(*ngIf='bodyType === "graphql"')
+                    .gql-grid
+                        .gql-pane
+                            .gql-pane-label Query
+                            textarea.code-editor.gql-editor(
+                                [(ngModel)]='graphql.query',
+                                placeholder='query Foo($id: ID!) { user(id: $id) { name } }',
+                                spellcheck='false'
+                            )
+                        .gql-pane
+                            .gql-pane-label Variables (JSON)
+                            textarea.code-editor.gql-editor(
+                                [(ngModel)]='graphql.variables',
+                                placeholder='{ "id": "1" }',
+                                spellcheck='false'
+                            )
+                    label.field-label.mt-2 Operation name (optional)
+                    input.field-input(type='text', [(ngModel)]='graphql.operationName', placeholder='Foo')
+
+                //- binary — file path
+                div(*ngIf='bodyType === "binary"')
+                    .file-cell.binary-row
+                        span.file-path([title]='binaryPath') {{binaryPath || "(no file)"}}
+                        button.body-type-btn((click)='pickBinaryFile()')
+                            i.fas.fa-folder-open.me-1
+                            | Pick file
+
                 .empty-state(*ngIf='bodyType === "none"')
                     i.fas.fa-ban(style='font-size: 20px; opacity: 0.2;')
                     .mt-1 This request does not have a body
 
-            //- Auth
+            //- ===== Auth =====
             .panel-body(*ngIf='activeRequestTab === "auth"')
                 .auth-selector
                     button.body-type-btn(
                         *ngFor='let at of authTypes',
                         [class.active]='auth.type === at',
                         (click)='auth.type = at'
-                    ) {{at === 'none' ? 'No Auth' : at === 'bearer' ? 'Bearer Token' : 'Basic Auth'}}
+                    ) {{ authLabel(at) }}
+
                 .auth-form(*ngIf='auth.type === "bearer"')
                     label.field-label Token
                     input.field-input(type='text', placeholder='Enter bearer token', [(ngModel)]='auth.token')
+
                 .auth-form(*ngIf='auth.type === "basic"')
                     .field-group
                         label.field-label Username
@@ -164,11 +259,155 @@
                     .field-group
                         label.field-label Password
                         input.field-input(type='password', placeholder='Password', [(ngModel)]='auth.password')
+
+                .auth-form(*ngIf='auth.type === "apikey"')
+                    .field-group
+                        label.field-label Key name
+                        input.field-input(type='text', placeholder='X-API-Key', [(ngModel)]='auth.apiKeyName')
+                    .field-group
+                        label.field-label Value
+                        input.field-input(type='text', placeholder='Value', [(ngModel)]='auth.apiKeyValue')
+                    .field-group
+                        label.field-label Add to
+                        select.field-input([(ngModel)]='auth.apiKeyLocation')
+                            option(value='header') Header
+                            option(value='query') Query parameter
+
+                .auth-form(*ngIf='auth.type === "oauth2"')
+                    .field-group
+                        label.field-label Grant type
+                        select.field-input([(ngModel)]='auth.oauth2.grantType')
+                            option(*ngFor='let g of grantTypes', [value]='g') {{g}}
+                    .field-group(*ngIf='auth.oauth2.grantType === "authorization_code"')
+                        label.field-label Authorization URL
+                        input.field-input(type='text', [(ngModel)]='auth.oauth2.authUrl')
+                    .field-group
+                        label.field-label Access token URL
+                        input.field-input(type='text', [(ngModel)]='auth.oauth2.tokenUrl')
+                    .field-group
+                        label.field-label Client ID
+                        input.field-input(type='text', [(ngModel)]='auth.oauth2.clientId')
+                    .field-group
+                        label.field-label Client secret
+                        input.field-input(type='password', [(ngModel)]='auth.oauth2.clientSecret')
+                    .field-group(*ngIf='auth.oauth2.grantType === "authorization_code"')
+                        label.field-label Redirect URI
+                        input.field-input(type='text', [(ngModel)]='auth.oauth2.redirectUri', placeholder='http://localhost/callback')
+                    .field-group(*ngIf='auth.oauth2.grantType === "password"')
+                        label.field-label Username
+                        input.field-input(type='text', [(ngModel)]='auth.oauth2.username')
+                    .field-group(*ngIf='auth.oauth2.grantType === "password"')
+                        label.field-label Password
+                        input.field-input(type='password', [(ngModel)]='auth.oauth2.password')
+                    .field-group
+                        label.field-label Scope
+                        input.field-input(type='text', [(ngModel)]='auth.oauth2.scope', placeholder='openid email')
+                    .field-row(*ngIf='auth.oauth2.grantType === "authorization_code"')
+                        label
+                            input(type='checkbox', [(ngModel)]='auth.oauth2.usePkce')
+                            |  Use PKCE
+                    .oauth-status
+                        .oauth-token(*ngIf='auth.oauth2.accessToken')
+                            i.fas.fa-check-circle.me-1
+                            | Token ready
+                            span(*ngIf='auth.oauth2.expiresAt')  · expires {{ auth.oauth2.expiresAt | date:'short' }}
+                        .oauth-actions
+                            button.body-type-btn((click)='refreshOAuthToken()')
+                                i.fas.fa-key.me-1
+                                | Get new token
+                            button.body-type-btn(*ngIf='auth.oauth2.accessToken', (click)='clearOAuthToken()')
+                                i.fas.fa-times.me-1
+                                | Clear
+
                 .empty-state(*ngIf='auth.type === "none"')
                     i.fas.fa-unlock(style='font-size: 20px; opacity: 0.2;')
                     .mt-1 No authentication required
 
-            //- Collections
+            //- ===== Tests (assertions) =====
+            .panel-body(*ngIf='activeRequestTab === "tests"')
+                .assertion-row(*ngFor='let a of assertions; let i = index')
+                    input(type='checkbox', [(ngModel)]='a.enabled')
+                    select([(ngModel)]='a.kind')
+                        option(value='status') status
+                        option(value='header') header
+                        option(value='body-contains') body contains
+                        option(value='json-path-equals') JSON path
+                    select([(ngModel)]='a.op')
+                        option(value='eq') ==
+                        option(value='neq') !=
+                        option(value='lt') &lt;
+                        option(value='gt') &gt;
+                        option(value='contains') contains
+                        option(value='exists') exists
+                    input(*ngIf='a.kind === "header" || a.kind === "json-path-equals"', type='text', [(ngModel)]='a.target', placeholder='target')
+                    input(type='text', [(ngModel)]='a.expected', placeholder='expected')
+                    button.icon-btn((click)='removeAssertion(i)')
+                        i.fas.fa-times
+                .add-row-group
+                    .add-row((click)='addAssertion("status")')
+                        i.fas.fa-plus.me-1
+                        | Status
+                    .add-row((click)='addAssertion("header")')
+                        i.fas.fa-plus.me-1
+                        | Header
+                    .add-row((click)='addAssertion("body-contains")')
+                        i.fas.fa-plus.me-1
+                        | Body contains
+                    .add-row((click)='addAssertion("json-path-equals")')
+                        i.fas.fa-plus.me-1
+                        | JSON path
+
+            //- ===== Pre-script =====
+            .panel-body(*ngIf='activeRequestTab === "pre"')
+                .script-hint
+                    | Runs before send. API:
+                    code tlink.env.set/get
+                    | ,
+                    code tlink.req.headers.set
+                    | ,
+                    code tlink.log
+                    | .
+                textarea.code-editor.script-editor(
+                    [(ngModel)]='preScript',
+                    placeholder='// e.g. tlink.req.headers.set("X-Trace-Id", crypto.randomUUID())',
+                    spellcheck='false'
+                )
+
+            //- ===== Post-script =====
+            .panel-body(*ngIf='activeRequestTab === "post"')
+                .script-hint
+                    | Runs after response. API:
+                    code tlink.res.json/status/headers
+                    | ,
+                    code tlink.env.set
+                    | .
+                textarea.code-editor.script-editor(
+                    [(ngModel)]='postScript',
+                    placeholder='// e.g. tlink.env.set("token", tlink.res.json().access_token)',
+                    spellcheck='false'
+                )
+
+            //- ===== Extract =====
+            .panel-body(*ngIf='activeRequestTab === "extract"')
+                .script-hint
+                    | After each response, write a value into the active environment so later requests can use
+                    code {{'{{name}}'}}
+                    | .
+                .extractor-row(*ngFor='let ex of extractors; let i = index')
+                    input(type='checkbox', [(ngModel)]='ex.enabled')
+                    input(type='text', [(ngModel)]='ex.name', placeholder='env var name')
+                    select([(ngModel)]='ex.source')
+                        option(value='body') body
+                        option(value='header') header
+                        option(value='status') status
+                    input(*ngIf='ex.source !== "status"', type='text', [(ngModel)]='ex.path', placeholder='ex.source === "body" ? "data.token" : "Content-Type"')
+                    button.icon-btn((click)='removeExtractor(i)')
+                        i.fas.fa-times
+                .add-row((click)='addExtractor()')
+                    i.fas.fa-plus.me-1
+                    | Add extractor
+
+            //- ===== Collections =====
             .panel-body(*ngIf='activeRequestTab === "collections"')
                 .collection-create
                     input.field-input(
@@ -184,6 +423,7 @@
                         .collection-title
                             i.fas.fa-folder-open.me-2
                             span {{col.name}}
+                            span.tab-count.ms-1(*ngIf='col.source') {{col.source}}
                             .ms-auto.d-flex.gap-1
                                 button.icon-btn.save-btn(
                                     (click)='saveRequestToCollection(col)',
@@ -210,53 +450,233 @@
                     i.fas.fa-folder-open(style='font-size: 20px; opacity: 0.2;')
                     .mt-1 Create a collection to save requests
 
-        //- Response Panel
-        .response-panel
-            .panel-label Response
-            div(*ngIf='response')
-                .response-status
-                    span.status-pill([class]='getStatusClass()') {{response.status}} {{response.statusText}}
-                    span.meta-pill
-                        i.fas.fa-clock.me-1
-                        | {{response.time}}ms
-                    span.meta-pill
-                        i.fas.fa-database.me-1
-                        | {{getResponseSize()}}
-                    span.error-pill(*ngIf='response.error')
-                        i.fas.fa-exclamation-triangle.me-1
-                        | {{response.error}}
-                .panel-tabs.response-tabs
-                    button.panel-tab(
-                        [class.active]='activeResponseTab === "body"',
-                        (click)='activeResponseTab = "body"'
-                    ) Body
-                    button.panel-tab(
-                        [class.active]='activeResponseTab === "headers"',
-                        (click)='activeResponseTab = "headers"'
-                    ) Headers
-                        span.tab-count {{getResponseHeaders().length}}
-                    button.panel-tab(
-                        [class.active]='activeResponseTab === "raw"',
-                        (click)='activeResponseTab = "raw"'
-                    ) Raw
-                    button.icon-btn.copy-btn.ms-auto(
-                        (click)='copyResponseBody()',
-                        title='Copy response'
+            //- ===== History =====
+            .panel-body(*ngIf='activeRequestTab === "history"')
+                .history-header(*ngIf='historyService.entries.length > 0')
+                    span.text-muted {{historyService.entries.length}} entries
+                    button.icon-btn.del-btn.ms-auto((click)='clearHistory()', title='Clear all history')
+                        i.fas.fa-trash
+                .history-list(*ngIf='historyService.entries.length > 0')
+                    .history-row(
+                        *ngFor='let h of historyService.entries',
+                        (click)='rerunHistory(h.id)'
                     )
-                        i.fas.fa-copy
-                .response-content
-                    pre.response-json(*ngIf='activeResponseTab === "body"') {{getFormattedBody()}}
-                    .response-header-list(*ngIf='activeResponseTab === "headers"')
-                        .resp-header-row(*ngFor='let h of getResponseHeaders()')
-                            span.resp-header-key {{h.key}}
-                            span.resp-header-val {{h.value}}
-                    pre.response-json(*ngIf='activeResponseTab === "raw"') {{response.body}}
+                        span.req-method([class]='h.method.toLowerCase()') {{h.method}}
+                        .history-meta
+                            span.history-url([title]='h.url') {{h.url}}
+                            .history-status
+                                span.status-dot([class]='h.status >= 200 && h.status < 300 ? "ok" : "bad"')
+                                | {{h.status}} {{h.statusText}} · {{h.time}}ms · {{formatHistoryTime(h.timestamp)}}
+                        button.icon-btn.del-btn(
+                            (click)='deleteHistory(h.id); $event.stopPropagation()'
+                        )
+                            i.fas.fa-times
+                .empty-state(*ngIf='historyService.entries.length === 0')
+                    i.fas.fa-history(style='font-size: 20px; opacity: 0.2;')
+                    .mt-1 Sent requests show up here
 
-            .empty-state.response-empty(*ngIf='!response && !sending')
-                i.fas.fa-paper-plane(style='font-size: 28px; opacity: 0.12;')
-                .mt-2 Click Send to make a request
-                .mt-1(style='font-size: 10px; opacity: 0.3;') Or press Enter in the URL bar
+            //- ===== Environments =====
+            .panel-body(*ngIf='activeRequestTab === "env"')
+                .env-create
+                    input.field-input(
+                        type='text',
+                        placeholder='New environment name...',
+                        [(ngModel)]='newEnvName',
+                        (keydown.enter)='createEnv()'
+                    )
+                    button.create-btn((click)='createEnv()', [disabled]='!newEnvName.trim()')
+                        i.fas.fa-plus
+                .env-list
+                    .env-group(*ngFor='let env of environments')
+                        .env-title
+                            i.fas.fa-layer-group.me-2
+                            span {{env.name}}
+                            span.tab-count.ms-1(*ngIf='env.id === activeEnvId') active
+                            .ms-auto.d-flex.gap-1
+                                button.icon-btn(
+                                    (click)='setActiveEnv(env.id === activeEnvId ? null : env.id)',
+                                    [title]='env.id === activeEnvId ? "Deactivate" : "Activate"'
+                                )
+                                    i.fas.fa-check-circle(*ngIf='env.id === activeEnvId')
+                                    i.far.fa-circle(*ngIf='env.id !== activeEnvId')
+                                button.icon-btn.del-btn(
+                                    *ngIf='env.id !== "global"',
+                                    (click)='deleteEnv(env)',
+                                    title='Delete environment'
+                                )
+                                    i.fas.fa-trash
+                        .env-vars
+                            .env-row(*ngFor='let v of env.variables; let i = index')
+                                input(type='checkbox', [(ngModel)]='v.enabled', (ngModelChange)='updateEnv(env)')
+                                input.var-key(type='text', [(ngModel)]='v.key', placeholder='key', (ngModelChange)='updateEnv(env)')
+                                input.var-val(
+                                    [type]='v.secret ? "password" : "text"',
+                                    [(ngModel)]='v.value',
+                                    placeholder='value',
+                                    (ngModelChange)='updateEnv(env)'
+                                )
+                                button.icon-btn(
+                                    [class.active]='v.secret',
+                                    (click)='v.secret = !v.secret; updateEnv(env)',
+                                    [title]='v.secret ? "Reveal value" : "Hide value"'
+                                )
+                                    i.fas.fa-eye-slash(*ngIf='v.secret')
+                                    i.fas.fa-eye(*ngIf='!v.secret')
+                                button.icon-btn((click)='removeVariable(env, i)')
+                                    i.fas.fa-times
+                            .add-row((click)='addVariable(env)')
+                                i.fas.fa-plus.me-1
+                                | Add variable
+                .empty-state(*ngIf='environments.length === 0')
+                    i.fas.fa-layer-group(style='font-size: 20px; opacity: 0.2;')
+                    .mt-1 Create an environment to use
+                    code {{'{{vars}}'}}
 
-            .empty-state.response-empty(*ngIf='sending')
-                i.fas.fa-spinner.fa-spin(style='font-size: 28px; opacity: 0.3;')
-                .mt-2 Sending request...
+        //- ============== Response panel ==============
+        .response-panel
+            //- Realtime mode replaces the standard response area.
+            div(*ngIf='realtime')
+                .realtime-toolbar
+                    .realtime-kind
+                        button.body-type-btn(
+                            [class.active]='realtimeKind === "websocket"',
+                            (click)='realtimeKind = "websocket"'
+                        ) WebSocket
+                        button.body-type-btn(
+                            [class.active]='realtimeKind === "sse"',
+                            (click)='realtimeKind = "sse"'
+                        ) SSE
+                    span.status-pill([class]='ws.status') {{ws.status}}
+                    button.body-type-btn(*ngIf='ws.status === "idle" || ws.status === "closed" || ws.status === "error"', (click)='realtimeOpen()')
+                        i.fas.fa-plug.me-1
+                        | Connect
+                    button.body-type-btn(*ngIf='ws.status === "open" || ws.status === "connecting"', (click)='realtimeClose()')
+                        i.fas.fa-power-off.me-1
+                        | Disconnect
+                    button.body-type-btn.ms-auto((click)='realtimeClear()')
+                        i.fas.fa-eraser.me-1
+                        | Clear
+
+                .frame-log(#frameLog)
+                    .frame-row(
+                        *ngFor='let f of ws.frames',
+                        [class.in]='f.direction === "in"',
+                        [class.out]='f.direction === "out"',
+                        [class.system]='f.direction === "system"'
+                    )
+                        span.frame-direction
+                            i.fas.fa-arrow-down(*ngIf='f.direction === "in"')
+                            i.fas.fa-arrow-up(*ngIf='f.direction === "out"')
+                            i.fas.fa-info-circle(*ngIf='f.direction === "system"')
+                        span.frame-text {{f.text}}
+
+                .send-row(*ngIf='realtimeKind === "websocket"')
+                    input.field-input(
+                        type='text',
+                        placeholder='Send a message…',
+                        [(ngModel)]='realtimeMessage',
+                        (keydown.enter)='realtimeSend()',
+                        [disabled]='ws.status !== "open"'
+                    )
+                    button.body-type-btn((click)='realtimeSend()', [disabled]='ws.status !== "open"')
+                        i.fas.fa-paper-plane.me-1
+                        | Send
+
+            //- Normal HTTP response.
+            div(*ngIf='!realtime')
+                .panel-label Response
+                div(*ngIf='response')
+                    .response-status
+                        span.status-pill([class]='getStatusClass()') {{response.status}} {{response.statusText}}
+                        span.meta-pill
+                            i.fas.fa-clock.me-1
+                            | {{response.time}}ms
+                        span.meta-pill
+                            i.fas.fa-database.me-1
+                            | {{getResponseSize()}}
+                        span.error-pill(*ngIf='response.error')
+                            i.fas.fa-exclamation-triangle.me-1
+                            | {{response.error}}
+
+                    //- Assertion results badges.
+                    .assertion-results(*ngIf='response.assertionResults && response.assertionResults.length')
+                        span.assertion-pill(
+                            *ngFor='let a of response.assertionResults',
+                            [class.pass]='a.pass',
+                            [class.fail]='!a.pass',
+                            [title]='a.detail'
+                        )
+                            i.fas.me-1(
+                                [class.fa-check]='a.pass',
+                                [class.fa-times]='!a.pass'
+                            )
+                            | {{a.label}}
+
+                    .panel-tabs.response-tabs
+                        button.panel-tab(
+                            [class.active]='activeResponseTab === "body"',
+                            (click)='activeResponseTab = "body"'
+                        ) Body
+                        button.panel-tab(
+                            *ngIf='isImageResponse()',
+                            [class.active]='activeResponseTab === "preview"',
+                            (click)='activeResponseTab = "preview"'
+                        ) Preview
+                        button.panel-tab(
+                            [class.active]='activeResponseTab === "headers"',
+                            (click)='activeResponseTab = "headers"'
+                        ) Headers
+                            span.tab-count {{getResponseHeaders().length}}
+                        button.panel-tab(
+                            [class.active]='activeResponseTab === "raw"',
+                            (click)='activeResponseTab = "raw"'
+                        ) Raw
+
+                        button.icon-btn.ms-auto((click)='openResponseSearch()', title='Find in response (Ctrl+F)')
+                            i.fas.fa-search
+                        button.icon-btn((click)='copyResponseBody()', title='Copy')
+                            i.fas.fa-copy
+                        button.icon-btn(
+                            *ngIf='response.bodyBytes',
+                            (click)='saveResponseToFile()',
+                            title='Save as file'
+                        )
+                            i.fas.fa-download
+
+                    .response-search(*ngIf='responseSearchOpen')
+                        i.fas.fa-search.me-1
+                        input.response-search-input(
+                            type='text',
+                            placeholder='Find in response…',
+                            [(ngModel)]='responseSearchQuery'
+                        )
+                        button.icon-btn((click)='closeResponseSearch()')
+                            i.fas.fa-times
+
+                    .response-content
+                        pre.response-json(
+                            *ngIf='activeResponseTab === "body" || activeResponseTab === "raw"',
+                            [innerHTML]='getSearchHighlightedBody()'
+                        )
+                        .response-header-list(*ngIf='activeResponseTab === "headers"')
+                            .resp-header-row(*ngFor='let h of getResponseHeaders()')
+                                span.resp-header-key {{h.key}}
+                                span.resp-header-val {{h.value}}
+                        .preview-pane(*ngIf='activeResponseTab === "preview" && isImageResponse()')
+                            img([src]='getImageDataUrl()')
+
+                .empty-state.response-empty(*ngIf='!response && !sending')
+                    i.fas.fa-paper-plane(style='font-size: 28px; opacity: 0.12;')
+                    .mt-2 Click Send to make a request
+                    .mt-1(style='font-size: 10px; opacity: 0.3;')
+                        | Or press
+                        kbd Ctrl
+                        |  +
+                        kbd Enter
+
+                .empty-state.response-empty(*ngIf='sending')
+                    i.fas.fa-spinner.fa-spin(style='font-size: 28px; opacity: 0.3;')
+                    .mt-2 Sending request...
+                    button.body-type-btn.mt-2((click)='cancel()')
+                        i.fas.fa-stop.me-1
+                        | Cancel
