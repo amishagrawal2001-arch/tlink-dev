@@ -5,3 +5,69 @@
         width: 100%;
     }
 }
+
+// ──────────────────────────────────────────
+// Filter chips — used on Installed + Available
+// ──────────────────────────────────────────
+.filter-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+
+    .chip {
+        background: transparent;
+        border: 1px solid var(--bs-border-color, rgba(128, 128, 128, 0.25));
+        color: var(--bs-body-color);
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.1s, border-color 0.1s;
+        display: inline-flex;
+        align-items: center;
+
+        &:hover {
+            background: rgba(13, 110, 253, 0.06);
+        }
+
+        &.active {
+            background: rgba(13, 110, 253, 0.15);
+            border-color: rgba(13, 110, 253, 0.5);
+            color: var(--bs-primary, #0d6efd);
+        }
+
+        .chip-count {
+            font-size: 9px;
+            background: rgba(245, 158, 11, 0.25);
+            color: #f59e0b;
+            padding: 1px 5px;
+            border-radius: 999px;
+            font-weight: 700;
+        }
+    }
+}
+
+// ──────────────────────────────────────────
+// Empty states inside each tab
+// ──────────────────────────────────────────
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+    text-align: center;
+
+    a {
+        cursor: pointer;
+        text-decoration: underline;
+    }
+}
+
+// ──────────────────────────────────────────
+// Inline uninstall confirmation
+// ──────────────────────────────────────────
+.uninstall-confirm {
+    border-radius: 4px;
+}
