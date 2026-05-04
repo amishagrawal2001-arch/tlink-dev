@@ -140,64 +140,64 @@
                         [class.active]='bodyType === bt',
                         (click)='setBodyType(bt)'
                     ) {{bt}}
-                    .color-group.ms-auto(*ngIf='bodyType === "json" || bodyType === "text" || bodyType === "graphql"')
-                        button.color-btn((click)='toggleColorPicker("text", $event)', title='Text color')
-                            span.color-dot([style.background]='bodyColor || "transparent"', [class.empty]='!bodyColor')
-                            | Text
-                        .color-pop(*ngIf='activeColorPicker === "text"', (click)='$event.stopPropagation()')
-                            .color-pop-title Text color
-                            .color-pop-grid
-                                button.color-chip(
-                                    *ngFor='let c of textPresets',
-                                    [style.background]='c',
-                                    [class.selected]='bodyColor === c',
-                                    (click)='pickColor("text", c)',
-                                    [title]='c'
-                                )
-                            .color-pop-actions
-                                label.custom-color
-                                    i.fas.fa-eye-dropper
-                                    | Custom…
-                                    input(
-                                        type='color',
-                                        [value]='bodyColor || "#ffffff"',
-                                        (input)='onCustomColor("text", $event)'
+                    //- Text + BG color pickers live in one wrapper so they
+                    //- wrap together onto a new row when the body-toolbar
+                    //- is narrow. ms-auto on the wrapper pushes the pair
+                    //- to the right edge of the toolbar.
+                    .color-pickers.ms-auto(*ngIf='bodyType === "json" || bodyType === "text" || bodyType === "graphql"')
+                        .color-group
+                            button.color-btn((click)='toggleColorPicker("text", $event)', title='Text color')
+                                span.color-dot([style.background]='bodyColor || "transparent"', [class.empty]='!bodyColor')
+                                | Text
+                            .color-pop(*ngIf='activeColorPicker === "text"', (click)='$event.stopPropagation()')
+                                .color-pop-title Text color
+                                .color-pop-grid
+                                    button.color-chip(
+                                        *ngFor='let c of textPresets',
+                                        [style.background]='c',
+                                        [class.selected]='bodyColor === c',
+                                        (click)='pickColor("text", c)',
+                                        [title]='c'
                                     )
-                                button.reset-color(*ngIf='bodyColor', (click)='resetColor("text")')
-                                    i.fas.fa-undo.me-1
-                                    | Reset
+                                .color-pop-actions
+                                    label.custom-color
+                                        i.fas.fa-eye-dropper
+                                        | Custom…
+                                        input(
+                                            type='color',
+                                            [value]='bodyColor || "#ffffff"',
+                                            (input)='onCustomColor("text", $event)'
+                                        )
+                                    button.reset-color(*ngIf='bodyColor', (click)='resetColor("text")')
+                                        i.fas.fa-undo.me-1
+                                        | Reset
 
-                    //- Background color picker — sibling of text color.
-                    //- The textarea reads bodyBgColor as inline style; the
-                    //- value persists with the saved request even though
-                    //- the picker UI was missing in v1.0.15+ (regression
-                    //- from the Tier 1+2 rewrite). Restored here.
-                    .color-group(*ngIf='bodyType === "json" || bodyType === "text" || bodyType === "graphql"')
-                        button.color-btn((click)='toggleColorPicker("bg", $event)', title='Background color')
-                            span.color-dot.square([style.background]='bodyBgColor || "transparent"', [class.empty]='!bodyBgColor')
-                            | BG
-                        .color-pop(*ngIf='activeColorPicker === "bg"', (click)='$event.stopPropagation()')
-                            .color-pop-title Background color
-                            .color-pop-grid
-                                button.color-chip(
-                                    *ngFor='let c of bgPresets',
-                                    [style.background]='c',
-                                    [class.selected]='bodyBgColor === c',
-                                    (click)='pickColor("bg", c)',
-                                    [title]='c'
-                                )
-                            .color-pop-actions
-                                label.custom-color
-                                    i.fas.fa-eye-dropper
-                                    | Custom…
-                                    input(
-                                        type='color',
-                                        [value]='bodyBgColor || "#1f2937"',
-                                        (input)='onCustomColor("bg", $event)'
+                        .color-group
+                            button.color-btn((click)='toggleColorPicker("bg", $event)', title='Background color')
+                                span.color-dot.square([style.background]='bodyBgColor || "transparent"', [class.empty]='!bodyBgColor')
+                                | BG
+                            .color-pop(*ngIf='activeColorPicker === "bg"', (click)='$event.stopPropagation()')
+                                .color-pop-title Background color
+                                .color-pop-grid
+                                    button.color-chip(
+                                        *ngFor='let c of bgPresets',
+                                        [style.background]='c',
+                                        [class.selected]='bodyBgColor === c',
+                                        (click)='pickColor("bg", c)',
+                                        [title]='c'
                                     )
-                                button.reset-color(*ngIf='bodyBgColor', (click)='resetColor("bg")')
-                                    i.fas.fa-undo.me-1
-                                    | Reset
+                                .color-pop-actions
+                                    label.custom-color
+                                        i.fas.fa-eye-dropper
+                                        | Custom…
+                                        input(
+                                            type='color',
+                                            [value]='bodyBgColor || "#1f2937"',
+                                            (input)='onCustomColor("bg", $event)'
+                                        )
+                                    button.reset-color(*ngIf='bodyBgColor', (click)='resetColor("bg")')
+                                        i.fas.fa-undo.me-1
+                                        | Reset
 
                 //- json / text — single textarea
                 textarea.code-editor(
