@@ -18,6 +18,7 @@ import {
     APIKeyLocation, OAuth2GrantType, AwsSigV4Config, TLSConfig, CookieEntry, APIFolder,
 } from '../api/interfaces'
 import { ImportModalComponent, ImportCollectionResult, ImportModalResult } from './importModal.component'
+import { HelpModalComponent } from './helpModal.component'
 
 /**
  * The big API-client tab. Hosts:
@@ -288,6 +289,9 @@ export class APIClientTabComponent extends BaseTabComponent implements OnDestroy
                 case 'api-client.import-curl':
                     this.openImport('curl')
                     break
+                case 'api-client.help':
+                    this.openHelp()
+                    break
             }
         }))
 
@@ -496,7 +500,20 @@ export class APIClientTabComponent extends BaseTabComponent implements OnDestroy
         } else if (event.key === 'Escape' && this.responseSearchOpen) {
             this.responseSearchOpen = false
             this.responseSearchQuery = ''
+        } else if (event.key === '?' && !this.isTypingTarget(event.target)) {
+            // Plain `?` opens help — but only when the user isn't
+            // mid-keystroke in an input/textarea, where '?' is a
+            // legitimate character. The active-tag check is the
+            // standard "GitHub-style hotkey" guard.
+            event.preventDefault()
+            this.openHelp()
         }
+    }
+
+    private isTypingTarget (target: EventTarget | null): boolean {
+        if (!(target instanceof HTMLElement)) {return false}
+        const tag = target.tagName
+        return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable
     }
 
     openResponseSearch (): void {
@@ -641,6 +658,14 @@ export class APIClientTabComponent extends BaseTabComponent implements OnDestroy
         } catch {
             return this.url.substring(0, 30)
         }
+    }
+
+    // ----- help --------------------------------------------------------
+
+    /** Open the searchable help modal. Same content lives in the
+     *  README on disk + GitHub; the modal is the in-app surface. */
+    openHelp (): void {
+        this.ngbModal.open(HelpModalComponent, { size: 'lg' })
     }
 
     // ----- imports + code-gen ------------------------------------------

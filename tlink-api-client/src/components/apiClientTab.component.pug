@@ -88,6 +88,11 @@
                 button.dropdown-item(ngbDropdownItem, (click)='toggleRealtime()')
                     i.fas.fa-bolt.me-1
                     | {{realtime ? 'Disable realtime mode' : 'Enable realtime (WS/SSE)'}}
+                .dropdown-divider
+                button.dropdown-item(ngbDropdownItem, (click)='openHelp()')
+                    i.fas.fa-question-circle.me-1
+                    | Help
+                    span.ms-2.text-muted(style='font-size: 10px;') ?
 
     .main-content
         //- ============== Request panel ==============

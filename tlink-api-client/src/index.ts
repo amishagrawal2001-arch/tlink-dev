@@ -7,6 +7,7 @@ import TlinkCoreModule, { ConfigProvider, TabRecoveryProvider, ProfileProvider, 
 
 import { APIClientTabComponent } from './components/apiClientTab.component'
 import { ImportModalComponent } from './components/importModal.component'
+import { HelpModalComponent } from './components/helpModal.component'
 import { APIClientConfigProvider } from './config'
 import { APIClientRecoveryProvider } from './recoveryProvider'
 import { APIClientProfilesService } from './profiles'
@@ -45,6 +46,7 @@ import { CookiesService } from './services/cookies.service'
     declarations: [
         APIClientTabComponent,
         ImportModalComponent,
+        HelpModalComponent,
     ],
 })
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class -- Angular @NgModule pattern

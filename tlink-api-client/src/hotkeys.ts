@@ -33,6 +33,10 @@ export class APIClientHotkeyProvider extends HotkeyProvider {
             id: 'api-client.import-curl',
             name: this.translate.instant('Import cURL into API client'),
         },
+        {
+            id: 'api-client.help',
+            name: this.translate.instant('Open API client help'),
+        },
     ]
 
     constructor (private translate: TranslateService) { super() }
