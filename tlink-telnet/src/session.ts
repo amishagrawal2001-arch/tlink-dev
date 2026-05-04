@@ -5,6 +5,7 @@ import stripAnsi from 'strip-ansi'
 import { Injector } from '@angular/core'
 import { LogService } from 'tlink-core'
 import { BaseSession, ConnectableTerminalProfile, InputProcessingOptions, InputProcessor, LoginScriptsOptions, SessionMiddleware, StreamProcessingOptions, TerminalStreamProcessor } from 'tlink-terminal'
+import { NetworkPlatformService } from 'tlink-ssh'
 import { Subject, Observable } from 'rxjs'
 
 
@@ -69,6 +70,11 @@ export class TelnetSession extends BaseSession {
     private lastHeight = 0
     private requestedOptions = new Set<number>()
     private telnetRemoteEcho = false
+    private platformService: NetworkPlatformService | null = null
+    /** Stable id used by NetworkPlatformService to key the detected
+     *  platform per session. Same shape as the SSH plugin's so both
+     *  transports key consistently into the shared service map. */
+    readonly platformSessionId: string
 
     constructor (
         injector: Injector,
@@ -79,6 +85,14 @@ export class TelnetSession extends BaseSession {
         this.middleware.push(this.streamProcessor)
         this.middleware.push(new InputProcessor(profile.options.input))
         this.setLoginScriptsOptions(profile.options)
+        this.platformSessionId = `telnet:${profile.options.host}:${profile.options.port ?? 23}:${Date.now()}`
+        try {
+            this.platformService = injector.get(NetworkPlatformService)
+        } catch {
+            // DI lookup can fail in test fixtures or when the SSH module
+            // isn't loaded — graceful no-op detection in that case.
+            this.platformService = null
+        }
     }
 
     async start (): Promise<void> {
@@ -101,6 +115,11 @@ export class TelnetSession extends BaseSession {
                 this.open = true
                 setTimeout(() => this.streamProcessor.start())
                 this.loginScriptProcessor?.executeUnconditionalScripts()
+                // Network-vendor detection — feed early session output
+                // into NetworkPlatformService. Service self-bounds: stops
+                // scanning once it matches OR after the buffer/timeout
+                // caps. Reuses the SSH-side regex catalog + snippet packs.
+                this.platformService?.attach(this.platformSessionId, this.output$)
                 resolve()
             })
         })
@@ -150,9 +169,8 @@ export class TelnetSession extends BaseSession {
     processTelnetProtocol (data: Buffer): Buffer {
         while (data.length) {
             if (data[0] === TelnetCommands.IAC) {
-                const command = data[1]
+                const [, command, option] = data
                 const commandName = TelnetCommands[command]
-                const option = data[2]
                 const optionName = TelnetOptions[option]
 
                 if (command === TelnetCommands.IAC) {
@@ -275,6 +293,8 @@ export class TelnetSession extends BaseSession {
         this.streamProcessor.close()
         this.serviceMessage.complete()
         this.kill()
+        // Free the platform-detection bookkeeping for this session.
+        this.platformService?.forget(this.platformSessionId)
         await super.destroy()
     }
 

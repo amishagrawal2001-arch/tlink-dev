@@ -9,6 +9,10 @@ export class TelnetHotkeyProvider extends HotkeyProvider {
             id: 'restart-telnet-session',
             name: this.translate.instant('Restart current Telnet session'),
         },
+        {
+            id: 'telnet-snippets',
+            name: this.translate.instant('Open network-vendor snippet picker (Telnet)'),
+        },
     ]
 
     constructor (private translate: TranslateService) { super() }

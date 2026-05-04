@@ -68,3 +68,9 @@ export * from './api'
 export { SFTPFile, SFTPSession } from './session/sftp'
 export { SFTPPanelComponent, SSHTabComponent }
 export { PasswordStorageService } from './services/passwordStorage.service'
+// Network-vendor awareness — re-exported so other transport plugins
+// (telnet, serial) can reuse the same detection + snippet infra
+// without duplicating the platform list / pattern catalog.
+export { NetworkPlatformService, NETWORK_PLATFORMS, NetworkPlatform } from './services/networkPlatform.service'
+export { NetworkSnippet, SnippetPack, NETWORK_SNIPPET_PACKS, getSnippetsForPlatform } from './services/networkSnippets'
+export { NetworkSnippetsModalComponent } from './components/networkSnippetsModal.component'

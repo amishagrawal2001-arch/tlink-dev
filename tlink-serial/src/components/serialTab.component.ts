@@ -2,8 +2,10 @@
 import { marker as _ } from '@biesbjerg/ngx-translate-extract-marker'
 import colors from 'ansi-colors'
 import { Component, Injector } from '@angular/core'
+import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import { Platform, SelectorService } from 'tlink-core'
 import { BaseTerminalTabComponent, ConnectableTerminalTabComponent } from 'tlink-terminal'
+import { NetworkSnippet, NetworkSnippetsModalComponent } from 'tlink-ssh'
 import { SerialSession, BAUD_RATES, SerialProfile } from '../api'
 
 /** @hidden */
@@ -17,10 +19,10 @@ export class SerialTabComponent extends ConnectableTerminalTabComponent<SerialPr
     session: SerialSession|null = null
     Platform = Platform
 
-    // eslint-disable-next-line @typescript-eslint/no-useless-constructor
     constructor (
         injector: Injector,
         private selector: SelectorService,
+        private ngbModal: NgbModal,
     ) {
         super(injector)
         this.enableToolbar = true
@@ -41,6 +43,9 @@ export class SerialTabComponent extends ConnectableTerminalTabComponent<SerialPr
                 case 'restart-serial-session':
                     this.reconnect()
                     break
+                case 'serial-snippets':
+                    this.showSnippetPicker()
+                    break
             }
         })
 
@@ -49,6 +54,32 @@ export class SerialTabComponent extends ConnectableTerminalTabComponent<SerialPr
         setImmediate(() => {
             this.setTitle(this.profile.name)
         })
+    }
+
+    /**
+     * Open the network-vendor snippet picker. Reuses the SSH plugin's
+     * modal + service via re-exports — same vendor list and curated
+     * commands. Console-port serial connections to network gear are
+     * one of the original justifications for vendor-aware snippets,
+     * so this keeps parity with the SSH + Telnet pickers.
+     */
+    showSnippetPicker (): void {
+        if (!this.session?.open) {
+            return
+        }
+        const ref = this.ngbModal.open(NetworkSnippetsModalComponent, { size: 'lg' })
+        const modal = ref.componentInstance as NetworkSnippetsModalComponent
+        modal.sessionId = this.session.platformSessionId
+        ref.result.then(
+            (result: { snippet: NetworkSnippet } | null) => {
+                if (!result?.snippet || !this.session?.open) {
+                    return
+                }
+                this.session.write(Buffer.from(result.snippet.template))
+                this.frontend?.focus()
+            },
+            () => { /* dismissed */ },
+        )
     }
 
     async initializeSession () {

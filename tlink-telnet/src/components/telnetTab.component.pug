@@ -6,3 +6,13 @@ terminal-toolbar([tab]='this')
     button.btn.btn-sm.btn-link.me-2((click)='reconnect()')
         i.fas.fa-redo
         span(translate) Reconnect
+
+    //- Network-vendor snippet picker. Same modal + service the SSH tab
+    //- uses — re-exported from tlink-ssh so we don't duplicate the
+    //- regex catalog / snippet packs.
+    button.btn.btn-sm.btn-link(
+        *ngIf='session && session.open',
+        (click)='showSnippetPicker()',
+        title='Network snippets'
+    )
+        i.fas.fa-bolt

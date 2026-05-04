@@ -13,6 +13,10 @@ export class SerialHotkeyProvider extends HotkeyProvider {
             id: 'restart-serial-session',
             name: this.translate.instant('Restart current serial session'),
         },
+        {
+            id: 'serial-snippets',
+            name: this.translate.instant('Open network-vendor snippet picker (Serial)'),
+        },
     ]
 
     constructor (private translate: TranslateService) { super() }

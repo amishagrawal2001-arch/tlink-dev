@@ -1,8 +1,10 @@
 import { marker as _ } from '@biesbjerg/ngx-translate-extract-marker'
 import colors from 'ansi-colors'
 import { Component, Injector } from '@angular/core'
+import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import { Platform } from 'tlink-core'
 import { BaseTerminalTabComponent, ConnectableTerminalTabComponent } from 'tlink-terminal'
+import { NetworkSnippet, NetworkSnippetsModalComponent } from 'tlink-ssh'
 import { TelnetProfile, TelnetSession } from '../session'
 
 
@@ -17,9 +19,9 @@ export class TelnetTabComponent extends ConnectableTerminalTabComponent<TelnetPr
     Platform = Platform
     session: TelnetSession|null = null
 
-    // eslint-disable-next-line @typescript-eslint/no-useless-constructor
     constructor (
         injector: Injector,
+        private ngbModal: NgbModal,
     ) {
         super(injector)
         this.enableToolbar = true
@@ -27,12 +29,47 @@ export class TelnetTabComponent extends ConnectableTerminalTabComponent<TelnetPr
 
     ngOnInit (): void {
         this.subscribeUntilDestroyed(this.hotkeys.hotkey$, hotkey => {
-            if (this.hasFocus && hotkey === 'restart-telnet-session') {
+            if (!this.hasFocus) {return}
+            if (hotkey === 'restart-telnet-session') {
                 this.reconnect()
+            } else if (hotkey === 'telnet-snippets') {
+                this.showSnippetPicker()
             }
         })
 
         super.ngOnInit()
+    }
+
+    /**
+     * Open the network-vendor snippet picker for the active session.
+     *
+     * Reuses the SSH plugin's modal + service via re-exports — same
+     * platform list (JUNOS, IOS-XR/XE, NX-OS, EOS, MikroTik, …) and
+     * same curated snippet packs. Telnet to console servers / network
+     * gear is one of the original justifications for vendor-aware
+     * snippets, so this keeps parity with the SSH side.
+     *
+     * Like the SSH picker, the chosen template is staged at the prompt
+     * without auto-running — surprise-execute on a router would be
+     * hostile.
+     */
+    showSnippetPicker (): void {
+        if (!this.session?.open) {
+            return
+        }
+        const ref = this.ngbModal.open(NetworkSnippetsModalComponent, { size: 'lg' })
+        const modal = ref.componentInstance as NetworkSnippetsModalComponent
+        modal.sessionId = this.session.platformSessionId
+        ref.result.then(
+            (result: { snippet: NetworkSnippet } | null) => {
+                if (!result?.snippet || !this.session?.open) {
+                    return
+                }
+                this.session.write(Buffer.from(result.snippet.template))
+                this.frontend?.focus()
+            },
+            () => { /* dismissed — no-op */ },
+        )
     }
 
     protected onSessionDestroyed (): void {

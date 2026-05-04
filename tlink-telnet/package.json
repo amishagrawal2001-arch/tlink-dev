@@ -31,6 +31,7 @@
     "rxjs": "^7",
     "tlink-core": "*",
     "tlink-settings": "*",
+    "tlink-ssh": "*",
     "tlink-terminal": "*"
   }
 }

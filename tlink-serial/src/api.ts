@@ -1,6 +1,7 @@
 import stripAnsi from 'strip-ansi'
 import { SerialPortStream } from '@serialport/stream'
 import { LogService, NotificationsService } from 'tlink-core'
+import { NetworkPlatformService } from 'tlink-ssh'
 import { Subject, Observable } from 'rxjs'
 import { Injector, NgZone } from '@angular/core'
 import { BaseSession, ConnectableTerminalProfile, InputProcessingOptions, InputProcessor, LoginScriptsOptions, SessionMiddleware, StreamProcessingOptions, TerminalStreamProcessor, UTF8SplitterMiddleware } from 'tlink-terminal'
@@ -50,6 +51,12 @@ export class SerialSession extends BaseSession {
     private zone: NgZone
     private notifications: NotificationsService
     private serialService: SerialService
+    private platformService: NetworkPlatformService | null = null
+    /** Stable id used by NetworkPlatformService — same shape SSH/Telnet
+     *  use, so all three transports key into the shared service map
+     *  consistently. Console-port serial connections to network gear
+     *  benefit from the same vendor-aware snippet picker. */
+    readonly platformSessionId: string
 
     constructor (injector: Injector, public profile: SerialProfile) {
         super(injector.get(LogService).create(`serial-${profile.options.port}`))
@@ -57,6 +64,13 @@ export class SerialSession extends BaseSession {
 
         this.zone = injector.get(NgZone)
         this.notifications = injector.get(NotificationsService)
+        this.platformSessionId = `serial:${profile.options.port}:${Date.now()}`
+        try {
+            this.platformService = injector.get(NetworkPlatformService)
+        } catch {
+            // SSH module may not be loaded — graceful no-op detection.
+            this.platformService = null
+        }
 
         this.streamProcessor = new TerminalStreamProcessor(profile.options)
         this.middleware.push(this.streamProcessor)
@@ -113,8 +127,8 @@ export class SerialSession extends BaseSession {
             try {
                 serial.open()
             } catch (e) {
-                this.notifications.error(e.message)
-                reject(e)
+                this.notifications.error((e as Error).message)
+                reject(e instanceof Error ? e : new Error(String(e)))
             }
         })
 
@@ -132,6 +146,12 @@ export class SerialSession extends BaseSession {
             }
         })
 
+        // Network-vendor detection — feed the post-open output stream
+        // into the shared platform service. Self-bounds via buffer +
+        // timeout caps so a long-running serial console that never
+        // matches doesn't keep scanning forever.
+        this.platformService?.attach(this.platformSessionId, this.output$)
+
         this.loginScriptProcessor?.executeUnconditionalScripts()
     }
 
@@ -141,6 +161,8 @@ export class SerialSession extends BaseSession {
 
     async destroy (): Promise<void> {
         this.serviceMessage.complete()
+        // Free the platform-detection bookkeeping for this session.
+        this.platformService?.forget(this.platformSessionId)
         await super.destroy()
     }
 
