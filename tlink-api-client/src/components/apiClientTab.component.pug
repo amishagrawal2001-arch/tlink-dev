@@ -498,7 +498,7 @@
                                         i.fas.fa-arrow-down
                                     select.folder-select(
                                         [ngModel]='req.folderId',
-                                        (ngModelChange)='moveRequest(req, $event); $event.stopPropagation()',
+                                        (ngModelChange)='moveRequest(req, $event)',
                                         (click)='$event.stopPropagation()',
                                         title='Move to folder'
                                     )
