@@ -748,6 +748,11 @@ export class APIClientTabComponent extends BaseTabComponent implements OnDestroy
         }
         this.configService.store.apiClient.collections = JSON.parse(JSON.stringify(this.collections))
         this.configService.save()
+        // Any save means the grouping may have changed — flush the
+        // memoized groups so the next *ngFor pass rebuilds them.
+        // Without this, the WeakMap cache would keep stale references
+        // and the UI wouldn't reflect adds/moves/deletes.
+        this.invalidateFoldered()
     }
 
     createCollection (): void {
@@ -929,8 +934,26 @@ export class APIClientTabComponent extends BaseTabComponent implements OnDestroy
         this.saveCollections()
     }
 
-    /** Returns the requests grouped by folder (root requests first). */
+    /**
+     * Returns the requests grouped by folder (root requests first).
+     *
+     * **Memoized** by collection identity — this method is called from
+     * `*ngFor` inside the Coll tab, which means change-detection invokes
+     * it on every tick. Returning a fresh array each call would force
+     * Angular to tear down and rebuild every saved-request row (each
+     * containing a `[ngModel]` select), which in turn triggers another
+     * change-detection pass — an infinite render loop that hangs the
+     * zone. The cache is invalidated by `saveCollections()` and on
+     * mutating helpers (`addFolder` / `deleteFolder` / `moveRequest`
+     * / `moveRequestUp` / `moveRequestDown` / `deleteRequest`).
+     */
+    private folderedCache = new WeakMap<APICollection, { folder: APIFolder | null, requests: SavedRequest[] }[]>()
+
     folderedRequests (col: APICollection): { folder: APIFolder | null, requests: SavedRequest[] }[] {
+        const cached = this.folderedCache.get(col)
+        if (cached) {
+            return cached
+        }
         const root = col.requests.filter(r => !r.folderId)
         const groups: { folder: APIFolder | null, requests: SavedRequest[] }[] = [{ folder: null, requests: root }]
         const folders = [...(col.folders ?? [])].sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
@@ -940,7 +963,18 @@ export class APIClientTabComponent extends BaseTabComponent implements OnDestroy
                 requests: col.requests.filter(r => r.folderId === f.id),
             })
         }
+        this.folderedCache.set(col, groups)
         return groups
+    }
+
+    /** Invalidate the foldered-requests cache for one (or all) collections.
+     *  Called from every mutation that could change the grouping. */
+    private invalidateFoldered (col?: APICollection): void {
+        if (col) {
+            this.folderedCache.delete(col)
+        } else {
+            this.folderedCache = new WeakMap()
+        }
     }
 
     /** Move a request to a different folder (or root). Called from a
