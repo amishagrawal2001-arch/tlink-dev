@@ -17,6 +17,10 @@ export class SSHHotkeyProvider extends HotkeyProvider {
             id: 'ssh-snippets',
             name: this.translate.instant('Open network-vendor snippet picker'),
         },
+        {
+            id: 'ssh-help',
+            name: this.translate.instant('Open SSH tab help'),
+        },
     ]
 
     constructor (private translate: TranslateService) { super() }

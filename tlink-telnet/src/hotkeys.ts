@@ -13,6 +13,10 @@ export class TelnetHotkeyProvider extends HotkeyProvider {
             id: 'telnet-snippets',
             name: this.translate.instant('Open network-vendor snippet picker (Telnet)'),
         },
+        {
+            id: 'telnet-help',
+            name: this.translate.instant('Open Telnet tab help'),
+        },
     ]
 
     constructor (private translate: TranslateService) { super() }

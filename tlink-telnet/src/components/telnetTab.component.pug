@@ -16,3 +16,11 @@ terminal-toolbar([tab]='this')
         title='Network snippets'
     )
         i.fas.fa-bolt
+
+    //- Help — searchable quick-reference. Always available so users
+    //- troubleshooting a failed connect can read the docs too.
+    button.btn.btn-sm.btn-link(
+        (click)='openHelp()',
+        title='Help'
+    )
+        i.fas.fa-question-circle

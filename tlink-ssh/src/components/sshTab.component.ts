@@ -11,6 +11,8 @@ import { SSHService } from '../services/ssh.service'
 import { KeyboardInteractivePrompt, SSHSession } from '../session/ssh'
 import { SSHPortForwardingModalComponent } from './sshPortForwardingModal.component'
 import { NetworkSnippetsModalComponent } from './networkSnippetsModal.component'
+import { HelpModalComponent } from './helpModal.component'
+import { SSH_HELP_CONTENT } from './sshHelp.content'
 import { SSHProfile } from '../api'
 import { SSHShellSession } from '../session/shell'
 import { SSHMultiplexerService } from '../services/sshMultiplexer.service'
@@ -103,6 +105,9 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
                     break
                 case 'ssh-snippets':
                     this.showSnippetPicker()
+                    break
+                case 'ssh-help':
+                    this.openHelp()
                     break
             }
         })
@@ -614,6 +619,16 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
             },
             () => { /* dismissed — no-op */ },
         )
+    }
+
+    /**
+     * Open the SSH-specific help dialog. Same generic modal that
+     * Telnet + Serial use; the content is defined in sshHelp.content.ts.
+     */
+    openHelp (): void {
+        const ref = this.ngbModal.open(HelpModalComponent, { size: 'lg', scrollable: true })
+        const modal = ref.componentInstance as HelpModalComponent
+        modal.content = SSH_HELP_CONTENT
     }
 
     async canClose (): Promise<boolean> {

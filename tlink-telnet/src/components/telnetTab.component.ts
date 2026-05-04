@@ -4,7 +4,8 @@ import { Component, Injector } from '@angular/core'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import { Platform } from 'tlink-core'
 import { BaseTerminalTabComponent, ConnectableTerminalTabComponent } from 'tlink-terminal'
-import { NetworkSnippet, NetworkSnippetsModalComponent } from 'tlink-ssh'
+import { NetworkSnippet, NetworkSnippetsModalComponent, HelpModalComponent } from 'tlink-ssh'
+import { TELNET_HELP_CONTENT } from './telnetHelp.content'
 import { TelnetProfile, TelnetSession } from '../session'
 
 
@@ -34,6 +35,8 @@ export class TelnetTabComponent extends ConnectableTerminalTabComponent<TelnetPr
                 this.reconnect()
             } else if (hotkey === 'telnet-snippets') {
                 this.showSnippetPicker()
+            } else if (hotkey === 'telnet-help') {
+                this.openHelp()
             }
         })
 
@@ -70,6 +73,14 @@ export class TelnetTabComponent extends ConnectableTerminalTabComponent<TelnetPr
             },
             () => { /* dismissed — no-op */ },
         )
+    }
+
+    /** Open the Telnet help dialog. Reuses the generic modal exported
+     *  from tlink-ssh; content lives in telnetHelp.content.ts. */
+    openHelp (): void {
+        const ref = this.ngbModal.open(HelpModalComponent, { size: 'lg', scrollable: true })
+        const modal = ref.componentInstance as HelpModalComponent
+        modal.content = TELNET_HELP_CONTENT
     }
 
     protected onSessionDestroyed (): void {

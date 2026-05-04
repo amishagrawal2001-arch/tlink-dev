@@ -1,0 +1,40 @@
+.modal-header
+    h5.modal-title
+        i.fas.fa-question-circle.me-2
+        | {{content.title}}
+    button.btn-close((click)='close()')
+
+.modal-body.help-modal-body
+    .help-search
+        i.fas.fa-search.me-2
+        input.help-search-input(
+            type='text',
+            placeholder='Search for a feature, hotkey, or task…',
+            [(ngModel)]='query',
+            autofocus
+        )
+        button.icon-btn(*ngIf='query', (click)='query = ""', title='Clear')
+            i.fas.fa-times
+
+    .help-tagline(*ngIf='content.tagline && !query') {{content.tagline}}
+
+    .help-empty(*ngIf='visibleSections().length === 0')
+        i.fas.fa-search(style='font-size: 24px; opacity: 0.3;')
+        .mt-2 No matches for "{{query}}"
+
+    .help-section(*ngFor='let sec of visibleSections()')
+        .help-section-title
+            i.fas.me-2([class]='"fa-" + sec.icon')
+            span {{sec.title}}
+        .help-item(*ngFor='let it of sec.items')
+            .help-item-label {{it.label}}
+            .help-item-howto
+                span.help-howto-text {{it.howto}}
+            .help-item-detail(*ngIf='it.detail') {{it.detail}}
+
+.modal-footer
+    .help-footer-hint
+        | Press
+        kbd.mx-1 ?
+        | from anywhere in the tab to reopen this dialog.
+    button.btn.btn-sm.btn-secondary.ms-auto((click)='close()') Close

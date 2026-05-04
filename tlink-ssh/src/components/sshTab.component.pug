@@ -74,6 +74,16 @@ terminal-toolbar([tab]='this')
     )
         i.fas.fa-robot
 
+    //- Help dialog — searchable quick-reference. Always available
+    //- (whether the session is open or not — the docs are equally
+    //- relevant when troubleshooting a failed connect).
+    button.btn.btn-sm.btn-link(
+        (click)='openHelp()',
+        [ngbTooltip]='"Help"|translate',
+        container='body'
+    )
+        i.fas.fa-question-circle
+
 
 sftp-panel.bg-dark(
     @panelSlide,

@@ -5,7 +5,8 @@ import { Component, Injector } from '@angular/core'
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import { Platform, SelectorService } from 'tlink-core'
 import { BaseTerminalTabComponent, ConnectableTerminalTabComponent } from 'tlink-terminal'
-import { NetworkSnippet, NetworkSnippetsModalComponent } from 'tlink-ssh'
+import { NetworkSnippet, NetworkSnippetsModalComponent, HelpModalComponent } from 'tlink-ssh'
+import { SERIAL_HELP_CONTENT } from './serialHelp.content'
 import { SerialSession, BAUD_RATES, SerialProfile } from '../api'
 
 /** @hidden */
@@ -46,6 +47,9 @@ export class SerialTabComponent extends ConnectableTerminalTabComponent<SerialPr
                 case 'serial-snippets':
                     this.showSnippetPicker()
                     break
+                case 'serial-help':
+                    this.openHelp()
+                    break
             }
         })
 
@@ -80,6 +84,14 @@ export class SerialTabComponent extends ConnectableTerminalTabComponent<SerialPr
             },
             () => { /* dismissed */ },
         )
+    }
+
+    /** Open the Serial help dialog. Reuses the generic modal exported
+     *  from tlink-ssh; content lives in serialHelp.content.ts. */
+    openHelp () {
+        const ref = this.ngbModal.open(HelpModalComponent, { size: 'lg', scrollable: true })
+        const modal = ref.componentInstance as HelpModalComponent
+        modal.content = SERIAL_HELP_CONTENT
     }
 
     async initializeSession () {

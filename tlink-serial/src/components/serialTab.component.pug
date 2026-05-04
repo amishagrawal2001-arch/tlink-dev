@@ -20,3 +20,11 @@ terminal-toolbar([tab]='this')
     button.btn.btn-sm.btn-link((click)='reconnect()', *ngIf='!session || !session.open')
         i.fas.fa-redo
         span(translate) Reconnect
+
+    //- Help — searchable quick-reference. Always available so users
+    //- troubleshooting a port-open failure can read the docs too.
+    button.btn.btn-sm.btn-link(
+        (click)='openHelp()',
+        title='Help'
+    )
+        i.fas.fa-question-circle

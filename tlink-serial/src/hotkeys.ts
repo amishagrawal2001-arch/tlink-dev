@@ -17,6 +17,10 @@ export class SerialHotkeyProvider extends HotkeyProvider {
             id: 'serial-snippets',
             name: this.translate.instant('Open network-vendor snippet picker (Serial)'),
         },
+        {
+            id: 'serial-help',
+            name: this.translate.instant('Open Serial tab help'),
+        },
     ]
 
     constructor (private translate: TranslateService) { super() }

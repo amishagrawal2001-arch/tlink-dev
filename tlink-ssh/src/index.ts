@@ -17,6 +17,7 @@ import { SFTPDeleteModalComponent } from './components/sftpDeleteModal.component
 import { KeyboardInteractiveAuthComponent } from './components/keyboardInteractiveAuthPanel.component'
 import { HostKeyPromptModalComponent } from './components/hostKeyPromptModal.component'
 import { NetworkSnippetsModalComponent } from './components/networkSnippetsModal.component'
+import { HelpModalComponent } from './components/helpModal.component'
 
 import { SSHConfigProvider } from './config'
 import { SSHSettingsTabProvider } from './settings'
@@ -59,6 +60,7 @@ import { SFTPCreateDirectoryModalComponent } from './components/sftpCreateDirect
         KeyboardInteractiveAuthComponent,
         HostKeyPromptModalComponent,
         NetworkSnippetsModalComponent,
+        HelpModalComponent,
     ],
 })
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class
@@ -74,3 +76,7 @@ export { PasswordStorageService } from './services/passwordStorage.service'
 export { NetworkPlatformService, NETWORK_PLATFORMS, NetworkPlatform } from './services/networkPlatform.service'
 export { NetworkSnippet, SnippetPack, NETWORK_SNIPPET_PACKS, getSnippetsForPlatform } from './services/networkSnippets'
 export { NetworkSnippetsModalComponent } from './components/networkSnippetsModal.component'
+// Generic help-modal — reusable across transport plugins. Each
+// plugin defines its own HelpContent and passes it in via the
+// modalRef.componentInstance.content field before showing.
+export { HelpModalComponent, HelpContent, HelpSection, HelpItem } from './components/helpModal.component'
