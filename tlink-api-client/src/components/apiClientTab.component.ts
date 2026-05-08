@@ -797,6 +797,55 @@ export class APIClientTabComponent extends BaseTabComponent implements OnDestroy
         this.saveCollections()
     }
 
+    /**
+     * Inline save-to-collection dialog state. Clicking the + button on
+     * a collection opens a small editable input pre-filled with the
+     * auto-generated name (`METHOD shortUrl`); the user can rename
+     * before confirming. Empty input falls back to the auto-name so
+     * users who don't care can just hit Enter.
+     */
+    savingToCollection: APICollection | null = null
+    pendingSaveName = ''
+
+    /** Open the inline save form for a collection. */
+    startSaveToCollection (col: APICollection): void {
+        this.savingToCollection = col
+        this.pendingSaveName = `${this.method} ${this.getShortUrl()}`
+        // Defer the focus so the input has rendered.
+        setTimeout(() => {
+            const el = document.querySelector('.save-name-input')
+            el?.focus()
+            el?.select()
+        }, 0)
+    }
+
+    cancelSaveToCollection (): void {
+        this.savingToCollection = null
+        this.pendingSaveName = ''
+    }
+
+    /** Apply the (possibly renamed) save. Falls back to the auto-name
+     *  on empty input so a user who just hits Enter still gets a
+     *  meaningful label. */
+    confirmSaveToCollection (col: APICollection): void {
+        const trimmed = this.pendingSaveName.trim()
+        const name = trimmed || `${this.method} ${this.getShortUrl()}`
+        const request: SavedRequest = JSON.parse(JSON.stringify({
+            id: `req-${Date.now()}`,
+            name,
+            options: this.snapshotOptions(),
+        }))
+        col.requests.push(request)
+        this.saveCollections()
+        this.cancelSaveToCollection()
+        this.notifications.info(`Saved as "${name}"`)
+    }
+
+    /** Quick-save without prompting — used when the auto-name is fine.
+     *  Mapped to the original toolbar "+" if the user wants the
+     *  no-friction path. Today we route everything through the inline
+     *  form by default; this stays as a service-method for the
+     *  ssh-snippets-style "save current request here" flow. */
     saveRequestToCollection (col: APICollection): void {
         const request: SavedRequest = JSON.parse(JSON.stringify({
             id: `req-${Date.now()}`,
@@ -806,6 +855,37 @@ export class APIClientTabComponent extends BaseTabComponent implements OnDestroy
         col.requests.push(request)
         this.saveCollections()
         this.notifications.info('Request saved')
+    }
+
+    // ----- inline rename of saved requests -----------------------------
+
+    renamingRequest: SavedRequest | null = null
+    pendingRenameName = ''
+
+    startRenameRequest (req: SavedRequest): void {
+        this.renamingRequest = req
+        this.pendingRenameName = req.name
+        setTimeout(() => {
+            const el = document.querySelector('.rename-input')
+            el?.focus()
+            el?.select()
+        }, 0)
+    }
+
+    cancelRenameRequest (): void {
+        this.renamingRequest = null
+        this.pendingRenameName = ''
+    }
+
+    confirmRenameRequest (req: SavedRequest): void {
+        const trimmed = this.pendingRenameName.trim()
+        if (!trimmed) {
+            this.cancelRenameRequest()
+            return
+        }
+        req.name = trimmed
+        this.saveCollections()
+        this.cancelRenameRequest()
     }
 
     loadRequest (req: SavedRequest): void {

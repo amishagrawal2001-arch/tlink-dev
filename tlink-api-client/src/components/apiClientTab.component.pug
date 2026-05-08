@@ -493,8 +493,9 @@
                                 )
                                     i.fas.fa-folder-plus
                                 button.icon-btn.save-btn(
-                                    (click)='saveRequestToCollection(col)',
-                                    title='Save current request here'
+                                    (click)='startSaveToCollection(col)',
+                                    title='Save current request here',
+                                    [disabled]='savingToCollection !== null'
                                 )
                                     i.fas.fa-plus-circle
                                 button.icon-btn.del-btn(
@@ -502,6 +503,24 @@
                                     title='Delete collection'
                                 )
                                     i.fas.fa-trash
+
+                        //- Inline save form — appears below the collection
+                        //- title when the user clicks "+". Pre-filled with
+                        //- "METHOD shortUrl"; user can rename before
+                        //- confirming. Empty input falls back to that auto-name.
+                        .save-form(*ngIf='savingToCollection === col')
+                            input.field-input.save-name-input(
+                                type='text',
+                                [(ngModel)]='pendingSaveName',
+                                placeholder='Request name',
+                                (keydown.enter)='confirmSaveToCollection(col)',
+                                (keydown.escape)='cancelSaveToCollection()'
+                            )
+                            button.btn.btn-sm.btn-primary((click)='confirmSaveToCollection(col)')
+                                i.fas.fa-check.me-1
+                                | Save
+                            button.btn.btn-sm.btn-secondary((click)='cancelSaveToCollection()')
+                                | Cancel
 
                         //- Group rendering: root, then folders. Empty groups
                         //- are shown so users can drop into them via the
@@ -518,11 +537,33 @@
 
                             .saved-request(
                                 *ngFor='let req of g.requests; let idx = index',
-                                (click)='loadRequest(req)'
+                                (click)='renamingRequest === req ? null : loadRequest(req)'
                             )
                                 span.req-method([class]='req.options.method.toLowerCase()') {{req.options.method}}
-                                span.req-name {{req.name}}
+
+                                //- Inline rename input — replaces the name span
+                                //- when this request is being renamed. Click +
+                                //- keystrokes inside it must NOT bubble to the
+                                //- parent .saved-request which would trigger
+                                //- loadRequest(). Hence the stopPropagation.
+                                input.rename-input(
+                                    *ngIf='renamingRequest === req',
+                                    type='text',
+                                    [(ngModel)]='pendingRenameName',
+                                    (click)='$event.stopPropagation()',
+                                    (keydown.enter)='confirmRenameRequest(req); $event.stopPropagation()',
+                                    (keydown.escape)='cancelRenameRequest(); $event.stopPropagation()',
+                                    (blur)='confirmRenameRequest(req)'
+                                )
+                                span.req-name(*ngIf='renamingRequest !== req') {{req.name}}
+
                                 .ms-auto.d-flex.gap-1
+                                    button.icon-btn(
+                                        *ngIf='renamingRequest !== req',
+                                        (click)='startRenameRequest(req); $event.stopPropagation()',
+                                        title='Rename'
+                                    )
+                                        i.fas.fa-pencil-alt
                                     button.icon-btn(
                                         (click)='moveRequestUp(col, req); $event.stopPropagation()',
                                         title='Move up'
