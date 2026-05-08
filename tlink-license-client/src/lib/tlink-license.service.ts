@@ -193,23 +193,57 @@ export class TlinkLicenseService implements OnDestroy {
     }
 
     /**
+     * Returns true when full-token logging has been opted into for this
+     * window. Set via DevTools when debugging an auth/heartbeat flow:
+     *
+     *   window.__tlinkLicenseLogFullTokens = true
+     *
+     * Cleared the same way (set to false / delete). Default off — tokens
+     * in console logs are a real leak vector via copy-paste, screen-share,
+     * Sentry breadcrumbs, and shoulder-surfing. Use sparingly and unset
+     * when done debugging.
+     */
+    private fullTokenLoggingEnabled (): boolean {
+        try {
+            // eslint-disable-next-line no-undef
+            const g: any = typeof globalThis !== 'undefined' ? globalThis
+                : typeof window !== 'undefined' ? window
+                    : {}
+            return Boolean(g.__tlinkLicenseLogFullTokens)
+        } catch {
+            return false
+        }
+    }
+
+    /**
      * Recursively clones `value`, replacing any property whose key is
      * sensitive with a stub. Depth-capped (8 levels) so a pathological
      * payload can't spin us. Arrays and primitives pass through unchanged
      * except for element-level recursion.
+     *
+     * When __tlinkLicenseLogFullTokens is set on the window, this becomes
+     * a passthrough — useful for debugging the activate/heartbeat/refresh
+     * flow but never on by default.
      */
     private redactValue (value: any, depth: number): any {
         if (depth > 8 || value === null || value === undefined) {return value}
+        if (this.fullTokenLoggingEnabled()) {return value}
         if (Array.isArray(value)) {return value.map(v => this.redactValue(v, depth + 1))}
         if (typeof value !== 'object') {return value}
         const out: any = {}
         for (const k of Object.keys(value)) {
             if (this.isSensitiveKey(k)) {
                 const v = value[k]
-                if (k.toLowerCase().includes('refresh_token') && typeof v === 'string' && v.length > 12) {
-                    // Preserve a short prefix so log readers can correlate two
-                    // events referencing the same token without exposing the secret.
-                    out[k] = v.slice(0, 12) + '…'
+                // Symmetric handling for access_token + refresh_token: both
+                // show a short head/tail so log readers can correlate two
+                // log events referencing the same token without exposing
+                // the full secret. Used to be asymmetric (access full-
+                // redacted, refresh prefix-only) which made debugging
+                // rotation cycles painful.
+                if (typeof v === 'string'
+                    && (k.toLowerCase().includes('refresh_token') || k.toLowerCase().includes('access_token'))
+                    && v.length > 24) {
+                    out[k] = `${v.slice(0, 8)}…${v.slice(-8)} (${v.length}b)`
                 } else if (k.toLowerCase() === 'authorization' && typeof v === 'string') {
                     out[k] = 'Bearer ***'
                 } else {
@@ -223,6 +257,7 @@ export class TlinkLicenseService implements OnDestroy {
     }
 
     private redactHeaders (headers: Record<string, string> = {}): Record<string, string> {
+        if (this.fullTokenLoggingEnabled()) {return { ...headers }}
         const copy: Record<string, string> = {}
         for (const k of Object.keys(headers)) {
             copy[k] = this.isSensitiveKey(k) ? (k.toLowerCase() === 'authorization' ? 'Bearer ***' : '***') : headers[k]
@@ -1326,14 +1361,21 @@ export class TlinkLicenseService implements OnDestroy {
             // enough to pull the status + tokens out regardless.
             const envelope = this.normalizeHeartbeat(rawJson)
             // eslint-disable-next-line no-console
+            // The response details go through redactValue so:
+            //  - default: tokens render as "abcdef…uvwxyz (NNb)"
+            //  - with __tlinkLicenseLogFullTokens: tokens render in full
+            // We feed the raw envelope (not just booleans) so the log
+            // is useful for cross-correlating server-side logs.
             console.info('%c[license:heartbeat] response',
                 envelope.status === 'VALID' ? 'color:#16a34a;font-weight:600' : 'color:#dc2626;font-weight:600',
-                {
+                this.redactValue({
                     status: envelope.status,
                     reason: envelope.reason_code,
-                    rotatedAccessToken: !!envelope.access_token,
-                    rotatedRefreshToken: !!envelope.refresh_token,
-                })
+                    access_token: envelope.access_token ?? null,
+                    refresh_token: envelope.refresh_token ?? null,
+                    access_expires_in_sec: envelope.access_expires_in_sec ?? null,
+                    refresh_expires_in_sec: envelope.refresh_expires_in_sec ?? null,
+                }, 0))
             return envelope
         } catch (e: any) {
             // eslint-disable-next-line no-console
