@@ -395,12 +395,13 @@ export class TlinkLicenseService implements OnDestroy {
      * extend this map then.
      */
     private translateActionForBase (action: string, kind: 'bare' | 'versioned' | 'licenses'): string {
-        // AWS API Gateway exposes a single /validate endpoint that handles
-        // initial activation, token refresh, AND periodic heartbeat —
-        // distinguishing them by request-body shape. Calling /heartbeat
-        // there returns 422 ("Unprocessable Content") because the route
-        // doesn't exist (or the validator rejects the bare body).
-        if (kind !== 'bare' && (action === 'refresh' || action === 'activate' || action === 'heartbeat')) {
+        // Cloud has a dedicated /licenses/heartbeat route now (slim 4-
+        // field body — see buildHeartbeatBody). It used to be aliased
+        // to /validate because the old AWS API-Gateway didn't have a
+        // heartbeat route; that reroute is gone. /activate and /refresh
+        // still alias to /validate because the cloud server still
+        // distinguishes them by body shape on that single endpoint.
+        if (kind !== 'bare' && (action === 'refresh' || action === 'activate')) {
             return 'validate'
         }
         return action
@@ -1143,6 +1144,26 @@ export class TlinkLicenseService implements OnDestroy {
      * those except password (deliberately never persisted), and the
      * refresh_token replaces password as the auth secret.
      */
+    /**
+     * Slim 4-field body for the cloud /heartbeat endpoint —
+     * { device_id, license_id, access_token, refresh_token }. The
+     * server uses access_token when valid and falls back to
+     * refresh_token to rotate. No fingerprint / email / product
+     * code / platform metadata is needed.
+     *
+     * Synchronous because we don't need the fingerprint here. Kept as
+     * a method (not a getter) for symmetry with buildTokenAuthBody and
+     * because TypeScript inference is cleaner.
+     */
+    private buildHeartbeatBody (): Record<string, string> {
+        return {
+            device_id: this.deviceId ?? '',
+            license_id: this.licenseId ?? '',
+            access_token: this.accessToken ?? '',
+            refresh_token: this.refreshToken ?? '',
+        }
+    }
+
     private async buildTokenAuthBody (): Promise<Record<string, any>> {
         const fp = await this.fingerprint.get()
         const cloud = this.classifyBase(this.trimmedServerUrl()) !== 'bare'
@@ -1233,14 +1254,21 @@ export class TlinkLicenseService implements OnDestroy {
         }
         try {
             const url = this.licenseEndpoint('heartbeat')
-            // On cloud bases (AWS /validate) the heartbeat alias expects
-            // the same rich body that activate sent — minus password —
-            // because /validate strictly validates the route schema. The
-            // refresh_token authenticates instead. On bare-host the slim
-            // legacy shape works.
+            // Cloud /heartbeat expects the slim 4-field body returned by
+            // /validate: { device_id, license_id, access_token,
+            // refresh_token }. The server uses access_token when it's
+            // still valid and falls through to refresh_token otherwise,
+            // rotating both in the response. The previous "rich body"
+            // shape (email, product_code, fingerprint, platform, app
+            // version, MAC) is no longer required — the server is
+            // self-sufficient with the IDs + tokens.
+            //
+            // On bare-host the legacy shape stays (no auth tokens at
+            // all by default; refresh_token attached only when the
+            // access token has expired so the server can rotate).
             const cloudBase = this.classifyBase(this.trimmedServerUrl()) !== 'bare'
             const body: any = cloudBase
-                ? await this.buildTokenAuthBody()
+                ? this.buildHeartbeatBody()
                 : { device_id: this.deviceId, license_id: this.licenseId }
             if (!cloudBase && this.isAccessExpired()) {
                 body.refresh_token = this.refreshToken
@@ -1383,8 +1411,13 @@ export class TlinkLicenseService implements OnDestroy {
 
     private normalizeHeartbeat (raw: any): HeartbeatEnvelope {
         const r = raw && typeof raw === 'object' ? raw : {}
+        // Tolerant of both shapes:
+        //   - new /heartbeat returns `status: VALID`
+        //   - legacy /validate-aliased path returned `license_status: VALID`
+        // During a server transition both can be in flight; we accept either.
+        const statusValue = r.status ?? r.license_status
         return {
-            status: r.status === 'VALID' ? 'VALID' : 'INVALID',
+            status: statusValue === 'VALID' ? 'VALID' : 'INVALID',
             reason_code: r.reason_code ?? null,
             access_token: r.access_token,
             refresh_token: r.refresh_token,
