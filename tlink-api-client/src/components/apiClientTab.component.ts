@@ -812,8 +812,11 @@ export class APIClientTabComponent extends BaseTabComponent implements OnDestroy
         this.savingToCollection = col
         this.pendingSaveName = `${this.method} ${this.getShortUrl()}`
         // Defer the focus so the input has rendered.
+        // Generic querySelector form gives us HTMLInputElement | null
+        // directly, which satisfies both TS (focus/select exist) and
+        // ESLint's no-unnecessary-type-assertion rule (no cast needed).
         setTimeout(() => {
-            const el = document.querySelector('.save-name-input')
+            const el = document.querySelector<HTMLInputElement>('.save-name-input')
             el?.focus()
             el?.select()
         }, 0)
@@ -866,7 +869,7 @@ export class APIClientTabComponent extends BaseTabComponent implements OnDestroy
         this.renamingRequest = req
         this.pendingRenameName = req.name
         setTimeout(() => {
-            const el = document.querySelector('.rename-input')
+            const el = document.querySelector<HTMLInputElement>('.rename-input')
             el?.focus()
             el?.select()
         }, 0)
