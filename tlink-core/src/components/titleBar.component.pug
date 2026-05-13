@@ -1,2 +1,9 @@
-.title((dblclick)='hostWindow.toggleMaximize()') NexTerm
+.title((dblclick)='hostWindow.toggleMaximize()')
+    span NexTerm
+    //- Version pill — small muted chip right next to the title so
+    //- users can see "what build am I on?" at a glance, in every
+    //- window. Backed by HomeBaseService.appVersion which reads
+    //- from the platform service.
+    span.title-version(*ngIf='homeBase.appVersion', [title]='"Version " + homeBase.appVersion')
+        | v{{homeBase.appVersion}}
 window-controls(*ngIf="!hideControls")

@@ -9,6 +9,26 @@ $titlebar-height: 30px;
         padding-left: 15px;
         line-height: $titlebar-height;
         -webkit-app-region: drag;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    // Version pill — small muted chip next to the product name.
+    // Pointer-events: none so the click region stays draggable.
+    .title-version {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.4px;
+        padding: 1px 7px;
+        border-radius: 999px;
+        background: rgba(128, 128, 128, 0.15);
+        color: rgba(128, 128, 128, 0.85);
+        font-family: 'Source Code Pro', monospace;
+        line-height: 1.4;
+        pointer-events: none;
+        // Don't break under the title baseline if the row is tight.
+        white-space: nowrap;
     }
 
     &.inset {
