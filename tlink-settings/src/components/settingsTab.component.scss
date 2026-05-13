@@ -33,14 +33,43 @@
     }
 
     > .content {
-        display: flex;
+        // CSS Grid layout so the search box sits ABOVE the nav-pills
+        // in the left column (200px wide), and the tab content
+        // outlet spans both rows on the right. Previously this was
+        // a flex row; the search box was added as a sibling so we
+        // switched to grid rather than re-indenting the entire pug
+        // nav tree under a wrapper div.
+        display: grid;
+        grid-template-columns: 200px 1fr;
+        grid-template-rows: auto 1fr;
+        grid-template-areas:
+            "search content"
+            "nav    content";
         min-height: 0;
         flex: 1 0 0;
+
+        // Search input lives in the top-left grid cell.
+        > .settings-search {
+            grid-area: search;
+        }
+        > .settings-search-count {
+            // Hint sits under the search input within the same area —
+            // we slip it into the nav cell's top edge so it doesn't
+            // push the pills down. Negative margin pulls it up to
+            // hug the search bar bottom edge.
+            grid-area: nav;
+            align-self: start;
+            font-size: 10px;
+            color: var(--bs-secondary-color);
+            padding: 4px 12px 0;
+            margin-top: -4px;
+        }
 
         // Compact pass — was 222px nav with 20px/10px padding. Now
         // 200px with 12px/8px padding, freeing up ~30px of horizontal
         // real estate for the actual settings content.
         > .nav {
+            grid-area: nav;
             padding: 12px 8px;
             width: 200px;
             flex: none;
@@ -52,6 +81,7 @@
         // horizontal. Settings panels now use ~20px less on each
         // edge, putting more content in the viewport.
         > .tab-content {
+            grid-area: content;
             flex: auto;
             padding: 12px 0;
             overflow-y: auto;
@@ -615,5 +645,49 @@ textarea {
         font-weight: 700;
         margin-left: 4px;
         white-space: nowrap;
+    }
+}
+
+// ══════════════════════════════════════
+// Settings search box (top of left nav)
+// ══════════════════════════════════════
+.settings-search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    margin: 8px 8px 4px;
+    background: var(--bs-tertiary-bg, rgba(128, 128, 128, 0.08));
+    border: 1px solid var(--bs-border-color, rgba(128, 128, 128, 0.25));
+    border-radius: 5px;
+    font-size: 11px;
+
+    i.fa-search {
+        opacity: 0.55;
+        font-size: 11px;
+    }
+
+    .settings-search-input {
+        flex: 1;
+        background: transparent;
+        border: 0;
+        outline: 0;
+        color: var(--bs-body-color);
+        font-size: 12px;
+        min-width: 0;
+
+        &::placeholder { opacity: 0.55; }
+    }
+
+    .icon-btn {
+        background: transparent;
+        border: 0;
+        color: var(--bs-secondary-color, rgba(128, 128, 128, 0.85));
+        cursor: pointer;
+        padding: 2px 5px;
+        border-radius: 3px;
+        font-size: 10px;
+
+        &:hover { background: rgba(128, 128, 128, 0.15); }
     }
 }

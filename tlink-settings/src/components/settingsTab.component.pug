@@ -1,6 +1,26 @@
 .content
+    //- Search box — filters the left nav by substring on tab labels.
+    //- Positioned in the top-left area via CSS Grid (see .scss). Stays
+    //- a sibling of the nav-pills and the outlet so we don't have to
+    //- re-indent the entire nav tree.
+    .settings-search
+        i.fas.fa-search.me-2
+        input.settings-search-input(
+            type='text',
+            placeholder='Search settings…',
+            [(ngModel)]='settingsSearchQuery'
+        )
+        button.icon-btn(
+            *ngIf='settingsSearchQuery',
+            (click)='clearSettingsSearch()',
+            title='Clear'
+        )
+            i.fas.fa-times
+    .settings-search-count(*ngIf='settingsSearchQuery')
+        | {{visibleSettingsCount}} of {{totalSettingsCount}} match
+
     ul.nav-pills(ngbNav, #nav='ngbNav', [activeId]='activeTab', orientation='vertical')
-        li(ngbNavItem='application')
+        li(ngbNavItem='application', *ngIf='showStaticTab("application")')
             a(ngbNavLink)
                 i.fas.fa-fw.fa-window-maximize.me-2
                 span(translate) Application
@@ -121,7 +141,10 @@
                         )
 
         ng-container(*ngFor='let provider of settingsProviders')
-            li(*ngIf='provider.prioritized', [ngbNavItem]='provider.id')
+            li(
+                *ngIf='provider.prioritized && matchesSettingsSearch(provider.title)',
+                [ngbNavItem]='provider.id'
+            )
                 a.d-flex.align-items-center(ngbNavLink)
                     i(class='fas fa-fw me-2 fa-{{provider.icon}}')
                     span {{provider.title|translate}}
@@ -131,14 +154,17 @@
         .mb-3
 
         ng-container(*ngFor='let provider of settingsProviders')
-            li(*ngIf='!provider.prioritized', [ngbNavItem]='provider.id')
+            li(
+                *ngIf='!provider.prioritized && matchesSettingsSearch(provider.title)',
+                [ngbNavItem]='provider.id'
+            )
                 a.d-flex.align-items-center(ngbNavLink)
                     i(class='fas fa-fw me-2 fa-{{provider.icon || "puzzle-piece"}}')
                     span {{provider.title|translate}}
                 ng-template(ngbNavContent)
                     settings-tab-body([provider]='provider')
 
-        li(ngbNavItem='license')
+        li(ngbNavItem='license', *ngIf='showStaticTab("license")')
             a.d-flex.align-items-center(ngbNavLink)
                 i.fas.fa-fw.fa-key.me-2
                 span(translate) License
@@ -516,7 +542,7 @@
                                 i.fas.fa-shopping-cart.me-2
                                 | Buy License
 
-        li(ngbNavItem='config-file')
+        li(ngbNavItem='config-file', *ngIf='showStaticTab("config-file")')
             a.d-flex.align-items-center(ngbNavLink)
                 i.fas.fa-fw.fa-code.me-2
                 span(translate) Config file

@@ -67,6 +67,66 @@ export class SettingsTabComponent extends BaseTabComponent {
     allLanguages = LocaleService.allLanguages
     @HostBinding('class.pad-window-controls') padWindowControls = false
 
+    /**
+     * Settings search — case-insensitive substring filter on tab
+     * labels. Empty query shows every tab. Counts of visible static
+     * tabs + dynamic providers feed the "N matching" hint below the
+     * input.
+     *
+     * Static-tab labels are duplicated here as plain strings because
+     * the pug templates use `(translate)` markers and we don't have
+     * access to the rendered text at filter-time. If a label changes
+     * upstream, update the corresponding string here.
+     */
+    settingsSearchQuery = ''
+
+    /**
+     * Static tab id → display label. Duplicated from the pug because
+     * the template uses `(translate)` markers; we need the plain
+     * English source at filter-time. If a label changes upstream,
+     * update the corresponding string here.
+     */
+    private static readonly STATIC_TAB_LABELS = {
+        application: 'Application',
+        license: 'License',
+        'config-file': 'Config file',
+    } as const
+
+    /** Does this label match the active search query? Empty query → true. */
+    matchesSettingsSearch (label: string | undefined | null): boolean {
+        const q = this.settingsSearchQuery.trim().toLowerCase()
+        if (!q) {return true}
+        if (!label) {return false}
+        return label.toLowerCase().includes(q)
+    }
+
+    /** Shortcut for static tabs by id — keeps the pug terse. */
+    showStaticTab (id: 'application' | 'license' | 'config-file'): boolean {
+        return this.matchesSettingsSearch(SettingsTabComponent.STATIC_TAB_LABELS[id])
+    }
+
+    /** Live count of currently-visible tabs (static + providers).
+     *  Powers the "N matching" hint under the search input. */
+    get visibleSettingsCount (): number {
+        let n = 0
+        for (const label of Object.values(SettingsTabComponent.STATIC_TAB_LABELS)) {
+            if (this.matchesSettingsSearch(label)) {n++}
+        }
+        for (const p of this.settingsProviders) {
+            if (this.matchesSettingsSearch(p.title)) {n++}
+        }
+        return n
+    }
+
+    /** Total number of tabs (for the "N of M" denominator). */
+    get totalSettingsCount (): number {
+        return Object.keys(SettingsTabComponent.STATIC_TAB_LABELS).length + this.settingsProviders.length
+    }
+
+    clearSettingsSearch (): void {
+        this.settingsSearchQuery = ''
+    }
+
     // Angular DI constructor — many dependencies is idiomatic here and
     // can't be meaningfully reduced without losing access to framework services.
     // eslint-disable-next-line @typescript-eslint/max-params
