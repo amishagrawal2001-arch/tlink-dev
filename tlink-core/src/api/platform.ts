@@ -115,6 +115,13 @@ export abstract class FileUpload extends FileTransfer {
 
 export interface FileUploadOptions {
     multiple: boolean
+    /**
+     * When true, suppress the fileTransferStarted$ event for the
+     * created transfers. Callers using this opt out of the global
+     * floating "File transfers" widget because they render their
+     * own progress UI (e.g. the SFTP panel's inline rows).
+     */
+    silent?: boolean
 }
 
 export class DirectoryUpload {
@@ -155,10 +162,20 @@ export abstract class PlatformService {
     abstract loadConfig (): Promise<string>
     abstract saveConfig (content: string): Promise<void>
 
-    abstract startDownload (name: string, mode: number, size: number): Promise<FileDownload|null>
-    abstract startDownloadDirectory (name: string, estimatedSize?: number): Promise<DirectoryDownload|null>
+    /**
+     * `silent` callers handle their own progress UI (e.g. the SFTP
+     * panel's inline transfer rows) and want to suppress the
+     * fileTransferStarted$ event that drives the global floating
+     * "File transfers" widget. The transfer object still works
+     * normally — we just skip the global notification.
+     *
+     * For startUpload, silent lives inside FileUploadOptions because
+     * the Electron impl already uses positional `paths` after options.
+     */
+    abstract startDownload (name: string, mode: number, size: number, silent?: boolean): Promise<FileDownload|null>
+    abstract startDownloadDirectory (name: string, estimatedSize?: number, silent?: boolean): Promise<DirectoryDownload|null>
     abstract startUpload (options?: FileUploadOptions): Promise<FileUpload[]>
-    abstract startUploadDirectory (paths?: string[]): Promise<DirectoryUpload>
+    abstract startUploadDirectory (paths?: string[], silent?: boolean): Promise<DirectoryUpload>
 
     async startUploadFromDragEvent (event: DragEvent, multiple = false): Promise<DirectoryUpload> {
         const result = new DirectoryUpload()
@@ -211,7 +228,7 @@ export abstract class PlatformService {
 
         const promises: Promise<void>[] = []
 
-        const items = event.dataTransfer.items
+        const { items } = event.dataTransfer
         // eslint-disable-next-line @typescript-eslint/prefer-for-of
         for (let i = 0; i < items.length; i++) {
             const item = items[i].webkitGetAsEntry()

@@ -41,7 +41,10 @@ export class EditSFTPContextMenu extends SFTPContextMenuItemProvider {
     private async edit (item: SFTPFile, sftp: SFTPSession) {
         const tempDir = (await tmp.dir({ unsafeCleanup: true })).path
         const tempPath = path.join(tempDir, item.name)
-        const transfer = await this.platform.startDownload(item.name, item.mode, item.size, tempPath)
+        // Open-edit is an internal flow — user already invoked it from
+        // the SFTP context menu, no need for the global widget noise.
+        // (4th param `silent` true, 5th param `filePath` is the temp path.)
+        const transfer = await this.platform.startDownload(item.name, item.mode, item.size, true, tempPath)
         if (!transfer) {
             return
         }
@@ -58,7 +61,7 @@ export class EditSFTPContextMenu extends SFTPContextMenuItemProvider {
                 if (event === 'rename') {
                     watcher.close()
                 }
-                const upload = await this.platform.startUpload({ multiple: false }, [tempPath])
+                const upload = await this.platform.startUpload({ multiple: false, silent: true }, [tempPath])
                 if (!upload.length) {
                     return
                 }

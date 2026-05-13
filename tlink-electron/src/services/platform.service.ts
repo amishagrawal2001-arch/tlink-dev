@@ -200,8 +200,18 @@ export class ElectronPlatformService extends PlatformService {
         this.electron.app.exit(0)
     }
 
+    // `silent` callers (e.g. the SFTP panel) handle their own progress
+    // UI and want to suppress the fileTransferStarted$ event that drives
+    // the global floating widget. Without this, SFTP downloads/uploads
+    // showed in BOTH the SFTP panel's inline rows AND the floating
+    // "File transfers" widget — a duplicate that confused users.
+
     async startUpload (options?: FileUploadOptions, paths?: string[]): Promise<FileUpload[]> {
         options ??= { multiple: false }
+        // silent lives inside the options bag because Electron already
+        // uses positional `paths` after options; can't add a third
+        // positional without breaking the abstract signature.
+        const silent = options.silent === true
 
         const properties: any[] = ['openFile', 'treatPackageAsDirectory']
         if (options.multiple) {
@@ -225,12 +235,17 @@ export class ElectronPlatformService extends PlatformService {
         return Promise.all(paths.map(async p => {
             const transfer = new ElectronFileUpload(p, this.electron)
             await wrapPromise(this.zone, transfer.open())
-            this.fileTransferStarted.next(transfer)
+            if (!silent) {
+                this.fileTransferStarted.next(transfer)
+            }
             return transfer
         }))
     }
 
-    async startUploadDirectory (paths?: string[]): Promise<DirectoryUpload> {
+    async startUploadDirectory (paths?: string[], _silent = false): Promise<DirectoryUpload> {
+        // startUploadDirectory doesn't fire fileTransferStarted itself
+        // (it builds a tree the caller iterates); silent is wired for
+        // API symmetry but is currently a no-op here.
         const properties: any[] = ['openFile', 'treatPackageAsDirectory', 'openDirectory']
 
         if (!paths) {
@@ -252,7 +267,10 @@ export class ElectronPlatformService extends PlatformService {
         return root
     }
 
-    async startDownload (name: string, mode: number, size: number, filePath?: string): Promise<FileDownload|null> {
+    async startDownload (name: string, mode: number, size: number, silent = false, filePath?: string): Promise<FileDownload|null> {
+        // silent comes before filePath so the positional aligns with
+        // the abstract base. filePath is an Electron-only extension
+        // (used by sftpContextMenu to write into a temp dir).
         if (!filePath) {
             const result = await this.electron.dialog.showSaveDialog(
                 this.hostWindow.getWindow(),
@@ -267,11 +285,13 @@ export class ElectronPlatformService extends PlatformService {
         }
         const transfer = new ElectronFileDownload(filePath, mode, size, this.electron)
         await wrapPromise(this.zone, transfer.open())
-        this.fileTransferStarted.next(transfer)
+        if (!silent) {
+            this.fileTransferStarted.next(transfer)
+        }
         return transfer
     }
 
-    async startDownloadDirectory (name: string, estimatedSize?: number): Promise<DirectoryDownload|null> {
+    async startDownloadDirectory (name: string, estimatedSize?: number, silent = false): Promise<DirectoryDownload|null> {
         const selectedFolder = await this.pickDirectory(this.translate.instant('Select destination folder for {name}', { name }), this.translate.instant('Download here'))
         if (!selectedFolder) {
             return null
@@ -286,7 +306,9 @@ export class ElectronPlatformService extends PlatformService {
 
         const transfer = new ElectronDirectoryDownload(downloadPath, name, estimatedSize ?? 0, this.electron, this.zone)
         await wrapPromise(this.zone, transfer.open())
-        this.fileTransferStarted.next(transfer)
+        if (!silent) {
+            this.fileTransferStarted.next(transfer)
+        }
         return transfer
     }
 
@@ -400,11 +422,29 @@ class ElectronFileDownload extends FileDownload {
     }
 
     async write (buffer: Uint8Array): Promise<void> {
+        // A cancelled transfer has already closed the file handle; any
+        // in-flight chunk from the producer (SFTP read loop, fetch
+        // stream, etc.) that arrives after cancel() must NOT throw —
+        // it would surface as "Uncaught (in promise): file closed" in
+        // the host renderer. We silently drop the chunk; the producer's
+        // own cancellation check will break its loop on the next tick.
+        if (this.isCancelled() || this.closed) {
+            return
+        }
         let pos = 0
         while (pos < buffer.length) {
-            const result = await this.file.write(buffer, pos, buffer.length - pos, null)
-            this.increaseProgress(result.bytesWritten)
-            pos += result.bytesWritten
+            try {
+                const result = await this.file.write(buffer, pos, buffer.length - pos, null)
+                this.increaseProgress(result.bytesWritten)
+                pos += result.bytesWritten
+            } catch (e: any) {
+                // Race: cancel() landed between the loop entry and the
+                // actual write. Same idempotent drop as the pre-loop guard.
+                if (this.isCancelled() || this.closed || /file closed|EBADF/i.test(e?.message ?? '')) {
+                    return
+                }
+                throw e
+            }
         }
         if (this.getCompletedBytes() >= this.getSize()) {
             this.setCompleted(true)
@@ -412,9 +452,21 @@ class ElectronFileDownload extends FileDownload {
     }
 
     close (): void {
+        if (this.closed) {return}
+        this.closed = true
         this.electron.powerSaveBlocker.stop(this.powerSaveBlocker)
-        this.file.close()
+        try {
+            this.file.close()
+        } catch {
+            // Already closed under us (race with a parallel cancel /
+            // double close). Idempotent close — swallow.
+        }
     }
+
+    /** True after close() has run. Internal — write() reads this to
+     *  short-circuit if a chunk arrives between cancel() and the
+     *  producer noticing. */
+    private closed = false
 }
 
 class ElectronDirectoryDownload extends DirectoryDownload {

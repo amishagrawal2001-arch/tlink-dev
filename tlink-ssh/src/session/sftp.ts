@@ -135,19 +135,39 @@ export class SFTPSession {
 
     async download (path: string, transfer: FileDownload): Promise<void> {
         this.logger.info('Downloading', path)
+        // Inferred from `await this.open()`. Russh exports its handle
+        // type as SFTPFile (see line 22 above), not SFTPHandle. Explicit
+        // = undefined satisfies init-declarations lint.
+        let handle: Awaited<ReturnType<typeof this.open>> | undefined = undefined
         try {
-            const handle = await this.open(path, russh.OPEN_READ)
+            handle = await this.open(path, russh.OPEN_READ)
             while (true) {
+                // Honour user-initiated cancel between chunks. Without
+                // this, closing the SFTP panel mid-transfer kept the
+                // read loop running until natural EOF — and the
+                // already-closed FileDownload.write() threw "file
+                // closed" as an uncaught promise rejection.
+                if (transfer.isCancelled()) {
+                    break
+                }
                 const chunk = await handle.read()
                 if (!chunk.length) {
                     break
                 }
                 await transfer.write(chunk)
             }
-            transfer.close()
+            if (!transfer.isCancelled()) {
+                transfer.close()
+            }
             handle.close()
         } catch (e) {
-            transfer.cancel()
+            // The "file closed" race is now neutered inside
+            // FileDownload.write itself, but we still defensively
+            // close the SFTP handle so the remote channel doesn't leak.
+            try { handle?.close() } catch { /* already gone */ }
+            if (!transfer.isCancelled()) {
+                transfer.cancel()
+            }
             throw e
         }
     }

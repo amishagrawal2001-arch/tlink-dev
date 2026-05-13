@@ -60,6 +60,10 @@ export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
     }
 
     get bookmarks (): string[] {
+        // Defensive ?. — session is @Input and can be undefined for a
+        // change-detection tick before the parent binds it. lint --fix
+        // tends to strip these as unnecessary; they aren't, leave alone.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         return this.session?.profile?.options?.sftpBookmarks ?? []
     }
 
@@ -68,6 +72,7 @@ export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
     }
 
     toggleBookmark (): void {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (!this.session?.profile?.options) {
             return
         }
@@ -88,6 +93,7 @@ export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
 
     removeBookmark (bm: string, event: Event): void {
         event.stopPropagation()
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (!this.session?.profile?.options) {
             return
         }
@@ -111,7 +117,7 @@ export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
                     clearTimeout(timeoutId)
                 }
             }
-            
+
             // Subscribe to SFTP session closure to prevent hanging operations
             this.sftpClosedSubscription = this.sftp.closed$.subscribe(() => {
                 if (this.isNavigating) {
@@ -235,12 +241,12 @@ export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
             this.filteredFileList = []
             this.notifications.error('SFTP operation timed out after 8 seconds. The UI was unresponsive. Please try again or check the path.')
         }, 8000)
-        
+
         // Normalize path
         const normalizedPath = newPath.trim()
         this.path = normalizedPath
         this.pathChange.next(this.path)
-        
+
         // Force UI update to show loading state immediately
         // Use setTimeout to ensure the UI updates before the blocking operation
         await new Promise(resolve => setTimeout(resolve, 0))
@@ -262,20 +268,20 @@ export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
 
         let timeoutId: NodeJS.Timeout | null = null
         let readdirPromise: Promise<SFTPFile[]> | null = null
-        
+
         try {
             // Double-check SFTP session is still available
             if (!this.sftp) {
                 throw new Error('SFTP session is not available')
             }
-            
+
             // Check if navigation was aborted before starting
             if (abortSignal.aborted || token !== this.navigationToken) {
                 this.isNavigating = false
                 this.navigationAbortController = null
                 return
             }
-            
+
             // Show warning after 2 seconds if operation is still pending
             this.navigationWarning = false
             this.warningTimeoutId = setTimeout(() => {
@@ -283,11 +289,11 @@ export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
                     this.navigationWarning = true
                 }
             }, 2000) // Show warning after 2 seconds
-            
+
             // Add timeout wrapper around readdir to prevent hanging
             // Start the readdir operation
             readdirPromise = this.sftp.readdir(this.path)
-            
+
             // Create timeout promise that will reject after 4 seconds (reduced for faster feedback)
             const timeoutPromise = new Promise<never>((_, reject) => {
                 timeoutId = setTimeout(() => {
@@ -323,7 +329,7 @@ export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
                 this.navigationWarning = false
                 throw err
             })
-            
+
             const wrappedTimeout = timeoutPromise.catch(err => {
                 // Timeout triggered - ensure cleanup
                 if (timeoutId) {
@@ -337,9 +343,9 @@ export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
                 this.navigationWarning = false
                 throw err
             })
-            
+
             const result = await Promise.race([wrappedReaddir, wrappedTimeout])
-            
+
             // Check if navigation was aborted or invalidated (double-check after await)
             if (abortSignal.aborted || !this.sftp || token !== this.navigationToken) {
                 if (token === this.navigationToken) {
@@ -349,12 +355,12 @@ export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
                 }
                 return
             }
-            
+
             // Verify we got a valid result
             if (!result || !Array.isArray(result)) {
                 throw new Error('Invalid response from SFTP server')
             }
-            
+
             // Final check before updating UI
             if (token === this.navigationToken) {
                 this.fileList = result
@@ -370,7 +376,7 @@ export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
                 this.warningTimeoutId = null
             }
             this.navigationWarning = false
-            
+
             // Don't show error if navigation was cancelled
             if (abortSignal.aborted) {
                 if (token === this.navigationToken) {
@@ -380,16 +386,16 @@ export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
                 }
                 return
             }
-            
+
             // Force UI update to show error state
             await new Promise(resolve => setTimeout(resolve, 0))
-            
+
             const errorMessage = error?.message ?? 'Failed to read directory'
             this.notifications.error(errorMessage)
             // Ensure UI exits loading state on failure
             this.fileList = []
             this.filteredFileList = []
-            
+
             // Reset to previous path if available
             if (previousPath && fallbackOnError && previousPath !== this.path) {
                 // Reset navigating flag before recursive call
@@ -438,7 +444,7 @@ export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
             // Navigation was invalidated or fileList is null, don't update UI
             return
         }
-        
+
         const dirKey = a => a.isDirectory ? 1 : 0
         this.fileList.sort((a, b) =>
             dirKey(b) - dirKey(a) ||
@@ -448,7 +454,7 @@ export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
         this.isNavigating = false
         this.navigationWarning = false
         this.navigationAbortController = null
-        
+
         // Clear hard timeout since navigation completed successfully
         if (this.hardTimeoutId) {
             clearTimeout(this.hardTimeoutId)
@@ -618,12 +624,15 @@ export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
     }
 
     async upload (): Promise<void> {
-        const transfers = await this.platform.startUpload({ multiple: true })
+        // silent: true suppresses the global "File transfers" widget —
+        // we render inline progress rows in the SFTP panel and don't
+        // want to double up.
+        const transfers = await this.platform.startUpload({ multiple: true, silent: true })
         await Promise.all(transfers.map(t => this.uploadOne(t)))
     }
 
     async uploadFolder (): Promise<void> {
-        const transfer = await this.platform.startUploadDirectory()
+        const transfer = await this.platform.startUploadDirectory(undefined, true)
         await this.uploadOneFolder(transfer)
     }
 
@@ -660,7 +669,9 @@ export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
     }
 
     async download (itemPath: string, mode: number, size: number): Promise<void> {
-        const transfer = await this.platform.startDownload(path.basename(itemPath), mode, size)
+        // silent: true — same reasoning as upload(): we own the
+        // inline progress rendering and the global widget would dup.
+        const transfer = await this.platform.startDownload(path.basename(itemPath), mode, size, true)
         if (!transfer) {
             return
         }
@@ -703,7 +714,7 @@ export class SFTPPanelComponent implements OnDestroy, AfterViewChecked {
 
     async downloadFolder (folder: SFTPFile): Promise<void> {
         try {
-            const transfer = await this.platform.startDownloadDirectory(folder.name, 0)
+            const transfer = await this.platform.startDownloadDirectory(folder.name, 0, true)
             if (!transfer) {
                 return
             }
