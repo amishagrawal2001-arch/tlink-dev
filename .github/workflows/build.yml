@@ -70,10 +70,14 @@ jobs:
     # builds, so day-to-day commits cost $0 on the 10× multiplier.
     # Tag pushes (releases) still build the full matrix.
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-    # 45 min cap × 10× multiplier = ~$3.60/leg worst-case. Historic
-    # green builds land in 18-22 min so this is ~2× normal.
+    # 45 min ceiling. On public repos, macos-13 (Intel x86_64,
+    # standard runner) is FREE — vs macos-15 (Apple Silicon, "larger
+    # runner") which bills at 10× even on public. Cross-compiling
+    # the arm64 binary still works from the Intel runner via the
+    # rust_triple matrix value; native Apple-Silicon-only builds
+    # would need to switch back to macos-15 or self-hosted.
     timeout-minutes: 45
-    runs-on: macos-15
+    runs-on: macos-13
     needs: Lint
     strategy:
       matrix:
