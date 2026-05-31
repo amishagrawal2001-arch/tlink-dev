@@ -17,6 +17,11 @@ concurrency:
   cancel-in-progress: true
 jobs:
   Lint:
+    # Without an explicit timeout, jobs default to GitHub's 6-hour
+    # ceiling. A stuck step can burn $30+ on macOS alone before being
+    # killed — explicit shorter timeouts cap the worst-case bill from
+    # any single run.
+    timeout-minutes: 15
     runs-on: ubuntu-24.04
 
     steps:
@@ -64,6 +69,9 @@ jobs:
     # PRs and feature-branch pushes — they only run on main + tag pushes
     # so the bill doesn't spike on every commit.
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+    # 45 min cap × 10× multiplier = ~$3.60/leg worst-case. Historic
+    # green builds land in 18-22 min so this is ~2× normal.
+    timeout-minutes: 45
     runs-on: macos-15
     needs: Lint
     strategy:
@@ -175,6 +183,9 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   Linux-Build:
+    # Linux 1× billing, but still set a ceiling so a stuck step
+    # can't pin a runner for 6 hours.
+    timeout-minutes: 30
     runs-on: ${{matrix.os}}
     needs: Lint
     strategy:
@@ -368,6 +379,8 @@ jobs:
     # macOS — only run on main pushes + tag pushes, skip PRs and
     # feature-branch pushes.
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+    # 45 min × 2× multiplier = ~$1.50/leg worst-case.
+    timeout-minutes: 45
     runs-on: windows-latest
     needs: Lint
     strategy:
