@@ -60,6 +60,10 @@ jobs:
       run: yarn --cwd tlink-ai-assistant run test
 
   macOS-Build:
+    # macos-15 runners are billed at 10× the Linux rate. Skip them on
+    # PRs and feature-branch pushes — they only run on main + tag pushes
+    # so the bill doesn't spike on every commit.
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
     runs-on: macos-15
     needs: Lint
     strategy:
@@ -150,12 +154,14 @@ jobs:
       with:
         name: macOS .dmg (${{matrix.arch}})
         path: artifact-dmg
+        retention-days: 7
 
     - uses: actions/upload-artifact@master
       name: Upload ZIP
       with:
         name: macOS .zip (${{matrix.arch}})
         path: artifact-zip
+        retention-days: 7
 
     - name: Upload to GitHub Release
       if: startsWith(github.ref, 'refs/tags/')
@@ -305,36 +311,42 @@ jobs:
       with:
         name: Linux AppImage (${{matrix.arch}})
         path: dist/*.AppImage
+        retention-days: 7
 
     - uses: actions/upload-artifact@master
       name: Upload DEB (${{matrix.arch}})
       with:
         name: Linux DEB (${{matrix.arch}})
         path: dist/*.deb
+        retention-days: 7
 
     - uses: actions/upload-artifact@master
       name: Upload RPM (${{matrix.arch}})
       with:
         name: Linux RPM (${{matrix.arch}})
         path: dist/*.rpm
+        retention-days: 7
 
     - uses: actions/upload-artifact@master
       name: Upload Pacman Package (${{matrix.arch}})
       with:
         name: Linux Pacman (${{matrix.arch}})
         path: dist/*.pacman
+        retention-days: 7
 
     - uses: actions/upload-artifact@master
       name: Upload Linux tarball (${{matrix.arch}})
       with:
         name: Linux tarball (${{matrix.arch}})
         path: dist/*.tar.gz
+        retention-days: 7
 
     - uses: actions/upload-artifact@master
       name: Upload web tarball (amd64 only)
       with:
         name: Web tarball
         path: tlink-web.tar.gz
+        retention-days: 7
       if: matrix.build-arch == 'x64'
 
     - name: Upload to GitHub Release
@@ -352,6 +364,10 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   Windows-Build:
+    # windows-latest is billed at 2× the Linux rate. Same gate as
+    # macOS — only run on main pushes + tag pushes, skip PRs and
+    # feature-branch pushes.
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
     runs-on: windows-latest
     needs: Lint
     strategy:
@@ -494,12 +510,14 @@ jobs:
       with:
         name: Windows installer (${{matrix.arch}})
         path: artifact-setup
+        retention-days: 7
 
     - uses: actions/upload-artifact@master
       name: Upload portable build
       with:
         name: Windows portable build (${{matrix.arch}})
         path: artifact-portable
+        retention-days: 7
 
     - name: Upload to GitHub Release
       if: startsWith(github.ref, 'refs/tags/')
