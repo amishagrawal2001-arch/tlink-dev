@@ -65,10 +65,11 @@ jobs:
       run: yarn --cwd tlink-ai-assistant run test
 
   macOS-Build:
-    # macos-15 runners are billed at 10× the Linux rate. Skip them on
-    # PRs and feature-branch pushes — they only run on main + tag pushes
-    # so the bill doesn't spike on every commit.
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+    # macos-15 runners are billed at 10× the Linux rate. Tightened to
+    # tag pushes ONLY — main-branch pushes no longer trigger macOS
+    # builds, so day-to-day commits cost $0 on the 10× multiplier.
+    # Tag pushes (releases) still build the full matrix.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     # 45 min cap × 10× multiplier = ~$3.60/leg worst-case. Historic
     # green builds land in 18-22 min so this is ~2× normal.
     timeout-minutes: 45
@@ -375,10 +376,9 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   Windows-Build:
-    # windows-latest is billed at 2× the Linux rate. Same gate as
-    # macOS — only run on main pushes + tag pushes, skip PRs and
-    # feature-branch pushes.
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+    # windows-latest is billed at 2× the Linux rate. Same tag-only
+    # gate as macOS — main-branch pushes skip Windows entirely.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     # 45 min × 2× multiplier = ~$1.50/leg worst-case.
     timeout-minutes: 45
     runs-on: windows-latest
