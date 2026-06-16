@@ -70,14 +70,17 @@ jobs:
     # builds, so day-to-day commits cost $0 on the 10× multiplier.
     # Tag pushes (releases) still build the full matrix.
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-    # 45 min ceiling. On public repos, macos-13 (Intel x86_64,
-    # standard runner) is FREE — vs macos-15 (Apple Silicon, "larger
-    # runner") which bills at 10× even on public. Cross-compiling
-    # the arm64 binary still works from the Intel runner via the
-    # rust_triple matrix value; native Apple-Silicon-only builds
-    # would need to switch back to macos-15 or self-hosted.
+    # 45 min ceiling. macos-latest currently resolves to macos-15
+    # (Apple Silicon). Both Apple Silicon runners (macos-14, -15)
+    # are FREE for public repositories — per GitHub's
+    # https://github.blog/changelog/2024-08-29-github-actions-apple-silicon-macos-runners-now-free-for-public-repositories/
+    # announcement. Previously this was macos-13 (Intel x86_64),
+    # but GitHub's Intel runner queue has become unreliable as Apple
+    # winds down x86_64 — v1.0.21's macOS legs sat 24h in queue
+    # before being auto-cancelled. macos-latest keeps us on
+    # whichever runner GitHub considers current + free.
     timeout-minutes: 45
-    runs-on: macos-13
+    runs-on: macos-latest
     needs: Lint
     strategy:
       matrix:
