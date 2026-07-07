@@ -11,7 +11,7 @@ import { TlinkLicenseConfig, TLINK_LICENSE_CONFIG, DEFAULT_LICENSE_CONFIG } from
         <button class="tlink-dialog__close" (click)="close()" *ngIf="!blocking">&times;</button>
         <h2 class="tlink-dialog__title">{{ blocking ? 'Sign in required' : 'Sign in to activate' }}</h2>
         <p class="tlink-dialog__subtitle" *ngIf="blocking">
-          Your license session is no longer valid. Sign in with your account to continue.
+          {{ blockingSubtitle }}
         </p>
 
         <div class="tlink-dialog__body" *ngIf="!offlineMode">
@@ -59,6 +59,18 @@ import { TlinkLicenseConfig, TLINK_LICENSE_CONFIG, DEFAULT_LICENSE_CONFIG } from
             <span style="opacity:0.4; margin: 0 8px;">|</span>
             <a class="tlink-dialog__link" [href]="purchaseUrl" target="_blank" rel="noopener">
               Get a license
+            </a>
+          </div>
+
+          <!-- Escape hatch: if the user believes their session was
+               cleared incorrectly (or they simply want to sign in as
+               a different account) they can wipe the local state
+               without a working password. Only shown when we're
+               blocking — normal sign-in doesn't need this. -->
+          <div class="tlink-dialog__footer tlink-dialog__footer--danger" *ngIf="blocking">
+            <a class="tlink-dialog__link tlink-dialog__link--danger" href="javascript:void(0)"
+               (click)="clearLocalSession()">
+              Clear local session and start over
             </a>
           </div>
         </div>
@@ -180,6 +192,8 @@ import { TlinkLicenseConfig, TLINK_LICENSE_CONFIG, DEFAULT_LICENSE_CONFIG } from
     .tlink-fp-copy:hover:not(:disabled) { background: var(--tlink-input-border, #e5e7eb); }
     .tlink-dialog__fp-disclosure { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--tlink-input-border, #eee); font-size: 12px; }
     .tlink-dialog__fp-disclosure .tlink-fp-row { margin-top: 8px; }
+    .tlink-dialog__footer--danger { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--tlink-input-border, #eee); }
+    .tlink-dialog__link--danger { color: #b91c1c; }
   `],
 })
 export class ActivationDialogComponent implements OnChanges {
@@ -214,6 +228,52 @@ export class ActivationDialogComponent implements OnChanges {
     ) {
         const merged = { ...DEFAULT_LICENSE_CONFIG, ...(config ?? {}) }
         this.purchaseUrl = merged.purchaseUrl
+    }
+
+    /**
+     * Contextual message shown under the "Sign in required" title.
+     * Surfaces billingType + endDate + reason so a paying user
+     * doesn't just see a generic "session invalid" and assume their
+     * paid-until-2027 license got wiped. The reason text uses
+     * `dockPillTooltip` because it already covers every reason
+     * code with a human-readable string.
+     */
+    get blockingSubtitle (): string {
+        const svc = this.licenseService
+        const parts: string[] = []
+        if (svc.billingType) {parts.push(svc.billingType)}
+        if (svc.endDate) {parts.push(`expires ${svc.endDate}`)}
+        const context = parts.length ? ` (${parts.join(' · ')})` : ''
+        // dockPillTooltip is human-readable and reason-specific.
+        // Fall back to the generic message when we don't have a
+        // reason on record.
+        const reason = svc.lastReasonCode && svc.lastReasonCode !== 'OK'
+            ? svc.dockPillTooltip
+            : 'Your license session is no longer valid. Sign in with your account to continue.'
+        return `Your license session${context}: ${reason}`
+    }
+
+    /**
+     * User-facing escape hatch when they're stuck at the blocking
+     * dialog with a session they can't rescue (forgot password, no
+     * network, etc.). Wipes the local bundle so they're back at
+     * the "unauthenticated" state and can either sign in fresh, use
+     * an activation code, or install elsewhere. skipServerCall=true
+     * because we don't want to also try to deactivate the device
+     * server-side — that's what "sign out" does; this is "wipe
+     * everything local".
+     */
+    async clearLocalSession (): Promise<void> {
+        this.message = ''
+        await this.licenseService.deactivateLicense(true)
+        // Force the dialog to re-open with a clean subtitle now that
+        // billingType/endDate/reason are all null. The consumer of
+        // <tlink-activation-dialog> keeps `visible` bound to
+        // shouldBlockApp, which stays true after clear.
+        this.email = ''
+        this.password = ''
+        this.offlineCode = ''
+        this.offlineMode = false
     }
 
     /** Fetch the fingerprint the first time the dialog becomes visible,

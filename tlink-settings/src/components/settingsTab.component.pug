@@ -449,7 +449,7 @@
                     .form-line
                         .header
                             .title(translate) Status check
-                            .description(translate) Periodic check-in to the license server. Triggers token rotation and revocation propagation.
+                            .description(translate) Periodic check-in to the license server. Rotates tokens and propagates revocations, but does NOT re-fetch your expiry date. Use "Refresh from server" below for that.
                         .license-input-row
                             button.btn.btn-secondary.license-btn(
                                 (click)='triggerHeartbeat()',
@@ -509,14 +509,20 @@
                         .actions-group.actions-secondary
                             //- Manual refresh — hits /api/licenses/refresh
                             //- right now instead of waiting for the ~13-min
-                            //- preemptive timer. Grey + retitle when the
-                            //- server already proved it doesn't support
-                            //- token-only refresh, so the user isn't
-                            //- tempted to repeatedly click a doomed button.
+                            //- preemptive timer. This re-applies the full
+                            //- license envelope (billingType, endDate,
+                            //- entitlement) — not the same as the cheap
+                            //- Heartbeat above, which only pings the server
+                            //- to confirm the session is still alive and
+                            //- does NOT re-fetch the expiry date. Grey +
+                            //- retitle when the server already proved it
+                            //- doesn't support token-only refresh, so the
+                            //- user isn't tempted to repeatedly click a
+                            //- doomed button.
                             button.btn.btn-outline-secondary(
                                 *ngIf='licenseSvc.licenseStatus === "active" && !licenseSvc.isLocalTrial',
                                 [disabled]='licenseRefreshing || licenseSvc.heartbeatDisabled',
-                                [title]='licenseSvc.heartbeatDisabled ? "This server requires sign-in to refresh." : ""',
+                                [title]='licenseSvc.heartbeatDisabled ? "This server requires sign-in to refresh." : "Re-fetch full license envelope from server — refreshes billing type, expiry date, and entitlement. Use this if you extended your subscription and want the client to see the new expiry immediately."',
                                 (click)='refreshLicense()'
                             )
                                 i.fas.me-2(
@@ -524,7 +530,7 @@
                                     [class.fa-spinner]='licenseRefreshing',
                                     [class.fa-spin]='licenseRefreshing'
                                 )
-                                | {{ licenseRefreshing ? 'Refreshing…' : (licenseSvc.heartbeatDisabled ? 'Refresh unavailable' : 'Refresh license') }}
+                                | {{ licenseRefreshing ? 'Refreshing…' : (licenseSvc.heartbeatDisabled ? 'Refresh unavailable' : 'Refresh from server') }}
 
                             //- Always visible so users can reset local
                             //- state even when there's no active session

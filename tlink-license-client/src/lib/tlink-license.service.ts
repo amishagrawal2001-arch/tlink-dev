@@ -93,6 +93,44 @@ export class TlinkLicenseService implements OnDestroy {
      * sustained unreachability before we change the badge.
      */
     private static readonly OFFLINE_GRACE_TRIGGER_FAILURES = 3
+
+    /**
+     * Reason codes that mean "your license is genuinely dead" —
+     * clearing the local session on these is correct. Anything
+     * outside this set (SIGNATURE_INVALID from a merely-expired
+     * refresh token, INVALID_REQUEST from a server hiccup, an
+     * empty reason, etc.) is treated as transient at bootstrap:
+     * we keep the cached state and let the user re-authenticate
+     * without wiping their whole session.
+     *
+     * Note: this set intentionally does NOT include
+     * SIGNATURE_INVALID / INVALID_CREDENTIALS. Those can be
+     * triggered by an expired refresh_token or a temporarily-
+     * wrong password on a stale device — clearing the session
+     * on those wipes a paying user's local state and forces a
+     * re-activate that they may not have their password for
+     * mid-year. The heartbeat path DOES include them (see below)
+     * because at heartbeat time we know the access_token was
+     * fresh, so those codes there really do mean revocation.
+     */
+    private static readonly BOOTSTRAP_REVOCATION_CODES = new Set<string>([
+        'LICENSE_EXPIRED', 'SEAT_REVOKED', 'DEVICE_LIMIT_REACHED',
+        'DEVICE_MISMATCH', 'PRODUCT_NOT_ENTITLED', 'APP_VERSION_BLOCKED',
+    ])
+
+    /**
+     * Wider revocation set used by the heartbeat path. Includes
+     * SIGNATURE_INVALID + INVALID_CREDENTIALS because at heartbeat
+     * time the access_token was freshly-minted server-side; a
+     * SIGNATURE_INVALID there really is the server rejecting our
+     * signed token (revocation), not merely a stale refresh_token.
+     */
+    private static readonly HEARTBEAT_REVOCATION_CODES = new Set<string>([
+        'LICENSE_EXPIRED', 'SEAT_REVOKED', 'DEVICE_LIMIT_REACHED',
+        'DEVICE_MISMATCH', 'SIGNATURE_INVALID', 'PRODUCT_NOT_ENTITLED',
+        'APP_VERSION_BLOCKED', 'INVALID_CREDENTIALS',
+    ])
+
     /**
      * Running tally of consecutive heartbeat failures. Reset to 0 on
      * any successful heartbeat / refresh / activate (i.e. every code
@@ -582,16 +620,60 @@ export class TlinkLicenseService implements OnDestroy {
             }
 
             // Grace expired AND server either unreachable or said INVALID.
-            // A known-paid user doesn't fall back to trial — that would be the
-            // same loophole we already closed on sign-out. Go straight to the
-            // correct error state and preserve the real reason so the UI can
-            // show "device limit reached" / "seat revoked" / etc. instead of a
-            // generic "trial expired".
+            // At bootstrap, be strict about which reason codes actually
+            // warrant wiping the session — an expired refresh_token
+            // (SIGNATURE_INVALID) or a merely-wrong-credentials response
+            // should keep the local cache and let the user re-authenticate,
+            // not wipe their paying subscription state. See
+            // BOOTSTRAP_REVOCATION_CODES for the exact list.
+            const reason = envelope?.reason_code ?? null
+            const isRevocation = envelope && reason
+                ? TlinkLicenseService.BOOTSTRAP_REVOCATION_CODES.has(reason)
+                : false
+
+            if (envelope && !isRevocation && this.isPaidWithinSubscription()) {
+                // Server responded with a non-VALID envelope but the reason
+                // isn't a genuine revocation AND we're a paid user still
+                // within our subscription period. This is almost always a
+                // stale refresh_token — treat as offline-grace and let the
+                // user re-authenticate at their convenience.
+                // eslint-disable-next-line no-console
+                console.warn('%c[license:bootstrap] non-revocation reason on paid subscription — staying active',
+                    'color:#f59e0b;font-weight:700',
+                    {
+                        reason,
+                        endDate: this.endDate,
+                        billingType: this.billingType,
+                        note: 'Session preserved; user should re-authenticate to refresh tokens.',
+                    })
+                this.offlineGrace = true
+                this.licenseStatus = 'active'
+                this.lastReasonCode = reason
+                this.emit()
+                this.startHeartbeat()
+                return this.licenseStatus
+            }
+
+            // Real revocation OR server unreachable + not paid-within-
+            // subscription. Wipe and drop to the sign-in dialog with the
+            // reason preserved so the UI can show "device limit reached"
+            // / "seat revoked" / etc. instead of a generic "trial expired".
+            // eslint-disable-next-line no-console
+            console.warn('%c[license:bootstrap] clearing session',
+                'color:#dc2626;font-weight:700',
+                {
+                    reason,
+                    isRevocation,
+                    endDate: this.endDate,
+                    billingType: this.billingType,
+                    isPaidWithinSubscription: this.isPaidWithinSubscription(),
+                    envelope: envelope ? 'non-VALID' : 'unreachable',
+                })
             await this.storage.clear()
             this.reset()
             if (envelope) {
-                this.licenseStatus = envelope.reason_code === 'LICENSE_EXPIRED' ? 'expired' : 'invalid'
-                this.lastReasonCode = envelope.reason_code
+                this.licenseStatus = reason === 'LICENSE_EXPIRED' ? 'expired' : 'invalid'
+                this.lastReasonCode = reason
             } else {
                 this.licenseStatus = 'unauthenticated'
                 this.lastReasonCode = null
@@ -863,13 +945,8 @@ export class TlinkLicenseService implements OnDestroy {
         // heartbeatTick: a malformed INVALID with no/unknown reason
         // doesn't sign the user out. Returns an error message but keeps
         // the session.
-        const REVOCATION_CODES = new Set<string>([
-            'LICENSE_EXPIRED', 'SEAT_REVOKED', 'DEVICE_LIMIT_REACHED',
-            'DEVICE_MISMATCH', 'SIGNATURE_INVALID', 'PRODUCT_NOT_ENTITLED',
-            'APP_VERSION_BLOCKED', 'INVALID_CREDENTIALS',
-        ])
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-        if (envelope.reason_code && REVOCATION_CODES.has(envelope.reason_code)) {
+        if (envelope.reason_code && TlinkLicenseService.HEARTBEAT_REVOCATION_CODES.has(envelope.reason_code)) {
             await this.handleInvalid(envelope.reason_code)
         }
         return { success: false, message: this.humanReason(envelope.reason_code), reasonCode: envelope.reason_code }
@@ -1473,6 +1550,24 @@ export class TlinkLicenseService implements OnDestroy {
     }
 
     private applyEnvelope (e: LicenseEnvelope): void {
+        // Diagnostic: applyEnvelope is the ONLY place endDate is refreshed
+        // from the server. If a user reports "expired early", the console
+        // trail of applyEnvelope logs shows exactly what the server sent
+        // and when — no more guessing whether the server returned a short
+        // date or the client mis-parsed it.
+        // eslint-disable-next-line no-console
+        console.info('%c[license:applyEnvelope]',
+            'color:#2563eb;font-weight:600',
+            {
+                billingType: e.billing_type,
+                startDate: e.start_date,
+                endDate: e.end_date,
+                reason: e.reason_code,
+                status: e.license_status,
+                refreshExpiresInSec: e.refresh_expires_in_sec,
+                accessExpiresInSec: e.access_expires_in_sec,
+                at: new Date().toISOString(),
+            })
         this.accessToken = e.access_token
         this.refreshToken = e.refresh_token
         // Prefer the server-provided email; fall back to whatever was already
@@ -1736,13 +1831,8 @@ export class TlinkLicenseService implements OnDestroy {
             // anything else (server bug, malformed response, unknown
             // status) is treated as transient. Same policy as
             // heartbeatTick.
-            const REVOCATION_CODES = new Set<string>([
-                'LICENSE_EXPIRED', 'SEAT_REVOKED', 'DEVICE_LIMIT_REACHED',
-                'DEVICE_MISMATCH', 'SIGNATURE_INVALID', 'PRODUCT_NOT_ENTITLED',
-                'APP_VERSION_BLOCKED', 'INVALID_CREDENTIALS',
-            ])
             // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-            if (envelope.reason_code && REVOCATION_CODES.has(envelope.reason_code)) {
+            if (envelope.reason_code && TlinkLicenseService.HEARTBEAT_REVOCATION_CODES.has(envelope.reason_code)) {
                 await this.handleInvalid(envelope.reason_code)
             } else {
                 // eslint-disable-next-line no-console
@@ -1870,13 +1960,8 @@ export class TlinkLicenseService implements OnDestroy {
             // or with a code that means "your request was malformed" rather
             // than "your license is dead") is treated as transient. Loud
             // log either way so a real revocation is still obvious.
-            const REVOCATION_CODES = new Set<string>([
-                'LICENSE_EXPIRED', 'SEAT_REVOKED', 'DEVICE_LIMIT_REACHED',
-                'DEVICE_MISMATCH', 'SIGNATURE_INVALID', 'PRODUCT_NOT_ENTITLED',
-                'APP_VERSION_BLOCKED', 'INVALID_CREDENTIALS',
-            ])
             const reason = h.reason_code ?? null
-            const shouldLogOut = !!reason && REVOCATION_CODES.has(reason)
+            const shouldLogOut = !!reason && TlinkLicenseService.HEARTBEAT_REVOCATION_CODES.has(reason)
             // eslint-disable-next-line no-console
             console.error(`%c[license:heartbeat] tick #${this.heartbeatCount} → INVALID`,
                 'color:#dc2626;font-weight:700',
@@ -1995,6 +2080,22 @@ export class TlinkLicenseService implements OnDestroy {
 
     private async handleInvalid (reason: ReasonCode | null): Promise<void> {
         if (this.handlingInvalid) {return this.handlingInvalid}
+        // Loud, self-diagnosing log at the exact moment we tear down the
+        // session. The user's most-common report is "it expired early" —
+        // this dump lets us confirm which path fired and with which reason
+        // by just asking for the DevTools console.
+        // eslint-disable-next-line no-console
+        console.warn('%c[license:handleInvalid] tearing down session',
+            'color:#dc2626;font-weight:700;font-size:12px',
+            {
+                reason,
+                billingType: this.billingType,
+                endDate: this.endDate,
+                isLocalTrial: this.isLocalTrial,
+                paidWithinSubscription: this.isPaidWithinSubscription(),
+                lastReasonCode: this.lastReasonCode,
+                at: new Date().toISOString(),
+            })
         this.handlingInvalid = (async () => {
             try {
                 this.stopTimers()
