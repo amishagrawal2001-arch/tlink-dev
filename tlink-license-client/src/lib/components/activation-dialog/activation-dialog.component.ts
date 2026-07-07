@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Inject, Input, Optional, Output } from '@angular/core'
+import { Component, EventEmitter, Inject, Input, OnChanges, Optional, Output, SimpleChanges } from '@angular/core'
 import { TlinkLicenseService } from '../../tlink-license.service'
 import { TlinkLicenseConfig, TLINK_LICENSE_CONFIG, DEFAULT_LICENSE_CONFIG } from '../../tlink-license.config'
 
@@ -64,6 +64,32 @@ import { TlinkLicenseConfig, TLINK_LICENSE_CONFIG, DEFAULT_LICENSE_CONFIG } from
         </div>
 
         <div class="tlink-dialog__body" *ngIf="offlineMode">
+          <!-- Device fingerprint — shown prominently in offline mode
+               because the admin needs it to mint a device-bound code.
+               Without this, a user blocked at sign-in has no easy way
+               to retrieve the fingerprint (Settings is unreachable
+               while the license dialog is blocking).
+               -->
+          <label class="tlink-dialog__label">Your device fingerprint</label>
+          <div class="tlink-dialog__hint">
+            Send this to your admin so they can mint an offline code bound to this device.
+          </div>
+          <div class="tlink-fp-row">
+            <input
+              class="tlink-dialog__input tlink-fp-input"
+              type="text"
+              readonly
+              [value]="deviceFingerprint || 'Computing…'"
+              (focus)="$any($event.target).select()" />
+            <button
+              class="tlink-dialog__btn tlink-dialog__btn--secondary tlink-fp-copy"
+              (click)="copyFingerprint()"
+              [disabled]="!deviceFingerprint"
+              type="button">
+              {{ fingerprintCopied ? 'Copied' : 'Copy' }}
+            </button>
+          </div>
+
           <label class="tlink-dialog__label">Activation code</label>
           <textarea
             class="tlink-dialog__input"
@@ -94,6 +120,34 @@ import { TlinkLicenseConfig, TLINK_LICENSE_CONFIG, DEFAULT_LICENSE_CONFIG } from
             </a>
           </div>
         </div>
+
+        <!-- Sign-in mode: fingerprint hidden by default (users
+             signing in normally don't need it) but revealable via a
+             one-click disclosure. Same reasoning as above — if the
+             user can't sign in for any reason, they must still be
+             able to retrieve the fingerprint without leaving this
+             dialog. -->
+        <div class="tlink-dialog__fp-disclosure" *ngIf="!offlineMode">
+          <a class="tlink-dialog__link" href="javascript:void(0)"
+             (click)="showFingerprint = !showFingerprint">
+            {{ showFingerprint ? '▾' : '▸' }} Device fingerprint
+          </a>
+          <div class="tlink-fp-row" *ngIf="showFingerprint">
+            <input
+              class="tlink-dialog__input tlink-fp-input"
+              type="text"
+              readonly
+              [value]="deviceFingerprint || 'Computing…'"
+              (focus)="$any($event.target).select()" />
+            <button
+              class="tlink-dialog__btn tlink-dialog__btn--secondary tlink-fp-copy"
+              (click)="copyFingerprint()"
+              [disabled]="!deviceFingerprint"
+              type="button">
+              {{ fingerprintCopied ? 'Copied' : 'Copy' }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   `,
@@ -117,11 +171,18 @@ import { TlinkLicenseConfig, TLINK_LICENSE_CONFIG, DEFAULT_LICENSE_CONFIG } from
     .tlink-dialog__btn--primary { background: var(--tlink-primary, #2563eb); color: #fff; flex: 1; }
     .tlink-dialog__btn--primary:hover:not(:disabled) { background: var(--tlink-primary-hover, #1d4ed8); }
     .tlink-dialog__footer { margin-top: 16px; text-align: center; }
-    .tlink-dialog__link { color: var(--tlink-primary, #2563eb); font-size: 13px; text-decoration: none; }
+    .tlink-dialog__link { color: var(--tlink-primary, #2563eb); font-size: 13px; text-decoration: none; cursor: pointer; }
     .tlink-dialog__link:hover { text-decoration: underline; }
+    .tlink-dialog__hint { font-size: 11px; color: var(--tlink-dialog-muted, #666); margin: 2px 0 6px; line-height: 1.35; }
+    .tlink-fp-row { display: flex; gap: 6px; align-items: center; }
+    .tlink-fp-input { font-family: monospace; font-size: 11px; letter-spacing: 0.3px; }
+    .tlink-fp-copy { padding: 8px 14px; font-size: 12px; white-space: nowrap; background: var(--tlink-input-bg, #f3f4f6); color: var(--tlink-dialog-color, #1a1a2e); border: 1px solid var(--tlink-input-border, #ddd); }
+    .tlink-fp-copy:hover:not(:disabled) { background: var(--tlink-input-border, #e5e7eb); }
+    .tlink-dialog__fp-disclosure { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--tlink-input-border, #eee); font-size: 12px; }
+    .tlink-dialog__fp-disclosure .tlink-fp-row { margin-top: 8px; }
   `],
 })
-export class ActivationDialogComponent {
+export class ActivationDialogComponent implements OnChanges {
     @Input() visible = false
     @Input() blocking = false
     @Output() activated = new EventEmitter<void>()
@@ -136,12 +197,62 @@ export class ActivationDialogComponent {
     offlineMode = false
     offlineCode = ''
 
+    /** Fingerprint of THIS device — required by the admin to mint an
+     *  offline activation code bound to a specific machine. Displayed
+     *  prominently in offline mode and reveal-on-click in sign-in mode.
+     *  Populated asynchronously the first time the dialog opens; kept
+     *  cached so subsequent opens are instant. */
+    deviceFingerprint = ''
+    /** Toggles the fingerprint disclosure in sign-in mode. */
+    showFingerprint = false
+    /** One-shot "Copied" indicator on the copy button. */
+    fingerprintCopied = false
+
     constructor (
         public licenseService: TlinkLicenseService,
         @Optional() @Inject(TLINK_LICENSE_CONFIG) config?: TlinkLicenseConfig,
     ) {
         const merged = { ...DEFAULT_LICENSE_CONFIG, ...(config ?? {}) }
         this.purchaseUrl = merged.purchaseUrl
+    }
+
+    /** Fetch the fingerprint the first time the dialog becomes visible,
+     *  so the user isn't waiting on it when they switch to offline mode. */
+    ngOnChanges (changes: SimpleChanges): void {
+        // We only care that `visible` flipped to true and we haven't
+        // computed the fingerprint yet. The linter dislikes both the
+        // optional chain (says currentValue is defined) AND the
+        // explicit truthy check (says the change entry can be undef),
+        // so we bracket-access and coerce.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (changes['visible']?.currentValue && !this.deviceFingerprint) {
+            void this.loadFingerprint()
+        }
+    }
+
+    private async loadFingerprint (): Promise<void> {
+        try {
+            this.deviceFingerprint = await this.licenseService.getDeviceFingerprint()
+        } catch {
+            // Fingerprint compute can fail on locked-down platforms; the
+            // input will just show "Computing…" indefinitely. Users can
+            // fall back to Settings → License → fingerprint once signed in
+            // (or ask the admin to mint an unbound code).
+            this.deviceFingerprint = ''
+        }
+    }
+
+    /** Copy the fingerprint to the clipboard and flash a "Copied"
+     *  hint on the button. Non-fatal if the Clipboard API is blocked. */
+    async copyFingerprint (): Promise<void> {
+        if (!this.deviceFingerprint) {return}
+        try {
+            await navigator.clipboard.writeText(this.deviceFingerprint)
+            this.fingerprintCopied = true
+            setTimeout(() => { this.fingerprintCopied = false }, 1500)
+        } catch {
+            /* clipboard unavailable — user can still triple-click to select */
+        }
     }
 
     async activate (): Promise<void> {
