@@ -60,15 +60,21 @@ export class GnmiService {
      * Build the CLI flags every RPC needs — target address, credentials,
      * TLS mode, encoding, timeout. Kept centralized so a Set / Get /
      * Subscribe call in later milestones can't accidentally forget one.
+     *
+     * `includeEncoding=false` for Subscribe: some vendors advertise
+     * JSON_IETF in Capabilities but silently emit nothing when you
+     * actually ask for it on Subscribe (observed on Junos). Letting
+     * gnmic + the device negotiate their default sidesteps the trap.
+     * Capabilities and Get can safely honor the profile's encoding.
      */
-    private commonArgs (target: GnmiProfile): string[] {
+    private commonArgs (target: GnmiProfile, includeEncoding = true): string[] {
         const o = target.options
         const args: string[] = []
         const port = o.port ? `:${o.port}` : ''
         args.push('-a', `${o.host}${port}`)
         if (o.username) { args.push('-u', o.username) }
         if (o.password) { args.push('-p', o.password) }
-        args.push('-e', o.encoding ?? 'JSON_IETF')
+        if (includeEncoding) { args.push('-e', o.encoding ?? 'JSON_IETF') }
         args.push('--timeout', `${Math.max(1, Math.round((o.timeoutMs ?? 10_000) / 1000))}s`)
 
         switch (o.security) {
@@ -214,9 +220,61 @@ export class GnmiService {
         const handle = new EventEmitter() as GnmiSubscribeHandle
         let killed = false
 
+        // Per-subscription JSON document accumulator. gnmic --format json
+        // emits one multi-line JSON object per notification, and
+        // --format event emits multi-line arrays. In both cases we can't
+        // parse line-by-line — we need to track brace/bracket depth
+        // (respecting string literals + escapes) and hand a complete
+        // document to the parser when depth returns to 0.
+        let docBuf = ''
+        let depth = 0
+        let inString = false
+        let escaping = false
+
+        const feedChar = (ch: string): void => {
+            // Skip leading whitespace when we're outside any document.
+            if (depth === 0 && !docBuf.length && (ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t')) {
+                return
+            }
+            docBuf += ch
+            if (escaping) { escaping = false; return }
+            if (inString) {
+                if (ch === '\\') {
+                    escaping = true
+                } else if (ch === '"') {
+                    inString = false
+                }
+                return
+            }
+            if (ch === '"') { inString = true; return }
+            if (ch === '{' || ch === '[') {
+                depth += 1
+            } else if (ch === '}' || ch === ']') {
+                depth -= 1
+                if (depth === 0) {
+                    const doc = docBuf.trim()
+                    docBuf = ''
+                    if (doc) { this.handleSubscribeDoc(doc, handle, target.name) }
+                }
+                if (depth < 0) {
+                    // Recover from a malformed prefix (e.g. gnmic banner
+                    // text that included a stray closing brace). Reset
+                    // so we don't lose subsequent good documents.
+                    depth = 0
+                    docBuf = ''
+                }
+            }
+        }
+
         const proc = this.spawnGnmic(
             args,
-            line => this.handleSubscribeLine(line, handle, target.name),
+            line => {
+                // pipeLines strips \n; add a separator character back so
+                // JSON that has `"key":\n"value"` still parses. The
+                // accumulator collapses whitespace between top-level
+                // documents naturally.
+                for (const ch of line + '\n') { feedChar(ch) }
+            },
             line => {
                 // gnmic writes progress + errors to stderr. Treat lines
                 // that look like errors as transient by default — the
@@ -258,9 +316,14 @@ export class GnmiService {
      */
     private buildSubscribeArgs (target: GnmiProfile, request: GnmiSubscribeRequest): string[] {
         const args = [
-            ...this.commonArgs(target),
+            ...this.commonArgs(target, false),
             'sub',
-            '--format', 'event',
+            // --format json emits one full JSON document per notification
+            // (prefix + updates[] + optional deletes[]) — richer than
+            // --format event and structurally the same across gnmic
+            // versions. The doc accumulator in subscribe() reassembles
+            // multi-line documents into complete objects.
+            '--format', 'json',
             '--mode', request.mode.toLowerCase(),
         ]
         // Streaming needs a stream-mode and, for SAMPLE, an interval.
@@ -291,64 +354,121 @@ export class GnmiService {
     }
 
     /**
-     * gnmic --format event emits one JSON object per line. Shape:
-     *   {
-     *     "name": "",
-     *     "timestamp": 1730000000000000000,   // nanos since epoch
-     *     "tags": { "source": "host:port", "subscription-name": "..." },
-     *     "values": { "/full/path": <value> },   // one entry per Update
-     *     "deletes": [ "/full/path" ]            // optional, on Delete
-     *   }
-     * The values map has one entry per Update; a single notification
-     * message with 5 updates fans out into 5 event lines. Deletes come
-     * on their own line with `deletes: [path]` and no values.
+     * Parse one complete JSON document from gnmic --format json.
+     * Handles both:
+     *   1. `--format json` — one object per document:
+     *      { source, subscription-name, timestamp, time, prefix,
+     *        updates: [{Path, values: {…}}], deletes: [ "path", … ] }
+     *   2. `--format event` fallback — an array of event objects, each
+     *      with { timestamp, tags, values: {"/full/path": val}, deletes }.
+     *      We keep this path because gnmic may still emit array-wrapped
+     *      output when multiple events collapse into one snapshot, and
+     *      external configs may set --format event anyway.
      *
-     * We flatten each entry into a GnmiNotification and emit one event
-     * per (path, value) pair so the UI's stream table shows one row per
-     * update, which is what users expect.
+     * Each Update becomes one 'notification' event (one row in the
+     * UI's stream table). Each delete path becomes a 'notification'
+     * with kind='delete'. sync_response tags emit a 'sync' event.
+     *
+     * Rich metadata (subscription-name, prefix, source) is preserved
+     * only inside the event object today; a future iteration can
+     * surface subscription-name to route rows to the correct sub in
+     * the left pane when we multiplex.
      */
-    private handleSubscribeLine (line: string, handle: GnmiSubscribeHandle, targetName: string): void {
-        const trimmed = line.trim()
-        if (!trimmed || trimmed.startsWith('#')) { return }
+    private handleSubscribeDoc (doc: string, handle: GnmiSubscribeHandle, targetName: string): void {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let event: any = null
+        let parsed: any = null
         try {
-            event = JSON.parse(trimmed)
+            parsed = JSON.parse(doc)
         } catch {
-            // Not JSON — probably a gnmic startup banner or debug
-            // line. Silently skip; stderr already surfaces real
-            // problems.
             return
         }
+        if (!parsed) { return }
+        const events = Array.isArray(parsed) ? parsed : [parsed]
+        for (const event of events) {
+            this.emitEventNotifications(event, handle, targetName)
+        }
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    private emitEventNotifications (event: any, handle: GnmiSubscribeHandle, targetName: string): void {
         if (!event || typeof event !== 'object') { return }
-        // sync_response arrives as a specific event tag.
-        if (event.name === 'sync' || event.tags?.subscribe === 'sync' || event.tags?.event === 'sync') {
+
+        // sync_response is variously tagged across formats.
+        if (event.name === 'sync' || event.sync === true || event.tags?.event === 'sync') {
             handle.emit('sync')
             return
         }
+
         const ts = Number(event.timestamp) || Date.now() * 1_000_000
-        if (event.values && typeof event.values === 'object') {
+
+        // Shape A — `--format json` with prefix + updates[].
+        if (Array.isArray(event.updates)) {
+            const rawPrefix = String(event.prefix ?? '').replace(/^\/+/, '')
+            const prefix = rawPrefix ? '/' + rawPrefix : ''
+            for (const upd of event.updates) {
+                // Prefer values entry keyed by upd.Path; fall back to
+                // the first entry when the key doesn't match (some
+                // Juniper builds emit the values map with a slightly
+                // different key than Path).
+                const values = upd?.values ?? {}
+                const valueEntries = Object.entries(values)
+                if (!valueEntries.length && upd?.val !== undefined) {
+                    // Some gnmic versions emit `val` directly on the update.
+                    const path = this.joinPath(prefix, upd.Path ?? upd.path ?? '')
+                    handle.emit('notification', {
+                        timestampNs: ts, path, value: upd.val,
+                        kind: 'update', target: targetName,
+                    } satisfies GnmiNotification)
+                    continue
+                }
+                for (const [key, value] of valueEntries) {
+                    // The values-map key may be a relative path repeat
+                    // of upd.Path, or (rarely) a different sub-leaf.
+                    // Trust upd.Path as the canonical path when present.
+                    const path = this.joinPath(prefix, upd.Path ?? upd.path ?? key)
+                    handle.emit('notification', {
+                        timestampNs: ts, path, value,
+                        kind: 'update', target: targetName,
+                    } satisfies GnmiNotification)
+                }
+            }
+        } else if (event.values && typeof event.values === 'object') {
+            // Shape B — `--format event` with a flat values map keyed
+            // by the fully-resolved path.
             for (const [path, value] of Object.entries(event.values)) {
                 handle.emit('notification', {
-                    timestampNs: ts,
-                    path,
-                    value,
-                    kind: 'update',
-                    target: targetName,
+                    timestampNs: ts, path, value,
+                    kind: 'update', target: targetName,
                 } satisfies GnmiNotification)
             }
         }
+
+        // Deletes — shape is the same in both formats.
         if (Array.isArray(event.deletes)) {
-            for (const path of event.deletes) {
+            const rawPrefix = String(event.prefix ?? '').replace(/^\/+/, '')
+            const prefix = rawPrefix ? '/' + rawPrefix : ''
+            for (const p of event.deletes) {
                 handle.emit('notification', {
                     timestampNs: ts,
-                    path,
+                    path: this.joinPath(prefix, String(p)),
                     value: null,
                     kind: 'delete',
                     target: targetName,
                 } satisfies GnmiNotification)
             }
         }
+    }
+
+    /**
+     * Concatenate a prefix and a relative path with exactly one `/`
+     * between them, tolerating leading/trailing slashes on either side.
+     */
+    private joinPath (prefix: string, rel: string): string {
+        const p = prefix.replace(/\/+$/, '')
+        const r = String(rel).replace(/^\/+/, '')
+        if (!p) { return '/' + r }
+        if (!r) { return p }
+        return `${p}/${r}`
     }
 
     /**
