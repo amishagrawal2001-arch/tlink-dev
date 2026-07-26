@@ -74,6 +74,7 @@ export class GnmiValueFormatterService {
 
     private formatNumber (n: number, path: string): FormattedValue {
         const leaf = this.leafName(path).toLowerCase()
+        const pathLower = path.toLowerCase()
 
         // Nanosecond timestamp — leaf names ending in `-time` /
         // `timestamp` / `last-*`, AND magnitude looks like ns-since-epoch
@@ -98,6 +99,15 @@ export class GnmiValueFormatterService {
             return { value: this.humanizeDuration(seconds), unit: '', kind: 'duration' }
         }
 
+        // Byte-count magnitudes — memory / storage / filesystem paths.
+        // Detected by path prefix (memory/state, storage, filesystem)
+        // OR by leaf name (used, free, available, physical, reserved,
+        // capacity, size) combined with a >=1 KiB magnitude — so `size: 5`
+        // on a totally different subtree doesn't get mis-formatted.
+        if (this.looksLikeByteValue(pathLower, leaf) && Math.abs(n) >= 1024) {
+            return this.humanizeBytes(n)
+        }
+
         // Percentage — leaf names that suggest a 0..100 gauge.
         if (this.looksLikePercentLeaf(leaf) && n >= 0 && n <= 100) {
             return { value: this.trimZero(n), unit: '%', kind: 'percent' }
@@ -111,6 +121,50 @@ export class GnmiValueFormatterService {
 
         // Plain number — trim trailing zeros on floats.
         return { value: this.trimZero(n), unit: '', kind: 'number' }
+    }
+
+    /**
+     * Format a byte count using IEC units (KiB, MiB, GiB, TiB). IEC
+     * (1024-based) not SI (1000-based) because we're overwhelmingly
+     * dealing with memory / filesystem values that the OS itself
+     * reports in binary units.
+     */
+    private humanizeBytes (n: number): FormattedValue {
+        const sign = n < 0 ? '-' : ''
+        const abs = Math.abs(n)
+        const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']
+        let v = abs
+        let i = 0
+        while (v >= 1024 && i < units.length - 1) {
+            v /= 1024
+            i += 1
+        }
+        // 2 significant fractional digits below 100, 1 above, none for whole units — reads cleanly.
+        const digits = v >= 100 ? 0 : v >= 10 ? 1 : 2
+        return {
+            value: sign + v.toFixed(digits),
+            unit: units[i],
+            kind: 'counter',
+        }
+    }
+
+    /**
+     * Byte-value detection. Path prefix wins fastest (e.g. everything
+     * under /system/memory/state/ is bytes); leaf-name check backstops
+     * when the path doesn't obviously indicate memory / storage but a
+     * common byte-y leaf name shows up.
+     */
+    private looksLikeByteValue (pathLower: string, leaf: string): boolean {
+        if (pathLower.includes('/memory/') ||
+            pathLower.includes('/storage/') ||
+            pathLower.includes('/filesystem/') ||
+            pathLower.includes('/disk/')) {
+            return true
+        }
+        return leaf === 'used' || leaf === 'free' || leaf === 'available' ||
+               leaf === 'physical' || leaf === 'reserved' || leaf === 'capacity' ||
+               leaf === 'size' || leaf === 'total' ||
+               leaf.endsWith('-used') || leaf.endsWith('-free') || leaf.endsWith('-available')
     }
 
     /**
