@@ -37,18 +37,124 @@ export class GnmiService {
 
     /**
      * Fetch the target's Capabilities response — supported YANG models,
-     * encodings, and gNMI version. Used by the path-autocomplete UI in
-     * M2 and by the "Test connection" button in the target-profile
-     * dialog.
+     * encodings, and gNMI version. Used by the "Test connection" button
+     * in the target-profile dialog and by the M2.2 path-autocomplete.
      *
-     * Not implemented in M1 — throws NotYetImplemented so callers get
-     * a loud, greppable failure rather than a silent null.
+     * The RPC is short-lived: we spawn `gnmic capabilities --format json`,
+     * accumulate one JSON blob on stdout, and return once the process
+     * exits. Timeout applied via the target's timeoutMs so a
+     * mid-handshake TLS hang doesn't wedge the UI forever.
      */
     async capabilities (target: GnmiProfile): Promise<GnmiCapabilities> {
         this.assertGnmicAvailable()
-        // TODO(M2): spawn `gnmic -a host:port [tls flags] capabilities --format json`
-        //           parse response into GnmiCapabilities.
-        throw new Error(`GnmiService.capabilities not implemented (M2). Target: ${target.name}`)
+        const args = [
+            ...this.commonArgs(target),
+            'capabilities',
+            '--format', 'json',
+        ]
+        const raw = await this.runOneShot(args, target.options.timeoutMs ?? 10_000)
+        return this.parseCapabilities(raw)
+    }
+
+    /**
+     * Build the CLI flags every RPC needs — target address, credentials,
+     * TLS mode, encoding, timeout. Kept centralized so a Set / Get /
+     * Subscribe call in later milestones can't accidentally forget one.
+     */
+    private commonArgs (target: GnmiProfile): string[] {
+        const o = target.options
+        const args: string[] = []
+        const port = o.port ? `:${o.port}` : ''
+        args.push('-a', `${o.host}${port}`)
+        if (o.username) { args.push('-u', o.username) }
+        if (o.password) { args.push('-p', o.password) }
+        args.push('-e', o.encoding ?? 'JSON_IETF')
+        args.push('--timeout', `${Math.max(1, Math.round((o.timeoutMs ?? 10_000) / 1000))}s`)
+
+        switch (o.security) {
+            case 'insecure':
+                args.push('--insecure')
+                break
+            case 'skip-verify':
+                args.push('--skip-verify')
+                break
+            case 'mtls':
+                if (o.clientCertPath) { args.push('--cert', o.clientCertPath) }
+                if (o.clientKeyPath) { args.push('--key', o.clientKeyPath) }
+                if (o.caCertPath) { args.push('--tls-ca', o.caCertPath) }
+                break
+            case 'tls':
+            default:
+                if (o.caCertPath) { args.push('--tls-ca', o.caCertPath) }
+                break
+        }
+        if (o.tlsServerName) { args.push('--tls-server-name', o.tlsServerName) }
+        return args
+    }
+
+    /**
+     * Run gnmic to completion and return whatever it wrote to stdout.
+     * Used for one-shot RPCs (Capabilities, Get). Reject on non-zero
+     * exit with the stderr tail so the UI can show the actual
+     * reason (bad auth, cert mismatch, etc.) instead of "failed".
+     */
+    private runOneShot (args: string[], timeoutMs: number): Promise<string> {
+        return new Promise((resolve, reject) => {
+            let stdout = ''
+            let stderr = ''
+            const proc = this.spawnGnmic(
+                args,
+                line => { stdout += line + '\n' },
+                line => { stderr += line + '\n' },
+            )
+            const timer = setTimeout(() => {
+                proc.kill('SIGTERM')
+                reject(new Error(`gnmic timed out after ${timeoutMs}ms`))
+            }, timeoutMs)
+            proc.on('exit', code => {
+                clearTimeout(timer)
+                if (code === 0) {
+                    resolve(stdout.trim())
+                } else {
+                    const tail = stderr.trim().split('\n').slice(-4).join('\n')
+                    reject(new Error(tail || `gnmic exited with code ${code}`))
+                }
+            })
+            proc.on('error', err => {
+                clearTimeout(timer)
+                reject(err)
+            })
+        })
+    }
+
+    /**
+     * Reshape gnmic's Capabilities JSON into GnmiCapabilities. gnmic
+     * emits `{ supported_models: [{name, organization, version}], ...
+     * supported_encodings: [...], gnmi_version: "..." }` — we normalize
+     * casing / naming to match our interface.
+     */
+    private parseCapabilities (raw: string): GnmiCapabilities {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let parsed: any = null
+        try {
+            parsed = JSON.parse(raw)
+        } catch {
+            throw new Error(`Capabilities response was not JSON: ${raw.slice(0, 200)}`)
+        }
+        // Some gnmic versions return a top-level array with one entry,
+        // others return an object — accept both.
+        const cap = Array.isArray(parsed) ? parsed[0] : parsed
+        return {
+            gnmiVersion: cap?.gnmi_version ?? cap?.gNMI_version ?? 'unknown',
+            supportedModels: (cap?.supported_models ?? cap?.supportedModels ?? []).map((m: {
+                name?: string; organization?: string; version?: string
+            }) => ({
+                name: m.name ?? '',
+                organization: m.organization ?? '',
+                version: m.version ?? '',
+            })),
+            supportedEncodings: (cap?.supported_encodings ?? cap?.supportedEncodings ?? []),
+        }
     }
 
     /**

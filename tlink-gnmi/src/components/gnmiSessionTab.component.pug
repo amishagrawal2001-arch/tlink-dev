@@ -1,0 +1,34 @@
+.session-placeholder
+    .placeholder-card
+        .placeholder-eyebrow
+            i.fas.fa-satellite-dish.me-2
+            span gNMI SESSION
+        h3.placeholder-title
+            | Connected to&nbsp;
+            span.mono {{ profile?.options?.host || 'target' }}
+            span.port(*ngIf='profile?.options?.port') :{{ profile.options.port }}
+
+        p.placeholder-lede
+            | The live subscription view arrives in M2.2. Everything up to this point works — the profile
+            | provider registers a gNMI target, the New Target dialog persists it, and Test Connection
+            | actually runs a Capabilities RPC against the device using the bundled gnmic binary.
+
+        .placeholder-facts
+            .fact
+                .fact-label VENDOR
+                .fact-value {{ profile?.options?.vendor || '—' }}
+            .fact
+                .fact-label SECURITY
+                .fact-value {{ profile?.options?.security || 'tls' }}
+            .fact
+                .fact-label ENCODING
+                .fact-value {{ profile?.options?.encoding || 'JSON_IETF' }}
+
+        .placeholder-next
+            .next-eyebrow M2.2 · NEXT MILESTONE
+            ul.next-list
+                li Subscribe RPC (STREAM / ONCE / POLL) wired to the gnmic subprocess
+                li Three-pane live view: subscriptions · notifications · controls
+                li Path autocomplete populated from Capabilities
+                li Filter · pause · export-to-JSONL
+                li Reconnect / backoff visible in the status footer

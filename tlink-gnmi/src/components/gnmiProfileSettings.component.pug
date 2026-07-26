@@ -1,0 +1,165 @@
+ul.nav-tabs(ngbNav, #nav='ngbNav')
+    li(ngbNavItem)
+        a(ngbNavLink, translate) Target
+        ng-template(ngbNavContent)
+            .mb-3
+                label(translate) Host
+                input.form-control(
+                    type='text',
+                    placeholder='device.example.com',
+                    [(ngModel)]='profile.options.host'
+                )
+
+            .mb-3
+                label(translate) Port
+                input.form-control(
+                    type='number',
+                    placeholder='e.g. 6030 (Arista) · 57400 (Cisco/Nokia) · 32767 (Junos)',
+                    [(ngModel)]='profile.options.port'
+                )
+
+            .mb-3
+                label(translate) Vendor
+                select.form-control(
+                    [(ngModel)]='profile.options.vendor',
+                    (ngModelChange)='onVendorChange()'
+                )
+                    option(value='arista') Arista EOS
+                    option(value='cisco-iosxr') Cisco IOS-XR
+                    option(value='juniper-junos') Juniper Junos
+                    option(value='nokia-srlinux') Nokia SR Linux
+                    option(value='nokia-sros') Nokia SR OS
+                    option(value='other') Other
+                small.form-text.text-muted(translate) Picking a vendor sets the standard port when the port field is empty.
+
+            .mb-3
+                label(translate) Encoding
+                select.form-control([(ngModel)]='profile.options.encoding')
+                    option(value='JSON_IETF') JSON_IETF (recommended)
+                    option(value='JSON') JSON
+                    option(value='PROTO') PROTO
+                    option(value='ASCII') ASCII
+                    option(value='BYTES') BYTES
+
+            //- ─────── Test connection ───────
+            //- Runs Capabilities. Success shows gnmi version + model
+            //- count + latency; failure shows the raw error so the
+            //- user knows whether to fix auth, TLS, or the port.
+            .mb-3
+                button.btn.btn-outline-primary.btn-sm(
+                    type='button',
+                    (click)='testConnection()',
+                    [disabled]='testing || !profile.options.host'
+                )
+                    i.fas.fa-satellite-dish.me-1
+                    span(translate) Test Connection
+                    i.fas.fa-spinner.fa-spin.ms-1(*ngIf='testing')
+
+                .mt-2(*ngIf='testResult')
+                    .test-result.test-result--ok(*ngIf='testResult.success')
+                        i.fas.fa-check-circle.me-1
+                        strong Connected
+                        span.text-muted.ms-2 gNMI {{ testResult.gnmiVersion }}
+                        span.text-muted.ms-2 {{ testResult.modelCount }} models
+                        span.text-muted.ms-2 {{ testResult.encodings }}
+                        span.text-muted.ms-2 · {{ testResult.latencyMs }}ms
+                    .test-result.test-result--err(*ngIf='!testResult.success')
+                        i.fas.fa-times-circle.me-1
+                        strong Failed
+                        span.text-muted.ms-2({{ testResult.latencyMs }}ms)
+                        .test-err-body.mt-1 {{ testResult.message }}
+
+    li(ngbNavItem)
+        a(ngbNavLink, translate) Auth
+        ng-template(ngbNavContent)
+            .mb-3
+                label(translate) Username
+                input.form-control(
+                    type='text',
+                    autocomplete='username',
+                    [(ngModel)]='profile.options.username'
+                )
+                small.form-text.text-muted(translate) Leave blank when using client-certificate auth only.
+
+            .mb-3
+                label(translate) Password
+                .input-group
+                    input.form-control(
+                        [type]='showPassword ? "text" : "password"',
+                        autocomplete='new-password',
+                        [(ngModel)]='profile.options.password'
+                    )
+                    button.btn.btn-outline-secondary(
+                        type='button',
+                        (click)='showPassword = !showPassword'
+                    )
+                        i.fas([class.fa-eye]='!showPassword', [class.fa-eye-slash]='showPassword')
+
+                .mt-2.d-flex.gap-2
+                    button.btn.btn-outline-primary.btn-sm(
+                        type='button',
+                        (click)='saveToKeychain()',
+                        [disabled]='!profile.options.password || !profile.options.host'
+                    )
+                        i.fas.fa-key.me-1
+                        span(translate) Save to keychain
+                    button.btn.btn-outline-danger.btn-sm(
+                        type='button',
+                        (click)='clearFromKeychain()'
+                    )
+                        i.fas.fa-times.me-1
+                        span(translate) Clear
+
+    li(ngbNavItem)
+        a(ngbNavLink, translate) Security
+        ng-template(ngbNavContent)
+            .mb-3
+                label(translate) Transport
+                select.form-control([(ngModel)]='profile.options.security')
+                    option(value='tls') TLS (default)
+                    option(value='mtls') mTLS (client certificate)
+                    option(value='skip-verify') TLS · skip cert verification
+                    option(value='insecure') Insecure (plaintext gRPC)
+                small.form-text.text-muted(translate) Insecure and skip-verify should stay in the lab. Production targets use TLS or mTLS.
+
+            .mb-3
+                label(translate) CA certificate bundle (PEM)
+                input.form-control(
+                    type='text',
+                    placeholder='/path/to/ca.pem — optional; system trust store used when empty',
+                    [(ngModel)]='profile.options.caCertPath'
+                )
+
+            .mb-3(*ngIf='profile.options.security === "mtls"')
+                label(translate) Client certificate (PEM)
+                input.form-control(
+                    type='text',
+                    placeholder='/path/to/client.crt',
+                    [(ngModel)]='profile.options.clientCertPath'
+                )
+
+            .mb-3(*ngIf='profile.options.security === "mtls"')
+                label(translate) Client key (PEM)
+                input.form-control(
+                    type='text',
+                    placeholder='/path/to/client.key',
+                    [(ngModel)]='profile.options.clientKeyPath'
+                )
+
+            .mb-3
+                label(translate) TLS server name (SNI override)
+                input.form-control(
+                    type='text',
+                    placeholder='optional — only when the target sits behind a load balancer',
+                    [(ngModel)]='profile.options.tlsServerName'
+                )
+
+            .mb-3
+                label(translate) gRPC dial timeout (ms)
+                input.form-control(
+                    type='number',
+                    placeholder='10000',
+                    [(ngModel)]='profile.options.timeoutMs'
+                )
+
+div([ngbNavOutlet]='nav')
