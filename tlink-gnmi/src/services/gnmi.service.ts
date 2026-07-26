@@ -187,25 +187,168 @@ export class GnmiService {
     }
 
     /**
-     * Open a streaming Subscribe RPC. Returns an EventEmitter that
-     * emits:
+     * Open a streaming Subscribe RPC. Returns a handle that emits:
      *   - 'notification' (GnmiNotification) — one per Update/Delete
      *   - 'sync'                             — sync_response received
      *   - 'error' (Error)                    — fatal stream error
-     *   - 'close'                            — stream closed cleanly
+     *   - 'close' (code: number|null)        — subprocess exited
      *
-     * Callers should retain the emitter and call `.kill()` (attached
-     * to the returned object) to tear the stream down. Reconnect and
-     * backoff live inside gnmic — we just watch its stdout.
+     * Callers must retain the handle and call `.kill()` to tear the
+     * stream down. gnmic handles reconnect/backoff internally when the
+     * TCP connection drops — we surface those events through the
+     * subprocess's stderr, which we tag onto the 'error' events with
+     * a `transient:true` marker so the UI can distinguish "stream is
+     * flaky" from "stream is dead."
      *
-     * Not implemented in M1 — arrives in M2 (Subscribe).
+     * Uses `--format event` which gives us one JSON object per Update
+     * — cleaner for a per-row stream table than raw gNMI Notifications
+     * (which pack multiple Updates into one message and need unrolling).
      */
     subscribe (target: GnmiProfile, request: GnmiSubscribeRequest): GnmiSubscribeHandle {
         this.assertGnmicAvailable()
-        // TODO(M2): spawn `gnmic -a host:port sub --path … --stream-mode … --format json`
-        //           parse newline-delimited JSON into GnmiNotification.
-        //           Attach reconnect/backoff observation.
-        throw new Error(`GnmiService.subscribe not implemented (M2). Target: ${target.name}, ${request.subscriptions.length} subs`)
+        if (!request.subscriptions.length) {
+            throw new Error('subscribe: at least one subscription path is required')
+        }
+
+        const args = this.buildSubscribeArgs(target, request)
+        const handle = new EventEmitter() as GnmiSubscribeHandle
+        let killed = false
+
+        const proc = this.spawnGnmic(
+            args,
+            line => this.handleSubscribeLine(line, handle, target.name),
+            line => {
+                // gnmic writes progress + errors to stderr. Treat lines
+                // that look like errors as transient by default — the
+                // subprocess will retry until it exits.
+                if (line.trim()) {
+                    handle.emit('error', Object.assign(new Error(line), { 'transient': true }))
+                }
+            },
+        )
+
+        proc.on('exit', code => {
+            if (killed) { return }
+            handle.emit('close', code)
+        })
+        proc.on('error', err => {
+            if (killed) { return }
+            handle.emit('error', err)
+        })
+
+        handle.kill = () => {
+            if (killed) { return }
+            killed = true
+            try { proc.kill('SIGTERM') } catch { /* already gone */ }
+        }
+
+        return handle
+    }
+
+    /**
+     * Turn a subscription request into the gnmic CLI args. Kept
+     * separate so tests (or a "show me the command" debug UI) can
+     * inspect what we're about to run without side effects.
+     *
+     * For the streaming case with one subscription we pass everything
+     * as flat flags. Multi-subscription requests with per-path
+     * sample intervals or stream-modes are represented by adding
+     * multiple --path flags with the SAME parent mode — mixed-mode
+     * subscribe would need `--config` YAML, which we can add later.
+     */
+    private buildSubscribeArgs (target: GnmiProfile, request: GnmiSubscribeRequest): string[] {
+        const args = [
+            ...this.commonArgs(target),
+            'sub',
+            '--format', 'event',
+            '--mode', request.mode.toLowerCase(),
+        ]
+        // Streaming needs a stream-mode and, for SAMPLE, an interval.
+        const [firstSub] = request.subscriptions
+        if (request.mode === 'STREAM') {
+            const streamMode = firstSub.streamMode ?? 'TARGET_DEFINED'
+            args.push('--stream-mode', streamMode.toLowerCase().replace('_', '-'))
+            if (streamMode === 'SAMPLE') {
+                const intervalSec = Math.max(1, Math.round((firstSub.sampleIntervalNs ?? 10_000_000_000) / 1_000_000_000))
+                args.push('--sample-interval', `${intervalSec}s`)
+            }
+            if (firstSub.suppressRedundant) {
+                args.push('--suppress-redundant')
+            }
+            if (firstSub.heartbeatIntervalNs) {
+                const heartbeatSec = Math.max(1, Math.round(firstSub.heartbeatIntervalNs / 1_000_000_000))
+                args.push('--heartbeat-interval', `${heartbeatSec}s`)
+            }
+        }
+        if (request.updatesOnly) {
+            args.push('--updates-only')
+        }
+        // One --path per subscription path.
+        for (const sub of request.subscriptions) {
+            args.push('--path', sub.path)
+        }
+        return args
+    }
+
+    /**
+     * gnmic --format event emits one JSON object per line. Shape:
+     *   {
+     *     "name": "",
+     *     "timestamp": 1730000000000000000,   // nanos since epoch
+     *     "tags": { "source": "host:port", "subscription-name": "..." },
+     *     "values": { "/full/path": <value> },   // one entry per Update
+     *     "deletes": [ "/full/path" ]            // optional, on Delete
+     *   }
+     * The values map has one entry per Update; a single notification
+     * message with 5 updates fans out into 5 event lines. Deletes come
+     * on their own line with `deletes: [path]` and no values.
+     *
+     * We flatten each entry into a GnmiNotification and emit one event
+     * per (path, value) pair so the UI's stream table shows one row per
+     * update, which is what users expect.
+     */
+    private handleSubscribeLine (line: string, handle: GnmiSubscribeHandle, targetName: string): void {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith('#')) { return }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let event: any = null
+        try {
+            event = JSON.parse(trimmed)
+        } catch {
+            // Not JSON — probably a gnmic startup banner or debug
+            // line. Silently skip; stderr already surfaces real
+            // problems.
+            return
+        }
+        if (!event || typeof event !== 'object') { return }
+        // sync_response arrives as a specific event tag.
+        if (event.name === 'sync' || event.tags?.subscribe === 'sync' || event.tags?.event === 'sync') {
+            handle.emit('sync')
+            return
+        }
+        const ts = Number(event.timestamp) || Date.now() * 1_000_000
+        if (event.values && typeof event.values === 'object') {
+            for (const [path, value] of Object.entries(event.values)) {
+                handle.emit('notification', {
+                    timestampNs: ts,
+                    path,
+                    value,
+                    kind: 'update',
+                    target: targetName,
+                } satisfies GnmiNotification)
+            }
+        }
+        if (Array.isArray(event.deletes)) {
+            for (const path of event.deletes) {
+                handle.emit('notification', {
+                    timestampNs: ts,
+                    path,
+                    value: null,
+                    kind: 'delete',
+                    target: targetName,
+                } satisfies GnmiNotification)
+            }
+        }
     }
 
     /**

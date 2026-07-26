@@ -1,34 +1,184 @@
-.session-placeholder
-    .placeholder-card
-        .placeholder-eyebrow
-            i.fas.fa-satellite-dish.me-2
-            span gNMI SESSION
-        h3.placeholder-title
-            | Connected to&nbsp;
-            span.mono {{ profile?.options?.host || 'target' }}
-            span.port(*ngIf='profile?.options?.port') :{{ profile.options.port }}
+.gnmi-session
+    //- ───────────────── Left pane: subscriptions ─────────────────
+    .pane.pane-subs
+        .pane-title
+            span SUBSCRIPTIONS
+            span.count {{ subscriptions.length }}
 
-        p.placeholder-lede
-            | The live subscription view arrives in M2.2. Everything up to this point works — the profile
-            | provider registers a gNMI target, the New Target dialog persists it, and Test Connection
-            | actually runs a Capabilities RPC against the device using the bundled gnmic binary.
+        .sub-list
+            .sub-item(*ngFor='let sub of subscriptions; trackBy: trackSubById',
+                      [class.active]='sub.running',
+                      [class.errored]='!!sub.lastError')
+                .sub-path {{ sub.path }}
+                .sub-meta
+                    span.dot([class.live]='sub.running', [class.dead]='!sub.running')
+                    span.mode {{ sub.mode }} · {{ sub.streamMode }}
+                    span.rate(*ngIf='sub.mode === "STREAM" && sub.streamMode === "SAMPLE"') {{ sub.sampleIntervalSec }}s
+                    span.recv {{ sub.receiveCount }} recv
+                .sub-error(*ngIf='sub.lastError') {{ sub.lastError }}
+                .sub-actions
+                    button.sub-btn(
+                        (click)='toggleSubscription(sub)',
+                        [title]='sub.running ? "Pause subscription" : "Resume subscription"'
+                    )
+                        i.fas([class.fa-pause]='sub.running', [class.fa-play]='!sub.running')
+                    button.sub-btn.danger(
+                        (click)='removeSubscription(sub)',
+                        title='Remove subscription'
+                    )
+                        i.fas.fa-times
 
-        .placeholder-facts
-            .fact
-                .fact-label VENDOR
-                .fact-value {{ profile?.options?.vendor || '—' }}
-            .fact
-                .fact-label SECURITY
-                .fact-value {{ profile?.options?.security || 'tls' }}
-            .fact
-                .fact-label ENCODING
-                .fact-value {{ profile?.options?.encoding || 'JSON_IETF' }}
+            .empty-hint(*ngIf='!subscriptions.length')
+                | No subscriptions yet — add a path in the right pane to start streaming.
 
-        .placeholder-next
-            .next-eyebrow M2.2 · NEXT MILESTONE
-            ul.next-list
-                li Subscribe RPC (STREAM / ONCE / POLL) wired to the gnmic subprocess
-                li Three-pane live view: subscriptions · notifications · controls
-                li Path autocomplete populated from Capabilities
-                li Filter · pause · export-to-JSONL
-                li Reconnect / backoff visible in the status footer
+    //- ───────────────── Center pane: live stream ─────────────────
+    .pane.pane-stream
+        .pane-title
+            span LIVE STREAM
+            span.count.recv-count {{ totalReceived }} recv
+            span.count.rate-count(*ngIf='receiveRate > 0') {{ receiveRate }}/s
+
+        .stream-toolbar
+            input.filter(
+                type='text',
+                placeholder='filter path or value…',
+                [(ngModel)]='filter'
+            )
+            button.toolbar-btn(
+                (click)='togglePause()',
+                [class.active]='paused'
+            )
+                i.fas.me-1([class.fa-pause]='!paused', [class.fa-play]='paused')
+                span(*ngIf='!paused') Pause
+                span(*ngIf='paused') Resume ({{ pendingSincePause }})
+            button.toolbar-btn((click)='clearStream()')
+                i.fas.fa-trash-alt.me-1
+                span Clear
+            button.toolbar-btn((click)='exportStream()')
+                i.fas.fa-copy.me-1
+                span Export
+
+        .stream
+            .stream-head
+                .col-ts Timestamp
+                .col-path Path
+                .col-val Value
+                .col-kind Kind
+            .stream-body
+                .empty-hint(*ngIf='!filteredStream.length')
+                    span(*ngIf='!stream.length') Waiting for notifications…
+                    span(*ngIf='stream.length && !filteredStream.length') No rows match filter.
+                .stream-row(
+                    *ngFor='let row of filteredStream; trackBy: trackRowById',
+                    [class.deleted]='row.kind === "delete"',
+                    [class.selected]='row === selectedRow',
+                    (click)='selectRow(row)'
+                )
+                    .col-ts {{ formatTimestamp(row.timestampNs) }}
+                    .col-path {{ row.path }}
+                    .col-val {{ row.valuePreview }}
+                    .col-kind {{ row.kind }}
+
+        //- Row detail — only rendered when a row is selected so the
+        //- pane collapses cleanly when nothing is picked.
+        .row-detail(*ngIf='selectedRow')
+            .detail-head
+                span DETAIL
+                span.detail-path {{ selectedRow.path }}
+                button.detail-close((click)='selectRow(selectedRow)')
+                    i.fas.fa-times
+            pre.detail-body {{ selectedRowJson }}
+
+    //- ───────────────── Right pane: RPC controls ─────────────────
+    .pane.pane-ctrl
+        .pane-title RPC
+
+        .ctrl-block
+            .ctrl-label Mode
+            .ctrl-row
+                label([class.selected]='mode === "STREAM"')
+                    input(type='radio', name='mode', value='STREAM', [(ngModel)]='mode')
+                    span STREAM
+                label([class.selected]='mode === "ONCE"')
+                    input(type='radio', name='mode', value='ONCE', [(ngModel)]='mode')
+                    span ONCE
+                label([class.selected]='mode === "POLL"')
+                    input(type='radio', name='mode', value='POLL', [(ngModel)]='mode')
+                    span POLL
+
+        .ctrl-block(*ngIf='mode === "STREAM"')
+            .ctrl-label Sub-mode
+            .ctrl-row
+                label([class.selected]='streamMode === "TARGET_DEFINED"')
+                    input(type='radio', name='streamMode', value='TARGET_DEFINED', [(ngModel)]='streamMode')
+                    span TARGET
+                label([class.selected]='streamMode === "ON_CHANGE"')
+                    input(type='radio', name='streamMode', value='ON_CHANGE', [(ngModel)]='streamMode')
+                    span ON_CHANGE
+                label([class.selected]='streamMode === "SAMPLE"')
+                    input(type='radio', name='streamMode', value='SAMPLE', [(ngModel)]='streamMode')
+                    span SAMPLE
+
+        .ctrl-block(*ngIf='mode === "STREAM" && streamMode === "SAMPLE"')
+            .ctrl-label Sample interval (s)
+            input.ctrl-input(type='number', min='1', [(ngModel)]='sampleIntervalSec')
+
+        .ctrl-block
+            .ctrl-label Add path
+            input.ctrl-input(
+                type='text',
+                placeholder='/openconfig/…',
+                [(ngModel)]='newSubPath',
+                (keydown.enter)='addSubscription()'
+            )
+            button.ctrl-primary((click)='addSubscription()', [disabled]='!newSubPath.trim()')
+                i.fas.fa-plus.me-1
+                span Subscribe
+
+        .ctrl-block
+            .ctrl-label
+                span Capabilities
+                a.ctrl-refresh(
+                    href='javascript:void(0)',
+                    (click)='loadCapabilities()',
+                    [class.loading]='capabilitiesLoading',
+                    title='Refresh'
+                )
+                    i.fas.fa-sync-alt
+
+            .capabilities-panel(*ngIf='capabilities && !capabilitiesError')
+                .row
+                    span.k gNMI
+                    span.v {{ capabilities.gnmiVersion }}
+                .row
+                    span.k Encodings
+                    span.v {{ capabilities.supportedEncodings.join(', ') || '—' }}
+                .row
+                    span.k Models
+                    span.v {{ capabilities.supportedModels.length }}
+                .row
+                    span.k Vendor
+                    span.v {{ profile?.options?.vendor || '—' }}
+
+            .capabilities-loading(*ngIf='capabilitiesLoading && !capabilities')
+                i.fas.fa-spinner.fa-spin.me-2
+                span Fetching capabilities…
+
+            .capabilities-error(*ngIf='capabilitiesError && !capabilitiesLoading')
+                strong Capabilities failed
+                .err-detail {{ capabilitiesError }}
+
+    //- ───────────────── Status footer ─────────────────
+    .session-status
+        span.status-dot(
+            [class.live]='subscriptions.length && subscriptions[0].running',
+            [class.dead]='!subscriptions.length || !subscriptions[0].running'
+        )
+        span.mono {{ profile?.options?.host }}:{{ profile?.options?.port }}
+        span.sep ·
+        span {{ profile?.options?.security }}
+        span.sep ·
+        span {{ subscriptions.length }} subs
+        span.sep ·
+        span {{ totalReceived }} recv
+        span.right(*ngIf='receiveRate > 0') {{ receiveRate }} msg/s
