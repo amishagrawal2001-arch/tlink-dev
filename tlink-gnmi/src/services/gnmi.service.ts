@@ -134,10 +134,14 @@ export class GnmiService {
     }
 
     /**
-     * Reshape gnmic's Capabilities JSON into GnmiCapabilities. gnmic
-     * emits `{ supported_models: [{name, organization, version}], ...
-     * supported_encodings: [...], gnmi_version: "..." }` — we normalize
-     * casing / naming to match our interface.
+     * Reshape gnmic's Capabilities JSON into GnmiCapabilities.
+     *
+     * gnmic hands out `--format json` with HYPHENATED keys per JSON
+     * convention (`supported-models`, `supported-encodings`). Older
+     * builds and other formats used underscored snake_case. We accept
+     * every spelling we've seen in the wild — hyphenated first, then
+     * underscored, then camelCase — because a "0 models" panel with a
+     * healthy device would be actively misleading.
      */
     private parseCapabilities (raw: string): GnmiCapabilities {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -150,16 +154,22 @@ export class GnmiService {
         // Some gnmic versions return a top-level array with one entry,
         // others return an object — accept both.
         const cap = Array.isArray(parsed) ? parsed[0] : parsed
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const pick = (obj: any, ...keys: string[]): any => {
+            for (const k of keys) {
+                if (obj?.[k] !== undefined) { return obj[k] }
+            }
+            return undefined
+        }
         return {
-            gnmiVersion: cap?.gnmi_version ?? cap?.gNMI_version ?? 'unknown',
-            supportedModels: (cap?.supported_models ?? cap?.supportedModels ?? []).map((m: {
-                name?: string; organization?: string; version?: string
-            }) => ({
-                name: m.name ?? '',
-                organization: m.organization ?? '',
-                version: m.version ?? '',
-            })),
-            supportedEncodings: (cap?.supported_encodings ?? cap?.supportedEncodings ?? []),
+            gnmiVersion: pick(cap, 'version', 'gnmi-version', 'gnmi_version', 'gNMI_version') ?? 'unknown',
+            supportedModels: (pick(cap, 'supported-models', 'supported_models', 'supportedModels') ?? [])
+                .map((m: { name?: string; organization?: string; version?: string }) => ({
+                    name: m.name ?? '',
+                    organization: m.organization ?? '',
+                    version: m.version ?? '',
+                })),
+            supportedEncodings: pick(cap, 'supported-encodings', 'supported_encodings', 'supportedEncodings') ?? [],
         }
     }
 
