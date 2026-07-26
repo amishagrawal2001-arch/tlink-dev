@@ -872,6 +872,150 @@ $lv-cols: 1fr 110px 110px 80px 70px;
     &:hover:not(:disabled) { filter: brightness(1.1); }
 }
 
+// ─────────────────────── CATALOG PICKER ───────────────────────
+
+.catalog-block {
+    max-height: 380px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 0;
+
+    .catalog-count {
+        font-family: $mono-font;
+        background: var(--theme-bg-more);
+        color: var(--theme-fg-more-2);
+        padding: 1px 6px;
+        border-radius: 999px;
+        font-size: 9px;
+        margin-left: 6px;
+    }
+
+    .catalog-search {
+        font-size: 10px;
+    }
+}
+
+.catalog-empty {
+    color: var(--theme-fg-more-2);
+    font-size: 10px;
+    text-align: center;
+    padding: 12px;
+    font-style: italic;
+}
+
+.catalog-groups {
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.catalog-group {
+    background: var(--theme-bg-more);
+    border: 1px solid var(--theme-bg-less);
+    border-radius: $border-radius;
+    overflow: hidden;
+}
+
+.catalog-group-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    cursor: pointer;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--theme-fg-more-1);
+    font-weight: 600;
+
+    &:hover { background: var(--theme-bg-less); }
+
+    .chevron {
+        font-size: 8px;
+        transition: transform 0.12s ease-out;
+        color: var(--theme-fg-more-2);
+    }
+    &.expanded .chevron { transform: rotate(90deg); }
+
+    @media (prefers-reduced-motion: reduce) {
+        .chevron { transition: none; }
+    }
+
+    .category { flex: 1; }
+
+    .count {
+        font-family: $mono-font;
+        color: var(--theme-fg-more-2);
+        font-size: 9px;
+        letter-spacing: 0;
+        text-transform: none;
+        font-weight: 500;
+    }
+}
+
+.catalog-entries {
+    border-top: 1px solid var(--theme-bg-less);
+    display: flex;
+    flex-direction: column;
+}
+
+.catalog-entry {
+    padding: 6px 10px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--theme-bg-less);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+
+    &:last-child { border-bottom: none; }
+    &:hover { background: var(--theme-bg-less); }
+
+    .catalog-entry-head {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        justify-content: space-between;
+
+        .label {
+            color: var(--theme-fg);
+            font-size: 11px;
+            font-weight: 500;
+        }
+        .vendor {
+            font-family: $mono-font;
+            background: rgba(210, 153, 34, 0.15);
+            color: #d29922;
+            padding: 1px 5px;
+            border-radius: 999px;
+            font-size: 9px;
+            letter-spacing: 0.02em;
+        }
+    }
+
+    .catalog-path {
+        font-family: $mono-font;
+        font-size: 10px;
+        color: #79b8ff;
+        word-break: break-all;
+        line-height: 1.4;
+    }
+
+    .catalog-desc {
+        font-size: 10px;
+        color: var(--theme-fg-more-2);
+        line-height: 1.4;
+    }
+}
+
+// Make the book icon in the Add-path label match .ctrl-refresh state.
+.ctrl-refresh.on {
+    color: #79b8ff;
+}
+
 .capabilities-panel {
     background: var(--theme-bg-more);
     border: 1px solid var(--theme-bg-less);

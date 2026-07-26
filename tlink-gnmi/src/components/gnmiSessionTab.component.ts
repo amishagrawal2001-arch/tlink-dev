@@ -4,6 +4,7 @@ import { BaseTabComponent, NotificationsService, ProfilesService } from 'tlink-c
 import { GnmiCapabilities, GnmiNotification, GnmiProfile, GnmiSavedSubscription, GnmiStreamMode, GnmiSubscribeMode } from '../api'
 import { GnmiService, GnmiSubscribeHandle } from '../services/gnmi.service'
 import { FormattedValue, GnmiValueFormatterService } from '../services/valueFormatter.service'
+import { GnmiCatalogEntry, GnmiCatalogGroup, GnmiPathCatalogService } from '../services/pathCatalog.service'
 
 /** Center-pane view mode. Wire is the original per-notification log. */
 export type ViewMode = 'wire' | 'latest' | 'graphical'
@@ -242,7 +243,16 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     private notifications: NotificationsService
     private formatter: GnmiValueFormatterService
     private profilesService: ProfilesService
+    private catalog: GnmiPathCatalogService
     private zone: NgZone
+
+    // ─── Path catalog picker state ─────────────────────────────────
+    /** Text filter over the catalog picker. */
+    catalogQuery = ''
+    /** Which category accordion is currently expanded. Null = collapsed. */
+    catalogExpanded: string | null = null
+    /** Whether the whole catalog picker panel is visible. Collapses by default to keep the right pane calm. */
+    catalogVisible = false
 
     constructor (injector: Injector) {
         super(injector)
@@ -250,6 +260,7 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         this.notifications = injector.get(NotificationsService)
         this.formatter = injector.get(GnmiValueFormatterService)
         this.profilesService = injector.get(ProfilesService)
+        this.catalog = injector.get(GnmiPathCatalogService)
         this.zone = injector.get(NgZone)
         // NB: title is set in ngOnInit, deferred a microtask, to sidestep
         // ExpressionChangedAfterItHasBeenCheckedError. Setting it here
@@ -730,6 +741,55 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         const next = this.savedSubscriptions.filter(s => s.id !== saved.id)
         await this.persistSavedSubscriptions(next)
     }
+
+    // ─── Path catalog picker ────────────────────────────────────────
+
+    /** Filtered catalog groups matching the current query. Cheap enough to recompute per CD tick. */
+    get catalogGroups (): GnmiCatalogGroup[] {
+        return this.catalog.search(this.catalogQuery)
+    }
+
+    /** Total entry count across all currently-filtered groups — for the "N results" chip. */
+    get catalogResultCount (): number {
+        return this.catalogGroups.reduce((sum, g) => sum + g.entries.length, 0)
+    }
+
+    toggleCatalogVisible (): void {
+        this.catalogVisible = !this.catalogVisible
+        if (this.catalogVisible && !this.catalogExpanded && this.catalogGroups.length) {
+            // Auto-expand the first category so the picker's not a wall
+            // of collapsed headers on first open.
+            this.catalogExpanded = this.catalogGroups[0].category
+        }
+    }
+
+    toggleCatalogGroup (category: string): void {
+        this.catalogExpanded = this.catalogExpanded === category ? null : category
+    }
+
+    /**
+     * Pick a catalog entry — fills the path input + applies the entry's
+     * suggested mode / stream-mode / interval when present. Doesn't
+     * auto-subscribe: user reviews the pre-filled form and clicks
+     * Subscribe. This is deliberate — some paths have big blast
+     * radius (subtree subscribes) and one extra click is worth the
+     * accidental-subscribe protection.
+     */
+    pickCatalogEntry (entry: GnmiCatalogEntry): void {
+        this.newSubPath = entry.path
+        if (entry.suggestedMode) {
+            this.mode = entry.suggestedMode
+        }
+        if (entry.suggestedStreamMode) {
+            this.streamMode = entry.suggestedStreamMode
+        }
+        if (entry.suggestedIntervalSec) {
+            this.sampleIntervalSec = entry.suggestedIntervalSec
+        }
+    }
+
+    trackCatalogGroup = (_: number, g: GnmiCatalogGroup): string => g.category
+    trackCatalogEntry = (_: number, e: GnmiCatalogEntry): string => e.path
 
     /**
      * Central write path — mutates profile.options.savedSubscriptions

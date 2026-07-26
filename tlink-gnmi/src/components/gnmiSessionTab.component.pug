@@ -281,16 +281,60 @@
             input.ctrl-input(type='number', min='1', [(ngModel)]='sampleIntervalSec')
 
         .ctrl-block
-            .ctrl-label Add path
+            .ctrl-label
+                span Add path
+                a.ctrl-refresh(
+                    href='javascript:void(0)',
+                    (click)='toggleCatalogVisible()',
+                    [class.on]='catalogVisible',
+                    title='Browse the built-in path catalog'
+                )
+                    i.fas.fa-book-open
             input.ctrl-input(
                 type='text',
-                placeholder='/openconfig/…',
+                placeholder='/openconfig/… or pick from catalog ↓',
                 [(ngModel)]='newSubPath',
                 (keydown.enter)='addSubscription()'
             )
             button.ctrl-primary((click)='addSubscription()', [disabled]='!newSubPath.trim()')
                 i.fas.fa-plus.me-1
                 span Subscribe
+
+        //- Catalog picker — toggled by the book icon in the "Add path"
+        //- header. Categories collapsed by default; auto-expands the
+        //- first category on open so it's not a wall of headers. Click
+        //- an entry to fill the path input + apply suggested mode /
+        //- interval; user still hits Subscribe to actually start.
+        .ctrl-block.catalog-block(*ngIf='catalogVisible')
+            .ctrl-label
+                span Catalog
+                span.catalog-count {{ catalogResultCount }}
+            input.ctrl-input.catalog-search(
+                type='text',
+                placeholder='search paths…',
+                [(ngModel)]='catalogQuery'
+            )
+            .catalog-empty(*ngIf='!catalogGroups.length') No paths match.
+            .catalog-groups
+                .catalog-group(*ngFor='let group of catalogGroups; trackBy: trackCatalogGroup')
+                    .catalog-group-head(
+                        (click)='toggleCatalogGroup(group.category)',
+                        [class.expanded]='catalogExpanded === group.category'
+                    )
+                        i.fas.fa-chevron-right.chevron
+                        span.category {{ group.category }}
+                        span.count {{ group.entries.length }}
+                    .catalog-entries(*ngIf='catalogExpanded === group.category')
+                        .catalog-entry(
+                            *ngFor='let entry of group.entries; trackBy: trackCatalogEntry',
+                            (click)='pickCatalogEntry(entry)',
+                            title='Click to fill the path input'
+                        )
+                            .catalog-entry-head
+                                span.label {{ entry.label }}
+                                span.vendor(*ngIf='entry.vendor') {{ entry.vendor }}
+                            .catalog-path {{ entry.path }}
+                            .catalog-desc {{ entry.description }}
 
         .ctrl-block
             .ctrl-label
