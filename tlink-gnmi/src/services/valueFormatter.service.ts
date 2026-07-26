@@ -153,9 +153,16 @@ export class GnmiValueFormatterService {
      * heuristic naming — full paths would be too noisy.
      */
     leafName (path: string): string {
-        const [clean] = path.split('[')
-        const parts = clean.split('/').filter(Boolean)
-        return parts[parts.length - 1] ?? ''
+        // Take the LAST /-segment first, then strip any trailing
+        // [key=val] from that segment alone. Splitting the whole path
+        // on '[' would eat the middle list-key and return the wrong
+        // segment — a subtle bug that made every path with a middle
+        // list-key collapse to the same leaf name (breaking the
+        // Graphical view's fan-out detection).
+        const parts = path.split('/').filter(Boolean)
+        const last = parts[parts.length - 1] ?? ''
+        const [leaf] = last.split('[')
+        return leaf
     }
 
     private looksLikeTimestampLeaf (leaf: string): boolean {
