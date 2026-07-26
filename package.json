@@ -159,7 +159,9 @@
     "graph": "depcruise tlink-*/src --include-only '^tlink-' --output-type mermaid --output-to docs/code-graph.mmd && echo 'wrote docs/code-graph.mmd — paste into GitHub / any Mermaid viewer'",
     "graph:license": "depcruise tlink-license-client/src --output-type mermaid --output-to docs/code-graph-license.mmd && echo 'wrote docs/code-graph-license.mmd'",
     "graph:svg": "depcruise tlink-*/src --include-only '^tlink-' --output-type dot | dot -T svg -o docs/code-graph.svg && echo 'wrote docs/code-graph.svg (requires: brew install graphviz)'",
-    "graph:validate": "depcruise tlink-*/src --include-only '^tlink-'"
+    "graph:validate": "depcruise tlink-*/src --include-only '^tlink-'",
+    "fetch:gnmic": "node scripts/fetch-gnmic.mjs",
+    "fetch:gnmic:all": "node scripts/fetch-gnmic.mjs --all"
   },
   "type": "module",
   "private": true,

@@ -44,6 +44,7 @@ export const builtinPlugins = [
     'tlink-chatgpt',
     'tlink-ai-assistant',
     'tlink-api-client',
+    'tlink-gnmi',
 ]
 
 export const packagesWithDocs = [

@@ -47,3 +47,7 @@ dist2/
 dist3/
 dist4/
 extras-ollama/
+# gnmic binaries — fetched per-platform in CI via scripts/fetch-gnmic.mjs.
+# Not committed because they're 15-25MB per platform and reproducibly
+# downloadable + checksum-verified from the openconfig/gnmic releases.
+extras/gnmic/
