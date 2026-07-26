@@ -3,6 +3,10 @@ import { Component, Injector, Input, NgZone, OnDestroy } from '@angular/core'
 import { BaseTabComponent, NotificationsService } from 'tlink-core'
 import { GnmiCapabilities, GnmiNotification, GnmiProfile, GnmiStreamMode, GnmiSubscribeMode } from '../api'
 import { GnmiService, GnmiSubscribeHandle } from '../services/gnmi.service'
+import { FormattedValue, GnmiValueFormatterService } from '../services/valueFormatter.service'
+
+/** Center-pane view mode. Wire is the original per-notification log. */
+export type ViewMode = 'wire' | 'latest' | 'graphical'
 
 /**
  * One row rendered in the live-stream table. We keep a monotonic id so
@@ -18,6 +22,70 @@ interface StreamRow {
     valuePreview: string
     kind: 'update' | 'delete'
     subscriptionId: string
+}
+
+/**
+ * One deduped path in Latest values / Graphical views. Holds the
+ * current value, previous value (for delta), a bounded numeric-only
+ * history buffer for the sparkline / chart, and the last-updated
+ * timestamp so the row can render "N seconds ago".
+ *
+ * Non-numeric values still populate lastValue/prevValue but skip the
+ * history buffer — a sparkline over strings would be meaningless.
+ */
+interface LatestEntry {
+    path: string
+    lastValue: unknown
+    prevValue: unknown
+    lastTimestampNs: number
+    firstTimestampNs: number
+    updateCount: number
+    /** Cached formatted view. Recomputed on each update; template reads. */
+    formatted: FormattedValue
+    /** Cached formatted previous value — used to detect a text-level Δ for non-numeric kinds. */
+    prevFormatted: FormattedValue
+    /** Numeric history for the sparkline, oldest first. Bounded by MAX_HISTORY. */
+    history: number[]
+}
+
+/** One row rendered in the Latest-values view — path + entry + group. */
+interface LatestRow {
+    entry: LatestEntry
+    /** Short path (last two segments) for the row's leading column. */
+    shortPath: string
+}
+
+/**
+ * A group of Latest rows sharing the same parent path + list-key.
+ * All /components/component[name=RE0:CPU0]/cpu/utilization/state/*
+ * leaves collapse into one group so 8 CPUs × 7 leaves render as 8
+ * distinct sections instead of 56 flat rows.
+ */
+interface LatestGroup {
+    /** Stable id — used for *ngFor trackBy. */
+    id: string
+    /** Group header prefix, e.g. .../cpu/utilization/state. */
+    prefixPath: string
+    /** List-key chip, e.g. RE0:CPU0. Null when the group has no key. */
+    key: string | null
+    rows: LatestRow[]
+}
+
+/** A candidate metric for the Graphical view — one leaf shared by ≥2 components. */
+interface GraphMetric {
+    /** Suffix segment used as the metric label (e.g. "instant"). */
+    leaf: string
+    /** Full unique leaf pattern — parent-relative, used for matching. */
+    signature: string
+    /** How many components emit this leaf right now. */
+    componentCount: number
+}
+
+/** One card in the Graphical view — a component's history for the selected metric. */
+interface GraphCard {
+    /** List-key value shown as the card title (falls back to full path when there's no key). */
+    label: string
+    entry: LatestEntry
 }
 
 /**
@@ -71,6 +139,8 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     private static readonly MAX_STREAM_ROWS = 1000
     /** Truncate rendered value strings past this length. Full value stays available in row-detail. */
     private static readonly VALUE_PREVIEW_LEN = 240
+    /** Sparkline / chart-card history depth per path. */
+    private static readonly MAX_HISTORY = 40
 
     // ─── Left pane state ────────────────────────────────────────────
     subscriptions: ActiveSubscription[] = []
@@ -85,6 +155,8 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     capabilitiesLoading = false
 
     // ─── Center pane state ──────────────────────────────────────────
+    /** Which view is showing in the center pane. */
+    viewMode: ViewMode = 'wire'
     stream: StreamRow[] = []
     filter = ''
     paused = false
@@ -93,6 +165,25 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     totalReceived = 0
     /** Rolling messages-per-second, updated on a 1-Hz timer. */
     receiveRate = 0
+
+    /**
+     * Dedupe map for Latest / Graphical views — one entry per unique
+     * path with its current value + numeric history for the sparkline.
+     * Populated in `onNotification` alongside the wire-log push, so
+     * the two views stay in sync without a second data flow.
+     *
+     * Public for the template to read via getters (Angular templates
+     * can't access private fields on the component instance).
+     */
+    latestByPath = new Map<string, LatestEntry>()
+
+    /**
+     * When the user hasn't picked a metric for the Graphical view, we
+     * auto-select the first numeric leaf that ≥2 subscribed components
+     * share. Sticky once set so the auto-selection doesn't jitter as
+     * new subscriptions land — user can override with graphicalMetric.
+     */
+    graphicalMetric: string | null = null
 
     // Internal counters/timers.
     private rowIdSeq = 0
@@ -104,15 +195,28 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
      * they were reading a specific row.
      */
     private pausedBuffer: StreamRow[] = []
+    /**
+     * Latest values / Graphical views are computed getters. They can
+     * recompute up to once per notification (~10Hz worst case) which
+     * is cheap for our data shapes but starts adding up as the map
+     * grows. Cache the last derivation and invalidate on new data.
+     */
+    private latestGroupsCache: { seq: number; groups: LatestGroup[] } = { seq: -1, groups: [] }
+    private graphicalCache: { seq: number; metric: string | null; cards: GraphCard[] } =
+        { seq: -1, metric: null, cards: [] }
+
+    private latestDirtySeq = 0
 
     private gnmi: GnmiService
     private notifications: NotificationsService
+    private formatter: GnmiValueFormatterService
     private zone: NgZone
 
     constructor (injector: Injector) {
         super(injector)
         this.gnmi = injector.get(GnmiService)
         this.notifications = injector.get(NotificationsService)
+        this.formatter = injector.get(GnmiValueFormatterService)
         this.zone = injector.get(NgZone)
         // NB: title is set in ngOnInit, deferred a microtask, to sidestep
         // ExpressionChangedAfterItHasBeenCheckedError. Setting it here
@@ -252,12 +356,55 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
             subscriptionId: sub.id,
         }
 
+        // Latest / Graphical are DE-duped views over the same stream.
+        // Feed them every notification, even when the wire log is paused,
+        // so switching modes shows current state instead of a stale snapshot.
+        this.updateLatestEntry(n)
+
         if (this.paused) {
             this.pausedBuffer.push(row)
             this.pendingSincePause = this.pausedBuffer.length
             return
         }
         this.pushRow(row)
+    }
+
+    /**
+     * Merge one notification into the deduped Latest map. Existing
+     * entries roll their history buffer; new paths seed a fresh entry.
+     * Kept private + narrow so onNotification stays readable.
+     */
+    private updateLatestEntry (n: GnmiNotification): void {
+        const existing = this.latestByPath.get(n.path)
+        const formatted = this.formatter.format(n.value, n.path)
+        if (existing) {
+            existing.prevValue = existing.lastValue
+            existing.prevFormatted = existing.formatted
+            existing.lastValue = n.value
+            existing.formatted = formatted
+            existing.lastTimestampNs = n.timestampNs
+            existing.updateCount += 1
+            if (typeof n.value === 'number' && Number.isFinite(n.value)) {
+                existing.history.push(n.value)
+                if (existing.history.length > GnmiSessionTabComponent.MAX_HISTORY) {
+                    existing.history.shift()
+                }
+            }
+        } else {
+            const entry: LatestEntry = {
+                path: n.path,
+                lastValue: n.value,
+                prevValue: n.value,
+                lastTimestampNs: n.timestampNs,
+                firstTimestampNs: n.timestampNs,
+                updateCount: 1,
+                formatted,
+                prevFormatted: formatted,
+                history: typeof n.value === 'number' && Number.isFinite(n.value) ? [n.value] : [],
+            }
+            this.latestByPath.set(n.path, entry)
+        }
+        this.latestDirtySeq += 1
     }
 
     private pushRow (row: StreamRow): void {
@@ -307,6 +454,19 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         this.selectedRow = null
         this.pausedBuffer = []
         this.pendingSincePause = 0
+        // Wipe deduped state too — Clear should reset ALL views, not
+        // just the wire log, or the user is left with a "current" view
+        // that shows stale-post-clear values.
+        this.latestByPath.clear()
+        this.graphicalMetric = null
+        this.latestDirtySeq += 1
+    }
+
+    /** Switch center-pane mode. Kept as a method (not just a bound property) so we can clear per-mode transient state (row selection, filter, etc.) on switch. */
+    setViewMode (mode: ViewMode): void {
+        if (mode === this.viewMode) { return }
+        this.viewMode = mode
+        this.selectedRow = null
     }
 
     /** Serialize the current stream (or full buffer if paused) as JSONL for the clipboard. */
@@ -391,4 +551,222 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
 
     trackRowById = (_: number, r: StreamRow): number => r.id
     trackSubById = (_: number, s: ActiveSubscription): string => s.id
+    trackLatestGroup = (_: number, g: LatestGroup): string => g.id
+    trackLatestRow = (_: number, r: LatestRow): string => r.entry.path
+    trackGraphCard = (_: number, c: GraphCard): string => c.entry.path
+
+    // ─── Latest values view (derived) ───────────────────────────────
+
+    /**
+     * Group the deduped Latest entries by their parent path + list-key.
+     * Sorting: groups by list-key alphabetically (so RE0:CPU0 comes
+     * before CPU1), rows within a group by leaf name (so `avg`, `instant`,
+     * `max`, `min` land in a consistent order across groups). Result
+     * is cached against `latestDirtySeq` so we don't re-sort on every
+     * change-detection tick.
+     */
+    get latestGroups (): LatestGroup[] {
+        if (this.latestGroupsCache.seq === this.latestDirtySeq) {
+            return this.filterLatestGroups(this.latestGroupsCache.groups)
+        }
+        const buckets = new Map<string, { key: string | null; prefix: string; rows: LatestRow[] }>()
+        for (const entry of this.latestByPath.values()) {
+            const prefix = this.formatter.parentPath(entry.path)
+            const key = this.formatter.lastListKey(entry.path)
+            const bucketId = `${prefix} ${key ?? ''}`
+            let bucket = buckets.get(bucketId)
+            if (!bucket) {
+                bucket = { key, prefix, rows: [] }
+                buckets.set(bucketId, bucket)
+            }
+            bucket.rows.push({
+                entry,
+                shortPath: this.formatter.shortPath(entry.path, 1),
+            })
+        }
+        const groups: LatestGroup[] = [...buckets.entries()].map(([id, b]) => ({
+            id,
+            prefixPath: b.prefix,
+            key: b.key,
+            rows: b.rows.sort((a, b2) =>
+                this.formatter.leafName(a.entry.path).localeCompare(this.formatter.leafName(b2.entry.path))),
+        }))
+        groups.sort((a, b) => (a.key ?? '').localeCompare(b.key ?? '') || a.prefixPath.localeCompare(b.prefixPath))
+        this.latestGroupsCache = { seq: this.latestDirtySeq, groups }
+        return this.filterLatestGroups(groups)
+    }
+
+    /**
+     * Apply the toolbar filter to the group list — same substring
+     * match as the wire log. A group is included when any row matches;
+     * matching rows within an otherwise-hidden group still get shown.
+     */
+    private filterLatestGroups (groups: LatestGroup[]): LatestGroup[] {
+        const f = this.filter.trim().toLowerCase()
+        if (!f) { return groups }
+        const out: LatestGroup[] = []
+        for (const g of groups) {
+            const rows = g.rows.filter(r =>
+                r.entry.path.toLowerCase().includes(f) ||
+                r.entry.formatted.value.toLowerCase().includes(f),
+            )
+            if (rows.length) { out.push({ ...g, rows }) }
+        }
+        return out
+    }
+
+    /**
+     * Build the SVG `d` attribute for a sparkline over the entry's
+     * history. Returns two paths: the stroked line + the filled area
+     * underneath (already CSS-styled). Coordinates map history[i] to
+     * an x=0..100, y=0..22 box; y inverts so high values sit at top.
+     * Returns null when there's <2 points — a one-sample line would
+     * be misleading.
+     */
+    sparklinePaths (entry: LatestEntry): { line: string; fill: string; endX: number; endY: number } | null {
+        const h = entry.history
+        if (h.length < 2) { return null }
+        const min = Math.min(...h)
+        const max = Math.max(...h)
+        const range = max - min || 1
+        const dx = 100 / (h.length - 1)
+        const pts = h.map((v, i) => {
+            const x = i * dx
+            // Leave 2px padding top+bottom (spark box is 22px tall).
+            const y = 20 - ((v - min) / range) * 16
+            return [x, y] as const
+        })
+        const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')
+        const fill = `M0 22 L${line.slice(1)} L100,22 Z`
+        const [endX, endY] = pts[pts.length - 1]
+        return { line, fill, endX, endY }
+    }
+
+    /**
+     * Best-effort delta indicator string. Returns 'up' / 'down' / 'same'
+     * plus the signed magnitude for numeric values; for non-numerics
+     * it just reports 'changed' when the formatted string flipped.
+     */
+    deltaOf (entry: LatestEntry): { kind: 'up' | 'down' | 'same' | 'changed'; label: string } {
+        const a = entry.lastValue
+        const b = entry.prevValue
+        if (typeof a === 'number' && typeof b === 'number' && Number.isFinite(a) && Number.isFinite(b)) {
+            const d = a - b
+            if (d > 0) { return { kind: 'up', label: `▲ +${this.compactNumber(d)}` } }
+            if (d < 0) { return { kind: 'down', label: `▼ ${this.compactNumber(d)}` } }
+            return { kind: 'same', label: '·' }
+        }
+        if (entry.formatted.value !== entry.prevFormatted.value) {
+            return { kind: 'changed', label: '≠' }
+        }
+        return { kind: 'same', label: '·' }
+    }
+
+    private compactNumber (n: number): string {
+        if (Number.isInteger(n)) { return String(n) }
+        return String(Number(n.toFixed(2)))
+    }
+
+    /**
+     * Age of an entry as a compact string ("2s", "1m"). Recomputes on
+     * every change-detection pass so the age ticks up while the tab
+     * is open. Cheap — one Date.now() call per row.
+     */
+    ageLabel (entry: LatestEntry): string {
+        const ms = Date.now() - Math.floor(entry.lastTimestampNs / 1_000_000)
+        const s = Math.max(0, Math.round(ms / 1000))
+        if (s < 60) { return `${s}s` }
+        const m = Math.round(s / 60)
+        if (m < 60) { return `${m}m` }
+        return `${Math.round(m / 60)}h`
+    }
+
+    /** True when the row updated in the last ~5s. Drives the pulse dot. */
+    isFresh (entry: LatestEntry): boolean {
+        return Date.now() - Math.floor(entry.lastTimestampNs / 1_000_000) < 5000
+    }
+
+    // ─── Graphical view (derived) ───────────────────────────────────
+
+    /**
+     * List of leaves shared by ≥2 components — the picker options for
+     * the Graphical metric. Sorted by component count so the "most
+     * fanned-out" metric is first (usually the one the user wants).
+     */
+    get graphicalMetricCandidates (): GraphMetric[] {
+        const counts = new Map<string, number>()
+        for (const entry of this.latestByPath.values()) {
+            const leaf = this.formatter.leafName(entry.path)
+            counts.set(leaf, (counts.get(leaf) ?? 0) + 1)
+        }
+        const out: GraphMetric[] = []
+        for (const [leaf, componentCount] of counts) {
+            if (componentCount >= 2) {
+                out.push({ leaf, signature: leaf, componentCount })
+            }
+        }
+        out.sort((a, b) => b.componentCount - a.componentCount || a.leaf.localeCompare(b.leaf))
+        return out
+    }
+
+    /**
+     * Auto-select the first numeric leaf when the user hasn't picked.
+     * Numeric preference: entries with a populated history buffer beat
+     * ones without. Runs on-demand from the template.
+     */
+    get selectedGraphicalMetric (): string | null {
+        if (this.graphicalMetric) { return this.graphicalMetric }
+        const candidates = this.graphicalMetricCandidates
+        for (const cand of candidates) {
+            const anyNumeric = [...this.latestByPath.values()].some(e =>
+                this.formatter.leafName(e.path) === cand.leaf && e.history.length > 0,
+            )
+            if (anyNumeric) { return cand.leaf }
+        }
+        return candidates[0]?.leaf ?? null
+    }
+
+    /** Cards for the currently-selected metric — one per component that emits it. */
+    get graphicalCards (): GraphCard[] {
+        const metric = this.selectedGraphicalMetric
+        if (!metric) { return [] }
+        if (this.graphicalCache.seq === this.latestDirtySeq && this.graphicalCache.metric === metric) {
+            return this.graphicalCache.cards
+        }
+        const cards: GraphCard[] = []
+        for (const entry of this.latestByPath.values()) {
+            if (this.formatter.leafName(entry.path) !== metric) { continue }
+            if (!entry.history.length) { continue }
+            const key = this.formatter.lastListKey(entry.path)
+            cards.push({
+                label: key ?? this.formatter.shortPath(entry.path, 2),
+                entry,
+            })
+        }
+        cards.sort((a, b) => a.label.localeCompare(b.label))
+        this.graphicalCache = { seq: this.latestDirtySeq, metric, cards }
+        return cards
+    }
+
+    /**
+     * SVG path for a card's chart. Same coordinate space as the
+     * sparkline but taller (0..50 y) and includes area fill.
+     */
+    chartPaths (entry: LatestEntry): { line: string; area: string; endX: number; endY: number; min: number; max: number } | null {
+        const h = entry.history
+        if (h.length < 2) { return null }
+        const min = Math.min(...h)
+        const max = Math.max(...h)
+        const range = max - min || 1
+        const dx = 100 / (h.length - 1)
+        const pts = h.map((v, i) => {
+            const x = i * dx
+            const y = 46 - ((v - min) / range) * 40
+            return [x, y] as const
+        })
+        const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')
+        const area = `M0 50 L${line.slice(1)} L100,50 Z`
+        const [endX, endY] = pts[pts.length - 1]
+        return { line, area, endX, endY, min, max }
+    }
 }
