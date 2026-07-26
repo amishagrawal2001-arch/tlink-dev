@@ -114,16 +114,21 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         this.gnmi = injector.get(GnmiService)
         this.notifications = injector.get(NotificationsService)
         this.zone = injector.get(NgZone)
-        this.setTitle('gNMI')
+        // NB: title is set in ngOnInit, deferred a microtask, to sidestep
+        // ExpressionChangedAfterItHasBeenCheckedError. Setting it here
+        // AND in ngOnInit trips the check because the parent tab-header
+        // reads it between the two writes.
     }
 
     ngOnInit (): void {
         // profile is @Input — declared present but Angular may not
         // have bound it yet when this fires. Guard defensively.
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-        if (this.profile) {
-            this.setTitle(`gNMI · ${this.profile.name}`)
-        }
+        const label = this.profile ? `gNMI · ${this.profile.name}` : 'gNMI'
+        // Defer to next microtask so the parent tab-header has already
+        // committed its initial read; setting synchronously here throws
+        // NG0100 (ExpressionChangedAfterItHasBeenCheckedError).
+        void Promise.resolve().then(() => this.setTitle(label))
         // Kick off a Capabilities fetch in the background so the right
         // pane has something to show. Non-blocking — user can already
         // add subscriptions while this races.
