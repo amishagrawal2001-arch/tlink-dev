@@ -171,6 +171,73 @@ $border-radius: 5px;
 
     &:hover { background: var(--theme-bg-less); color: var(--theme-fg); }
     &.danger:hover { color: #f85149; }
+    // Starred state — yellow filled star. Same hue we use for
+    // .lv-col-delta.delta-changed so the "attention" color stays
+    // consistent across the tab.
+    &.starred { color: #d29922; }
+    &.starred:hover { color: #f2a12a; background: rgba(210, 153, 34, 0.12); }
+}
+
+// ─────────────────────── SAVED SUBSCRIPTIONS ───────────────────────
+
+.saved-title {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--theme-bg-less);
+    border-bottom: 1px solid var(--theme-bg-less);
+}
+
+// Saved rows visually distinct from Active — dashed border + slightly
+// muted so the eye reads them as "templates, not live state".
+.saved-item {
+    padding: 8px 10px;
+    border-radius: $border-radius;
+    background: transparent;
+    border: 1px dashed var(--theme-bg-less);
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    position: relative;
+    cursor: pointer;
+
+    &:hover {
+        background: var(--theme-bg-more);
+        border-style: solid;
+        border-color: rgba(88, 166, 255, 0.4);
+    }
+
+    .sub-path {
+        color: var(--theme-fg-more-1);
+        padding-right: 30px;  // leave room for the remove button
+    }
+
+    // Chevron-style bolt for auto-start. Off state is muted; on state
+    // uses the accent color to signal "this will fire on tab open".
+    .auto-start {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        margin-left: auto;
+        padding: 1px 6px;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--theme-fg-more-2);
+        border: 1px solid var(--theme-bg-less);
+        cursor: pointer;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        letter-spacing: 0.03em;
+
+        i { font-size: 8px; }
+
+        &:hover { border-color: var(--theme-fg-more-2); color: var(--theme-fg-more-1); }
+        &.on {
+            background: rgba(88, 166, 255, 0.15);
+            color: #79b8ff;
+            border-color: rgba(88, 166, 255, 0.4);
+        }
+        &.on:hover { background: rgba(88, 166, 255, 0.22); }
+    }
 }
 
 // ─────────────────────── CENTER PANE: live stream ───────────────────────

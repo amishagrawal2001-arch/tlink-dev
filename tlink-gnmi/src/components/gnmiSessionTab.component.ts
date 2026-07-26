@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/explicit-module-boundary-types */
 import { Component, Injector, Input, NgZone, OnDestroy } from '@angular/core'
-import { BaseTabComponent, NotificationsService } from 'tlink-core'
-import { GnmiCapabilities, GnmiNotification, GnmiProfile, GnmiStreamMode, GnmiSubscribeMode } from '../api'
+import { BaseTabComponent, NotificationsService, ProfilesService } from 'tlink-core'
+import { GnmiCapabilities, GnmiNotification, GnmiProfile, GnmiSavedSubscription, GnmiStreamMode, GnmiSubscribeMode } from '../api'
 import { GnmiService, GnmiSubscribeHandle } from '../services/gnmi.service'
 import { FormattedValue, GnmiValueFormatterService } from '../services/valueFormatter.service'
 
@@ -89,6 +89,27 @@ interface GraphCard {
 }
 
 /**
+ * Blob persisted by getRecoveryToken() and passed back on tab restore
+ * via the @Input savedState. Deliberately minimal — just enough to
+ * re-subscribe. Stream history isn't restored because a subscription
+ * is a live stream that negotiates fresh with the target anyway.
+ */
+export interface GnmiRecoverySavedState {
+    /** Snapshot of active subscriptions at tab-close time. */
+    activeSubscriptions: GnmiRecoveredSubscription[]
+    /** Center-pane view mode the user was on. */
+    viewMode?: ViewMode
+}
+
+/** One recovered subscription — enough to reissue the subscribe RPC. */
+export interface GnmiRecoveredSubscription {
+    path: string
+    mode: GnmiSubscribeMode
+    streamMode: GnmiStreamMode
+    sampleIntervalSec: number
+}
+
+/**
  * User-configured entry in the left pane. Owns the underlying
  * GnmiSubscribeHandle so we can tear it down when the row is removed
  * without going through the service.
@@ -134,6 +155,14 @@ interface ActiveSubscription {
 })
 export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestroy {
     @Input() profile: GnmiProfile
+
+    /**
+     * Recovery payload — populated by GnmiRecoveryProvider when the
+     * tab is restored across an app restart. Shape mirrors what
+     * getRecoveryToken() emits: a list of the previously-active
+     * subscriptions to re-subscribe as soon as the tab boots.
+     */
+    @Input() savedState: GnmiRecoverySavedState | null = null
 
     /** Maximum notifications kept in the live-stream ring buffer. */
     private static readonly MAX_STREAM_ROWS = 1000
@@ -207,9 +236,12 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
 
     private latestDirtySeq = 0
 
+    // NB: `config: ConfigService` is inherited protected on BaseTabComponent
+    // — no need to redeclare or re-inject.
     private gnmi: GnmiService
     private notifications: NotificationsService
     private formatter: GnmiValueFormatterService
+    private profilesService: ProfilesService
     private zone: NgZone
 
     constructor (injector: Injector) {
@@ -217,6 +249,7 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         this.gnmi = injector.get(GnmiService)
         this.notifications = injector.get(NotificationsService)
         this.formatter = injector.get(GnmiValueFormatterService)
+        this.profilesService = injector.get(ProfilesService)
         this.zone = injector.get(NgZone)
         // NB: title is set in ngOnInit, deferred a microtask, to sidestep
         // ExpressionChangedAfterItHasBeenCheckedError. Setting it here
@@ -250,6 +283,57 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
                 }
             }, 1000)
         })
+
+        // Priority order for what to auto-subscribe on tab open:
+        //   1. Recovery savedState  — user had these running when the
+        //      app was last closed; restore verbatim.
+        //   2. Saved subs with autoStart=true — user's opt-in defaults
+        //      for this target.
+        // We deliberately don't do both — if recovery data is present
+        // it's more specific than the saved defaults, and doubling up
+        // would spawn duplicate subprocesses.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (this.savedState?.activeSubscriptions?.length) {
+            for (const s of this.savedState.activeSubscriptions) {
+                this.spawnSubscription(s)
+            }
+            if (this.savedState.viewMode) {
+                this.viewMode = this.savedState.viewMode
+            }
+        } else {
+            for (const saved of this.savedSubscriptions) {
+                if (saved.autoStart) {
+                    this.spawnSubscription({
+                        path: saved.path,
+                        mode: saved.mode,
+                        streamMode: saved.streamMode,
+                        sampleIntervalSec: saved.sampleIntervalSec,
+                    })
+                }
+            }
+        }
+    }
+
+    /**
+     * Serialize live tab state so tlink-core's tab-recovery layer can
+     * persist it and hand it back on next app boot. Returning null
+     * would skip recovery entirely; we always return a token so the
+     * tab reopens on its own target even if no subs were live.
+     */
+    async getRecoveryToken (): Promise<any> {
+        return {
+            type: 'app:gnmi-tab',
+            profile: this.profile,
+            savedState: {
+                activeSubscriptions: this.subscriptions.map(s => ({
+                    path: s.path,
+                    mode: s.mode,
+                    streamMode: s.streamMode,
+                    sampleIntervalSec: s.sampleIntervalSec,
+                })),
+                viewMode: this.viewMode,
+            } satisfies GnmiRecoverySavedState,
+        }
     }
 
     ngOnDestroy (): void {
@@ -267,18 +351,34 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         const path = this.newSubPath.trim()
         if (!path) { return }
         this.newSubPath = ''
-        const sub: ActiveSubscription = {
-            id: `${Date.now()}-${Math.floor((this.rowIdSeq + 1) % 1000)}`,
+        this.spawnSubscription({
             path,
             mode: this.mode,
             streamMode: this.streamMode,
             sampleIntervalSec: this.sampleIntervalSec,
+        })
+    }
+
+    /**
+     * Create an ActiveSubscription record + start it. Extracted so both
+     * addSubscription (user typed a path) and the tab-open auto-start
+     * paths (recovery + saved-autoStart) share the same construction
+     * shape without duplicating field initialization.
+     */
+    private spawnSubscription (spec: GnmiRecoveredSubscription): ActiveSubscription {
+        const sub: ActiveSubscription = {
+            id: `${Date.now()}-${Math.floor((this.rowIdSeq + 1) % 1000)}`,
+            path: spec.path,
+            mode: spec.mode,
+            streamMode: spec.streamMode,
+            sampleIntervalSec: spec.sampleIntervalSec,
             running: false,
             receiveCount: 0,
             handle: null,
         }
         this.subscriptions = [...this.subscriptions, sub]
         this.startSubscription(sub)
+        return sub
     }
 
     removeSubscription (sub: ActiveSubscription): void {
@@ -554,6 +654,102 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     trackLatestGroup = (_: number, g: LatestGroup): string => g.id
     trackLatestRow = (_: number, r: LatestRow): string => r.entry.path
     trackGraphCard = (_: number, c: GraphCard): string => c.entry.path
+    trackSavedById = (_: number, s: GnmiSavedSubscription): string => s.id
+
+    // ─── Saved subscriptions ────────────────────────────────────────
+
+    /**
+     * Getter over profile.options.savedSubscriptions so the template
+     * can *ngFor without an existence check on every render. Returns
+     * a fresh empty array when the profile hasn't been starred against
+     * yet — never null.
+     */
+    get savedSubscriptions (): GnmiSavedSubscription[] {
+        return this.profile.options.savedSubscriptions ?? []
+    }
+
+    /** True when an active subscription matches a saved template by (path, mode, streamMode, interval). */
+    isSubscriptionSaved (sub: ActiveSubscription): boolean {
+        return this.savedSubscriptions.some(s =>
+            s.path === sub.path &&
+            s.mode === sub.mode &&
+            s.streamMode === sub.streamMode &&
+            s.sampleIntervalSec === sub.sampleIntervalSec,
+        )
+    }
+
+    /**
+     * Star / unstar an active subscription. Persists via
+     * ProfilesService + ConfigService — the write flows through the
+     * same path Settings uses so file sync + hot-reload behave
+     * identically.
+     */
+    async toggleSaved (sub: ActiveSubscription): Promise<void> {
+        const matchIdx = this.savedSubscriptions.findIndex(s =>
+            s.path === sub.path &&
+            s.mode === sub.mode &&
+            s.streamMode === sub.streamMode &&
+            s.sampleIntervalSec === sub.sampleIntervalSec,
+        )
+        const next = [...this.savedSubscriptions]
+        if (matchIdx >= 0) {
+            next.splice(matchIdx, 1)
+        } else {
+            next.push({
+                id: `sav-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+                path: sub.path,
+                mode: sub.mode,
+                streamMode: sub.streamMode,
+                sampleIntervalSec: sub.sampleIntervalSec,
+                autoStart: false,
+            })
+        }
+        await this.persistSavedSubscriptions(next)
+        this.notifications.info(matchIdx >= 0 ? 'Subscription unstarred' : 'Subscription starred')
+    }
+
+    /** Kick off a subscribe from a saved template. Reuses the standard start path so behavior matches Add-path. */
+    subscribeFromSaved (saved: GnmiSavedSubscription): void {
+        this.spawnSubscription({
+            path: saved.path,
+            mode: saved.mode,
+            streamMode: saved.streamMode,
+            sampleIntervalSec: saved.sampleIntervalSec,
+        })
+    }
+
+    /** Flip autoStart on a saved template. Persists immediately. */
+    async toggleSavedAutoStart (saved: GnmiSavedSubscription): Promise<void> {
+        const next = this.savedSubscriptions.map(s =>
+            s.id === saved.id ? { ...s, autoStart: !s.autoStart } : s,
+        )
+        await this.persistSavedSubscriptions(next)
+    }
+
+    async removeSaved (saved: GnmiSavedSubscription): Promise<void> {
+        const next = this.savedSubscriptions.filter(s => s.id !== saved.id)
+        await this.persistSavedSubscriptions(next)
+    }
+
+    /**
+     * Central write path — mutates profile.options.savedSubscriptions
+     * to a new array, forwards to ProfilesService.writeProfile (which
+     * updates the config store), then flushes to disk. Split so all
+     * mutations (add / remove / toggle) touch the same path and
+     * config-file writes stay consistent.
+     */
+    private async persistSavedSubscriptions (next: GnmiSavedSubscription[]): Promise<void> {
+        // Some profile shapes ship without options populated at all —
+        // shouldn't happen for gNMI but the defensive init avoids
+        // throwing if the profile came from a legacy config.
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (!this.profile.options) {
+            this.profile.options = {} as GnmiProfile['options']
+        }
+        this.profile.options.savedSubscriptions = next
+        await this.profilesService.writeProfile(this.profile)
+        await this.config.save()
+    }
 
     // ─── Latest values view (derived) ───────────────────────────────
 

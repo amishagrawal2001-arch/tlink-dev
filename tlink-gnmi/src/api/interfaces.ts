@@ -82,6 +82,37 @@ export interface GnmiProfileOptions {
     vendor?: 'arista' | 'cisco-iosxr' | 'juniper-junos' | 'nokia-srlinux' | 'nokia-sros' | 'other'
     /** Free-form gRPC dial timeout in ms. Default 10000. */
     timeoutMs?: number
+
+    /**
+     * Persisted per-target subscription templates. Populated when the
+     * user "stars" an active subscription; consumed when the session
+     * tab opens to seed the Saved section (and auto-start the ones
+     * flagged autoStart). Kept optional so existing profiles don't
+     * need migration on upgrade.
+     */
+    savedSubscriptions?: GnmiSavedSubscription[]
+}
+
+/**
+ * One entry in a profile's saved-subscriptions list. Same shape the UI
+ * uses for an active subscription, minus the runtime state — enough to
+ * reconstruct a working subscribe request on click.
+ */
+export interface GnmiSavedSubscription {
+    /** Stable id so the star-toggle can match an existing entry. */
+    id: string
+    /** gNMI path to subscribe to. */
+    path: string
+    /** Subscribe RPC mode this template was starred as. */
+    mode: GnmiSubscribeMode
+    /** Stream sub-mode when mode=STREAM. */
+    streamMode: GnmiStreamMode
+    /** Sample interval in seconds — matches the UI's editable unit. */
+    sampleIntervalSec: number
+    /** When true, this saved sub subscribes automatically on tab open. */
+    autoStart: boolean
+    /** Optional user-editable display name. Defaults to path when unset. */
+    label?: string
 }
 
 /**

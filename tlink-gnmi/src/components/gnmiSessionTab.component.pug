@@ -18,6 +18,13 @@
                 .sub-error(*ngIf='sub.lastError') {{ sub.lastError }}
                 .sub-actions
                     button.sub-btn(
+                        (click)='toggleSaved(sub)',
+                        [class.starred]='isSubscriptionSaved(sub)',
+                        [title]='isSubscriptionSaved(sub) ? "Unstar subscription (saved to profile)" : "Star subscription (save to profile)"'
+                    )
+                        i.fas.fa-star(*ngIf='isSubscriptionSaved(sub)')
+                        i.far.fa-star(*ngIf='!isSubscriptionSaved(sub)')
+                    button.sub-btn(
                         (click)='toggleSubscription(sub)',
                         [title]='sub.running ? "Pause subscription" : "Resume subscription"'
                     )
@@ -30,6 +37,39 @@
 
             .empty-hint(*ngIf='!subscriptions.length')
                 | No subscriptions yet — add a path in the right pane to start streaming.
+
+        //- Saved subscriptions — the "starred" templates for this
+        //- target. Kept below Active so the eye lands on live state
+        //- first. Auto-start toggle persists to profile; click the
+        //- path or the play button to subscribe on demand.
+        div(*ngIf='savedSubscriptions.length')
+            .pane-title.saved-title
+                span SAVED
+                span.count {{ savedSubscriptions.length }}
+
+            .sub-list
+                .saved-item(
+                    *ngFor='let saved of savedSubscriptions; trackBy: trackSavedById',
+                    (click)='subscribeFromSaved(saved)',
+                    title='Click to subscribe'
+                )
+                    .sub-path {{ saved.label || saved.path }}
+                    .sub-meta
+                        span.mode {{ saved.mode }} · {{ saved.streamMode }}
+                        span.rate(*ngIf='saved.mode === "STREAM" && saved.streamMode === "SAMPLE"') {{ saved.sampleIntervalSec }}s
+                        span.auto-start(
+                            [class.on]='saved.autoStart',
+                            (click)='toggleSavedAutoStart(saved); $event.stopPropagation()',
+                            [title]='saved.autoStart ? "Auto-start ON — click to disable" : "Auto-start OFF — click to enable"'
+                        )
+                            i.fas.fa-bolt
+                            span Auto
+                    .sub-actions
+                        button.sub-btn.danger(
+                            (click)='removeSaved(saved); $event.stopPropagation()',
+                            title='Remove from saved'
+                        )
+                            i.fas.fa-times
 
     //- ───────────────── Center pane: live stream ─────────────────
     .pane.pane-stream
