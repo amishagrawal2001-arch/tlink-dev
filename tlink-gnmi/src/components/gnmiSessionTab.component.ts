@@ -117,6 +117,37 @@ export interface GnmiRecoveredSubscription {
     sampleIntervalSec: number
 }
 
+/** One axis tick — position in viewBox space plus its display label. */
+interface AxisTick {
+    pos: number
+    label: string
+}
+
+/** Full data model for the expanded chart view. */
+interface ExpandedChart {
+    line: string
+    area: string
+    min: number
+    max: number
+    sampleCount: number
+    windowSpanLabel: string
+    useRate: boolean
+    yTicks: AxisTick[]
+    xTicks: AxisTick[]
+    chartX0: number; chartX1: number
+    chartY0: number; chartY1: number
+    hover: ExpandedChartHover | null
+}
+
+/** Tooltip contents for the hover crosshair. */
+interface ExpandedChartHover {
+    x: number
+    y: number
+    value: string
+    unit: string
+    ago: string
+}
+
 /**
  * User-configured entry in the left pane. Owns the underlying
  * GnmiSubscribeHandle so we can tear it down when the row is removed
@@ -216,6 +247,16 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         { label: 'Value', value: 'value' },
         { label: 'Rate', value: 'rate' },
     ]
+
+    /**
+     * When set, the Graphical grid is replaced by a full-pane detailed
+     * chart for this specific path. Stored as PATH not entry reference
+     * so a clear-and-recreate elsewhere doesn't orphan the view.
+     */
+    expandedEntryPath: string | null = null
+
+    /** Hover state for the expanded chart — sample index the mouse is closest to. */
+    hoverIndex: number | null = null
 
     /** Timestamps parallel to history entries, so we can window by wall-clock. */
     private static readonly WINDOW_CHOICES: { label: string; sec: number }[] = [
@@ -1356,6 +1397,151 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
             rateTs.push(ts[i])
         }
         return [rateVals, rateTs]
+    }
+
+    // ─── Expanded card view ─────────────────────────────────────────
+
+    expandCard (card: GraphCard): void {
+        this.expandedEntryPath = card.entry.path
+        this.hoverIndex = null
+    }
+
+    closeExpanded (): void {
+        this.expandedEntryPath = null
+        this.hoverIndex = null
+    }
+
+    /** Currently-expanded entry, resolved from the path stored in state. */
+    get expandedEntry (): LatestEntry | null {
+        if (!this.expandedEntryPath) { return null }
+        return this.latestByPath.get(this.expandedEntryPath) ?? null
+    }
+
+    /** List-key or short-path label for the expanded card header. */
+    get expandedLabel (): string {
+        const e = this.expandedEntry
+        if (!e) { return '' }
+        return this.formatter.lastListKey(e.path) ?? this.formatter.shortPath(e.path, 2)
+    }
+
+    /** Chart data for the expanded view — larger viewBox, keeps axis-tick data. */
+    get expandedChart (): ExpandedChart | null {
+        const e = this.expandedEntry
+        if (!e) { return null }
+        const useRate = this.shouldPlotRate(e.path)
+        const [hRaw, tsRaw] = this.windowedHistory(e)
+        const [values, ts] = useRate ? this.toRateSeries(hRaw, tsRaw) : [hRaw, tsRaw]
+        if (!values.length) { return null }
+
+        // viewBox: 800 wide × 300 tall. Reserve gutters for axis
+        // labels: 60 left (y-axis), 30 bottom (x-axis), 10 top / 20
+        // right for breathing room.
+        const chartX0 = 60
+        const chartX1 = 780
+        const chartY0 = 10
+        const chartY1 = 260
+        const chartW = chartX1 - chartX0
+        const chartH = chartY1 - chartY0
+
+        const min = Math.min(...values)
+        const max = Math.max(...values)
+        const yRange = max - min || 1
+        const dx = values.length > 1 ? chartW / (values.length - 1) : 0
+        const pts = values.map((v, i) => ({
+            x: chartX0 + i * dx,
+            y: chartY1 - ((v - min) / yRange) * chartH,
+            value: v,
+            tsMs: ts[i],
+        }))
+        const line = pts.map((p, i) =>
+            `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`,
+        ).join(' ')
+        const area = pts.length
+            ? `M${chartX0},${chartY1} L${line.slice(1)} L${pts[pts.length - 1].x.toFixed(1)},${chartY1} Z`
+            : ''
+
+        // Y-axis ticks — five evenly-spaced values.
+        const yTicks: AxisTick[] = []
+        for (let i = 0; i <= 4; i++) {
+            const frac = i / 4
+            const value = min + yRange * (1 - frac)
+            yTicks.push({
+                pos: chartY0 + frac * chartH,
+                label: useRate ? this.formatRateValue(value, e.path) : this.compactNumber(value),
+            })
+        }
+
+        // X-axis ticks — five evenly-spaced sample points showing
+        // relative time-ago. Use the endpoint's timestamp as "now" so
+        // ticks line up with actual samples.
+        const xTicks: AxisTick[] = []
+        const endTs = ts[ts.length - 1]
+        const [startTs] = ts
+        for (let i = 0; i <= 4; i++) {
+            const frac = i / 4
+            const tickTs = startTs + (endTs - startTs) * frac
+            const agoMs = endTs - tickTs
+            xTicks.push({
+                pos: chartX0 + frac * chartW,
+                label: agoMs === 0 ? 'now' : `-${this.humanizeSpan(agoMs)}`,
+            })
+        }
+
+        // Hover crosshair position + tooltip data.
+        let hover: ExpandedChartHover | null = null
+        if (this.hoverIndex !== null && this.hoverIndex >= 0 && this.hoverIndex < pts.length) {
+            const p = pts[this.hoverIndex]
+            const agoMs = endTs - p.tsMs
+            hover = {
+                x: p.x,
+                y: p.y,
+                value: useRate ? this.formatRateValue(p.value, e.path) : this.compactNumber(p.value),
+                unit: useRate ? this.rateUnit(e.path) : e.formatted.unit,
+                ago: agoMs === 0 ? 'now' : `${this.humanizeSpan(agoMs)} ago`,
+            }
+        }
+
+        return {
+            line, area, min, max,
+            sampleCount: values.length,
+            windowSpanLabel: this.humanizeSpan(endTs - startTs),
+            useRate, yTicks, xTicks,
+            chartX0, chartX1, chartY0, chartY1,
+            hover,
+        }
+    }
+
+    /**
+     * Mouse hover on the expanded chart — compute the nearest sample
+     * index in viewBox space. Called from the template with the raw
+     * MouseEvent, plus the SVG element reference so we can convert
+     * client coordinates into viewBox coordinates.
+     */
+    onExpandedHover (event: MouseEvent, svgEl: SVGSVGElement): void {
+        const chart = this.expandedChart
+        if (!chart) { return }
+        const rect = svgEl.getBoundingClientRect()
+        // Normalize to viewBox x-space (viewBox is 800 wide).
+        const viewX = ((event.clientX - rect.left) / rect.width) * 800
+        // Bail out if the pointer's off the plot area.
+        if (viewX < chart.chartX0 || viewX > chart.chartX1) {
+            this.hoverIndex = null
+            return
+        }
+        const { useRate } = chart
+        const e = this.expandedEntry
+        if (!e) { return }
+        const [hRaw, tsRaw] = this.windowedHistory(e)
+        const [values] = useRate ? this.toRateSeries(hRaw, tsRaw) : [hRaw, tsRaw]
+        if (values.length < 2) { this.hoverIndex = values.length === 1 ? 0 : null; return }
+        const chartW = chart.chartX1 - chart.chartX0
+        const dx = chartW / (values.length - 1)
+        const idx = Math.round((viewX - chart.chartX0) / dx)
+        this.hoverIndex = Math.max(0, Math.min(values.length - 1, idx))
+    }
+
+    onExpandedLeave (): void {
+        this.hoverIndex = null
     }
 
     /** Human-facing unit for a rate value on a given path. */

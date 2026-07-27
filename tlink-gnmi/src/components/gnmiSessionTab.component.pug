@@ -255,8 +255,12 @@
                         .k Latest
                         .v {{ graphicalCards[0]?.entry.formatted.value }}{{ graphicalCards[0]?.entry.formatted.unit }}
 
-                .gr-grid
-                    .gr-card(*ngFor='let card of graphicalCards; trackBy: trackGraphCard')
+                .gr-grid(*ngIf='!expandedEntryPath')
+                    .gr-card(
+                        *ngFor='let card of graphicalCards; trackBy: trackGraphCard',
+                        (click)='expandCard(card)',
+                        title='Click to expand'
+                    )
                         .gr-card-head
                             span.gr-card-label
                                 strong {{ card.label }}
@@ -295,6 +299,60 @@
                                 ng-container(*ngIf='!chartPaths(card.entry)')
                                     | {{ ageLabel(card.entry) }} ago
                             span([ngClass]='"delta-" + deltaOf(card.entry).kind') {{ deltaOf(card.entry).label }}
+
+                //- ───────────── Expanded card view ─────────────
+                //- Full-pane detail — replaces the grid when a card is
+                //- clicked. Shows a bigger chart with real x/y axes +
+                //- hover crosshair. Escape / back button returns to grid.
+                .gr-expanded(*ngIf='expandedEntryPath && expandedChart as ec')
+                    .gr-expanded-head
+                        button.gr-expanded-back((click)='closeExpanded()', title='Back to grid')
+                            i.fas.fa-arrow-left.me-1
+                            span Back
+                        span.title {{ selectedGraphicalMetric }}
+                        span.chip {{ expandedLabel }}
+                        span.chip.rate(*ngIf='ec.useRate') rate
+                        span.spacer
+                        span.samples {{ ec.sampleCount }} samples · last {{ ec.windowSpanLabel }}
+                    .gr-expanded-value
+                        | {{ ec.hover ? ec.hover.value : (chartPaths(expandedEntry).currentLabel) }}
+                        span.unit
+                            | {{ ec.hover ? ec.hover.unit : chartPaths(expandedEntry).currentUnit }}
+                        span.at(*ngIf='ec.hover')
+                            | &nbsp;· {{ ec.hover.ago }}
+                    .gr-expanded-chart-wrap
+                        svg(
+                            #expandedSvg,
+                            viewBox='0 0 800 300',
+                            preserveAspectRatio='none',
+                            (mousemove)='onExpandedHover($event, expandedSvg)',
+                            (mouseleave)='onExpandedLeave()'
+                        )
+                            //- Y-axis gridlines + labels
+                            g.axis-y
+                                g(*ngFor='let t of ec.yTicks')
+                                    line.grid-line([attr.x1]='ec.chartX0', [attr.x2]='ec.chartX1',
+                                                   [attr.y1]='t.pos', [attr.y2]='t.pos')
+                                    text.axis-label([attr.x]='ec.chartX0 - 6', [attr.y]='t.pos + 3',
+                                                    text-anchor='end') {{ t.label }}
+                            //- X-axis baseline + tick labels
+                            g.axis-x
+                                line.axis-line([attr.x1]='ec.chartX0', [attr.x2]='ec.chartX1',
+                                               [attr.y1]='ec.chartY1', [attr.y2]='ec.chartY1')
+                                g(*ngFor='let t of ec.xTicks')
+                                    line.tick-mark([attr.x1]='t.pos', [attr.x2]='t.pos',
+                                                   [attr.y1]='ec.chartY1', [attr.y2]='ec.chartY1 + 4')
+                                    text.axis-label([attr.x]='t.pos', [attr.y]='ec.chartY1 + 16',
+                                                    text-anchor='middle') {{ t.label }}
+                            //- Series
+                            path.area([attr.d]='ec.area')
+                            path.line([attr.d]='ec.line')
+                            //- Hover crosshair + point marker
+                            g.hover(*ngIf='ec.hover')
+                                line.crosshair([attr.x1]='ec.hover.x', [attr.x2]='ec.hover.x',
+                                               [attr.y1]='ec.chartY0', [attr.y2]='ec.chartY1')
+                                circle.hover-dot([attr.cx]='ec.hover.x', [attr.cy]='ec.hover.y', r='4')
+
             pre.detail-body {{ selectedRowJson }}
 
     //- ───────────────── Right pane: RPC controls ─────────────────
