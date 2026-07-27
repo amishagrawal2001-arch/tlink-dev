@@ -10,6 +10,7 @@ import { GnmicDiscoveryService } from './services/gnmicDiscovery.service'
 import { GnmiPasswordStorageService } from './services/passwordStorage.service'
 import { GnmiValueFormatterService } from './services/valueFormatter.service'
 import { GnmiPathCatalogService } from './services/pathCatalog.service'
+import { GnmiHistoryRetentionService } from './services/historyRetention.service'
 
 import { GnmiProfilesService } from './profiles'
 import { GnmiRecoveryProvider } from './recoveryProvider'
@@ -48,6 +49,7 @@ import { GnmiSessionTabComponent } from './components/gnmiSessionTab.component'
         GnmiPasswordStorageService,
         GnmiValueFormatterService,
         GnmiPathCatalogService,
+        GnmiHistoryRetentionService,
         GnmiProfilesService,
     ],
     declarations: [

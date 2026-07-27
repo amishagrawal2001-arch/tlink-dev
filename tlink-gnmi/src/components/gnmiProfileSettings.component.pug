@@ -163,4 +163,18 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                     [(ngModel)]='profile.options.timeoutMs'
                 )
 
+            .mb-3
+                label(translate) On-disk history retention (days)
+                input.form-control(
+                    type='number',
+                    min='0',
+                    placeholder='0 = disabled',
+                    [(ngModel)]='profile.options.savedHistoryDays'
+                )
+                small.form-text.text-muted(translate)
+                    | When set, numeric samples are appended to
+                    | ~/Library/Application Support/tlink/gnmi-history/&lt;profile&gt;/YYYY-MM-DD.jsonl
+                    | and loaded back on tab open. Older files are pruned automatically.
+                    | Leave 0 for in-memory only.
+
 div([ngbNavOutlet]='nav')

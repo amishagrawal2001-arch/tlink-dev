@@ -91,6 +91,17 @@ export interface GnmiProfileOptions {
      * need migration on upgrade.
      */
     savedSubscriptions?: GnmiSavedSubscription[]
+
+    /**
+     * On-disk history retention window in days. 0 or undefined
+     * disables retention entirely (in-memory ring buffer only —
+     * previous behavior). Positive N keeps the last N days of
+     * notifications under
+     *   <userData>/gnmi-history/<profileId>/YYYY-MM-DD.jsonl
+     * and hydrates them into latestByPath on tab open. Files older
+     * than N days are pruned when the tab opens.
+     */
+    savedHistoryDays?: number
 }
 
 /**

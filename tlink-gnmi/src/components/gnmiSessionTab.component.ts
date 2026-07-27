@@ -5,6 +5,7 @@ import { GnmiCapabilities, GnmiNotification, GnmiProfile, GnmiSavedSubscription,
 import { GnmiService, GnmiSubscribeHandle } from '../services/gnmi.service'
 import { FormattedValue, GnmiValueFormatterService } from '../services/valueFormatter.service'
 import { GnmiCatalogEntry, GnmiCatalogGroup, GnmiPathCatalogService } from '../services/pathCatalog.service'
+import { GnmiHistoryRetentionService } from '../services/historyRetention.service'
 
 /** Center-pane view mode. Wire is the original per-notification log. */
 export type ViewMode = 'wire' | 'latest' | 'graphical'
@@ -352,6 +353,7 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     private formatter: GnmiValueFormatterService
     private profilesService: ProfilesService
     private catalog: GnmiPathCatalogService
+    private retention: GnmiHistoryRetentionService
     private zone: NgZone
     private cdr: ChangeDetectorRef
 
@@ -381,6 +383,7 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         this.formatter = injector.get(GnmiValueFormatterService)
         this.profilesService = injector.get(ProfilesService)
         this.catalog = injector.get(GnmiPathCatalogService)
+        this.retention = injector.get(GnmiHistoryRetentionService)
         this.zone = injector.get(NgZone)
         this.cdr = injector.get(ChangeDetectorRef)
         // NB: title is set in ngOnInit, deferred a microtask, to sidestep
@@ -398,6 +401,21 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         // committed its initial read; setting synchronously here throws
         // NG0100 (ExpressionChangedAfterItHasBeenCheckedError).
         void Promise.resolve().then(() => this.setTitle(label))
+        // Hydrate latestByPath from on-disk retention before subs
+        // start. Fires only when the profile has opted in via
+        // savedHistoryDays; a no-op otherwise. Loaded samples flow
+        // through the same updateLatestEntry path as live
+        // notifications, so history + delta + sparkline all populate
+        // consistently — no special "loaded from disk" bucket.
+        this.retention.load(this.profile, (path, ts, value) => {
+            this.updateLatestEntry({
+                path, timestampNs: ts, value, kind: 'update', target: this.profile.name,
+            })
+        })
+        // Prune files past the retention window so a profile left
+        // running for weeks doesn't hoard disk.
+        this.retention.prune(this.profile)
+
         // Kick off a Capabilities fetch in the background so the right
         // pane has something to show. Non-blocking — user can already
         // add subscriptions while this races.
@@ -485,6 +503,9 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         if (this.pendingCheckTimer) {
             clearTimeout(this.pendingCheckTimer)
         }
+        // Final flush — buffered writes from the last ~2s of the
+        // session would otherwise be lost when the tab closes.
+        this.retention.flush(this.profile)
     }
 
     /**
@@ -643,6 +664,12 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         // Feed them every notification, even when the wire log is paused,
         // so switching modes shows current state instead of a stale snapshot.
         this.updateLatestEntry(n)
+
+        // On-disk retention (no-op unless the profile opted in).
+        // Runs after updateLatestEntry so the same notification lands
+        // in both the in-memory buffer and the persistence layer in
+        // one pass.
+        this.retention.record(this.profile, n)
 
         if (this.paused) {
             this.pausedBuffer.push(row)
