@@ -22,6 +22,7 @@ export class GnmiProfilesService extends QuickConnectProfileProvider<GnmiProfile
     supportsQuickConnect = true
     settingsComponent = GnmiProfileSettingsComponent
     configDefaults = {
+        icon: 'fas fa-satellite-dish',
         options: {
             host: null,
             port: null,
@@ -136,6 +137,7 @@ export class GnmiProfilesService extends QuickConnectProfileProvider<GnmiProfile
         return {
             name: username ? `${username}@${host}` : host,
             type: 'gnmi',
+            icon: 'fas fa-satellite-dish',
             options: {
                 host,
                 port,
