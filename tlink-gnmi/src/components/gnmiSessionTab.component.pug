@@ -254,7 +254,7 @@
                         .gr-card-value
                             | {{ card.entry.formatted.value }}
                             span.unit(*ngIf='card.entry.formatted.unit') {{ card.entry.formatted.unit }}
-                        .gr-chart-wrap
+                        .gr-chart-wrap([class.single-sample]='chartPaths(card.entry)?.singleSample')
                             ng-container(*ngIf='chartPaths(card.entry) as chart')
                                 svg(viewBox='0 0 100 50', preserveAspectRatio='none')
                                     line.grid-line(x1='0', y1='12', x2='100', y2='12')
@@ -263,12 +263,15 @@
                                     path.area([attr.d]='chart.area')
                                     path.line([attr.d]='chart.line')
                                     circle.endpoint([attr.cx]='chart.endX', [attr.cy]='chart.endY', r='2.5')
-                                    text.y-max(x='1', y='10') {{ chart.max }}
-                                    text.y-min(x='1', y='48') {{ chart.min }}
+                                    text.y-max(*ngIf='!chart.singleSample', x='1', y='10') {{ chart.max }}
+                                    text.y-min(*ngIf='!chart.singleSample', x='1', y='48') {{ chart.min }}
                         .gr-card-sub
                             span
                                 ng-container(*ngIf='chartPaths(card.entry) as chart')
-                                    | {{ chart.sampleCount }} samples · last {{ chart.windowSpanLabel }}
+                                    ng-container(*ngIf='!chart.singleSample')
+                                        | {{ chart.sampleCount }} samples · last {{ chart.windowSpanLabel }}
+                                    ng-container(*ngIf='chart.singleSample')
+                                        | 1 sample · waiting for change
                                 ng-container(*ngIf='!chartPaths(card.entry)')
                                     | {{ ageLabel(card.entry) }} ago
                             span([ngClass]='"delta-" + deltaOf(card.entry).kind') {{ deltaOf(card.entry).label }}

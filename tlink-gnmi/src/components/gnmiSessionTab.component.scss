@@ -672,6 +672,25 @@ $lv-cols: 1fr 110px 110px 80px 70px;
         font-size: 7px;
         fill: var(--theme-fg-more-2);
     }
+
+    // Single-sample state — flat mid-line rendered muted so it reads as
+    // "no trend yet" rather than "value is holding steady". The card
+    // header still shows the current value big, so information isn't
+    // lost — the chart pane just doesn't pretend to plot a trend from
+    // one point.
+    &.single-sample {
+        .area { opacity: 0.05; }
+        .line {
+            stroke: var(--theme-fg-more-2);
+            stroke-width: 1;
+            stroke-dasharray: 3 4;
+            opacity: 0.6;
+        }
+        .endpoint {
+            fill: var(--theme-fg-more-2);
+            opacity: 0.6;
+        }
+    }
 }
 
 .gr-card-sub {

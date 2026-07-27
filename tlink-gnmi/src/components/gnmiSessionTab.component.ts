@@ -1082,20 +1082,54 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     }
 
     /**
-     * Auto-select the first numeric leaf when the user hasn't picked.
-     * Numeric preference: entries with a populated history buffer beat
-     * ones without. Runs on-demand from the template.
+     * Auto-select a metric worth plotting when the user hasn't picked.
+     *
+     * Priority order:
+     *   1. Metrics where MULTIPLE components have ≥2 samples (chartable
+     *      → visible line for at least some cards). Sorted by "chartable
+     *      count" so `in-pkts` (46 interfaces all incrementing) wins
+     *      over `carrier-transitions` (46 interfaces but only 1 sample
+     *      each — nothing to plot).
+     *   2. Any leaf where at least ONE component has ≥2 samples.
+     *   3. Fall back to whatever candidate is first (renders as
+     *      single-value flat lines).
+     *
+     * Previous heuristic just alphabetized among tied-count candidates,
+     * which meant `carrier-transitions` beat `in-pkts` in
+     * interface-counter subscribes → user saw an empty-chart grid.
      */
     get selectedGraphicalMetric (): string | null {
         if (this.graphicalMetric) { return this.graphicalMetric }
         const candidates = this.graphicalMetricCandidates
+        if (!candidates.length) { return null }
+
+        // Score each candidate by how many of its component entries have
+        // enough history to actually draw a chart (≥2 samples). A
+        // metric with 40 chartable components beats one with 40
+        // components but 0 chartable.
+        let best: { leaf: string; chartable: number } | null = null
+        for (const cand of candidates) {
+            let chartable = 0
+            for (const entry of this.latestByPath.values()) {
+                if (this.formatter.leafName(entry.path) === cand.leaf && entry.history.length >= 2) {
+                    chartable += 1
+                }
+            }
+            if (chartable > 0 && (!best || chartable > best.chartable)) {
+                best = { leaf: cand.leaf, chartable }
+            }
+        }
+        if (best) { return best.leaf }
+
+        // No metric has multi-sample entries yet — fall back to any
+        // leaf with numeric history at all, then the first candidate.
         for (const cand of candidates) {
             const anyNumeric = [...this.latestByPath.values()].some(e =>
                 this.formatter.leafName(e.path) === cand.leaf && e.history.length > 0,
             )
             if (anyNumeric) { return cand.leaf }
         }
-        return candidates[0]?.leaf ?? null
+        return candidates[0].leaf
     }
 
     /** Cards for the currently-selected metric — one per component that emits it. */
@@ -1132,9 +1166,27 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         min: number; max: number
         windowSpanLabel: string
         sampleCount: number
+        singleSample: boolean
     } | null {
         const [h, ts] = this.windowedHistory(entry)
-        if (h.length < 2) { return null }
+        if (!h.length) { return null }
+        // One-sample case: render as a flat line at mid-height so the
+        // card doesn't look broken. This is the "carrier-transitions
+        // never changes" scenario — we want to show the value's
+        // constant, not an empty box that reads as "no data".
+        if (h.length === 1) {
+            const [only] = h
+            const y = 25
+            return {
+                line: `M0,${y} L100,${y}`,
+                area: `M0 50 L0,${y} L100,${y} L100,50 Z`,
+                endX: 100, endY: y,
+                min: only, max: only,
+                windowSpanLabel: this.humanizeSpan(this.now - ts[0]),
+                sampleCount: 1,
+                singleSample: true,
+            }
+        }
         const min = Math.min(...h)
         const max = Math.max(...h)
         const range = max - min || 1
@@ -1152,6 +1204,7 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
             line, area, endX, endY, min, max,
             windowSpanLabel: this.humanizeSpan(spanMs),
             sampleCount: h.length,
+            singleSample: false,
         }
     }
 
