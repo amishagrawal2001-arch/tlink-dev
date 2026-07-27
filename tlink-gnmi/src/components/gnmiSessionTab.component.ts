@@ -47,6 +47,13 @@ interface LatestEntry {
     prevFormatted: FormattedValue
     /** Numeric history for the sparkline, oldest first. Bounded by MAX_HISTORY. */
     history: number[]
+    /**
+     * Wall-clock timestamps (ms) for each history sample, parallel to
+     * `history`. Kept alongside so a windowed chart view can slice by
+     * time regardless of how bursty the sample rate is. `historyTs[i]`
+     * corresponds to `history[i]`.
+     */
+    historyTs: number[]
 }
 
 /** One row rendered in the Latest-values view — path + entry + group. */
@@ -169,8 +176,29 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     private static readonly MAX_STREAM_ROWS = 1000
     /** Truncate rendered value strings past this length. Full value stays available in row-detail. */
     private static readonly VALUE_PREVIEW_LEN = 240
-    /** Sparkline / chart-card history depth per path. */
-    private static readonly MAX_HISTORY = 40
+    /**
+     * Sparkline / chart-card history depth per path. At 10s sample
+     * interval that's ~83 min of retained data per path — comfortably
+     * covers "let me look at the last hour" without spending real
+     * memory. Renderers can window this further via chartWindowSec
+     * without changing the buffer.
+     */
+    private static readonly MAX_HISTORY = 500
+
+    /** How many seconds of history the Graphical chart cards visualize. 0 = all retained history. */
+    chartWindowSec = 0
+
+    /** Timestamps parallel to history entries, so we can window by wall-clock. */
+    private static readonly WINDOW_CHOICES: { label: string; sec: number }[] = [
+        { label: '1m', sec: 60 },
+        { label: '5m', sec: 300 },
+        { label: '15m', sec: 900 },
+        { label: '30m', sec: 1800 },
+        { label: '1h', sec: 3600 },
+        { label: 'All', sec: 0 },
+    ]
+
+    chartWindowChoices = GnmiSessionTabComponent.WINDOW_CHOICES
 
     // ─── Left pane state ────────────────────────────────────────────
     subscriptions: ActiveSubscription[] = []
@@ -507,6 +535,7 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     private updateLatestEntry (n: GnmiNotification): void {
         const existing = this.latestByPath.get(n.path)
         const formatted = this.formatter.format(n.value, n.path)
+        const nowMs = Math.floor(n.timestampNs / 1_000_000)
         if (existing) {
             existing.prevValue = existing.lastValue
             existing.prevFormatted = existing.formatted
@@ -516,11 +545,14 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
             existing.updateCount += 1
             if (typeof n.value === 'number' && Number.isFinite(n.value)) {
                 existing.history.push(n.value)
+                existing.historyTs.push(nowMs)
                 if (existing.history.length > GnmiSessionTabComponent.MAX_HISTORY) {
                     existing.history.shift()
+                    existing.historyTs.shift()
                 }
             }
         } else {
+            const numeric = typeof n.value === 'number' && Number.isFinite(n.value)
             const entry: LatestEntry = {
                 path: n.path,
                 lastValue: n.value,
@@ -530,7 +562,8 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
                 updateCount: 1,
                 formatted,
                 prevFormatted: formatted,
-                history: typeof n.value === 'number' && Number.isFinite(n.value) ? [n.value] : [],
+                history: numeric ? [n.value as number] : [],
+                historyTs: numeric ? [nowMs] : [],
             }
             this.latestByPath.set(n.path, entry)
         }
@@ -1088,11 +1121,19 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     }
 
     /**
-     * SVG path for a card's chart. Same coordinate space as the
-     * sparkline but taller (0..50 y) and includes area fill.
+     * SVG path for a card's chart, filtered to the current
+     * chartWindowSec. Returns null when there are fewer than 2 samples
+     * in the window (a one-point line would be misleading). Includes
+     * min / max for y-axis labels and windowSpanSec + startedMinAgo
+     * for the x-axis "-5m to now" hint.
      */
-    chartPaths (entry: LatestEntry): { line: string; area: string; endX: number; endY: number; min: number; max: number } | null {
-        const h = entry.history
+    chartPaths (entry: LatestEntry): {
+        line: string; area: string; endX: number; endY: number;
+        min: number; max: number
+        windowSpanLabel: string
+        sampleCount: number
+    } | null {
+        const [h, ts] = this.windowedHistory(entry)
         if (h.length < 2) { return null }
         const min = Math.min(...h)
         const max = Math.max(...h)
@@ -1106,6 +1147,44 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')
         const area = `M0 50 L${line.slice(1)} L100,50 Z`
         const [endX, endY] = pts[pts.length - 1]
-        return { line, area, endX, endY, min, max }
+        const spanMs = ts[ts.length - 1] - ts[0]
+        return {
+            line, area, endX, endY, min, max,
+            windowSpanLabel: this.humanizeSpan(spanMs),
+            sampleCount: h.length,
+        }
+    }
+
+    /**
+     * Return the subset of (history, historyTs) that falls within the
+     * current chart window. `chartWindowSec === 0` means show the full
+     * retained buffer (up to MAX_HISTORY samples). Otherwise, everything
+     * newer than `now - windowSec` — walking from the newest sample
+     * backwards means we spend O(k) not O(n) even when the buffer is
+     * near-full and the window is small.
+     */
+    private windowedHistory (entry: LatestEntry): [number[], number[]] {
+        if (!this.chartWindowSec || !entry.historyTs.length) {
+            return [entry.history, entry.historyTs]
+        }
+        const cutoff = this.now - this.chartWindowSec * 1000
+        // Find the first index whose timestamp is >= cutoff, from the
+        // newest end (typical case: cutoff is recent, sliced window is
+        // small).
+        let startIdx = entry.historyTs.length
+        for (let i = entry.historyTs.length - 1; i >= 0; i--) {
+            if (entry.historyTs[i] < cutoff) { break }
+            startIdx = i
+        }
+        return [entry.history.slice(startIdx), entry.historyTs.slice(startIdx)]
+    }
+
+    /** Format a span-in-ms as a compact label like "12s", "5m", "1h". */
+    private humanizeSpan (ms: number): string {
+        const s = Math.max(0, Math.round(ms / 1000))
+        if (s < 60) { return `${s}s` }
+        const m = Math.round(s / 60)
+        if (m < 60) { return `${m}m` }
+        return `${Math.round(m / 60)}h`
     }
 }
