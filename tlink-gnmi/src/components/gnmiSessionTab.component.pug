@@ -31,7 +31,10 @@
         .sub-list
             .sub-item(*ngFor='let sub of subscriptions; trackBy: trackSubById',
                       [class.active]='sub.running',
-                      [class.errored]='!!sub.lastError')
+                      [class.errored]='!!sub.lastError',
+                      [class.focused]='focusedSubscriptionId === sub.id',
+                      (click)='toggleSubscriptionFocus(sub)',
+                      [title]='focusedSubscriptionId === sub.id ? "Click to show all subscriptions" : "Click to scope Latest / Graphical to this subscription"')
                 .sub-path {{ sub.path }}
                 .sub-meta
                     span.dot([class.live]='sub.running', [class.dead]='!sub.running')
@@ -39,21 +42,23 @@
                     span.rate(*ngIf='sub.mode === "STREAM" && sub.streamMode === "SAMPLE"') {{ sub.sampleIntervalSec }}s
                     span.recv {{ sub.receiveCount }} recv
                 .sub-error(*ngIf='sub.lastError') {{ sub.lastError }}
+                //- Stop-propagation on all action buttons so clicking
+                //- them doesn't also toggle the sub-row focus behind.
                 .sub-actions
                     button.sub-btn(
-                        (click)='toggleSaved(sub)',
+                        (click)='toggleSaved(sub); $event.stopPropagation()',
                         [class.starred]='isSubscriptionSaved(sub)',
                         [title]='isSubscriptionSaved(sub) ? "Unstar subscription (saved to profile)" : "Star subscription (save to profile)"'
                     )
                         i.fas.fa-star(*ngIf='isSubscriptionSaved(sub)')
                         i.far.fa-star(*ngIf='!isSubscriptionSaved(sub)')
                     button.sub-btn(
-                        (click)='toggleSubscription(sub)',
+                        (click)='toggleSubscription(sub); $event.stopPropagation()',
                         [title]='sub.running ? "Pause subscription" : "Resume subscription"'
                     )
                         i.fas([class.fa-pause]='sub.running', [class.fa-play]='!sub.running')
                     button.sub-btn.danger(
-                        (click)='removeSubscription(sub)',
+                        (click)='removeSubscription(sub); $event.stopPropagation()',
                         title='Remove subscription'
                     )
                         i.fas.fa-times

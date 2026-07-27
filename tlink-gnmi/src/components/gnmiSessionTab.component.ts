@@ -259,6 +259,15 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     /** Hover state for the expanded chart — sample index the mouse is closest to. */
     hoverIndex: number | null = null
 
+    /**
+     * When set, Latest + Graphical filter to only entries whose full
+     * path starts with the selected subscription's path (ignoring
+     * [key=X] list-keys). Click a subscription in the left pane to
+     * focus; click again to unfocus. Null = show entries from every
+     * active subscription (previous default).
+     */
+    focusedSubscriptionId: string | null = null
+
     /** Timestamps parallel to history entries, so we can window by wall-clock. */
     private static readonly WINDOW_CHOICES: { label: string; sec: number }[] = [
         { label: '1m', sec: 60 },
@@ -591,6 +600,40 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     removeSubscription (sub: ActiveSubscription): void {
         sub.handle?.kill()
         this.subscriptions = this.subscriptions.filter(s => s !== sub)
+    }
+
+    /**
+     * Click a subscription row to focus — Latest + Graphical views
+     * scope to only entries produced by that subscribe. Click the
+     * same row again to unfocus.
+     *
+     * Match is by path prefix with [key=X] list-keys stripped from
+     * the entry path, so a subscription to
+     * /interfaces/interface/state/counters matches every fanned-out
+     * /interfaces/interface[name=X]/state/counters/* entry.
+     */
+    toggleSubscriptionFocus (sub: ActiveSubscription): void {
+        this.focusedSubscriptionId = this.focusedSubscriptionId === sub.id ? null : sub.id
+        // Invalidate the derived caches so the next getter call
+        // recomputes with the new focus filter applied.
+        this.latestDirtySeq += 1
+    }
+
+    /** Currently-focused subscription, or null when showing all. */
+    get focusedSubscription (): ActiveSubscription | null {
+        if (!this.focusedSubscriptionId) { return null }
+        return this.subscriptions.find(s => s.id === this.focusedSubscriptionId) ?? null
+    }
+
+    /**
+     * Does an entry path fall under a subscribe path? Normalizes over
+     * middle list-keys: a sub to `.../interface/state/counters`
+     * matches an entry at `.../interface[name=et-0/0/0]/state/counters/in-pkts`.
+     */
+    private entryMatchesSubscription (entryPath: string, subPath: string): boolean {
+        const normalized = entryPath.replace(/\[[^\]]+\]/g, '')
+        const normalizedSub = subPath.replace(/\[[^\]]+\]/g, '')
+        return normalized.startsWith(normalizedSub)
     }
 
     toggleSubscription (sub: ActiveSubscription): void {
@@ -1098,8 +1141,10 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         if (this.latestGroupsCache.seq === this.latestDirtySeq) {
             return this.filterLatestGroups(this.latestGroupsCache.groups)
         }
+        const focus = this.focusedSubscription
         const buckets = new Map<string, { key: string | null; prefix: string; rows: LatestRow[] }>()
         for (const entry of this.latestByPath.values()) {
+            if (focus && !this.entryMatchesSubscription(entry.path, focus.path)) { continue }
             const prefix = this.formatter.parentPath(entry.path)
             const key = this.formatter.lastListKey(entry.path)
             const bucketId = `${prefix} ${key ?? ''}`
@@ -1272,9 +1317,11 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         if (this.candidatesCache.seq === this.latestDirtySeq) {
             return this.candidatesCache.list
         }
+        const focus = this.focusedSubscription
         const counts = new Map<string, number>()
         for (const entry of this.latestByPath.values()) {
             if (!entry.history.length) { continue }
+            if (focus && !this.entryMatchesSubscription(entry.path, focus.path)) { continue }
             const leaf = this.formatter.leafName(entry.path)
             counts.set(leaf, (counts.get(leaf) ?? 0) + 1)
         }
@@ -1349,10 +1396,12 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         if (this.graphicalCache.seq === this.latestDirtySeq && this.graphicalCache.metric === metric) {
             return this.graphicalCache.cards
         }
+        const focus = this.focusedSubscription
         const cards: GraphCard[] = []
         for (const entry of this.latestByPath.values()) {
             if (this.formatter.leafName(entry.path) !== metric) { continue }
             if (!entry.history.length) { continue }
+            if (focus && !this.entryMatchesSubscription(entry.path, focus.path)) { continue }
             const key = this.formatter.lastListKey(entry.path)
             cards.push({
                 label: key ?? this.formatter.shortPath(entry.path, 2),

@@ -129,12 +129,22 @@ $border-radius: 5px;
     flex-direction: column;
     gap: 4px;
     position: relative;
+    cursor: pointer;
 
     &.active {
         border-color: rgba(88, 166, 255, 0.5);
     }
     &.errored {
         border-color: rgba(248, 81, 73, 0.4);
+    }
+    // Focused = user clicked this row to scope the Latest / Graphical
+    // views. Uses accent-dim background + left rail so the "this is
+    // the selected filter" state reads without conflicting with the
+    // running/errored border colors on the sides.
+    &.focused {
+        background: rgba(88, 166, 255, 0.08);
+        border-left: 3px solid #58a6ff;
+        padding-left: 8px;   // compensate for the thicker border
     }
 }
 
