@@ -69,6 +69,34 @@ $border-radius: 5px;
     font-weight: 500;
     margin-left: 6px;
 }
+
+// "Save all" — sits on the right of the Subscriptions pane header
+// so the eye lands on it when scanning left-to-right after the count.
+// Uses the same accent as .starred so the "yellow = starred" visual
+// language stays consistent.
+.save-all-btn {
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid var(--theme-bg-less);
+    color: var(--theme-fg-more-1);
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 10px;
+    cursor: pointer;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+
+    &:hover {
+        border-color: #d29922;
+        color: #d29922;
+        background: rgba(210, 153, 34, 0.08);
+    }
+
+    i { font-size: 10px; }
+}
 .recv-count { color: #3fb950; }
 .rate-count {
     background: rgba(63, 185, 80, 0.12);

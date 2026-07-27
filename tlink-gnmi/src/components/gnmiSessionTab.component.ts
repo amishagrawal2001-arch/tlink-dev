@@ -709,6 +709,63 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     }
 
     /**
+     * One-click "save current session" — snapshots every active
+     * subscription into profile.options.savedSubscriptions with
+     * autoStart=true, so reopening the tab (or restarting the app)
+     * brings them back automatically.
+     *
+     * Skips subs that already have a matching saved template — we
+     * don't want a double-save adding phantom duplicates. When a
+     * matching entry exists but has autoStart=false, we flip it on
+     * (assumption: user hit "save all" because they want them all
+     * back next time).
+     *
+     * Empty active list → no-op with a hint toast.
+     */
+    async saveAllAsAutoStart (): Promise<void> {
+        if (!this.subscriptions.length) {
+            this.notifications.info('No active subscriptions to save')
+            return
+        }
+        const next = [...this.savedSubscriptions]
+        let added = 0
+        let updated = 0
+        for (const sub of this.subscriptions) {
+            const existingIdx = next.findIndex(s =>
+                s.path === sub.path &&
+                s.mode === sub.mode &&
+                s.streamMode === sub.streamMode &&
+                s.sampleIntervalSec === sub.sampleIntervalSec,
+            )
+            if (existingIdx >= 0) {
+                if (!next[existingIdx].autoStart) {
+                    next[existingIdx] = { ...next[existingIdx], autoStart: true }
+                    updated += 1
+                }
+            } else {
+                next.push({
+                    id: `sav-${Date.now()}-${added}-${Math.floor(Math.random() * 1000)}`,
+                    path: sub.path,
+                    mode: sub.mode,
+                    streamMode: sub.streamMode,
+                    sampleIntervalSec: sub.sampleIntervalSec,
+                    autoStart: true,
+                })
+                added += 1
+            }
+        }
+        if (!added && !updated) {
+            this.notifications.info('All active subscriptions are already saved')
+            return
+        }
+        await this.persistSavedSubscriptions(next)
+        const parts: string[] = []
+        if (added) { parts.push(`${added} saved`) }
+        if (updated) { parts.push(`${updated} auto-start enabled`) }
+        this.notifications.info(`Session saved — ${parts.join(', ')}. Reopen the tab to restore.`)
+    }
+
+    /**
      * Star / unstar an active subscription. Persists via
      * ProfilesService + ConfigService — the write flows through the
      * same path Settings uses so file sync + hot-reload behave

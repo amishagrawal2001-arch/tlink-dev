@@ -4,6 +4,18 @@
         .pane-title
             span SUBSCRIPTIONS
             span.count {{ subscriptions.length }}
+            //- One-click "save current session" — every active
+            //- subscription becomes a saved template with
+            //- autoStart=true, so the same set fires next tab open.
+            //- Kept right next to the count so it's discoverable
+            //- without hunting through per-row action buttons.
+            button.save-all-btn(
+                *ngIf='subscriptions.length',
+                (click)='saveAllAsAutoStart()',
+                title='Save all active subscriptions with auto-start — reopens with them next time'
+            )
+                i.fas.fa-bookmark.me-1
+                span Save all
 
         .sub-list
             .sub-item(*ngFor='let sub of subscriptions; trackBy: trackSubById',
