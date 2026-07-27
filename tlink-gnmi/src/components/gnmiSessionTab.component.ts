@@ -459,33 +459,48 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
             }, 1000)
         })
 
-        // Priority order for what to auto-subscribe on tab open:
-        //   1. Recovery savedState  — user had these running when the
-        //      app was last closed; restore verbatim.
-        //   2. Saved subs with autoStart=true — user's opt-in defaults
-        //      for this target.
-        // We deliberately don't do both — if recovery data is present
-        // it's more specific than the saved defaults, and doubling up
-        // would spawn duplicate subprocesses.
+        // Union both sources for what to auto-subscribe on tab open:
+        //   1. Recovery savedState — subs that were running when the
+        //      app last closed. Restore verbatim.
+        //   2. Saved subs flagged autoStart=true — user's opt-in
+        //      "always run this on tab open" list.
+        // Dedupe by (path, mode, stream-mode, interval) so a sub that
+        // lives in BOTH sources spawns only once.
+        //
+        // Previous behavior was "recovery OR autoStart" which broke
+        // the natural user expectation: after a close+reopen with
+        // recovery data present, subs marked autoStart in Saved
+        // wouldn't actually fire even when they weren't in the
+        // recovery set.
+        const toStart: GnmiRecoveredSubscription[] = []
+        const seen = new Set<string>()
+        const specKey = (s: GnmiRecoveredSubscription): string =>
+            `${s.path}|${s.mode}|${s.streamMode}|${s.sampleIntervalSec}`
+
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         if (this.savedState?.activeSubscriptions?.length) {
             for (const s of this.savedState.activeSubscriptions) {
-                this.spawnSubscription(s)
+                toStart.push(s)
+                seen.add(specKey(s))
             }
             if (this.savedState.viewMode) {
                 this.viewMode = this.savedState.viewMode
             }
-        } else {
-            for (const saved of this.savedSubscriptions) {
-                if (saved.autoStart) {
-                    this.spawnSubscription({
-                        path: saved.path,
-                        mode: saved.mode,
-                        streamMode: saved.streamMode,
-                        sampleIntervalSec: saved.sampleIntervalSec,
-                    })
-                }
+        }
+        for (const saved of this.savedSubscriptions) {
+            if (!saved.autoStart) { continue }
+            const spec: GnmiRecoveredSubscription = {
+                path: saved.path,
+                mode: saved.mode,
+                streamMode: saved.streamMode,
+                sampleIntervalSec: saved.sampleIntervalSec,
             }
+            if (seen.has(specKey(spec))) { continue }
+            toStart.push(spec)
+            seen.add(specKey(spec))
+        }
+        for (const s of toStart) {
+            this.spawnSubscription(s)
         }
     }
 
