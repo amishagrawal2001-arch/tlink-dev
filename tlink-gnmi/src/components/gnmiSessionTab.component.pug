@@ -301,8 +301,8 @@
                                     path.area([attr.d]='chart.area')
                                     path.line([attr.d]='chart.line')
                                     circle.endpoint([attr.cx]='chart.endX', [attr.cy]='chart.endY', r='2.5')
-                                    text.y-max(*ngIf='!chart.singleSample', x='1', y='10') {{ chart.max }}
-                                    text.y-min(*ngIf='!chart.singleSample', x='1', y='48') {{ chart.min }}
+                                    text.y-max(*ngIf='!chart.singleSample', x='1', y='10') {{ chart.maxLabel }}
+                                    text.y-min(*ngIf='!chart.singleSample', x='1', y='48') {{ chart.minLabel }}
                         .gr-card-sub
                             span
                                 ng-container(*ngIf='chartPaths(card.entry) as chart')

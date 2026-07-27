@@ -1233,8 +1233,20 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         const b = entry.prevValue
         if (typeof a === 'number' && typeof b === 'number' && Number.isFinite(a) && Number.isFinite(b)) {
             const d = a - b
-            if (d > 0) { return { kind: 'up', label: `▲ +${this.compactNumber(d)}` } }
-            if (d < 0) { return { kind: 'down', label: `▼ ${this.compactNumber(d)}` } }
+            if (d > 0) {
+                const f = this.formatter.format(d, entry.path)
+                const unit = f.unit ? ` ${f.unit}` : ''
+                return { kind: 'up', label: `▲ +${f.value}${unit}` }
+            }
+            if (d < 0) {
+                // formatter's byte path prefixes '-' for negatives; other
+                // paths return positive value strings, so we prepend the
+                // sign only when it isn't already there.
+                const f = this.formatter.format(d, entry.path)
+                const unit = f.unit ? ` ${f.unit}` : ''
+                const signed = f.value.startsWith('-') ? f.value : `-${f.value}`
+                return { kind: 'down', label: `▼ ${signed}${unit}` }
+            }
             return { kind: 'same', label: '·' }
         }
         if (entry.formatted.value !== entry.prevFormatted.value) {
@@ -1423,6 +1435,8 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     chartPaths (entry: LatestEntry): {
         line: string; area: string; endX: number; endY: number;
         min: number; max: number
+        /** Formatted min / max for axis labels — respects the same unit inference (GiB / MiB / pps / etc.) the header value uses. */
+        minLabel: string; maxLabel: string
         windowSpanLabel: string
         sampleCount: number
         singleSample: boolean
@@ -1450,6 +1464,14 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         const latestLabel = useRate
             ? this.formatRateValue(latest, entry.path)
             : entry.formatted.value
+        // Format axis min/max labels using the same unit inference
+        // as the header. For memory-used at 14.8 GB, raw bytes would
+        // render "14810345472" — unreadable — instead we get "13.8 GiB"
+        // matching the header. For rate charts we skip the byte-formatter
+        // and use the rate formatter so B/s → K B/s → M B/s auto-scales.
+        const axisLabel = (n: number): string => useRate
+            ? this.formatRateValue(n, entry.path)
+            : this.formatter.format(n, entry.path).value
         if (h.length === 1 || max === min) {
             const value = max
             const y = 25
@@ -1459,6 +1481,7 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
                 area: `M0 50 L0,${y} L100,${y} L100,50 Z`,
                 endX: 100, endY: y,
                 min: value, max: value,
+                minLabel: axisLabel(value), maxLabel: axisLabel(value),
                 windowSpanLabel: this.humanizeSpan(spanMs),
                 sampleCount: h.length,
                 singleSample: true,
@@ -1479,6 +1502,7 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         const spanMs = ts[ts.length - 1] - ts[0]
         return {
             line, area, endX, endY, min, max,
+            minLabel: axisLabel(min), maxLabel: axisLabel(max),
             windowSpanLabel: this.humanizeSpan(spanMs),
             sampleCount: h.length,
             singleSample: false,
@@ -1594,14 +1618,20 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
             ? `M${chartX0},${chartY1} L${line.slice(1)} L${pts[pts.length - 1].x.toFixed(1)},${chartY1} Z`
             : ''
 
-        // Y-axis ticks — five evenly-spaced values.
+        // Y-axis ticks — five evenly-spaced values, formatted with the
+        // same unit inference the header uses (memory → GiB, counters
+        // → K/M/G rate, etc.). Raw compactNumber was fine for small
+        // gauges but rendered raw byte counts like 14810345472 on
+        // memory charts.
         const yTicks: AxisTick[] = []
         for (let i = 0; i <= 4; i++) {
             const frac = i / 4
             const value = min + yRange * (1 - frac)
             yTicks.push({
                 pos: chartY0 + frac * chartH,
-                label: useRate ? this.formatRateValue(value, e.path) : this.compactNumber(value),
+                label: useRate
+                    ? this.formatRateValue(value, e.path)
+                    : this.formatter.format(value, e.path).value,
             })
         }
 
@@ -1760,8 +1790,10 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         const chartSvg = (card: GraphCard): string => {
             const c = this.chartPaths(card.entry)
             if (!c) { return '<span class="dash">—</span>' }
-            const minLabel = escape(c.singleSample ? '' : this.compactNumber(c.min))
-            const maxLabel = escape(c.singleSample ? '' : this.compactNumber(c.max))
+            // Use the same unit-inferred labels the app renders so
+            // exported HTML matches what the user saw on screen.
+            const minLabel = escape(c.singleSample ? '' : c.minLabel)
+            const maxLabel = escape(c.singleSample ? '' : c.maxLabel)
             return `<svg viewBox="0 0 100 50" preserveAspectRatio="none" class="chart">
                 <line class="grid" x1="0" y1="12" x2="100" y2="12"/>
                 <line class="grid" x1="0" y1="25" x2="100" y2="25"/>
