@@ -270,7 +270,9 @@
                                 ng-container(*ngIf='chartPaths(card.entry) as chart')
                                     ng-container(*ngIf='!chart.singleSample')
                                         | {{ chart.sampleCount }} samples · last {{ chart.windowSpanLabel }}
-                                    ng-container(*ngIf='chart.singleSample')
+                                    ng-container(*ngIf='chart.singleSample && chart.sampleCount > 1')
+                                        | {{ chart.sampleCount }} samples · constant
+                                    ng-container(*ngIf='chart.singleSample && chart.sampleCount === 1')
                                         | 1 sample · waiting for change
                                 ng-container(*ngIf='!chartPaths(card.entry)')
                                     | {{ ageLabel(card.entry) }} ago

@@ -1084,39 +1084,43 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     /**
      * Auto-select a metric worth plotting when the user hasn't picked.
      *
-     * Priority order:
-     *   1. Metrics where MULTIPLE components have ≥2 samples (chartable
-     *      → visible line for at least some cards). Sorted by "chartable
-     *      count" so `in-pkts` (46 interfaces all incrementing) wins
-     *      over `carrier-transitions` (46 interfaces but only 1 sample
-     *      each — nothing to plot).
-     *   2. Any leaf where at least ONE component has ≥2 samples.
-     *   3. Fall back to whatever candidate is first (renders as
-     *      single-value flat lines).
+     * Scoring priority (each dominates the next):
+     *   1. VARYING entries — components whose min < max in the retained
+     *      history. A metric where values actually change beats one where
+     *      they're constant, even if both have equal fan-out and equal
+     *      chartable counts. Fixes the "carrier-transitions always wins"
+     *      bug on interface subscribes where every leaf has the same
+     *      sample count but only in-pkts / in-octets actually move.
+     *   2. Chartable entries — components with ≥2 samples (visible line).
+     *   3. Alphabetical (from candidates ordering) as final tie-break.
      *
-     * Previous heuristic just alphabetized among tied-count candidates,
-     * which meant `carrier-transitions` beat `in-pkts` in
-     * interface-counter subscribes → user saw an empty-chart grid.
+     * Two-tier scoring done inline as `varying * 10000 + chartable` so
+     * we can compare in one pass without a sort.
      */
     get selectedGraphicalMetric (): string | null {
         if (this.graphicalMetric) { return this.graphicalMetric }
         const candidates = this.graphicalMetricCandidates
         if (!candidates.length) { return null }
 
-        // Score each candidate by how many of its component entries have
-        // enough history to actually draw a chart (≥2 samples). A
-        // metric with 40 chartable components beats one with 40
-        // components but 0 chartable.
-        let best: { leaf: string; chartable: number } | null = null
+        let best: { leaf: string; score: number } | null = null
         for (const cand of candidates) {
             let chartable = 0
+            let varying = 0
             for (const entry of this.latestByPath.values()) {
-                if (this.formatter.leafName(entry.path) === cand.leaf && entry.history.length >= 2) {
-                    chartable += 1
+                if (this.formatter.leafName(entry.path) !== cand.leaf) { continue }
+                if (entry.history.length < 2) { continue }
+                chartable += 1
+                // Cheap "does this value change" check — walk history
+                // once and short-circuit on the first differing sample.
+                // Beats Math.min/max spread over huge arrays.
+                const [first] = entry.history
+                for (let i = 1; i < entry.history.length; i++) {
+                    if (entry.history[i] !== first) { varying += 1; break }
                 }
             }
-            if (chartable > 0 && (!best || chartable > best.chartable)) {
-                best = { leaf: cand.leaf, chartable }
+            const score = varying * 10_000 + chartable
+            if (score > 0 && (!best || score > best.score)) {
+                best = { leaf: cand.leaf, score }
             }
         }
         if (best) { return best.leaf }
@@ -1170,25 +1174,28 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     } | null {
         const [h, ts] = this.windowedHistory(entry)
         if (!h.length) { return null }
-        // One-sample case: render as a flat line at mid-height so the
-        // card doesn't look broken. This is the "carrier-transitions
-        // never changes" scenario — we want to show the value's
-        // constant, not an empty box that reads as "no data".
-        if (h.length === 1) {
-            const [only] = h
+        // One-sample OR constant-across-samples case: render a flat
+        // mid-line placeholder instead of squishing everything to
+        // y=46. Both scenarios are visually the same ("no trend"),
+        // and the previous code turned constant-value counters like
+        // carrier-transitions into a line pinned to the chart bottom
+        // — reads as "0/off" instead of "value is stable at N".
+        const min = Math.min(...h)
+        const max = Math.max(...h)
+        if (h.length === 1 || max === min) {
+            const value = max
             const y = 25
+            const spanMs = ts.length ? this.now - ts[0] : 0
             return {
                 line: `M0,${y} L100,${y}`,
                 area: `M0 50 L0,${y} L100,${y} L100,50 Z`,
                 endX: 100, endY: y,
-                min: only, max: only,
-                windowSpanLabel: this.humanizeSpan(this.now - ts[0]),
-                sampleCount: 1,
+                min: value, max: value,
+                windowSpanLabel: this.humanizeSpan(spanMs),
+                sampleCount: h.length,
                 singleSample: true,
             }
         }
-        const min = Math.min(...h)
-        const max = Math.max(...h)
         const range = max - min || 1
         const dx = 100 / (h.length - 1)
         const pts = h.map((v, i) => {

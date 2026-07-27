@@ -52,7 +52,13 @@ export class GnmiService {
             'capabilities',
             '--format', 'json',
         ]
-        const raw = await this.runOneShot(args, target.options.timeoutMs ?? 10_000)
+        // Capabilities RPCs can be slow on a device that's busy
+        // serving many subscribe streams — devices with slow control
+        // planes routinely take 5-15s under load. Give it ~3x the
+        // profile timeout (min 30s) so a stalled Capabilities doesn't
+        // fail while the device is otherwise healthy.
+        const timeout = Math.max(30_000, (target.options.timeoutMs ?? 10_000) * 3)
+        const raw = await this.runOneShot(args, timeout)
         return this.parseCapabilities(raw)
     }
 
