@@ -177,4 +177,37 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                     | and loaded back on tab open. Older files are pruned automatically.
                     | Leave 0 for in-memory only.
 
+                //- Current disk usage + Clear-all. Only rendered once
+                //- the initial size fetch completes. Two-step confirmation
+                //- on the Clear button so a stray click doesn't nuke
+                //- days of data.
+                .retention-status.mt-2(*ngIf='historySize')
+                    .retention-usage
+                        span.usage-label Retained:
+                        span.usage-value(*ngIf='historySize.fileCount > 0')
+                            | &nbsp;{{ formatSize(historySize.totalBytes) }}
+                            | across {{ historySize.fileCount }} file{{ historySize.fileCount === 1 ? '' : 's' }}
+                            span.usage-oldest(*ngIf='historySize.oldestDate')
+                                | &nbsp;· oldest {{ historySize.oldestDate }}
+                        span.usage-value.usage-empty(*ngIf='historySize.fileCount === 0')
+                            | &nbsp;nothing on disk
+                        a.usage-refresh(
+                            href='javascript:void(0)',
+                            (click)='refreshHistorySize()',
+                            title='Refresh size'
+                        )
+                            i.fas.fa-sync-alt
+                    button.btn.btn-outline-danger.btn-sm.mt-2(
+                        type='button',
+                        (click)='clearHistory()',
+                        [disabled]='historySize.fileCount === 0 && !clearHistoryConfirming',
+                        [class.confirming]='clearHistoryConfirming'
+                    )
+                        i.fas.me-1(
+                            [class.fa-trash-alt]='!clearHistoryConfirming',
+                            [class.fa-exclamation-triangle]='clearHistoryConfirming'
+                        )
+                        span(*ngIf='!clearHistoryConfirming') Clear all history
+                        span(*ngIf='clearHistoryConfirming') Really? Click again to delete
+
 div([ngbNavOutlet]='nav')

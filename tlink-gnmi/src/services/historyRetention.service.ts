@@ -196,6 +196,70 @@ export class GnmiHistoryRetentionService {
     }
 
     /**
+     * Total on-disk size + file count for one profile's history.
+     * Cheap enough to call from the Settings UI on demand — just a
+     * readdir + stat per file, no I/O beyond that.
+     *
+     * Returns 0/0 when the profile's directory doesn't exist yet
+     * (retention disabled or no data recorded).
+     */
+    sizeOf (profile: GnmiProfile): { totalBytes: number; fileCount: number; oldestDate: string | null } {
+        const dir = path.join(this.rootDir(), this.sanitizeId(profile.id))
+        let entries: string[] = []
+        try {
+            entries = fs.readdirSync(dir).filter(n => n.endsWith('.jsonl'))
+        } catch {
+            return { totalBytes: 0, fileCount: 0, oldestDate: null }
+        }
+        let totalBytes = 0
+        for (const f of entries) {
+            try {
+                const stat = fs.statSync(path.join(dir, f))
+                totalBytes += stat.size
+            } catch { /* skip inaccessible */ }
+        }
+        const sorted = entries.sort()
+        const oldestDate = sorted.length ? sorted[0].slice(0, 10) : null
+        return { totalBytes, fileCount: entries.length, oldestDate }
+    }
+
+    /**
+     * Delete every retained file for a profile — user-triggered
+     * cleanup from the Settings UI. Also flushes any in-memory
+     * buffer for this profile so nothing gets written back seconds
+     * later. Idempotent — safe to call when nothing's there.
+     *
+     * Returns the count of files removed so the UI can report it.
+     */
+    clearAll (profile: GnmiProfile): number {
+        // Cancel any pending flush + drop the buffer so a scheduled
+        // write doesn't recreate a file we just deleted.
+        const key = this.sanitizeId(profile.id)
+        const timer = this.flushTimers.get(key)
+        if (timer) {
+            clearTimeout(timer)
+            this.flushTimers.delete(key)
+        }
+        this.buffers.delete(key)
+
+        const dir = path.join(this.rootDir(), this.sanitizeId(profile.id))
+        let entries: string[] = []
+        try {
+            entries = fs.readdirSync(dir).filter(n => n.endsWith('.jsonl'))
+        } catch {
+            return 0
+        }
+        let removed = 0
+        for (const f of entries) {
+            try {
+                fs.unlinkSync(path.join(dir, f))
+                removed += 1
+            } catch { /* skip */ }
+        }
+        return removed
+    }
+
+    /**
      * Delete files older than `savedHistoryDays` days for a profile.
      * Runs on tab open right after load(); a background sweep keeps
      * disk usage bounded even for profiles the user leaves running
