@@ -344,6 +344,15 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     private graphicalCache: { seq: number; metric: string | null; cards: GraphCard[] } =
         { seq: -1, metric: null, cards: [] }
 
+    /**
+     * Candidates cache. Same latestDirtySeq invalidation as the other
+     * derived getters — critical here because the metric dropdown's
+     * *ngFor was tearing down and recreating <option> elements on
+     * every CD tick, which closed the dropdown mid-click and made it
+     * impossible to select a metric under active telemetry.
+     */
+    private candidatesCache: { seq: number; list: GraphMetric[] } = { seq: -1, list: [] }
+
     private latestDirtySeq = 0
 
     // NB: `config: ConfigService` is inherited protected on BaseTabComponent
@@ -870,6 +879,9 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     trackLatestRow = (_: number, r: LatestRow): string => r.entry.path
     trackGraphCard = (_: number, c: GraphCard): string => c.entry.path
     trackSavedById = (_: number, s: GnmiSavedSubscription): string => s.id
+    trackCandidateByLeaf = (_: number, m: GraphMetric): string => m.leaf
+    trackWindowChoiceBySec = (_: number, w: { sec: number }): number => w.sec
+    trackDisplayChoiceByValue = (_: number, d: { value: string }): string => d.value
 
     // ─── Saved subscriptions ────────────────────────────────────────
 
@@ -1219,6 +1231,13 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
      * metric; the empty-state hint tells the user why nothing shows.
      */
     get graphicalMetricCandidates (): GraphMetric[] {
+        // Cached against latestDirtySeq — same invalidation scheme as
+        // graphicalCards. Without this the template's *ngFor over the
+        // dropdown options tears down and recreates <option> elements
+        // on every CD tick, which closes the dropdown mid-click.
+        if (this.candidatesCache.seq === this.latestDirtySeq) {
+            return this.candidatesCache.list
+        }
         const counts = new Map<string, number>()
         for (const entry of this.latestByPath.values()) {
             if (!entry.history.length) { continue }
@@ -1230,6 +1249,7 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
             out.push({ leaf, signature: leaf, componentCount })
         }
         out.sort((a, b) => b.componentCount - a.componentCount || a.leaf.localeCompare(b.leaf))
+        this.candidatesCache = { seq: this.latestDirtySeq, list: out }
         return out
     }
 

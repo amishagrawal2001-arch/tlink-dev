@@ -236,7 +236,7 @@
                         )
                             option([ngValue]='null') Auto ({{ selectedGraphicalMetric || '—' }})
                             option(
-                                *ngFor='let m of graphicalMetricCandidates',
+                                *ngFor='let m of graphicalMetricCandidates; trackBy: trackCandidateByLeaf',
                                 [ngValue]='m.leaf'
                             ) {{ m.leaf }} ({{ m.componentCount }})
                     .gr-metric
@@ -249,7 +249,7 @@
                             (ngModelChange)='latestDirtySeq = latestDirtySeq + 1'
                         )
                             option(
-                                *ngFor='let w of chartWindowChoices',
+                                *ngFor='let w of chartWindowChoices; trackBy: trackWindowChoiceBySec',
                                 [ngValue]='w.sec'
                             ) {{ w.label }}
                     .gr-metric
@@ -259,7 +259,7 @@
                             (ngModelChange)='latestDirtySeq = latestDirtySeq + 1'
                         )
                             option(
-                                *ngFor='let d of chartDisplayChoices',
+                                *ngFor='let d of chartDisplayChoices; trackBy: trackDisplayChoiceByValue',
                                 [ngValue]='d.value'
                             ) {{ d.label }}
                     .gr-metric
