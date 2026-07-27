@@ -1177,6 +1177,13 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
      * it just reports 'changed' when the formatted string flipped.
      */
     deltaOf (entry: LatestEntry): { kind: 'up' | 'down' | 'same' | 'changed'; label: string } {
+        // Rate-mode delta = difference between the two most recent
+        // rate samples (rate at N-1 minus rate at N-2), not the raw
+        // counter delta. Otherwise the card shows "1,593,437 pps"
+        // next to "+70,710,362" which reads as two unrelated numbers.
+        if (this.shouldPlotRate(entry.path)) {
+            return this.deltaOfRate(entry)
+        }
         const a = entry.lastValue
         const b = entry.prevValue
         if (typeof a === 'number' && typeof b === 'number' && Number.isFinite(a) && Number.isFinite(b)) {
@@ -1188,6 +1195,33 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         if (entry.formatted.value !== entry.prevFormatted.value) {
             return { kind: 'changed', label: '≠' }
         }
+        return { kind: 'same', label: '·' }
+    }
+
+    /**
+     * Delta between the last two RATES rather than the last two raw
+     * counters. Needs at least 3 raw samples in history (from which
+     * we compute the two rates); returns "·" while collecting. Skips
+     * counter resets (dv<0) same as toRateSeries does.
+     */
+    private deltaOfRate (entry: LatestEntry): { kind: 'up' | 'down' | 'same' | 'changed'; label: string } {
+        const h = entry.history
+        const ts = entry.historyTs
+        if (h.length < 3) { return { kind: 'same', label: '·' } }
+        const n = h.length
+        const rateAt = (i: number): number | null => {
+            const dt = ts[i] - ts[i - 1]
+            if (dt <= 0) { return null }
+            const dv = h[i] - h[i - 1]
+            if (dv < 0) { return null }
+            return (dv / dt) * 1000
+        }
+        const cur = rateAt(n - 1)
+        const prev = rateAt(n - 2)
+        if (cur === null || prev === null) { return { kind: 'same', label: '·' } }
+        const d = cur - prev
+        if (d > 0) { return { kind: 'up', label: `▲ +${this.formatRateValue(d, entry.path)} ${this.rateUnit(entry.path)}` } }
+        if (d < 0) { return { kind: 'down', label: `▼ ${this.formatRateValue(d, entry.path)} ${this.rateUnit(entry.path)}` } }
         return { kind: 'same', label: '·' }
     }
 
@@ -1347,6 +1381,8 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         currentLabel: string
         /** Formatted current unit (matches value in value mode; "bps"/"pps"/"/s" in rate mode). */
         currentUnit: string
+        /** True when this chart is plotting rate deltas rather than raw values. Template uses it to swap the "singleSample" footer copy. */
+        useRate: boolean
     } | null {
         const useRate = this.shouldPlotRate(entry.path)
         const [hRaw, tsRaw] = this.windowedHistory(entry)
@@ -1378,6 +1414,7 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
                 sampleCount: h.length,
                 singleSample: true,
                 currentLabel: latestLabel, currentUnit: unit,
+                useRate,
             }
         }
         const range = max - min || 1
@@ -1397,6 +1434,7 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
             sampleCount: h.length,
             singleSample: false,
             currentLabel: latestLabel, currentUnit: unit,
+            useRate,
         }
     }
 
