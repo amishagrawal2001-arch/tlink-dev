@@ -197,9 +197,11 @@
                 span Waiting for notifications…
             .empty-hint(*ngIf='!graphicalCards.length && latestByPath.size')
                 span
-                    | No metric with ≥2 components is being sampled yet.
-                    | Subscribe to a path that produces numeric leaves across multiple components
-                    | (e.g. /components/component/cpu/utilization/state/instant).
+                    | Subscribed paths aren't producing numeric values yet.
+                    | Try a numeric leaf — e.g. /system/memory/state/used,
+                    | /components/component/cpu/utilization/state/instant,
+                    | or any interface counter.
+                    | Strings and objects (hostname, status enums) can't be plotted.
 
             div(*ngIf='graphicalCards.length')
                 .gr-summary-strip

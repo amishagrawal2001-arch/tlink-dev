@@ -945,21 +945,25 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     // ─── Graphical view (derived) ───────────────────────────────────
 
     /**
-     * List of leaves shared by ≥2 components — the picker options for
-     * the Graphical metric. Sorted by component count so the "most
-     * fanned-out" metric is first (usually the one the user wants).
+     * Candidate leaves for the Graphical metric — every leaf that has
+     * at least one numeric entry we could plot. Sorted by fan-out (most
+     * components first, then leaf name), so a "cpu instant across 8
+     * cores" picks before a "memory used across 1 device".
+     *
+     * NB: only NUMERIC entries count. A subscribe that only emits
+     * strings (e.g. hostname) shouldn't offer itself as a chart-able
+     * metric; the empty-state hint tells the user why nothing shows.
      */
     get graphicalMetricCandidates (): GraphMetric[] {
         const counts = new Map<string, number>()
         for (const entry of this.latestByPath.values()) {
+            if (!entry.history.length) { continue }
             const leaf = this.formatter.leafName(entry.path)
             counts.set(leaf, (counts.get(leaf) ?? 0) + 1)
         }
         const out: GraphMetric[] = []
         for (const [leaf, componentCount] of counts) {
-            if (componentCount >= 2) {
-                out.push({ leaf, signature: leaf, componentCount })
-            }
+            out.push({ leaf, signature: leaf, componentCount })
         }
         out.sort((a, b) => b.componentCount - a.componentCount || a.leaf.localeCompare(b.leaf))
         return out
