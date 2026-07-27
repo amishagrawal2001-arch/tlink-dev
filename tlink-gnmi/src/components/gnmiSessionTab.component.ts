@@ -197,6 +197,26 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     /** How many seconds of history the Graphical chart cards visualize. 0 = all retained history. */
     chartWindowSec = 0
 
+    /**
+     * Chart display mode.
+     *   - 'auto' (default): counter leaves (in-pkts, in-octets,
+     *     *-count, etc.) render as RATE; everything else renders as
+     *     the raw value.
+     *   - 'value': always plot the raw sample value.
+     *   - 'rate':  always plot per-second delta between consecutive
+     *     samples.
+     * A monotonic counter plotted raw is boring ("line always goes
+     * up-and-right"); plotted as rate you can see traffic bursts,
+     * bandwidth patterns, error spikes. Rate view is the standard for
+     * counter telemetry — matches what SNMP/telemetry dashboards do.
+     */
+    chartDisplay: 'auto' | 'value' | 'rate' = 'auto'
+    chartDisplayChoices: { label: string; value: 'auto' | 'value' | 'rate' }[] = [
+        { label: 'Auto', value: 'auto' },
+        { label: 'Value', value: 'value' },
+        { label: 'Rate', value: 'rate' },
+    ]
+
     /** Timestamps parallel to history entries, so we can window by wall-clock. */
     private static readonly WINDOW_CHOICES: { label: string; sec: number }[] = [
         { label: '1m', sec: 60 },
@@ -1235,8 +1255,14 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         windowSpanLabel: string
         sampleCount: number
         singleSample: boolean
+        /** Formatted current-sample text (raw value in value mode, latest rate in rate mode). */
+        currentLabel: string
+        /** Formatted current unit (matches value in value mode; "bps"/"pps"/"/s" in rate mode). */
+        currentUnit: string
     } | null {
-        const [h, ts] = this.windowedHistory(entry)
+        const useRate = this.shouldPlotRate(entry.path)
+        const [hRaw, tsRaw] = this.windowedHistory(entry)
+        const [h, ts] = useRate ? this.toRateSeries(hRaw, tsRaw) : [hRaw, tsRaw]
         if (!h.length) { return null }
         // One-sample OR constant-across-samples case: render a flat
         // mid-line placeholder instead of squishing everything to
@@ -1246,6 +1272,11 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         // — reads as "0/off" instead of "value is stable at N".
         const min = Math.min(...h)
         const max = Math.max(...h)
+        const unit = useRate ? this.rateUnit(entry.path) : entry.formatted.unit
+        const latest = h[h.length - 1]
+        const latestLabel = useRate
+            ? this.formatRateValue(latest, entry.path)
+            : entry.formatted.value
         if (h.length === 1 || max === min) {
             const value = max
             const y = 25
@@ -1258,6 +1289,7 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
                 windowSpanLabel: this.humanizeSpan(spanMs),
                 sampleCount: h.length,
                 singleSample: true,
+                currentLabel: latestLabel, currentUnit: unit,
             }
         }
         const range = max - min || 1
@@ -1276,7 +1308,81 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
             windowSpanLabel: this.humanizeSpan(spanMs),
             sampleCount: h.length,
             singleSample: false,
+            currentLabel: latestLabel, currentUnit: unit,
         }
+    }
+
+    /**
+     * True when a leaf should be plotted as rate under the current
+     * chartDisplay setting. In 'auto' mode we look at the path — the
+     * classic counter naming (`.../counters/*`, `-octets`, `-pkts`,
+     * `-packets`, `-count`, `-frames`) triggers rate; everything else
+     * plots raw. `value` forces raw; `rate` forces rate.
+     */
+    shouldPlotRate (path: string): boolean {
+        if (this.chartDisplay === 'value') { return false }
+        if (this.chartDisplay === 'rate') { return true }
+        const p = path.toLowerCase()
+        if (p.includes('/counters/')) { return true }
+        const leaf = this.formatter.leafName(path).toLowerCase()
+        return leaf.endsWith('-octets') || leaf === 'octets' ||
+               leaf.endsWith('-pkts') || leaf.endsWith('-packets') || leaf === 'packets' ||
+               leaf.endsWith('-count') || leaf === 'count' ||
+               leaf.endsWith('-frames') || leaf === 'frames' ||
+               leaf.endsWith('-errors') || leaf === 'errors' ||
+               leaf.endsWith('-discards') || leaf === 'discards'
+    }
+
+    /**
+     * Convert (value[], timestamp[]) into a rate series: element i is
+     * (value[i+1] - value[i]) / (ts[i+1] - ts[i]) * 1000, so the
+     * result is per-second rate. Skips negative rates (counter reset
+     * or wrap — we can't distinguish, so treat as gap and null the
+     * bin). Result array is one shorter than input; timestamp[i] is
+     * paired with the END of that interval so windowing still lines up.
+     */
+    private toRateSeries (values: number[], ts: number[]): [number[], number[]] {
+        if (values.length < 2) { return [[], []] }
+        const rateVals: number[] = []
+        const rateTs: number[] = []
+        for (let i = 1; i < values.length; i++) {
+            const dt = ts[i] - ts[i - 1]
+            if (dt <= 0) { continue }
+            const dv = values[i] - values[i - 1]
+            // Negative delta = counter reset (interface flap) or wrap.
+            // Skip rather than plot a huge downward spike.
+            if (dv < 0) { continue }
+            rateVals.push((dv / dt) * 1000)
+            rateTs.push(ts[i])
+        }
+        return [rateVals, rateTs]
+    }
+
+    /** Human-facing unit for a rate value on a given path. */
+    private rateUnit (path: string): string {
+        const leaf = this.formatter.leafName(path).toLowerCase()
+        if (leaf.endsWith('-octets') || leaf === 'octets') { return 'B/s' }
+        if (leaf.endsWith('-pkts') || leaf.endsWith('-packets') || leaf === 'packets') { return 'pps' }
+        if (leaf.endsWith('-frames') || leaf === 'frames') { return 'fps' }
+        return '/s'
+    }
+
+    /** Format a rate number sensibly — auto-scales K/M/G suffixes for byte counters. */
+    private formatRateValue (n: number, path: string): string {
+        const leaf = this.formatter.leafName(path).toLowerCase()
+        if (leaf.endsWith('-octets') || leaf === 'octets') {
+            // Bytes per second → K/M/G/T scaling
+            const units = ['', 'K', 'M', 'G', 'T']
+            let v = n
+            let i = 0
+            while (Math.abs(v) >= 1024 && i < units.length - 1) { v /= 1024; i += 1 }
+            const digits = Math.abs(v) >= 100 ? 0 : Math.abs(v) >= 10 ? 1 : 2
+            return `${v.toFixed(digits)} ${units[i]}`.trim()
+        }
+        // Packet counters etc. — thousands separator for readability.
+        if (Math.abs(n) >= 10_000) { return Math.round(n).toLocaleString('en-US') }
+        if (Math.abs(n) >= 1) { return n.toFixed(1) }
+        return n.toFixed(2)
     }
 
     /**

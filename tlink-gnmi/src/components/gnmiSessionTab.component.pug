@@ -242,6 +242,16 @@
                                 [ngValue]='w.sec'
                             ) {{ w.label }}
                     .gr-metric
+                        .k Display
+                        select.gr-metric-select(
+                            [(ngModel)]='chartDisplay',
+                            (ngModelChange)='latestDirtySeq = latestDirtySeq + 1'
+                        )
+                            option(
+                                *ngFor='let d of chartDisplayChoices',
+                                [ngValue]='d.value'
+                            ) {{ d.label }}
+                    .gr-metric
                         .k Latest
                         .v {{ graphicalCards[0]?.entry.formatted.value }}{{ graphicalCards[0]?.entry.formatted.unit }}
 
@@ -250,10 +260,18 @@
                         .gr-card-head
                             span.gr-card-label
                                 strong {{ card.label }}
-                            span.gr-card-label {{ card.entry.formatted.unit || '' }}
+                            span.gr-card-label(*ngIf='shouldPlotRate(card.entry.path)') rate
                         .gr-card-value
-                            | {{ card.entry.formatted.value }}
-                            span.unit(*ngIf='card.entry.formatted.unit') {{ card.entry.formatted.unit }}
+                            //- Prefer the chart's latest (rate-aware) value
+                            //- when we have a rendered chart; fall back to
+                            //- the raw formatted value for cards that
+                            //- couldn't build a chart yet.
+                            ng-container(*ngIf='chartPaths(card.entry) as chart; else rawValue')
+                                | {{ chart.currentLabel }}
+                                span.unit(*ngIf='chart.currentUnit') {{ chart.currentUnit }}
+                            ng-template(#rawValue)
+                                | {{ card.entry.formatted.value }}
+                                span.unit(*ngIf='card.entry.formatted.unit') {{ card.entry.formatted.unit }}
                         .gr-chart-wrap([class.single-sample]='chartPaths(card.entry)?.singleSample')
                             ng-container(*ngIf='chartPaths(card.entry) as chart')
                                 svg(viewBox='0 0 100 50', preserveAspectRatio='none')
