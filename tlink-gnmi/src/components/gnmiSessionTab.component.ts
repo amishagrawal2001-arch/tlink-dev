@@ -1498,33 +1498,43 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
             })
         }
 
-        // X-axis ticks — five evenly-spaced sample points showing
-        // relative time-ago. Use the endpoint's timestamp as "now" so
-        // ticks line up with actual samples.
+        // X-axis ticks — five evenly-spaced sample points labeled
+        // with absolute wall-clock time (HH:MM or HH:MM:SS depending
+        // on window span). Matches what a network engineer sees in
+        // syslog / show-interface output; correlates directly with
+        // device events. Previous relative-time labels ("-17m")
+        // required mental math against "now" and read cluttered.
         const xTicks: AxisTick[] = []
         const endTs = ts[ts.length - 1]
         const [startTs] = ts
+        const spanMs = endTs - startTs
+        // Sub-5-min windows include seconds so ticks 5-10s apart
+        // don't all round to the same "14:22"; longer windows drop
+        // seconds so the label stays compact.
+        const includeSeconds = spanMs < 5 * 60 * 1000
         for (let i = 0; i <= 4; i++) {
             const frac = i / 4
-            const tickTs = startTs + (endTs - startTs) * frac
-            const agoMs = endTs - tickTs
+            const tickTs = startTs + spanMs * frac
             xTicks.push({
                 pos: chartX0 + frac * chartW,
-                label: agoMs === 0 ? 'now' : `-${this.humanizeSpan(agoMs)}`,
+                label: this.formatClock(tickTs, includeSeconds),
             })
         }
 
-        // Hover crosshair position + tooltip data.
+        // Hover crosshair position + tooltip data. Show absolute
+        // wall-clock time to match the x-axis convention plus the
+        // relative age in parens for at-a-glance context.
         let hover: ExpandedChartHover | null = null
         if (this.hoverIndex !== null && this.hoverIndex >= 0 && this.hoverIndex < pts.length) {
             const p = pts[this.hoverIndex]
             const agoMs = endTs - p.tsMs
+            const clock = this.formatClock(p.tsMs, true)
             hover = {
                 x: p.x,
                 y: p.y,
                 value: useRate ? this.formatRateValue(p.value, e.path) : this.compactNumber(p.value),
                 unit: useRate ? this.rateUnit(e.path) : e.formatted.unit,
-                ago: agoMs === 0 ? 'now' : `${this.humanizeSpan(agoMs)} ago`,
+                ago: agoMs === 0 ? clock + ' (now)' : `${clock} (${this.humanizeSpan(agoMs)} ago)`,
             }
         }
 
@@ -1620,6 +1630,20 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
             startIdx = i
         }
         return [entry.history.slice(startIdx), entry.historyTs.slice(startIdx)]
+    }
+
+    /**
+     * Format a wall-clock timestamp (ms since epoch) as HH:MM or
+     * HH:MM:SS in the local timezone. Used on the expanded chart's
+     * x-axis so tick labels match syslog / show-interface output.
+     */
+    private formatClock (ms: number, includeSeconds: boolean): string {
+        const d = new Date(ms)
+        const hh = String(d.getHours()).padStart(2, '0')
+        const mm = String(d.getMinutes()).padStart(2, '0')
+        if (!includeSeconds) { return `${hh}:${mm}` }
+        const ss = String(d.getSeconds()).padStart(2, '0')
+        return `${hh}:${mm}:${ss}`
     }
 
     /** Format a span-in-ms as a compact label like "12s", "5m", "1h". */
