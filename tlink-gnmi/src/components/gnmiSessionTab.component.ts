@@ -215,6 +215,16 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
      */
     graphicalMetric: string | null = null
 
+    /**
+     * Stable "current time" tick, updated once per second by the
+     * rateTimer. Age / freshness getters read from this instead of
+     * Date.now() so their value stays constant across Angular's two
+     * dev-mode CD passes — otherwise the second half of the pass
+     * observes a fresher timestamp and throws NG0100
+     * (ExpressionChangedAfterItHasBeenCheckedError).
+     */
+    now = Date.now()
+
     // Internal counters/timers.
     private rowIdSeq = 0
     private prevTotalForRate = 0
@@ -282,16 +292,25 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         // add subscriptions while this races.
         void this.loadCapabilities()
 
-        // 1-Hz timer to compute msg/s. Runs outside Angular's zone so
-        // it doesn't trigger a change-detection pass just for the
-        // rate number — we manually invalidate via zone.run.
+        // 1-Hz timer runs the wall-clock tick + msg/s calc. Fires
+        // outside Angular's zone so it doesn't hijack CD scheduling,
+        // then batches all state updates into a single zone.run so
+        // one CD pass covers both the rate change and the age labels.
+        // We ALWAYS enter zone.run (even when receiveRate is
+        // unchanged) so ageLabel-driven rows tick predictably —
+        // otherwise the age display would sit stale until the next
+        // rate change.
         this.zone.runOutsideAngular(() => {
             this.rateTimer = setInterval(() => {
+                const nextNow = Date.now()
                 const delta = this.totalReceived - this.prevTotalForRate
                 this.prevTotalForRate = this.totalReceived
-                if (delta !== this.receiveRate) {
-                    this.zone.run(() => { this.receiveRate = delta })
-                }
+                this.zone.run(() => {
+                    this.now = nextNow
+                    if (delta !== this.receiveRate) {
+                        this.receiveRate = delta
+                    }
+                })
             }, 1000)
         })
 
@@ -929,7 +948,10 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
      * is open. Cheap — one Date.now() call per row.
      */
     ageLabel (entry: LatestEntry): string {
-        const ms = Date.now() - Math.floor(entry.lastTimestampNs / 1_000_000)
+        // Read from this.now (updated by the 1-Hz timer) not Date.now()
+        // so the value is stable across Angular's two dev-mode CD
+        // passes; see the `now` field comment for the NG0100 details.
+        const ms = this.now - Math.floor(entry.lastTimestampNs / 1_000_000)
         const s = Math.max(0, Math.round(ms / 1000))
         if (s < 60) { return `${s}s` }
         const m = Math.round(s / 60)
@@ -939,7 +961,7 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
 
     /** True when the row updated in the last ~5s. Drives the pulse dot. */
     isFresh (entry: LatestEntry): boolean {
-        return Date.now() - Math.floor(entry.lastTimestampNs / 1_000_000) < 5000
+        return this.now - Math.floor(entry.lastTimestampNs / 1_000_000) < 5000
     }
 
     // ─── Graphical view (derived) ───────────────────────────────────
