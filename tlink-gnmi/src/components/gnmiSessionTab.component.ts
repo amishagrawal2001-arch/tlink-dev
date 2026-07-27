@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/explicit-module-boundary-types */
-import { Component, Injector, Input, NgZone, OnDestroy } from '@angular/core'
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Injector, Input, NgZone, OnDestroy } from '@angular/core'
 import { BaseTabComponent, NotificationsService, ProfilesService } from 'tlink-core'
 import { GnmiCapabilities, GnmiNotification, GnmiProfile, GnmiSavedSubscription, GnmiStreamMode, GnmiSubscribeMode } from '../api'
 import { GnmiService, GnmiSubscribeHandle } from '../services/gnmi.service'
@@ -160,6 +160,15 @@ interface ActiveSubscription {
     selector: 'gnmi-session-tab',
     templateUrl: './gnmiSessionTab.component.pug',
     styleUrls: ['./gnmiSessionTab.component.scss'],
+    // OnPush cuts change-detection cost dramatically on the Graphical
+    // view — with 40+ cards each calling chartPaths() + deltaOf() +
+    // ageLabel(), default CD was thrashing every gnmic notification
+    // (5-10 Hz × 46 cards = ~500 recomputations per second) and
+    // reliably hanging the tab. OnPush + scheduleCheck() below caps
+    // CD to ~10 Hz regardless of notification rate; the visible
+    // stream still updates smoothly because that's already faster
+    // than the eye can distinguish.
+    changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestroy {
     @Input() profile: GnmiProfile
@@ -283,6 +292,18 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     private profilesService: ProfilesService
     private catalog: GnmiPathCatalogService
     private zone: NgZone
+    private cdr: ChangeDetectorRef
+
+    /**
+     * Throttled CD-scheduling state. Under OnPush, notifications need
+     * to explicitly ask Angular to re-check the view; scheduling a
+     * markForCheck on every notification would defeat the point.
+     * pendingCheckTimer being non-null means a check is already
+     * queued, so subsequent notifications collapse into one CD pass.
+     */
+    private pendingCheckTimer: ReturnType<typeof setTimeout> | null = null
+    /** Cap CD passes at ~10 Hz. Fast enough that the human eye can't tell it's throttled. */
+    private static readonly CD_THROTTLE_MS = 100
 
     // ─── Path catalog picker state ─────────────────────────────────
     /** Text filter over the catalog picker. */
@@ -300,6 +321,7 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         this.profilesService = injector.get(ProfilesService)
         this.catalog = injector.get(GnmiPathCatalogService)
         this.zone = injector.get(NgZone)
+        this.cdr = injector.get(ChangeDetectorRef)
         // NB: title is set in ngOnInit, deferred a microtask, to sidestep
         // ExpressionChangedAfterItHasBeenCheckedError. Setting it here
         // AND in ngOnInit trips the check because the parent tab-header
@@ -321,24 +343,22 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         void this.loadCapabilities()
 
         // 1-Hz timer runs the wall-clock tick + msg/s calc. Fires
-        // outside Angular's zone so it doesn't hijack CD scheduling,
-        // then batches all state updates into a single zone.run so
-        // one CD pass covers both the rate change and the age labels.
-        // We ALWAYS enter zone.run (even when receiveRate is
-        // unchanged) so ageLabel-driven rows tick predictably —
-        // otherwise the age display would sit stale until the next
-        // rate change.
+        // outside Angular's zone so it doesn't hijack CD scheduling;
+        // scheduleCheck() below batches the actual CD pass with any
+        // in-flight notification updates so age labels tick at 1 Hz
+        // regardless of notification volume. Under OnPush, plain
+        // zone.run does NOT force this component to re-check —
+        // markForCheck is required, which scheduleCheck handles.
         this.zone.runOutsideAngular(() => {
             this.rateTimer = setInterval(() => {
                 const nextNow = Date.now()
                 const delta = this.totalReceived - this.prevTotalForRate
                 this.prevTotalForRate = this.totalReceived
-                this.zone.run(() => {
-                    this.now = nextNow
-                    if (delta !== this.receiveRate) {
-                        this.receiveRate = delta
-                    }
-                })
+                this.now = nextNow
+                if (delta !== this.receiveRate) {
+                    this.receiveRate = delta
+                }
+                this.scheduleCheck()
             }, 1000)
         })
 
@@ -401,6 +421,29 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         if (this.rateTimer) {
             clearInterval(this.rateTimer)
         }
+        if (this.pendingCheckTimer) {
+            clearTimeout(this.pendingCheckTimer)
+        }
+    }
+
+    /**
+     * Queue a change-detection pass, coalescing bursts. First caller
+     * schedules a real setTimeout; subsequent callers within the
+     * throttle window are no-ops (their state changes fold into the
+     * same pass).
+     *
+     * Uses runOutsideAngular so the setTimeout scheduling doesn't
+     * itself trigger a CD pass — only the eventual markForCheck +
+     * zone.run inside the callback does.
+     */
+    private scheduleCheck (): void {
+        if (this.pendingCheckTimer) { return }
+        this.zone.runOutsideAngular(() => {
+            this.pendingCheckTimer = setTimeout(() => {
+                this.pendingCheckTimer = null
+                this.zone.run(() => this.cdr.markForCheck())
+            }, GnmiSessionTabComponent.CD_THROTTLE_MS)
+        })
     }
 
     // ─── Subscription lifecycle ─────────────────────────────────────
@@ -469,28 +512,34 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
             sub.lastError = undefined
 
             handle.on('notification', (n: GnmiNotification) => {
-                this.zone.run(() => this.onNotification(n, sub))
+                // Update state OUTSIDE the zone (no per-notification CD
+                // storm), then let the throttled scheduler batch a
+                // markForCheck for the next tick. On a fast device
+                // pushing 100 notifications per second, this collapses
+                // ~100 CD passes into ~10.
+                this.onNotification(n, sub)
+                this.scheduleCheck()
             })
             handle.on('sync', () => {
                 // Nothing user-facing yet — could add a "sync received"
                 // marker in the stream table in a future iteration.
             })
             handle.on('error', (err: Error & { transient?: boolean }) => {
-                this.zone.run(() => {
-                    sub.lastError = err.message
-                    if (!err.transient) {
-                        this.notifications.error(`gNMI subscribe error: ${err.message}`)
-                    }
-                })
+                sub.lastError = err.message
+                if (!err.transient) {
+                    // NotificationsService uses toastr which re-enters
+                    // the zone on its own — safe to call from outside.
+                    this.notifications.error(`gNMI subscribe error: ${err.message}`)
+                }
+                this.scheduleCheck()
             })
             handle.on('close', (code: number | null) => {
-                this.zone.run(() => {
-                    sub.running = false
-                    sub.handle = null
-                    if (code && code !== 0 && !sub.lastError) {
-                        sub.lastError = `gnmic exited with code ${code}`
-                    }
-                })
+                sub.running = false
+                sub.handle = null
+                if (code && code !== 0 && !sub.lastError) {
+                    sub.lastError = `gnmic exited with code ${code}`
+                }
+                this.scheduleCheck()
             })
         } catch (err) {
             sub.lastError = (err as Error).message
