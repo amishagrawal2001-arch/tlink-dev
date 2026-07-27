@@ -16,6 +16,17 @@
             )
                 i.fas.fa-bookmark.me-1
                 span Save all
+            //- Download the current session state as a self-contained
+            //- HTML report — safe to attach to a ticket / email.
+            //- Available whenever anything has been received (not just
+            //- when subs are active — post-close-review is a valid case).
+            button.save-all-btn(
+                *ngIf='subscriptions.length || latestByPath.size',
+                (click)='downloadReport()',
+                title='Download the current session as a self-contained HTML report'
+            )
+                i.fas.fa-file-download.me-1
+                span Report
 
         .sub-list
             .sub-item(*ngFor='let sub of subscriptions; trackBy: trackSubById',
