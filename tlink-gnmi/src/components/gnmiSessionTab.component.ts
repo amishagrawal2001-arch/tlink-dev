@@ -1363,8 +1363,17 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
      * we can compare in one pass without a sort.
      */
     get selectedGraphicalMetric (): string | null {
-        if (this.graphicalMetric) { return this.graphicalMetric }
         const candidates = this.graphicalMetricCandidates
+        // User's manual pick wins ONLY when it still exists under the
+        // current filter (focused subscription, active window, etc.).
+        // Previously a stale manual pick — e.g. "in-pkts" left over
+        // from an interfaces subscription — would suppress auto-select
+        // even after the user focused a subscription that has no
+        // in-pkts leaf, leaving the Graphical view stuck on the empty
+        // hint. Fall through to auto when the pick doesn't match.
+        if (this.graphicalMetric && candidates.some(c => c.leaf === this.graphicalMetric)) {
+            return this.graphicalMetric
+        }
         if (!candidates.length) { return null }
 
         let best: { leaf: string; score: number } | null = null
