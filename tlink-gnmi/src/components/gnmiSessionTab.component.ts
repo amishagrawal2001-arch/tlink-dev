@@ -432,16 +432,31 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
      * throttle window are no-ops (their state changes fold into the
      * same pass).
      *
-     * Uses runOutsideAngular so the setTimeout scheduling doesn't
-     * itself trigger a CD pass — only the eventual markForCheck +
-     * zone.run inside the callback does.
+     * Uses detectChanges() rather than markForCheck() because gnmic
+     * subprocess events may fire outside Zone.js's patched surface in
+     * Electron — a markForCheck alone doesn't reliably trigger the
+     * tick that processes the flag. detectChanges bypasses that by
+     * running CD directly on this component; we still throttle to
+     * 10 Hz so a fan-out subscribe can't storm.
+     *
+     * Wrapped in zone.run so any downstream event bindings that fire
+     * during CD (unlikely but possible via structural directives)
+     * are still tracked by the Angular zone.
      */
     private scheduleCheck (): void {
         if (this.pendingCheckTimer) { return }
         this.zone.runOutsideAngular(() => {
             this.pendingCheckTimer = setTimeout(() => {
                 this.pendingCheckTimer = null
-                this.zone.run(() => this.cdr.markForCheck())
+                this.zone.run(() => {
+                    try {
+                        this.cdr.detectChanges()
+                    } catch {
+                        // View has been destroyed between scheduleCheck
+                        // and now (tab close) — swallow; ngOnDestroy
+                        // also clears the timer but a race is possible.
+                    }
+                })
             }, GnmiSessionTabComponent.CD_THROTTLE_MS)
         })
     }
