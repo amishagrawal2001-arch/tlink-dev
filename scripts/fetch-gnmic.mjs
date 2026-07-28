@@ -68,14 +68,29 @@ const versionArg = argv.find(a => a.startsWith('--version='))
 const VERSION = versionArg?.replace(/^--version=/, '') ?? process.env.GNMIC_VERSION ?? DEFAULT_VERSION
 
 function detectHostPlatform () {
-    if (process.platform === 'darwin') { return process.arch === 'arm64' ? 'mac-arm64' : 'mac-x64' }
-    if (process.platform === 'win32') { return process.arch === 'arm64' ? 'windows-arm64' : 'windows-x64' }
+    // Honor an ARCH env var override so cross-arch CI builds fetch
+    // the right binary. The macOS matrix runs on macos-latest
+    // (Apple Silicon) but iterates arch=x86_64 AND arch=arm64;
+    // process.arch would return 'arm64' both times and give us the
+    // wrong binary for the x86_64 leg. Same shape on Windows / Linux
+    // cross-arch build legs.
+    const arch = normalizeArch(process.env.ARCH || process.arch)
+    if (process.platform === 'darwin') { return arch === 'arm64' ? 'mac-arm64' : 'mac-x64' }
+    if (process.platform === 'win32') { return arch === 'arm64' ? 'windows-arm64' : 'windows-x64' }
     if (process.platform === 'linux') {
-        if (process.arch === 'arm64') { return 'linux-arm64' }
-        if (process.arch === 'arm') { return 'linux-armv7' }
+        if (arch === 'arm64') { return 'linux-arm64' }
+        if (arch === 'arm' || arch === 'armv7l' || arch === 'armhf') { return 'linux-armv7' }
         return 'linux-x64'
     }
-    throw new Error(`Unsupported host platform: ${process.platform}/${process.arch}`)
+    throw new Error(`Unsupported host platform: ${process.platform}/${arch}`)
+}
+
+/** Map various arch spellings to the canonical form our PLATFORMS map uses. */
+function normalizeArch (raw) {
+    const a = String(raw || '').toLowerCase()
+    if (a === 'x86_64' || a === 'amd64') { return 'x64' }
+    if (a === 'aarch64') { return 'arm64' }
+    return a
 }
 
 const targets = wantAll ? Object.keys(PLATFORMS) : [detectHostPlatform()]

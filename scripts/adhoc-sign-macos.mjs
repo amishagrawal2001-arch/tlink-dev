@@ -126,11 +126,16 @@ async function signBundledExtras (appPath) {
         }
     }
 
-    // Sign executables
+    // Sign executables. Include both mac-arm64 and mac-x64 gnmic —
+    // whichever arch the fetch step landed under extras/gnmic/ is what
+    // this build packaged; the missing one is a no-op via existsSync
+    // below.
     const executables = [
         path.join(extrasPath, 'freerdp', 'mac', 'sdl-freerdp'),
         path.join(extrasPath, 'freerdp', 'mac', 'xfreerdp'),
         path.join(extrasPath, 'fish', 'mac', 'fish'),
+        path.join(extrasPath, 'gnmic', 'mac-arm64', 'gnmic'),
+        path.join(extrasPath, 'gnmic', 'mac-x64', 'gnmic'),
     ]
     for (const exe of executables) {
         if (fs.existsSync(exe)) {

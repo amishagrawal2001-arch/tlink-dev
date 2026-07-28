@@ -122,6 +122,13 @@ jobs:
       env:
         ARCH: ${{matrix.arch}}
 
+    # Fetch the platform-appropriate gnmic binary so tlink-gnmi has
+    # something to spawn once installed. Script auto-detects host
+    # arch (Darwin arm64 / x86_64), verifies SHA256 against the
+    # release checksums, drops the binary at extras/gnmic/mac-*/gnmic.
+    - name: Fetch gnmic binary
+      run: node scripts/fetch-gnmic.mjs
+
     - run: sed -i '' 's/updateInfo = await/\/\/updateInfo = await/g' node_modules/app-builder-lib/out/targets/ArchiveTarget.js
 
     # Work around electron-builder beta bug
@@ -290,6 +297,9 @@ jobs:
     - name: Prepackage plugins (${{matrix.arch}})
       run: scripts/prepackage-plugins.mjs
 
+    - name: Fetch gnmic binary (${{matrix.arch}})
+      run: node scripts/fetch-gnmic.mjs
+
     - name: Build packages (${{matrix.arch}})
       run: scripts/build-linux.mjs
       env:
@@ -453,6 +463,10 @@ jobs:
       run: node scripts/prepackage-plugins.mjs
       env:
         ARCH: ${{matrix.arch}}
+
+    - name: Fetch gnmic binary
+      shell: bash
+      run: node scripts/fetch-gnmic.mjs
 
     - name: Decode certificate
       if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags'))
