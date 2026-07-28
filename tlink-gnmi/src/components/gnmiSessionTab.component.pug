@@ -40,6 +40,16 @@
                     span.dot([class.live]='sub.running', [class.dead]='!sub.running')
                     span.mode {{ sub.mode }} · {{ sub.streamMode }}
                     span.rate(*ngIf='sub.mode === "STREAM" && sub.streamMode === "SAMPLE"') {{ sub.sampleIntervalSec }}s
+                    //- Transient error counter — grows while a sub is
+                    //- flapping (reconnect storm, auth denies, etc.)
+                    //- and resets to 0 the moment data lands. Shown
+                    //- only when non-zero so healthy subs stay clean.
+                    span.err-count(
+                        *ngIf='sub.transientErrorCount > 0',
+                        [title]='"Transient errors since last success: " + sub.transientErrorCount'
+                    )
+                        i.fas.fa-exclamation-triangle.me-1
+                        | {{ sub.transientErrorCount }}
                     span.recv {{ sub.receiveCount }} recv
                 .sub-error(*ngIf='sub.lastError') {{ sub.lastError }}
                 //- Stop-propagation on all action buttons so clicking

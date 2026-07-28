@@ -164,6 +164,14 @@ interface ActiveSubscription {
     receiveCount: number
     handle: GnmiSubscribeHandle | null
     lastError?: string
+    /**
+     * Count of transient errors observed since the last successful
+     * notification. Reset to 0 when data lands, so a healthy sub reads
+     * "0 err" and a flapping sub grows a visible counter. Reveals
+     * reconnect storms that would otherwise stay invisible (transient
+     * errors don't fire toast notifications to avoid spam).
+     */
+    transientErrorCount: number
 }
 
 /**
@@ -626,6 +634,7 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
             running: false,
             receiveCount: 0,
             handle: null,
+            transientErrorCount: 0,
         }
         this.subscriptions = [...this.subscriptions, sub]
         this.startSubscription(sub)
@@ -702,6 +711,11 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
                 // pushing 100 notifications per second, this collapses
                 // ~100 CD passes into ~10.
                 this.onNotification(n, sub)
+                // Successful data means the current "streak" of
+                // transient errors has ended — reset the counter so
+                // the sub row reflects healthy state.
+                if (sub.transientErrorCount) { sub.transientErrorCount = 0 }
+                if (sub.lastError) { sub.lastError = undefined }
                 this.scheduleCheck()
             })
             handle.on('sync', () => {
@@ -710,7 +724,11 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
             })
             handle.on('error', (err: Error & { transient?: boolean }) => {
                 sub.lastError = err.message
-                if (!err.transient) {
+                if (err.transient) {
+                    // Silent-per-error to avoid spam; the counter on
+                    // the sub row is the user-visible signal instead.
+                    sub.transientErrorCount += 1
+                } else {
                     // NotificationsService uses toastr which re-enters
                     // the zone on its own — safe to call from outside.
                     this.notifications.error(`gNMI subscribe error: ${err.message}`)

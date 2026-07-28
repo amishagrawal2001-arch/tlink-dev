@@ -179,6 +179,13 @@ $border-radius: 5px;
     .mode { color: var(--theme-fg-more-1); }
     .rate { color: var(--theme-fg-more-2); }
     .recv { margin-left: auto; color: var(--theme-fg-more-2); }
+    // Transient-error counter — sits between rate and recv. Amber to
+    // signal "attention, not fatal"; the row already goes red-bordered
+    // if a fatal error hits (.errored class).
+    .err-count {
+        color: #d29922;
+        font-weight: 500;
+    }
 }
 
 .sub-error {
