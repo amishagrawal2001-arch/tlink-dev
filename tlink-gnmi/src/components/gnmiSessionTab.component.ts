@@ -250,6 +250,26 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     ]
 
     /**
+     * Card size for the Graphical grid. Drives the CSS grid's
+     * auto-fit minmax min-width via a --gr-card-min CSS variable set
+     * on the .gr-grid host: compact = 170px, normal = 210px (default),
+     * large = 340px. On a wide monitor "compact" fits 5-6 cards per
+     * row for at-a-glance scanning; "large" fits 2-3 with more chart
+     * detail per card.
+     */
+    chartCardSize: 'compact' | 'normal' | 'large' = 'normal'
+    chartCardSizeChoices: { label: string; value: 'compact' | 'normal' | 'large'; minPx: number }[] = [
+        { label: 'Compact', value: 'compact', minPx: 170 },
+        { label: 'Normal', value: 'normal', minPx: 210 },
+        { label: 'Large', value: 'large', minPx: 340 },
+    ]
+
+    /** Pixel width the CSS variable resolves to for the current chartCardSize. */
+    get chartCardMinPx (): number {
+        return this.chartCardSizeChoices.find(c => c.value === this.chartCardSize)?.minPx ?? 210
+    }
+
+    /**
      * When set, the Graphical grid is replaced by a full-pane detailed
      * chart for this specific path. Stored as PATH not entry reference
      * so a clear-and-recreate elsewhere doesn't orphan the view.
@@ -972,6 +992,7 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     trackCandidateByLeaf = (_: number, m: GraphMetric): string => m.leaf
     trackWindowChoiceBySec = (_: number, w: { sec: number }): number => w.sec
     trackDisplayChoiceByValue = (_: number, d: { value: string }): string => d.value
+    trackCardSizeByValue = (_: number, s: { value: string }): string => s.value
 
     // ─── Saved subscriptions ────────────────────────────────────────
 

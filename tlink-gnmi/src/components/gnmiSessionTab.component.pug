@@ -271,10 +271,22 @@
                                 [ngValue]='d.value'
                             ) {{ d.label }}
                     .gr-metric
+                        .k Size
+                        select.gr-metric-select(
+                            [(ngModel)]='chartCardSize'
+                        )
+                            option(
+                                *ngFor='let s of chartCardSizeChoices; trackBy: trackCardSizeByValue',
+                                [ngValue]='s.value'
+                            ) {{ s.label }}
+                    .gr-metric
                         .k Latest
                         .v {{ graphicalCards[0]?.entry.formatted.value }}{{ graphicalCards[0]?.entry.formatted.unit }}
 
-                .gr-grid(*ngIf='!expandedEntryPath')
+                .gr-grid(
+                    *ngIf='!expandedEntryPath',
+                    [style.--gr-card-min.px]='chartCardMinPx'
+                )
                     .gr-card(
                         *ngFor='let card of graphicalCards; trackBy: trackGraphCard',
                         (click)='expandCard(card)',

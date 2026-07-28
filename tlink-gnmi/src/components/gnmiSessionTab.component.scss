@@ -601,8 +601,13 @@ $lv-cols: 1fr 110px 110px 80px 70px;
 }
 
 .gr-grid {
+    // --gr-card-min is set inline via [style.--gr-card-min.px] on the
+    // .gr-grid host, driven by the Size dropdown in the summary strip.
+    // Falls back to 210px (Normal) when the variable isn't bound so
+    // the grid still renders in edge cases (e.g. testing).
+    --gr-card-min: 210px;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(var(--gr-card-min), 1fr));
     gap: 8px;
 }
 
