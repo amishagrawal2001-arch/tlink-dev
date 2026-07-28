@@ -851,22 +851,54 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
         this.selectedRow = null
     }
 
-    /** Serialize the current stream (or full buffer if paused) as JSONL for the clipboard. */
+    /**
+     * Copy the current stream (or full buffer if paused) to the
+     * clipboard as JSONL — one JSON object per line, keeps full value
+     * fidelity including nested objects. Best for further processing
+     * with jq / scripting.
+     */
     async exportStream (): Promise<void> {
+        await this.exportStreamAs('jsonl')
+    }
+
+    /**
+     * Copy as CSV — one row per notification, columns
+     * `timestamp_iso, path, kind, value`. Values get JSON-serialized
+     * inside the cell (so nested objects survive) and CSV-escaped
+     * (wrap in double quotes, double any embedded quotes) per RFC-4180.
+     * Best for spreadsheet ingest.
+     */
+    async exportStreamCsv (): Promise<void> {
+        await this.exportStreamAs('csv')
+    }
+
+    /** Shared serialize+copy path. Keeps the two entry-point methods thin. */
+    private async exportStreamAs (format: 'jsonl' | 'csv'): Promise<void> {
         const rows = this.paused
             ? [...this.pausedBuffer.reverse(), ...this.stream]
             : this.stream
-        const jsonl = rows
-            .map(r => JSON.stringify({
-                timestamp_ns: r.timestampNs,
-                path: r.path,
-                kind: r.kind,
-                value: r.value,
-            }))
-            .join('\n')
+        let text = ''
+        if (format === 'jsonl') {
+            text = rows
+                .map(r => JSON.stringify({
+                    timestamp_ns: r.timestampNs,
+                    path: r.path,
+                    kind: r.kind,
+                    value: r.value,
+                }))
+                .join('\n')
+        } else {
+            const csvEsc = (v: string): string => `"${v.replace(/"/g, '""')}"`
+            const header = 'timestamp_iso,path,kind,value'
+            text = [header, ...rows.map(r => {
+                const iso = new Date(Math.floor(r.timestampNs / 1_000_000)).toISOString()
+                const valueStr = typeof r.value === 'string' ? r.value : JSON.stringify(r.value)
+                return [iso, r.path, r.kind, valueStr].map(csvEsc).join(',')
+            })].join('\n')
+        }
         try {
-            await navigator.clipboard.writeText(jsonl)
-            this.notifications.info(`${rows.length} rows copied to clipboard as JSONL`)
+            await navigator.clipboard.writeText(text)
+            this.notifications.info(`${rows.length} rows copied as ${format.toUpperCase()}`)
         } catch (err) {
             this.notifications.error(`Copy failed: ${(err as Error).message}`)
         }

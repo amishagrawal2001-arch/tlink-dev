@@ -143,9 +143,12 @@
             button.toolbar-btn((click)='clearStream()')
                 i.fas.fa-trash-alt.me-1
                 span Clear
-            button.toolbar-btn(*ngIf='viewMode === "wire"', (click)='exportStream()')
+            button.toolbar-btn(*ngIf='viewMode === "wire"', (click)='exportStream()', title='Copy stream to clipboard as newline-delimited JSON')
                 i.fas.fa-copy.me-1
-                span Export
+                span JSONL
+            button.toolbar-btn(*ngIf='viewMode === "wire"', (click)='exportStreamCsv()', title='Copy stream to clipboard as CSV (spreadsheet-friendly)')
+                i.fas.fa-file-csv.me-1
+                span CSV
 
         //- ───────────── Wire log (original) ─────────────
         div(*ngIf='viewMode === "wire"', style='display: contents')
