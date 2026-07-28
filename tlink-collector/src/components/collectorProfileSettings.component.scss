@@ -1,0 +1,10 @@
+:host {
+    .form-control {
+        background-color: var(--theme-bg-more);
+        border-color: var(--theme-bg-less);
+        color: var(--theme-fg);
+    }
+    .form-control::placeholder { color: var(--theme-fg-more-2); }
+    select.form-control { color: var(--theme-fg); }
+    label { color: var(--theme-fg); }
+}

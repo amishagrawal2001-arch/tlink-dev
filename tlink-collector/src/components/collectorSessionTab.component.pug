@@ -1,0 +1,55 @@
+.collector-session
+    header.session-head
+        .head-block
+            span.eyebrow COLLECTOR
+            span.source-chip {{ profile?.options?.source || 'unknown' }}
+            span.status-dot([class.live]='running', [class.dead]='!running')
+            span.status-label {{ running ? 'streaming' : 'stopped' }}
+            span.recv {{ totalReceived }} received
+            span.rate(*ngIf='receiveRate > 0') · {{ receiveRate }}/s
+        .head-actions
+            button.head-btn((click)='toggleRunning()', [title]='running ? "Stop stream" : "Start stream"')
+                i.fas.me-1([class.fa-pause]='running', [class.fa-play]='!running')
+                span {{ running ? 'Stop' : 'Start' }}
+        .head-error(*ngIf='lastError')
+            i.fas.fa-triangle-exclamation.me-1
+            span {{ lastError }}
+
+    .toolbar
+        input.filter(
+            type='text',
+            placeholder='filter path or value…',
+            [(ngModel)]='filter'
+        )
+        button.toolbar-btn(
+            (click)='togglePause()',
+            [class.active]='paused'
+        )
+            i.fas.me-1([class.fa-pause]='!paused', [class.fa-play]='paused')
+            span(*ngIf='!paused') Pause
+            span(*ngIf='paused') Resume ({{ pendingSincePause }})
+        button.toolbar-btn((click)='clearStream()')
+            i.fas.fa-trash-alt.me-1
+            span Clear
+        button.toolbar-btn((click)='exportJsonl()')
+            i.fas.fa-copy.me-1
+            span JSONL
+
+    .stream
+        .stream-head
+            .col-ts Timestamp
+            .col-path Path
+            .col-val Value
+            .col-kind Kind
+        .stream-body
+            .empty-hint(*ngIf='!filteredStream.length')
+                span(*ngIf='!stream.length') Waiting for samples…
+                span(*ngIf='stream.length && !filteredStream.length') No rows match filter.
+            .stream-row(
+                *ngFor='let row of filteredStream; trackBy: trackRowById',
+                [class.deleted]='row.kind === "delete"'
+            )
+                .col-ts {{ formatTimestamp(row.timestampNs) }}
+                .col-path {{ row.path }}
+                .col-val {{ row.valuePreview }}
+                .col-kind {{ row.kind }}

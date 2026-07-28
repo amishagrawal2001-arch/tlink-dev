@@ -45,6 +45,7 @@ export const builtinPlugins = [
     'tlink-ai-assistant',
     'tlink-api-client',
     'tlink-gnmi',
+    'tlink-collector',
 ]
 
 export const packagesWithDocs = [

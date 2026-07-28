@@ -1,0 +1,104 @@
+ul.nav-tabs(ngbNav, #nav='ngbNav')
+    li(ngbNavItem)
+        a(ngbNavLink, translate) Source
+        ng-template(ngbNavContent)
+            .mb-3
+                label(translate) Data source
+                select.form-control(
+                    [(ngModel)]='profile.options.source',
+                    (ngModelChange)='onSourceChange()'
+                )
+                    option(value='mock') Mock (built-in generator)
+                    option(value='prometheus') Prometheus / Telegraf (HTTP scrape)
+                small.form-text.text-muted(translate)
+                    | Mock generates synthetic host metrics for demo / testing.
+                    | Prometheus HTTP scraper arrives in M3.2 — configurable now,
+                    | but the real scraper isn't wired up yet.
+
+            .mb-3
+                label(translate) Scrape interval (s)
+                input.form-control(
+                    type='number',
+                    min='1',
+                    placeholder='10',
+                    [(ngModel)]='profile.options.scrapeIntervalSec'
+                )
+
+    li(ngbNavItem, *ngIf='profile.options.source === "mock"')
+        a(ngbNavLink, translate) Mock
+        ng-template(ngbNavContent)
+            .mb-3
+                label(translate) Host count
+                input.form-control(
+                    type='number',
+                    min='1',
+                    max='200',
+                    [(ngModel)]='profile.options.mock.hostCount'
+                )
+                small.form-text.text-muted(translate)
+                    | Each synthetic host emits 4 metrics (cpu, memory, requests, errors).
+                    | Cardinality = hosts × 4. Keep under 100 unless you're stress-testing the UI.
+
+            .mb-3
+                label(translate) Scenario
+                select.form-control([(ngModel)]='profile.options.mock.scenario')
+                    option(value='idle') Idle (low, stable)
+                    option(value='busy') Busy (high CPU + steady growth)
+                    option(value='flapping') Flapping (periodic spikes)
+                    option(value='growing') Growing (deliberate memory leak, high request rate)
+
+    li(ngbNavItem, *ngIf='profile.options.source === "prometheus"')
+        a(ngbNavLink, translate) Prometheus
+        ng-template(ngbNavContent)
+            .mb-3
+                label(translate) Endpoint URL
+                input.form-control(
+                    type='text',
+                    placeholder='https://prometheus.example.com:9090/metrics',
+                    [(ngModel)]='profile.options.url'
+                )
+                small.form-text.text-muted(translate)
+                    | Point at a Prometheus /metrics endpoint or Telegraf's
+                    | prometheus_client output. Real HTTP scraping arrives in M3.2.
+
+            .mb-3
+                label(translate) Username
+                input.form-control(
+                    type='text',
+                    autocomplete='username',
+                    [(ngModel)]='profile.options.username'
+                )
+
+            .mb-3
+                label(translate) Password
+                input.form-control(
+                    type='password',
+                    autocomplete='new-password',
+                    [(ngModel)]='profile.options.password'
+                )
+
+            .mb-3
+                label(translate) Bearer token
+                input.form-control(
+                    type='password',
+                    [(ngModel)]='profile.options.bearerToken'
+                )
+                small.form-text.text-muted(translate) Sent as Authorization: Bearer …
+
+            .mb-3
+                label(translate) Metric name filter (glob)
+                input.form-control(
+                    type='text',
+                    placeholder='http_*  — leave empty for all',
+                    [(ngModel)]='profile.options.metricFilter'
+                )
+
+            .form-check.mb-3
+                input.form-check-input(
+                    type='checkbox',
+                    id='cx-insecure-tls',
+                    [(ngModel)]='profile.options.insecureTls'
+                )
+                label.form-check-label(for='cx-insecure-tls', translate) Skip TLS certificate verification
+
+div([ngbNavOutlet]='nav')
