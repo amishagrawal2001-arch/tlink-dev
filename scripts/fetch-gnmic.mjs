@@ -178,6 +178,16 @@ async function fetchOne (platform, checksumsText) {
     const releaseUrl = `https://github.com/openconfig/gnmic/releases/download/${VERSION}/${filename}`
     const expectedSha = findChecksum(checksumsText, filename)
     if (!expectedSha) {
+        // openconfig/gnmic does not publish Windows binaries (checked
+        // through v0.47.0). Soft-skip rather than fail the whole CI
+        // leg — the installer still builds and Windows users get a
+        // clear "binary not found" message from GnmicDiscoveryService
+        // if they open the gNMI plugin. Non-Windows misses still throw
+        // because those SHOULD be present.
+        if (platform.startsWith('windows-')) {
+            console.log(`  ${platform}: skipped — openconfig/gnmic does not publish a Windows asset for ${VERSION}`)
+            return
+        }
         throw new Error(`No checksum for ${filename} in checksums.txt — asset name mismatch?`)
     }
 
