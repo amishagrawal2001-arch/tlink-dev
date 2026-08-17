@@ -398,7 +398,14 @@ jobs:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     # 45 min × 2× multiplier = ~$1.50/leg worst-case.
     timeout-minutes: 45
-    runs-on: windows-latest
+    # Pin to windows-2022 (VS2022) rather than windows-latest. GitHub
+    # rolled windows-latest to the windows-2025-vs2026 image, and the
+    # pinned node-gyp@10.2.0 below can't locate VS2026 — native-module
+    # rebuild (@tabby-gang/windows-blurbehind) fails with "Could not
+    # find any Visual Studio installation to use", producing an empty
+    # Windows section of the release. Revisit when node-gyp gains
+    # VS2026 discovery.
+    runs-on: windows-2022
     needs: Lint
     strategy:
       matrix:
