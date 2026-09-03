@@ -232,45 +232,6 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
         return result
     }
 
-    /**
-     * Compress an SSH banner into something safe to drop into a notification
-     * toast. Corporate / government banners can be hundreds of lines of
-     * ASCII-art borders + Acceptable Use Policy text; rendered raw, the toast
-     * blows up the layout (long runs of `#` line-wrap into `# #` garbage).
-     *
-     * Strategy:
-     *  - Drop lines that are pure decoration (only `#`, `*`, `=`, `-`, `_`).
-     *  - Collapse long runs of identical decoration chars *within* a line to
-     *    a short marker so the toast doesn't try to wrap a 500-char string.
-     *  - Drop empty lines (all whitespace).
-     *  - Cap the result at ~3 lines / 240 chars with a "…" tail. The full
-     *    banner is written to the terminal scroll-back separately.
-     */
-    private summarizeBanner (banner: string): string {
-        const lines = banner
-            .split(/\r?\n/)
-            .map(line => line
-                // Strip ANSI / control codes that would render wrong in the
-                // toast.
-                // eslint-disable-next-line no-control-regex
-                .replace(/\x1B\[[0-9;]*[A-Za-z]/g, '')
-                // eslint-disable-next-line no-control-regex
-                .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
-                .trimEnd())
-            // Drop lines that are only decoration / whitespace.
-            .filter(line => line.trim() && !/^[\s#*=_\-]+$/.test(line))
-            // Collapse decoration runs >= 6 chars to a single ellipsis so
-            // a divider that snuck into a content line doesn't blow up.
-            .map(line => line.replace(/([#*=\-_])\1{5,}/g, '…'))
-            .map(line => line.trim())
-            .filter(Boolean)
-        if (lines.length === 0) {return ''}
-        const head = lines.slice(0, 3).join(' · ')
-        const more = lines.length > 3 ? ` (+${lines.length - 3} more lines)` : ''
-        const out = head + more
-        return out.length > 240 ? out.slice(0, 239) + '…' : out
-    }
-
     private getBaseDirectory (): string {
         const configPath = this.platform.getConfigPath()
         if (configPath) {
@@ -373,16 +334,14 @@ export class SSHTabComponent extends ConnectableTerminalTabComponent<SSHProfile>
         this.attachSessionHandler(session.banner$, banner => {
             const trimmed = banner.trim()
             if (!trimmed) {return}
-            // Notification toast renders inline and word-wraps badly when a
-            // full corporate AUP banner with ASCII-art separators arrives —
-            // long runs of `#` / `=` get wrapped into "# #" garbage that
-            // pushes other UI off-screen. Show a *summary* in the toast and
-            // write the full banner into the terminal scroll-back where SSH
-            // banners belong (and where the user can copy from).
-            const summary = this.summarizeBanner(trimmed)
-            if (summary) {
-                this.sshNotifications.info(summary, `${this.profile.options.host} banner`)
-            }
+            // Banner goes to the terminal scroll-back only. The prior toast
+            // popup covered the terminal on every connect (visible even for
+            // trivial "Welcome" banners) and duplicated content the user
+            // could already see in the terminal — the truncated summary
+            // added noise without info. Users who want the full banner see
+            // it in-terminal below the ` BANNER ` marker; users who want
+            // to suppress it entirely can flip the "Skip MoTD/banner"
+            // profile setting.
             if (this.frontendIsReady) {
                 const formatted = trimmed.replace(/\r?\n/g, '\r\n')
                 this.write(`\r\n${colors.black.bgYellow(' BANNER ')} ${this.profile.options.host}\r\n${formatted}\r\n`)
