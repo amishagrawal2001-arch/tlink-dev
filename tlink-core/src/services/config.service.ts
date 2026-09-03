@@ -46,6 +46,22 @@ export class ConfigProxy {
                         enumerable: true,
                         configurable: false,
                         get: () => proxy,
+                        // Structural members were previously getter-only, which
+                        // meant `profile.terminalColorScheme = newScheme` (used
+                        // by the color-templates panel) threw "which has only
+                        // a getter". Assign onto the SAME underlying object so
+                        // the nested proxy's closure over real[key] still sees
+                        // the new fields — reassigning real[key] would orphan
+                        // the proxy.
+                        set: (value: any) => {
+                            const target = real[key]
+                            for (const existingKey of Object.keys(target)) {
+                                Reflect.deleteProperty(target, existingKey)
+                            }
+                            if (value && typeof value === 'object') {
+                                Object.assign(target, value)
+                            }
+                        },
                     },
                 )
             } else {
@@ -138,6 +154,7 @@ export class ConfigService {
     get changed$ (): Observable<void> { return this.changed }
 
     /** @hidden */
+    // eslint-disable-next-line @typescript-eslint/max-params
     private constructor (
         private hostApp: HostAppService,
         private platform: PlatformService,
