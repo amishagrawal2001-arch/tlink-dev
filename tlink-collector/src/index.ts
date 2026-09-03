@@ -6,6 +6,7 @@ import TlinkCoreModule, { ConfigProvider, ProfileProvider, TabRecoveryProvider }
 
 import { CollectorConfigProvider } from './config'
 import { CollectorMockService } from './services/mock.service'
+import { CollectorValueFormatterService } from './services/valueFormatter.service'
 import { CollectorProfilesService } from './profiles'
 import { CollectorRecoveryProvider } from './recoveryProvider'
 import { CollectorProfileSettingsComponent } from './components/collectorProfileSettings.component'
@@ -40,6 +41,7 @@ import { CollectorSessionTabComponent } from './components/collectorSessionTab.c
         { provide: TabRecoveryProvider, useClass: CollectorRecoveryProvider, multi: true },
         CollectorMockService,
         CollectorProfilesService,
+        CollectorValueFormatterService,
     ],
     declarations: [
         CollectorProfileSettingsComponent,

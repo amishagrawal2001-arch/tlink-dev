@@ -16,12 +16,32 @@
             span {{ lastError }}
 
     .toolbar
+        //- 3-way view mode toggle. Same three states + segmented-control
+        //- shape as the gNMI plugin so the muscle memory carries over.
+        .mode-tabs
+            button.mode-tab(
+                (click)='setViewMode("wire")',
+                [class.active]='viewMode === "wire"',
+                title='Wire log — every sample as a row'
+            ) Wire
+            button.mode-tab(
+                (click)='setViewMode("latest")',
+                [class.active]='viewMode === "latest"',
+                title='Latest values — one row per unique path with history'
+            ) Latest
+            button.mode-tab(
+                (click)='setViewMode("graphical")',
+                [class.active]='viewMode === "graphical"',
+                title='Graphical — chart card per host sharing a metric'
+            ) Graphical
+
         input.filter(
             type='text',
             placeholder='filter path or value…',
             [(ngModel)]='filter'
         )
         button.toolbar-btn(
+            *ngIf='viewMode === "wire"',
             (click)='togglePause()',
             [class.active]='paused'
         )
@@ -31,11 +51,12 @@
         button.toolbar-btn((click)='clearStream()')
             i.fas.fa-trash-alt.me-1
             span Clear
-        button.toolbar-btn((click)='exportJsonl()')
+        button.toolbar-btn(*ngIf='viewMode === "wire"', (click)='exportJsonl()')
             i.fas.fa-copy.me-1
             span JSONL
 
-    .stream
+    //- ───────────── Wire log ─────────────
+    .stream(*ngIf='viewMode === "wire"')
         .stream-head
             .col-ts Timestamp
             .col-path Path
@@ -53,3 +74,193 @@
                 .col-path {{ row.path }}
                 .col-val {{ row.valuePreview }}
                 .col-kind {{ row.kind }}
+
+    //- ───────────── Latest values ─────────────
+    .latest-view(*ngIf='viewMode === "latest"')
+        .empty-hint(*ngIf='!latestGroups.length')
+            span(*ngIf='!latestByPath.size') Waiting for samples…
+            span(*ngIf='latestByPath.size && !latestGroups.length') No rows match filter.
+
+        .lv-header(*ngIf='latestGroups.length')
+            .lv-col-path Path
+            .lv-col-spark History
+            .lv-col-val.right Value
+            .lv-col-delta.right Δ
+            .lv-col-age.right Age
+
+        .lv-group(*ngFor='let group of latestGroups; trackBy: trackLatestGroup')
+            .lv-group-header
+                span.lv-group-name {{ group.prefixPath }}
+                span.lv-group-chip(*ngIf='group.key') {{ group.key }}
+                span.lv-group-count {{ group.rows.length }} leaves
+
+            .lv-row(*ngFor='let row of group.rows; trackBy: trackLatestRow')
+                .lv-col-path
+                    span.dim …/
+                    | {{ row.shortPath.replace('…/', '') }}
+                .lv-col-spark
+                    ng-container(*ngIf='sparklinePaths(row.entry) as spark')
+                        svg(viewBox='0 0 100 22', preserveAspectRatio='none')
+                            path.fill([attr.d]='spark.fill')
+                            path.line([attr.d]='spark.line')
+                            circle.endpoint([attr.cx]='spark.endX', [attr.cy]='spark.endY', r='2.5')
+                    span.spark-flat(*ngIf='!sparklinePaths(row.entry)') —
+                .lv-col-val
+                    span.value {{ row.entry.formatted.value }}
+                    span.unit(*ngIf='row.entry.formatted.unit') &nbsp;{{ row.entry.formatted.unit }}
+                .lv-col-delta([ngClass]='"delta-" + deltaOf(row.entry).kind')
+                    | {{ deltaOf(row.entry).label }}
+                .lv-col-age
+                    span.age-dot(*ngIf='isFresh(row.entry)')
+                    | {{ ageLabel(row.entry) }}
+
+    //- ───────────── Graphical view ─────────────
+    .gr-view(*ngIf='viewMode === "graphical"')
+        .empty-hint(*ngIf='!graphicalCards.length && !latestByPath.size')
+            span Waiting for samples…
+        .empty-hint(*ngIf='!graphicalCards.length && latestByPath.size')
+            span
+                | No numeric metrics to plot yet. The Mock source emits
+                | cpu_percent, memory_bytes, requests_total, and errors_total —
+                | wait a few ticks for history to accumulate.
+
+        div(*ngIf='graphicalCards.length')
+            .gr-summary-strip
+                .gr-metric
+                    .k Metric
+                    select.gr-metric-select(
+                        [(ngModel)]='graphicalMetric',
+                        (ngModelChange)='latestDirtySeq = latestDirtySeq + 1'
+                    )
+                        option([ngValue]='null') Auto ({{ selectedGraphicalMetric || '—' }})
+                        option(
+                            *ngFor='let m of graphicalMetricCandidates; trackBy: trackCandidateByLeaf',
+                            [ngValue]='m.leaf'
+                        ) {{ m.leaf }} ({{ m.componentCount }})
+                .gr-metric
+                    .k Cards
+                    .v {{ graphicalCards.length }}
+                .gr-metric
+                    .k Window
+                    select.gr-metric-select(
+                        [(ngModel)]='chartWindowSec',
+                        (ngModelChange)='latestDirtySeq = latestDirtySeq + 1'
+                    )
+                        option(
+                            *ngFor='let w of chartWindowChoices; trackBy: trackWindowChoiceBySec',
+                            [ngValue]='w.sec'
+                        ) {{ w.label }}
+                .gr-metric
+                    .k Display
+                    select.gr-metric-select(
+                        [(ngModel)]='chartDisplay',
+                        (ngModelChange)='latestDirtySeq = latestDirtySeq + 1'
+                    )
+                        option(
+                            *ngFor='let d of chartDisplayChoices; trackBy: trackDisplayChoiceByValue',
+                            [ngValue]='d.value'
+                        ) {{ d.label }}
+                .gr-metric
+                    .k Size
+                    select.gr-metric-select(
+                        [(ngModel)]='chartCardSize'
+                    )
+                        option(
+                            *ngFor='let s of chartCardSizeChoices; trackBy: trackCardSizeByValue',
+                            [ngValue]='s.value'
+                        ) {{ s.label }}
+                .gr-metric
+                    .k Latest
+                    .v {{ graphicalCards[0]?.entry.formatted.value }}{{ graphicalCards[0]?.entry.formatted.unit }}
+
+            .gr-grid(
+                *ngIf='!expandedEntryPath',
+                [style.--gr-card-min.px]='chartCardMinPx'
+            )
+                .gr-card(
+                    *ngFor='let card of graphicalCards; trackBy: trackGraphCard',
+                    (click)='expandCard(card)',
+                    title='Click to expand'
+                )
+                    .gr-card-head
+                        span.gr-card-label
+                            strong {{ card.label }}
+                        span.gr-card-label(*ngIf='shouldPlotRate(card.entry.path)') rate
+                    .gr-card-value
+                        ng-container(*ngIf='chartPaths(card.entry) as chart; else rawValue')
+                            | {{ chart.currentLabel }}
+                            span.unit(*ngIf='chart.currentUnit') {{ chart.currentUnit }}
+                        ng-template(#rawValue)
+                            | {{ card.entry.formatted.value }}
+                            span.unit(*ngIf='card.entry.formatted.unit') {{ card.entry.formatted.unit }}
+                    .gr-chart-wrap([class.single-sample]='chartPaths(card.entry)?.singleSample')
+                        ng-container(*ngIf='chartPaths(card.entry) as chart')
+                            svg(viewBox='0 0 100 50', preserveAspectRatio='none')
+                                line.grid-line(x1='0', y1='12', x2='100', y2='12')
+                                line.grid-line(x1='0', y1='25', x2='100', y2='25')
+                                line.grid-line(x1='0', y1='38', x2='100', y2='38')
+                                path.area([attr.d]='chart.area')
+                                path.line([attr.d]='chart.line')
+                                circle.endpoint([attr.cx]='chart.endX', [attr.cy]='chart.endY', r='2.5')
+                                text.y-max(*ngIf='!chart.singleSample', x='1', y='10') {{ chart.maxLabel }}
+                                text.y-min(*ngIf='!chart.singleSample', x='1', y='48') {{ chart.minLabel }}
+                    .gr-card-sub
+                        span
+                            ng-container(*ngIf='chartPaths(card.entry) as chart')
+                                ng-container(*ngIf='!chart.singleSample')
+                                    | {{ chart.sampleCount }} samples · last {{ chart.windowSpanLabel }}
+                                ng-container(*ngIf='chart.singleSample && chart.sampleCount > 1')
+                                    | {{ chart.sampleCount }} samples · constant
+                                ng-container(*ngIf='chart.singleSample && chart.sampleCount === 1 && chart.useRate')
+                                    | 1 rate · chart draws on next sample
+                                ng-container(*ngIf='chart.singleSample && chart.sampleCount === 1 && !chart.useRate')
+                                    | 1 sample · waiting for change
+                            ng-container(*ngIf='!chartPaths(card.entry)')
+                                | {{ ageLabel(card.entry) }} ago
+                        span([ngClass]='"delta-" + deltaOf(card.entry).kind') {{ deltaOf(card.entry).label }}
+
+            //- ───────────── Expanded card view ─────────────
+            .gr-expanded(*ngIf='expandedEntryPath && expandedChart as ec')
+                .gr-expanded-head
+                    button.gr-expanded-back((click)='closeExpanded()', title='Back to grid')
+                        i.fas.fa-arrow-left.me-1
+                        span Back
+                    span.title {{ selectedGraphicalMetric }}
+                    span.chip {{ expandedLabel }}
+                    span.chip.rate(*ngIf='ec.useRate') rate
+                    span.spacer
+                    span.samples {{ ec.sampleCount }} samples · last {{ ec.windowSpanLabel }}
+                .gr-expanded-value
+                    | {{ ec.hover ? ec.hover.value : (chartPaths(expandedEntry).currentLabel) }}
+                    span.unit
+                        | {{ ec.hover ? ec.hover.unit : chartPaths(expandedEntry).currentUnit }}
+                    span.at(*ngIf='ec.hover')
+                        | &nbsp;· {{ ec.hover.ago }}
+                .gr-expanded-chart-wrap
+                    svg(
+                        #expandedSvg,
+                        viewBox='0 0 800 300',
+                        preserveAspectRatio='none',
+                        (mousemove)='onExpandedHover($event, expandedSvg)',
+                        (mouseleave)='onExpandedLeave()'
+                    )
+                        g.axis-y
+                            g(*ngFor='let t of ec.yTicks')
+                                line.grid-line([attr.x1]='ec.chartX0', [attr.x2]='ec.chartX1',
+                                               [attr.y1]='t.pos', [attr.y2]='t.pos')
+                                text.axis-label([attr.x]='ec.chartX0 - 6', [attr.y]='t.pos + 3',
+                                                text-anchor='end') {{ t.label }}
+                        g.axis-x
+                            line.axis-line([attr.x1]='ec.chartX0', [attr.x2]='ec.chartX1',
+                                           [attr.y1]='ec.chartY1', [attr.y2]='ec.chartY1')
+                            g(*ngFor='let t of ec.xTicks')
+                                line.tick-mark([attr.x1]='t.pos', [attr.x2]='t.pos',
+                                               [attr.y1]='ec.chartY1', [attr.y2]='ec.chartY1 + 4')
+                                text.axis-label([attr.x]='t.pos', [attr.y]='ec.chartY1 + 16',
+                                                text-anchor='middle') {{ t.label }}
+                        path.area([attr.d]='ec.area')
+                        path.line([attr.d]='ec.line')
+                        g.hover(*ngIf='ec.hover')
+                            line.crosshair([attr.x1]='ec.hover.x', [attr.x2]='ec.hover.x',
+                                           [attr.y1]='ec.chartY0', [attr.y2]='ec.chartY1')
+                            circle.hover-dot([attr.cx]='ec.hover.x', [attr.cy]='ec.hover.y', r='4')
