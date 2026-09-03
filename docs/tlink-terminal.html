@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tlink Terminal — SSH, RDP, Telemetry & Offline AI for Network Engineers</title>
+    <meta name="description" content="One terminal for SSH, RDP, Serial, Telnet, SFTP, gNMI streaming telemetry, Prometheus/Telegraf collectors, and offline AI. Built for network engineers and DevOps.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Tlink Terminal — blue/teal identity to differentiate from Studio's purple/pink. */
+        .term-hero { padding: 140px 0 60px; text-align: center; position: relative; overflow: hidden; }
+        .term-hero .hero-glow {
+            position: absolute; top: -200px; left: 50%; transform: translateX(-50%);
+            width: 800px; height: 600px;
+            background: radial-gradient(ellipse, rgba(74, 158, 255, 0.16) 0%, rgba(34, 211, 238, 0.08) 40%, transparent 70%);
+            pointer-events: none;
+        }
+        .term-badge {
+            display: inline-flex; align-items: center; gap: 8px; padding: 8px 20px;
+            border-radius: 999px; background: rgba(74, 158, 255, 0.10); border: 1px solid rgba(74, 158, 255, 0.25);
+            color: #4a9eff; font-size: 13px; font-weight: 500; margin-bottom: 20px;
+        }
+        .term-badge + .term-badge { margin-left: 8px; }
+        .term-gradient { background: linear-gradient(135deg, #4a9eff, #22d3ee, #34d399); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .term-primary-btn { background: linear-gradient(135deg, #4a9eff, #22d3ee) !important; }
+
+        /* Signature-capability grid — telemetry-native pitch. */
+        .cap-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-top: 56px; }
+        .cap-card {
+            padding: 28px 24px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+            text-align: left; transition: all 0.25s;
+        }
+        .cap-card:hover { border-color: rgba(74, 158, 255, 0.4); transform: translateY(-2px); box-shadow: 0 12px 40px rgba(0,0,0,0.28); }
+        .cap-icon {
+            width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+            font-size: 18px; margin-bottom: 14px; color: white;
+        }
+        .cap-icon.protocol { background: linear-gradient(135deg, #4a9eff, #60a5fa); }
+        .cap-icon.telemetry { background: linear-gradient(135deg, #06b6d4, #22d3ee); }
+        .cap-icon.ai { background: linear-gradient(135deg, #a78bfa, #6366f1); }
+        .cap-icon.workflow { background: linear-gradient(135deg, #34d399, #10b981); }
+        .cap-card h3 { margin-bottom: 6px; font-size: 1.05rem; }
+        .cap-card p { color: var(--text-secondary); font-size: 13.5px; line-height: 1.55; margin: 0; }
+
+        .features-detail { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
+        .features-detail.reverse { direction: rtl; }
+        .features-detail.reverse > * { direction: ltr; }
+        .feature-detail-text h3 { font-size: 1.5rem; margin-bottom: 12px; }
+        .feature-detail-text h3 i { color: #4a9eff; margin-right: 8px; }
+        .feature-detail-text p { color: var(--text-secondary); font-size: 15px; line-height: 1.7; margin-bottom: 16px; }
+        .feature-detail-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+        .feature-detail-list li { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-secondary); }
+        .feature-detail-list li i { color: var(--accent-green); font-size: 11px; flex-shrink: 0; }
+        .feature-visual {
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+            padding: 24px; min-height: 280px; display: flex; align-items: center; justify-content: center;
+        }
+        .feature-visual img { width: 100%; height: auto; border-radius: var(--radius); }
+        .feature-visual .placeholder { text-align: center; color: var(--text-muted); padding: 24px; }
+        .feature-visual .placeholder i { font-size: 48px; display: block; margin-bottom: 12px; color: rgba(74,158,255,0.35); }
+        .feature-visual .placeholder p { font-size: 13px; margin: 0; }
+
+        /* Telemetry-native signature section — the differentiator. */
+        .telemetry-panel {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 48px;
+        }
+        .tele-card {
+            padding: 28px 24px; background: linear-gradient(135deg, rgba(6,182,212,0.05), rgba(74,158,255,0.05));
+            border: 1px solid rgba(6,182,212,0.25); border-radius: var(--radius);
+        }
+        .tele-card h3 { font-size: 1.05rem; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+        .tele-card h3 i { color: #22d3ee; }
+        .tele-card p { color: var(--text-secondary); font-size: 14px; line-height: 1.6; margin-bottom: 14px; }
+        .tele-card ul { list-style: none; display: flex; flex-direction: column; gap: 6px; padding: 0; margin: 0; }
+        .tele-card ul li { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
+        .tele-card ul li i { color: var(--accent-green); font-size: 10px; }
+
+        /* Protocol matrix chips — greppable at a glance. */
+        .protocol-matrix { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 40px; }
+        .proto-chip {
+            padding: 10px 20px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border);
+            font-size: 13px; font-weight: 500; color: var(--text-primary); display: flex; align-items: center; gap: 8px;
+            transition: all 0.2s;
+        }
+        .proto-chip:hover { border-color: rgba(74,158,255,0.4); transform: translateY(-1px); }
+        .proto-chip i { color: #4a9eff; font-size: 15px; }
+        .proto-chip .kind { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-left: 4px; }
+
+        .tech-stack { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 40px; }
+        .tech-pill {
+            padding: 8px 20px; border-radius: 999px; background: var(--bg-card); border: 1px solid var(--border);
+            font-size: 13px; font-weight: 500; color: var(--text-secondary); display: flex; align-items: center; gap: 6px;
+        }
+        .tech-pill i { color: #4a9eff; }
+
+        /* Who-it's-for row. */
+        .persona-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 48px; }
+        .persona-card {
+            padding: 24px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+        }
+        .persona-card h4 { font-size: 1rem; margin: 0 0 8px 0; display: flex; align-items: center; gap: 10px; }
+        .persona-card h4 i { color: #22d3ee; }
+        .persona-card p { color: var(--text-secondary); font-size: 13.5px; line-height: 1.6; margin: 0; }
+
+        @media (max-width: 900px) {
+            .cap-grid { grid-template-columns: repeat(2, 1fr); }
+            .telemetry-panel { grid-template-columns: 1fr; }
+            .persona-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 768px) {
+            .cap-grid { grid-template-columns: 1fr; }
+            .features-detail, .features-detail.reverse { grid-template-columns: 1fr; direction: ltr; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container nav-container">
+            <a href="tlink-terminal.html" class="nav-brand">
+                <span class="brand-icon" style="background:linear-gradient(135deg,#4a9eff,#22d3ee)"><i class="fas fa-terminal"></i></span>
+                <span class="brand-text">Tlink Terminal</span>
+            </a>
+            <div class="nav-links">
+                <a href="#protocols">Protocols</a>
+                <a href="#telemetry">Telemetry</a>
+                <a href="#ai">Offline AI</a>
+                <a href="#features">Features</a>
+                <a href="tlink-studio.html">Tlink Studio</a>
+                <a href="#pricing">Pricing</a>
+            </div>
+            <div class="nav-actions">
+                <a href="https://github.com/amishagrawal2001-arch/tlink-dev" class="btn btn-ghost" target="_blank">
+                    <i class="fab fa-github"></i> GitHub
+                </a>
+                <a href="#download" class="btn btn-primary term-primary-btn">Download</a>
+            </div>
+            <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open');document.querySelector('.nav-actions').classList.toggle('open')">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="term-hero">
+        <div class="hero-glow"></div>
+        <div class="container">
+            <div class="term-badge">
+                <i class="fas fa-network-wired"></i> SSH &middot; RDP &middot; Serial &middot; Telnet &middot; SFTP
+            </div>
+            <div class="term-badge" style="background:rgba(34,211,238,0.10);border-color:rgba(34,211,238,0.25);color:#22d3ee">
+                <i class="fas fa-satellite-dish"></i> gNMI &middot; Prometheus &middot; Telegraf
+            </div>
+            <div class="term-badge" style="background:rgba(167,139,250,0.10);border-color:rgba(167,139,250,0.25);color:#a78bfa">
+                <i class="fas fa-shield-halved"></i> Offline AI &middot; Zero data leakage
+            </div>
+            <h1 class="hero-title">
+                The terminal built for<br>
+                <span class="term-gradient">network engineers</span>
+            </h1>
+            <p class="hero-subtitle">
+                One app for every protocol a network engineer touches &mdash; SSH, RDP, Serial, Telnet, SFTP &mdash;
+                plus native <strong>gNMI streaming telemetry</strong>, <strong>Prometheus / Telegraf scraping</strong>,
+                a built-in <strong>REST API client</strong>, and an <strong>offline AI assistant</strong> that never leaves your machine.
+            </p>
+            <div class="hero-actions">
+                <a href="#download" class="btn btn-primary btn-lg term-primary-btn">
+                    <i class="fas fa-download"></i> Download Free
+                </a>
+                <a href="#telemetry" class="btn btn-outline btn-lg">
+                    <i class="fas fa-chart-line"></i> See Telemetry
+                </a>
+                <a href="https://github.com/amishagrawal2001-arch/tlink-dev" class="btn btn-outline btn-lg" target="_blank">
+                    <i class="fab fa-github"></i> View Source
+                </a>
+            </div>
+            <div class="hero-platforms">
+                <span><i class="fab fa-apple"></i> macOS &middot; Intel + Apple Silicon</span>
+                <span><i class="fab fa-windows"></i> Windows &middot; x64 + arm64</span>
+                <span><i class="fab fa-linux"></i> Linux &middot; x64 + arm64 + armv7</span>
+            </div>
+
+            <!-- Capability cards — the whole story in four squares. -->
+            <div class="cap-grid">
+                <div class="cap-card">
+                    <div class="cap-icon protocol"><i class="fas fa-plug"></i></div>
+                    <h3>Every protocol</h3>
+                    <p>SSH, RDP, Serial, Telnet, SFTP — all in one tabbed interface. Profile per host with credentials, jump chains, and per-target color schemes.</p>
+                </div>
+                <div class="cap-card">
+                    <div class="cap-icon telemetry"><i class="fas fa-chart-line"></i></div>
+                    <h3>Live telemetry</h3>
+                    <p>Native gNMI subscribe for streaming telemetry from Arista, Juniper, Nokia, Cisco. Prometheus / Telegraf scraping with Wire, Latest, and Graphical chart views.</p>
+                </div>
+                <div class="cap-card">
+                    <div class="cap-icon ai"><i class="fas fa-robot"></i></div>
+                    <h3>Offline AI</h3>
+                    <p>Bundled Ollama runtime runs models locally &mdash; no API keys, no data leaving your network. Or plug in OpenAI, Anthropic, Groq, GLM, MiniMax, vLLM.</p>
+                </div>
+                <div class="cap-card">
+                    <div class="cap-icon workflow"><i class="fas fa-layer-group"></i></div>
+                    <h3>Full workflow</h3>
+                    <p>Session sharing, session recording, workspaces, backup / restore, community themes, plugin manager, and a REST API client &mdash; without leaving the terminal.</p>
+                </div>
+            </div>
+
+            <!-- Hero screenshot -->
+            <div style="margin-top:56px;border-radius:16px;overflow:hidden;border:1px solid var(--border);box-shadow:0 25px 80px rgba(0,0,0,0.4)">
+                <img src="screenshot-ssh-session.png" alt="Tlink Terminal — SSH session with tabbed profiles" style="width:100%;display:block">
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats -->
+    <section class="stats-bar">
+        <div class="container">
+            <div class="stats-grid">
+                <div class="stat">
+                    <div class="stat-number" style="background:linear-gradient(135deg,#4a9eff,#22d3ee);-webkit-background-clip:text;-webkit-text-fill-color:transparent">5+</div>
+                    <div class="stat-label">Network protocols</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" style="background:linear-gradient(135deg,#4a9eff,#22d3ee);-webkit-background-clip:text;-webkit-text-fill-color:transparent">25+</div>
+                    <div class="stat-label">Built-in plugins</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" style="background:linear-gradient(135deg,#4a9eff,#22d3ee);-webkit-background-clip:text;-webkit-text-fill-color:transparent">8</div>
+                    <div class="stat-label">AI providers</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number" style="background:linear-gradient(135deg,#4a9eff,#22d3ee);-webkit-background-clip:text;-webkit-text-fill-color:transparent">7</div>
+                    <div class="stat-label">Platform builds</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Protocols matrix — greppable chips. -->
+    <section id="protocols" class="section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge" style="background:rgba(74,158,255,0.1);border-color:rgba(74,158,255,0.25);color:#4a9eff">Protocols</span>
+                <h2>Every session type, one app</h2>
+                <p>Stop juggling PuTTY, mRemoteNG, Microsoft Remote Desktop, and a serial console tool. Tlink Terminal handles all of them with per-target profiles and jump-host support.</p>
+            </div>
+            <div class="protocol-matrix">
+                <div class="proto-chip"><i class="fas fa-server"></i> SSH <span class="kind">Remote shell</span></div>
+                <div class="proto-chip"><i class="fas fa-desktop"></i> RDP <span class="kind">Windows desktop</span></div>
+                <div class="proto-chip"><i class="fas fa-usb"></i> Serial <span class="kind">USB / TTY</span></div>
+                <div class="proto-chip"><i class="fas fa-terminal"></i> Telnet <span class="kind">Legacy devices</span></div>
+                <div class="proto-chip"><i class="fas fa-folder-open"></i> SFTP <span class="kind">File transfer</span></div>
+                <div class="proto-chip"><i class="fas fa-satellite-dish"></i> gNMI <span class="kind">Streaming telemetry</span></div>
+                <div class="proto-chip"><i class="fas fa-database"></i> Prometheus <span class="kind">Metrics scrape</span></div>
+                <div class="proto-chip"><i class="fas fa-satellite"></i> Telegraf <span class="kind">/metrics endpoint</span></div>
+                <div class="proto-chip"><i class="fas fa-paper-plane"></i> REST API <span class="kind">HTTP client</span></div>
+                <div class="proto-chip"><i class="fas fa-code-branch"></i> Local shell <span class="kind">Bash / Zsh / PowerShell</span></div>
+            </div>
+
+            <div class="features-detail" style="margin-top:80px">
+                <div class="feature-detail-text">
+                    <h3><i class="fas fa-network-wired"></i> One tabbed workspace for all sessions</h3>
+                    <p>Every protocol lives as a tab, split, or window. Profiles carry credentials, jump chains, environment, working directory, and per-target color schemes so you know at a glance which switch you're on.</p>
+                    <ul class="feature-detail-list">
+                        <li><i class="fas fa-check"></i> SSH with password, key, agent, jump-host chains, and X11 forwarding</li>
+                        <li><i class="fas fa-check"></i> RDP with credential presets, resolution, and per-monitor config</li>
+                        <li><i class="fas fa-check"></i> Serial with configurable baud, parity, flow control, and log capture</li>
+                        <li><i class="fas fa-check"></i> Telnet for legacy switches, IPMI, console servers</li>
+                        <li><i class="fas fa-check"></i> SFTP file browser + drag-and-drop transfers</li>
+                        <li><i class="fas fa-check"></i> Split panes, drag-reorder tabs, workspaces you can save and restore</li>
+                        <li><i class="fas fa-check"></i> QuickConnect: type a URL, get the right session type inferred</li>
+                    </ul>
+                </div>
+                <div class="feature-visual">
+                    <img src="screenshot-profiles.png" alt="Tlink Terminal — Profiles pane with every protocol">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Telemetry — the signature capability. -->
+    <section id="telemetry" class="section section-dark">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge" style="background:rgba(6,182,212,0.1);border-color:rgba(6,182,212,0.25);color:#22d3ee">Telemetry</span>
+                <h2>Streaming telemetry, built in</h2>
+                <p>Watch device counters, interface stats, CPU, and memory update live &mdash; without leaving your terminal and without setting up Grafana. gNMI streaming plus Prometheus / Telegraf scraping, natively.</p>
+            </div>
+
+            <div class="telemetry-panel">
+                <div class="tele-card">
+                    <h3><i class="fas fa-satellite-dish"></i> gNMI Streaming</h3>
+                    <p>Subscribe to sensor paths on Arista, Juniper, Nokia, or any gNMI-compatible target. Bundled <code>gnmic</code> binary handles the RPC; you get the UI.</p>
+                    <ul>
+                        <li><i class="fas fa-check"></i> STREAM / ONCE / POLL modes</li>
+                        <li><i class="fas fa-check"></i> Built-in OpenConfig path catalog</li>
+                        <li><i class="fas fa-check"></i> Rate view for counter leaves</li>
+                        <li><i class="fas fa-check"></i> On-disk history retention</li>
+                        <li><i class="fas fa-check"></i> Save subscriptions per target, auto-restore on relaunch</li>
+                    </ul>
+                </div>
+                <div class="tele-card">
+                    <h3><i class="fas fa-database"></i> Prometheus / Telegraf</h3>
+                    <p>Point the collector at any <code>/metrics</code> endpoint. Same tabbed UI as the terminal &mdash; profiles per endpoint, credentials, TLS, filter expression.</p>
+                    <ul>
+                        <li><i class="fas fa-check"></i> Prometheus text-format scrape</li>
+                        <li><i class="fas fa-check"></i> Telegraf <code>prometheus_client</code> output</li>
+                        <li><i class="fas fa-check"></i> Bearer token, basic auth, custom TLS trust</li>
+                        <li><i class="fas fa-check"></i> Mock data source for demos and offline development</li>
+                        <li><i class="fas fa-check"></i> Metric filter to slice down large exporters</li>
+                    </ul>
+                </div>
+                <div class="tele-card">
+                    <h3><i class="fas fa-chart-line"></i> Three views, one data pipeline</h3>
+                    <p>Wire log, Latest values, and Graphical charts &mdash; toggle between them without losing history. Expand any chart into a full-pane view with wall-clock x-axis and hover crosshair.</p>
+                    <ul>
+                        <li><i class="fas fa-check"></i> Wire log with pause / clear / JSONL + CSV export</li>
+                        <li><i class="fas fa-check"></i> Latest table with sparklines, delta, and freshness dot</li>
+                        <li><i class="fas fa-check"></i> Graphical card grid: Compact / Normal / Large sizes</li>
+                        <li><i class="fas fa-check"></i> Auto rate detection on counters (octets, packets, <code>_total</code>)</li>
+                        <li><i class="fas fa-check"></i> Downloadable self-contained HTML report</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Tools launcher callout -->
+            <div style="margin-top:56px;padding:32px;background:linear-gradient(135deg,rgba(74,158,255,0.08),rgba(34,211,238,0.05));border:1px solid rgba(74,158,255,0.25);border-radius:var(--radius-lg)">
+                <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+                    <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#4a9eff,#22d3ee);display:flex;align-items:center;justify-content:center;color:white;font-size:18px">
+                        <i class="fas fa-wrench"></i>
+                    </div>
+                    <div>
+                        <h3 style="margin:0;font-size:1.15rem">Tools launcher</h3>
+                        <p style="margin:2px 0 0 0;color:var(--text-secondary);font-size:14px">Open the right session in one click, from the dock.</p>
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:20px">
+                    <div style="padding:14px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px">
+                        <div style="color:#4a9eff;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px"><i class="fas fa-paper-plane"></i> API Client</div>
+                        <div style="color:var(--text-secondary);font-size:13px">REST requests, headers, auth &mdash; a Postman-style tab inside the terminal.</div>
+                    </div>
+                    <div style="padding:14px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px">
+                        <div style="color:#22d3ee;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px"><i class="fas fa-satellite-dish"></i> gNMI</div>
+                        <div style="color:var(--text-secondary);font-size:13px">Fill in host, port, TLS, encoding &mdash; hit connect.</div>
+                    </div>
+                    <div style="padding:14px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px">
+                        <div style="color:#f97316;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px"><i class="fas fa-fire"></i> Prometheus</div>
+                        <div style="color:var(--text-secondary);font-size:13px">Point at any <code>/metrics</code> URL, set scrape interval.</div>
+                    </div>
+                    <div style="padding:14px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px">
+                        <div style="color:#22d3ee;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px"><i class="fas fa-satellite"></i> Telegraf</div>
+                        <div style="color:var(--text-secondary);font-size:13px">Default localhost:9273 &mdash; the Telegraf <code>prometheus_client</code> port.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Offline AI section -->
+    <section id="ai" class="section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge" style="background:rgba(167,139,250,0.1);border-color:rgba(167,139,250,0.25);color:#a78bfa">Offline AI</span>
+                <h2>An AI assistant that respects your network</h2>
+                <p>Bundled Ollama runtime runs models entirely on your machine. No API keys required. No prompts, code snippets, or command output leaves your laptop unless you choose an external provider.</p>
+            </div>
+
+            <div class="features-detail" style="margin-top:60px">
+                <div class="feature-detail-text">
+                    <h3><i class="fas fa-shield-halved"></i> Local-first, cloud-optional</h3>
+                    <p>Start with the bundled local runtime for zero-config privacy. Later, plug in your team's cloud provider &mdash; OpenAI, Anthropic, Groq, GLM, MiniMax, vLLM, or any OpenAI-compatible endpoint &mdash; without changing the chat UI.</p>
+                    <ul class="feature-detail-list">
+                        <li><i class="fas fa-check"></i> Bundled Ollama runtime &mdash; models run on your CPU / GPU</li>
+                        <li><i class="fas fa-check"></i> OpenAI, Anthropic, Groq, GLM, MiniMax, vLLM, Ollama, Tabby &mdash; drop-in</li>
+                        <li><i class="fas fa-check"></i> Per-provider API-key vault &mdash; AES-256 at rest</li>
+                        <li><i class="fas fa-check"></i> Copilot-style agent that can read terminal buffer with permission</li>
+                        <li><i class="fas fa-check"></i> Redaction: mask secrets before sending anything to a remote provider</li>
+                        <li><i class="fas fa-check"></i> Per-workspace chat history, exportable to Markdown</li>
+                    </ul>
+                </div>
+                <div class="feature-visual">
+                    <img src="screenshot-ai-chat.png" alt="Tlink Terminal — AI chat sidebar with local model">
+                </div>
+            </div>
+
+            <div class="features-detail reverse" style="margin-top:80px">
+                <div class="feature-detail-text">
+                    <h3><i class="fas fa-server"></i> Bring your own model runtime</h3>
+                    <p>Run vLLM on a beefy dev box, self-host GLM in a private cloud, or use Ollama on the laptop &mdash; Tlink Terminal talks to all of them with the same UI, so switching costs are zero.</p>
+                    <ul class="feature-detail-list">
+                        <li><i class="fas fa-check"></i> Provider health check: latency, model list, active model</li>
+                        <li><i class="fas fa-check"></i> Streaming responses with cancellation</li>
+                        <li><i class="fas fa-check"></i> Context provider: paste last N lines, current file, current profile</li>
+                        <li><i class="fas fa-check"></i> System prompt editor with team-share presets</li>
+                        <li><i class="fas fa-check"></i> Local-first mode toggle disables all cloud calls, hard-stop</li>
+                    </ul>
+                </div>
+                <div class="feature-visual">
+                    <img src="screenshot-vllm.png" alt="Tlink Terminal — vLLM provider configuration">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Feature blocks — workflow / plugins / sharing. -->
+    <section id="features" class="section section-dark">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge" style="background:rgba(52,211,153,0.1);border-color:rgba(52,211,153,0.25);color:#34d399">Workflow</span>
+                <h2>Built for the actual day</h2>
+                <p>The things you do every hour &mdash; find the right host, share a session with a teammate, replay something for a ticket, back up your setup &mdash; are one click, not a config file.</p>
+            </div>
+
+            <div class="features-detail" style="margin-top:60px">
+                <div class="feature-detail-text">
+                    <h3><i class="fas fa-users"></i> Session sharing &amp; recording</h3>
+                    <p>Hand a live terminal to a teammate for pair-debugging, or record every keystroke to file for tickets and audits. Both ship in the box &mdash; no third-party tools, no external service.</p>
+                    <ul class="feature-detail-list">
+                        <li><i class="fas fa-check"></i> Multi-user access with per-user read / write scopes</li>
+                        <li><i class="fas fa-check"></i> Session recording with searchable timeline</li>
+                        <li><i class="fas fa-check"></i> Downloadable session-as-HTML report for tickets</li>
+                        <li><i class="fas fa-check"></i> Automatic sudo password from the credential vault</li>
+                    </ul>
+                </div>
+                <div class="feature-visual">
+                    <img src="screenshot-session-sharing.png" alt="Tlink Terminal — session sharing pane">
+                </div>
+            </div>
+
+            <div class="features-detail reverse" style="margin-top:80px">
+                <div class="feature-detail-text">
+                    <h3><i class="fas fa-cubes"></i> Workspaces &amp; backup</h3>
+                    <p>Save your entire layout &mdash; open tabs, splits, working directories, active profiles &mdash; as a named workspace. Restore in one click, or sync your full setup between laptops with the encrypted backup file.</p>
+                    <ul class="feature-detail-list">
+                        <li><i class="fas fa-check"></i> Named workspaces with layout + open tabs + splits</li>
+                        <li><i class="fas fa-check"></i> Encrypted backup with everything: profiles, keys, themes, AI config</li>
+                        <li><i class="fas fa-check"></i> Restore on a fresh install in under a minute</li>
+                        <li><i class="fas fa-check"></i> Community color schemes plugin &mdash; hundreds of themes, one click</li>
+                    </ul>
+                </div>
+                <div class="feature-visual">
+                    <img src="screenshot-workspaces.png" alt="Tlink Terminal — workspaces">
+                </div>
+            </div>
+
+            <div class="features-detail" style="margin-top:80px">
+                <div class="feature-detail-text">
+                    <h3><i class="fas fa-puzzle-piece"></i> Plugin manager</h3>
+                    <p>Every capability &mdash; SSH, RDP, gNMI, collector, AI, api-client &mdash; is a plugin. Enable what you need, disable what you don't. Add third-party plugins from the manager UI without touching config files.</p>
+                    <ul class="feature-detail-list">
+                        <li><i class="fas fa-check"></i> 25+ built-in plugins, all disable-able</li>
+                        <li><i class="fas fa-check"></i> One-click install from the plugin browser</li>
+                        <li><i class="fas fa-check"></i> Update notifications with changelog preview</li>
+                        <li><i class="fas fa-check"></i> Third-party plugin SDK &mdash; publish your own</li>
+                        <li><i class="fas fa-check"></i> JetBrains bridge for IntelliJ-family editors</li>
+                    </ul>
+                </div>
+                <div class="feature-visual">
+                    <img src="screenshot-settings.png" alt="Tlink Terminal — Settings and plugin manager">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Who it's for -->
+    <section class="section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge" style="background:rgba(74,158,255,0.1);border-color:rgba(74,158,255,0.25);color:#4a9eff">Who it's for</span>
+                <h2>Three teams, one tool</h2>
+                <p>Tlink Terminal earns its keep for anyone whose day mixes remote shells, device consoles, and observability.</p>
+            </div>
+            <div class="persona-grid">
+                <div class="persona-card">
+                    <h4><i class="fas fa-server"></i> Network engineers</h4>
+                    <p>SSH into a switch, hop through a jump host, tail Prometheus counters on the same device, and diff two configs with a colleague &mdash; without leaving the app. gNMI streaming turns the terminal into a live NOC console.</p>
+                </div>
+                <div class="persona-card">
+                    <h4><i class="fas fa-cloud"></i> DevOps / SRE</h4>
+                    <p>SSH + Kubernetes exec + serial console + REST API client. Session recording for incident reviews. Offline AI for on-call automation drafts. One backup file syncs your whole rig between laptops.</p>
+                </div>
+                <div class="persona-card">
+                    <h4><i class="fas fa-building"></i> MSPs</h4>
+                    <p>One licensed app per engineer covers every customer, every protocol. Per-profile color schemes stop the "wrong tenant" mistake. Session sharing lets senior engineers assist junior ones on live customer boxes.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tech stack -->
+    <section class="section section-dark">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge" style="background:rgba(74,158,255,0.1);border-color:rgba(74,158,255,0.25);color:#4a9eff">Technology</span>
+                <h2>Built on proven technology</h2>
+            </div>
+            <div class="tech-stack">
+                <div class="tech-pill"><i class="fab fa-js-square"></i> Electron 38</div>
+                <div class="tech-pill"><i class="fab fa-angular"></i> Angular 15</div>
+                <div class="tech-pill"><i class="fas fa-terminal"></i> xterm.js</div>
+                <div class="tech-pill"><i class="fas fa-satellite-dish"></i> gnmic</div>
+                <div class="tech-pill"><i class="fas fa-robot"></i> Ollama runtime</div>
+                <div class="tech-pill"><i class="fas fa-shield-halved"></i> AES-256 vault</div>
+                <div class="tech-pill"><i class="fab fa-node-js"></i> Node.js 22</div>
+                <div class="tech-pill"><i class="fas fa-lock"></i> OpenSSL</div>
+                <div class="tech-pill"><i class="fab fa-rust"></i> Rust helpers</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing -->
+    <section id="pricing" class="section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge" style="background:rgba(52,211,153,0.1);border-color:rgba(52,211,153,0.25);color:#34d399">Pricing</span>
+                <h2>Simple, transparent pricing</h2>
+                <p>Start free forever. Pay only when your team needs seats, SSO, and support SLAs.</p>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:56px" class="pricing-grid-3">
+                <div style="padding:32px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg)">
+                    <div style="color:#4a9eff;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">Community</div>
+                    <div style="font-size:2.2rem;font-weight:800;margin-bottom:4px">Free</div>
+                    <div style="color:var(--text-secondary);font-size:14px;margin-bottom:24px">Forever, for individuals</div>
+                    <ul class="feature-detail-list" style="margin-bottom:24px">
+                        <li><i class="fas fa-check"></i> Every protocol, every feature</li>
+                        <li><i class="fas fa-check"></i> Offline AI included</li>
+                        <li><i class="fas fa-check"></i> Community forum support</li>
+                        <li><i class="fas fa-check"></i> MIT-licensed source on GitHub</li>
+                    </ul>
+                    <a href="#download" class="btn btn-outline" style="width:100%;justify-content:center">Download</a>
+                </div>
+                <div style="padding:32px;background:linear-gradient(135deg,rgba(74,158,255,0.06),rgba(34,211,238,0.04));border:1px solid rgba(74,158,255,0.35);border-radius:var(--radius-lg);position:relative">
+                    <div style="position:absolute;top:-12px;right:20px;background:linear-gradient(135deg,#4a9eff,#22d3ee);color:white;font-size:11px;font-weight:600;padding:4px 12px;border-radius:999px;text-transform:uppercase;letter-spacing:0.08em">Popular</div>
+                    <div style="color:#4a9eff;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">Individual</div>
+                    <div style="font-size:2.2rem;font-weight:800;margin-bottom:4px">$9<span style="font-size:1rem;font-weight:500;color:var(--text-secondary)">/mo</span></div>
+                    <div style="color:var(--text-secondary);font-size:14px;margin-bottom:24px">Billed annually &middot; single user</div>
+                    <ul class="feature-detail-list" style="margin-bottom:24px">
+                        <li><i class="fas fa-check"></i> Everything in Community</li>
+                        <li><i class="fas fa-check"></i> Session sharing (unlimited)</li>
+                        <li><i class="fas fa-check"></i> Encrypted cloud backup sync</li>
+                        <li><i class="fas fa-check"></i> Priority email support (48h)</li>
+                        <li><i class="fas fa-check"></i> Early-access releases</li>
+                    </ul>
+                    <a href="#download" class="btn btn-primary term-primary-btn" style="width:100%;justify-content:center">Start free trial</a>
+                </div>
+                <div style="padding:32px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg)">
+                    <div style="color:#a78bfa;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px">Team</div>
+                    <div style="font-size:2.2rem;font-weight:800;margin-bottom:4px">$29<span style="font-size:1rem;font-weight:500;color:var(--text-secondary)">/seat/mo</span></div>
+                    <div style="color:var(--text-secondary);font-size:14px;margin-bottom:24px">Billed annually &middot; 5-seat minimum</div>
+                    <ul class="feature-detail-list" style="margin-bottom:24px">
+                        <li><i class="fas fa-check"></i> Everything in Individual</li>
+                        <li><i class="fas fa-check"></i> SSO (SAML / OIDC)</li>
+                        <li><i class="fas fa-check"></i> Central profile / secret management</li>
+                        <li><i class="fas fa-check"></i> Audit log export</li>
+                        <li><i class="fas fa-check"></i> SLA-backed support (8h business)</li>
+                        <li><i class="fas fa-check"></i> Self-hostable license server</li>
+                    </ul>
+                    <a href="mailto:sales@tlink.dev?subject=Team%20plan%20inquiry" class="btn btn-outline" style="width:100%;justify-content:center">Contact sales</a>
+                </div>
+            </div>
+            <p style="text-align:center;color:var(--text-muted);font-size:13px;margin-top:32px">
+                Community edition stays fully open source, MIT-licensed, and permanently free &mdash; including the offline AI runtime.
+                Paid plans fund development and are billed through the license server.
+            </p>
+        </div>
+    </section>
+
+    <!-- Download / CTA -->
+    <section id="download" class="cta-section">
+        <div class="container">
+            <h2>Download Tlink Terminal</h2>
+            <p>One download, every platform. No account required for the Community edition.</p>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:40px" class="download-grid">
+                <a href="https://github.com/amishagrawal2001-arch/tlink-dev/releases/latest" target="_blank" style="padding:28px 24px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);text-align:center;text-decoration:none;color:var(--text-primary);transition:all 0.2s" onmouseover="this.style.borderColor='rgba(74,158,255,0.4)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border)';this.style.transform='translateY(0)'">
+                    <i class="fab fa-apple" style="font-size:36px;color:#4a9eff;margin-bottom:12px"></i>
+                    <div style="font-weight:600;font-size:1rem;margin-bottom:4px">macOS</div>
+                    <div style="font-size:13px;color:var(--text-secondary)">.dmg &middot; Intel + Apple Silicon</div>
+                </a>
+                <a href="https://github.com/amishagrawal2001-arch/tlink-dev/releases/latest" target="_blank" style="padding:28px 24px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);text-align:center;text-decoration:none;color:var(--text-primary);transition:all 0.2s" onmouseover="this.style.borderColor='rgba(74,158,255,0.4)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border)';this.style.transform='translateY(0)'">
+                    <i class="fab fa-windows" style="font-size:36px;color:#4a9eff;margin-bottom:12px"></i>
+                    <div style="font-weight:600;font-size:1rem;margin-bottom:4px">Windows</div>
+                    <div style="font-size:13px;color:var(--text-secondary)">setup.exe &middot; x64 + arm64</div>
+                </a>
+                <a href="https://github.com/amishagrawal2001-arch/tlink-dev/releases/latest" target="_blank" style="padding:28px 24px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);text-align:center;text-decoration:none;color:var(--text-primary);transition:all 0.2s" onmouseover="this.style.borderColor='rgba(74,158,255,0.4)';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border)';this.style.transform='translateY(0)'">
+                    <i class="fab fa-linux" style="font-size:36px;color:#4a9eff;margin-bottom:12px"></i>
+                    <div style="font-weight:600;font-size:1rem;margin-bottom:4px">Linux</div>
+                    <div style="font-size:13px;color:var(--text-secondary)">.deb .rpm .AppImage .tar.gz</div>
+                </a>
+            </div>
+            <div class="cta-actions" style="margin-top:40px">
+                <a href="https://github.com/amishagrawal2001-arch/tlink-dev" target="_blank" class="btn btn-outline btn-lg">
+                    <i class="fab fa-github"></i> Star on GitHub
+                </a>
+                <a href="tlink-studio.html" class="btn btn-outline btn-lg">
+                    <i class="fas fa-code"></i> Also try Tlink Studio
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <div class="nav-brand">
+                        <span class="brand-icon" style="background:linear-gradient(135deg,#4a9eff,#22d3ee)"><i class="fas fa-terminal"></i></span>
+                        <span class="brand-text">Tlink Terminal</span>
+                    </div>
+                    <p>Every protocol, streaming telemetry, and offline AI &mdash; in one terminal built for network engineers. Part of the Tlink product family.</p>
+                </div>
+                <div class="footer-links">
+                    <h4>Products</h4>
+                    <a href="tlink-terminal.html">Tlink Terminal</a>
+                    <a href="tlink-studio.html">Tlink Studio</a>
+                    <a href="#download">Download</a>
+                    <a href="#pricing">Pricing</a>
+                </div>
+                <div class="footer-links">
+                    <h4>Capabilities</h4>
+                    <a href="#protocols">Protocols</a>
+                    <a href="#telemetry">gNMI &amp; Prometheus</a>
+                    <a href="#ai">Offline AI</a>
+                    <a href="#features">Session sharing &amp; backup</a>
+                </div>
+                <div class="footer-links">
+                    <h4>Community</h4>
+                    <a href="https://github.com/amishagrawal2001-arch/tlink-dev" target="_blank">GitHub (Terminal)</a>
+                    <a href="https://github.com/amishagrawal2001-arch/tlink-studio" target="_blank">GitHub (Studio)</a>
+                    <a href="https://github.com/amishagrawal2001-arch/tlink-dev/releases" target="_blank">Releases</a>
+                    <a href="https://github.com/amishagrawal2001-arch/tlink-dev/issues" target="_blank">Report an issue</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2025-2026 Tlink. MIT License. Built with Electron, Angular, xterm.js, gnmic, and Ollama.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
