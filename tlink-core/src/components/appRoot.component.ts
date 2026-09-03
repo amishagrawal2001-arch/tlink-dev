@@ -406,6 +406,93 @@ export class AppRootComponent implements OnInit {
         } as any)
     }
 
+    /**
+     * Tools-menu launcher for a new gNMI target. Opens the profile edit
+     * modal pre-filled with a template so the user fills in host / port
+     * / credentials before we launch the tab. Bypassing the modal
+     * dumped users into a session tab with no target to connect to.
+     */
+    async openGnmi (): Promise<void> {
+        await this.openToolProfile({
+            type: 'gnmi',
+            name: 'gNMI target',
+            icon: 'fas fa-satellite-dish',
+            options: {
+                host: '',
+                port: 6030,
+                username: '',
+                security: 'tls',
+                encoding: 'JSON_IETF',
+                vendor: 'other',
+            },
+        })
+    }
+
+    /** Tools-menu launcher for a Prometheus-source collector tab. */
+    async openPrometheus (): Promise<void> {
+        await this.openToolProfile({
+            type: 'collector',
+            name: 'Prometheus endpoint',
+            icon: 'fas fa-database',
+            options: {
+                source: 'prometheus',
+                scrapeIntervalSec: 15,
+                url: 'http://localhost:9090/metrics',
+            },
+        })
+    }
+
+    /**
+     * Telegraf exposes a Prometheus-compatible /metrics endpoint on port
+     * 9273 by default (via the `prometheus_client` output plugin), so
+     * the collector's prometheus source works verbatim — this is the
+     * same code path with a Telegraf-typical default URL.
+     */
+    async openTelegraf (): Promise<void> {
+        await this.openToolProfile({
+            type: 'collector',
+            name: 'Telegraf endpoint',
+            icon: 'fas fa-satellite',
+            options: {
+                source: 'prometheus',
+                scrapeIntervalSec: 10,
+                url: 'http://localhost:9273/metrics',
+            },
+        })
+    }
+
+    /**
+     * Shared launcher for Tools-menu items that need connection details.
+     * Opens tlink-settings' EditProfileModalComponent seeded with the
+     * template partial, then hands the resulting profile to
+     * profiles.openNewTabForProfile. Dynamic require avoids a compile-
+     * time dep on tlink-settings.
+     */
+    private async openToolProfile (template: PartialProfile<Profile>): Promise<void> {
+        let EditProfileModalComponent: any = null
+        try {
+            ({ EditProfileModalComponent } = window['nodeRequire']('tlink-settings'))
+        } catch {
+            // If tlink-settings isn't loaded, skip the modal and launch
+            // with the template as-is — matches the pre-modal behavior
+            // rather than silently doing nothing.
+            await this.profiles.openNewTabForProfile(template)
+            return
+        }
+        const provider = this.profiles.providerForProfile(template as Profile)
+        if (!provider) {
+            this.notifications.error(`No provider registered for "${template.type}"`)
+            return
+        }
+        const modal = this.ngbModal.open(EditProfileModalComponent, { size: 'lg' })
+        modal.componentInstance.profile = JSON.parse(JSON.stringify(template))
+        modal.componentInstance.profileProvider = provider
+        const result = await modal.result.catch(() => null)
+        if (!result) { return }
+        result.type = provider.id
+        await this.profiles.openNewTabForProfile(result)
+    }
+
     openHelpGuide (): void {
         try {
             const electron = require('electron')

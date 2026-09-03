@@ -275,6 +275,40 @@ title-bar(
                         line(x1='1.5', y1='7', x2='14.5', y2='7', stroke='currentColor', stroke-width='1.2')
                         rect(x='3.5', y='8.5', width='3', height='2.5', rx='0.5', fill='currentColor')
                         rect(x='8', y='8.5', width='3', height='2.5', rx='0.5', fill='currentColor')
+
+                //- Tools launcher. Groups sibling protocol/endpoint tabs
+                //- (API client, gNMI, Prometheus, Telegraf) under one
+                //- entry point so the shortcut bar doesn't grow one
+                //- icon per plugin. Uses ngbDropdown to match the
+                //- Individual-badge dropdown pattern in the spacer.
+                .shortcut-tools-dropdown(
+                    ngbDropdown,
+                    container='body',
+                    placement='top-start'
+                )
+                    button.btn.btn-sm.btn-icon.shortcut-icon-button(
+                        type='button',
+                        ngbDropdownToggle,
+                        ngbTooltip='Tools'
+                    )
+                        svg(width='14', height='14', viewBox='0 0 16 16', aria-hidden='true', focusable='false')
+                            path(
+                                d='M11 1.5l3.5 3.5-1.4 1.4-1.1-1.1-6.5 6.5-2.4.5.5-2.4 6.5-6.5-1.1-1.1z',
+                                fill='none', stroke='currentColor', stroke-width='1.2', stroke-linejoin='round'
+                            )
+                    div(ngbDropdownMenu, style='min-width:200px;padding:4px 0')
+                        button.dropdown-item(type='button', (click)='openAPIClient()')
+                            i.fas.fa-fw.fa-paper-plane.me-2
+                            | API Client
+                        button.dropdown-item(type='button', (click)='openGnmi()')
+                            i.fas.fa-fw.fa-satellite-dish.me-2
+                            | gNMI
+                        button.dropdown-item(type='button', (click)='openPrometheus()')
+                            i.fas.fa-fw.fa-fire.me-2
+                            | Prometheus
+                        button.dropdown-item(type='button', (click)='openTelegraf()')
+                            i.fas.fa-fw.fa-satellite.me-2
+                            | Telegraf endpoint
             .shortcut-spacer
                 //- "Sign in" pill — shown when the user isn't in a real
                 //- signed-in session: either fully unauthenticated/expired,
