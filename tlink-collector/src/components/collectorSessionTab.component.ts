@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Injector, Input,
 import { BaseTabComponent, NotificationsService } from 'tlink-core'
 import { CollectorProfile, CollectorSample } from '../api'
 import { CollectorHandle, CollectorMockService } from '../services/mock.service'
+import { PrometheusCollectorService } from '../services/prometheus.service'
 import { CollectorValueFormatterService, FormattedValue } from '../services/valueFormatter.service'
 
 /** Center-pane view mode. Wire is the original per-notification log. */
@@ -178,6 +179,7 @@ export class CollectorSessionTabComponent extends BaseTabComponent implements On
     private candidatesCache: { seq: number; list: GraphMetric[] } = { seq: -1, list: [] }
 
     private mock: CollectorMockService
+    private prometheus: PrometheusCollectorService
     private notifications: NotificationsService
     private formatter: CollectorValueFormatterService
     private zone: NgZone
@@ -186,6 +188,7 @@ export class CollectorSessionTabComponent extends BaseTabComponent implements On
     constructor (injector: Injector) {
         super(injector)
         this.mock = injector.get(CollectorMockService)
+        this.prometheus = injector.get(PrometheusCollectorService)
         this.notifications = injector.get(NotificationsService)
         this.formatter = injector.get(CollectorValueFormatterService)
         this.zone = injector.get(NgZone)
@@ -229,7 +232,8 @@ export class CollectorSessionTabComponent extends BaseTabComponent implements On
                     this.handle = this.mock.start(this.profile)
                     break
                 case 'prometheus':
-                    throw new Error('Prometheus source arrives in M3.2. Pick mock for now.')
+                    this.handle = this.prometheus.start(this.profile)
+                    break
                 default:
                     throw new Error(`Unknown source: ${this.profile.options.source}`)
             }
