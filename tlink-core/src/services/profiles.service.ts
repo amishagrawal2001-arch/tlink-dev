@@ -9,6 +9,7 @@ import { SplitDirection } from '../components/splitTab.component'
 import { configMerge, ConfigProxy, ConfigService } from './config.service'
 import { NotificationsService } from './notifications.service'
 import { SelectorService } from './selector.service'
+import { TlinkLicenseService } from '../../../tlink-license-client/src/lib/tlink-license.service'
 import deepClone from 'clone-deep'
 import { v4 as uuidv4 } from 'uuid'
 import slugify from 'slugify'
@@ -32,12 +33,14 @@ export class ProfilesService {
         sessionLog: undefined,
     }
 
+    // eslint-disable-next-line @typescript-eslint/max-params
     constructor (
         private app: AppService,
         private config: ConfigService,
         private notifications: NotificationsService,
         private selector: SelectorService,
         private translate: TranslateService,
+        private licenseSvc: TlinkLicenseService,
         @Inject(ProfileProvider) private profileProviders: ProfileProvider<Profile>[],
     ) { }
 
@@ -201,6 +204,19 @@ export class ProfilesService {
     }
 
     async openNewTabForProfile <P extends Profile> (profile: PartialProfile<P>, direction: SplitDirection = 'r', inputs?: Record<string, any>): Promise<BaseTabComponent|null> {
+        // Soft read-only gate: license expired / invalid. Blocks NEW
+        // profile sessions (SSH, RDP, collector, gNMI, ...) but leaves
+        // Settings, existing tabs, and the activation dialog itself
+        // reachable — users whose card just failed can still look at
+        // their work while they fix billing. Clicking the Reactivate
+        // pill in the bottom bar opens the activation modal; see
+        // tlink-license-client isReadOnly for the state transitions.
+        if (this.licenseSvc.isReadOnly) {
+            this.notifications.error(this.translate.instant(
+                'License expired — reactivate to open new sessions. Existing tabs are read-only.',
+            ))
+            return null
+        }
         const params = await this.newTabParametersForProfile(profile)
         if (params) {
             if (inputs) {
