@@ -54,13 +54,17 @@ export class PrometheusCollectorService {
             throw new Error('Prometheus source needs a URL (e.g. http://localhost:9090/metrics)')
         }
         // Validate up front so the user doesn't wait a full interval
-        // for a typo to surface.
-        let parsed: url.URL | null = null
-        try {
-            parsed = new url.URL(scrapeUrl)
-        } catch {
-            throw new Error(`Invalid Prometheus URL: ${scrapeUrl}`)
-        }
+        // for a typo to surface. IIFE keeps `parsed` a non-nullable
+        // const — the throw-in-catch is safe at runtime, but TS flow
+        // analysis + the init-declarations lint rule don't like a
+        // `let parsed: URL` that's conditionally initialized.
+        const parsed = ((): url.URL => {
+            try {
+                return new url.URL(scrapeUrl)
+            } catch {
+                throw new Error(`Invalid Prometheus URL: ${scrapeUrl}`)
+            }
+        })()
         if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
             throw new Error(`Prometheus URL must be http:// or https:// — got ${parsed.protocol}`)
         }
