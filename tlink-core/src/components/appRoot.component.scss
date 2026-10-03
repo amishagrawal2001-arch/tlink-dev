@@ -709,7 +709,9 @@ hotkey-hint {
     display: inline-flex;
     align-items: center;
 }
-::ng-deep .license-dock-signin { margin-right: 6px; }
+::ng-deep .license-dock-signin,
+::ng-deep .license-dock-upgrade,
+::ng-deep .license-dock-reactivate { margin-right: 6px; }
 
 // License dock banner (centered in bottom bar)
 ::ng-deep .license-dock-banner {
@@ -739,13 +741,21 @@ hotkey-hint {
     &.dock-expired { background: #dc2626; }
     // Neutral blue CTA for unauthenticated / trial signin — "come sign in".
     &.dock-signin { background: #2563eb; }
+    // Green CTA for trial-to-paid upgrade. Softer than the signin
+    // blue — this is "optional, when you're ready", not "action
+    // required now". Shown next to the trial-days countdown.
+    &.dock-upgrade { background: #16a34a; }
 }
 
-// When the banner wraps a dock-expired/dock-signin badge we want the pill
-// to read at full opacity — this is a call-to-action, not an info chip.
+// When the banner wraps a dock-expired/dock-signin/dock-upgrade badge
+// we want the pill to read at full opacity — these are calls-to-action,
+// not info chips.
 ::ng-deep .license-dock-signin .license-dock-banner,
+::ng-deep .license-dock-upgrade,
+::ng-deep .license-dock-reactivate,
 ::ng-deep .license-dock-banner:has(.dock-expired),
-::ng-deep .license-dock-banner:has(.dock-signin) {
+::ng-deep .license-dock-banner:has(.dock-signin),
+::ng-deep .license-dock-banner:has(.dock-upgrade) {
     opacity: 1;
 }
 

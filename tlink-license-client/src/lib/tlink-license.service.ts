@@ -732,6 +732,28 @@ export class TlinkLicenseService implements OnDestroy {
     }
 
     /**
+     * External URL to send users to for buying / upgrading a license.
+     * Mirrors the field consumed by the activation dialog's "Get a
+     * license" footer link — exposing it on the service so the bottom
+     * shortcut bar can wire an Upgrade button without having to
+     * re-inject TLINK_LICENSE_CONFIG everywhere.
+     */
+    get purchaseUrl (): string {
+        return this.config.purchaseUrl
+    }
+
+    /**
+     * True while the app should run in read-only mode: license is
+     * expired or invalid, so new sessions should be blocked but
+     * existing tabs stay viewable. Lets paying users whose card just
+     * failed keep looking at their work instead of getting a wall.
+     * Also drives the persistent "Reactivate" banner.
+     */
+    get isReadOnly (): boolean {
+        return this.licenseStatus === 'expired' || this.licenseStatus === 'invalid'
+    }
+
+    /**
      * Hours left in the trial — for the "< 1 day" edge case where the day
      * counter has already hit 0 but we haven't actually expired yet. Callers
      * should show this when `trialDaysRemaining === 0` and the trial is still

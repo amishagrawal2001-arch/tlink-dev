@@ -510,6 +510,20 @@ export class AppRootComponent implements OnInit {
         this.hostApp.openSettingsUI()
     }
 
+    /**
+     * Fire-and-forget browser hand-off to the pricing / checkout page.
+     * Called from the Upgrade pill next to the trial countdown and
+     * from the Reactivate banner during read-only (expired) mode.
+     * Users who prefer the in-app flow can still use "Sign in to
+     * activate" in the license dropdown.
+     */
+    openUpgradePurchase (): void {
+        const url = this.licenseSvc.purchaseUrl
+        if (url) {
+            this.platform.openExternal(url)
+        }
+    }
+
     openProfilesAndConnections (): void {
         try {
             const { SettingsTabComponent } = window['nodeRequire']('tlink-settings')
@@ -857,11 +871,16 @@ export class AppRootComponent implements OnInit {
             this.licenseSvc.licenseInfo$.subscribe(info => {
                 setTimeout(() => {
                     // Close the dialog on successful paid sign-in (active &&
-                    // not a local trial). Force it open on adverse transitions
-                    // (e.g. heartbeat reports SEAT_REVOKED mid-session).
+                    // not a local trial). On `unauthenticated` (first run,
+                    // signed out) force it open — the user needs to sign in
+                    // or start a trial. On `expired` or `invalid` DON'T
+                    // force it open: the app drops into soft read-only mode
+                    // (persistent Reactivate pill in the dock, new sessions
+                    // blocked by profiles.service, existing tabs viewable)
+                    // so paying users whose card just failed don't hit a wall.
                     if (info.status === 'active' && !info.isLocalTrial) {
                         this.showLicenseActivation = false
-                    } else if (info.status === 'expired' || info.status === 'invalid' || info.status === 'unauthenticated') {
+                    } else if (info.status === 'unauthenticated') {
                         this.showLicenseActivation = true
                     }
                 }, 0)

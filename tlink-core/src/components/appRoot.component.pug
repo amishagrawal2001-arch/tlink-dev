@@ -310,25 +310,48 @@ title-bar(
                             i.fas.fa-fw.fa-satellite.me-2
                             | Telegraf endpoint
             .shortcut-spacer
-                //- "Sign in" pill — shown when the user isn't in a real
-                //- signed-in session: either fully unauthenticated/expired,
-                //- OR on the local 30-day trial (so they can still upgrade).
-                //- Label + tooltip come from the service so trial, expired,
-                //- seat-revoked, device-limit, etc. each render distinctly
-                //- instead of a single ambiguous "Sign in".
-                .license-dock-banner.license-dock-signin(
-                    *ngIf='licenseSvc.licenseStatus !== "active" || licenseSvc.isLocalTrial',
+                //- "Upgrade" pill — surfaced during a healthy local trial
+                //- so users see a conversion CTA from day 1 instead of
+                //- only at expiry. Opens the pricing page externally;
+                //- in-app activation stays available via "Sign in to
+                //- activate" inside the dropdown below.
+                .license-dock-banner.license-dock-upgrade(
+                    *ngIf='licenseSvc.isLocalTrial && licenseSvc.licenseStatus === "active"',
+                    (click)='openUpgradePurchase()',
+                    title='Keep Tlink after your trial — view pricing'
+                )
+                    span.license-dock-badge.dock-upgrade
+                        i.fas.fa-arrow-up-right-from-square.me-1
+                        | Upgrade
+
+                //- "Reactivate" banner — shown when the license is in
+                //- read-only mode (expired or invalid). Soft fail: the
+                //- app keeps working, existing tabs stay viewable, only
+                //- new sessions are blocked (gated in profiles.service
+                //- openNewTabForProfile). Clicking the pill opens the
+                //- activation modal in non-blocking mode so users can
+                //- Clear local session / Have an activation code paths
+                //- stay reachable without a hard wall.
+                .license-dock-banner.license-dock-reactivate(
+                    *ngIf='licenseSvc.isReadOnly',
                     (click)='showLicenseActivation = true',
                     [title]='licenseSvc.dockPillTooltip'
                 )
-                    span.license-dock-badge(
-                        [class.dock-expired]='licenseSvc.licenseStatus === "expired" || licenseSvc.licenseStatus === "invalid"',
-                        [class.dock-signin]='licenseSvc.licenseStatus !== "expired" && licenseSvc.licenseStatus !== "invalid"'
-                    )
-                        i.fas.me-1(
-                            [class.fa-exclamation-triangle]='licenseSvc.licenseStatus === "expired" || licenseSvc.licenseStatus === "invalid"',
-                            [class.fa-sign-in-alt]='licenseSvc.licenseStatus !== "expired" && licenseSvc.licenseStatus !== "invalid"'
-                        )
+                    span.license-dock-badge.dock-expired
+                        i.fas.fa-triangle-exclamation.me-1
+                        | Reactivate
+
+                //- "Sign in" pill — unauthenticated / seat-revoked /
+                //- device-limit state (NOT the local-trial or expired
+                //- cases, which have their own pills above). Opens the
+                //- in-app activation modal.
+                .license-dock-banner.license-dock-signin(
+                    *ngIf='licenseSvc.licenseStatus !== "active" && !licenseSvc.isReadOnly',
+                    (click)='showLicenseActivation = true',
+                    [title]='licenseSvc.dockPillTooltip'
+                )
+                    span.license-dock-badge.dock-signin
+                        i.fas.fa-sign-in-alt.me-1
                         | {{ licenseSvc.dockPillLabel }}
 
                 //- Signed-in dropdown: badge + sign-out + settings.
@@ -396,9 +419,15 @@ title-bar(
                     [ngbTooltip]='"Update available - Click to install"|translate',
                     (click)='updater.update()'
                 ) !{require('../icons/gift.svg')}
+//- Activation dialog is NO LONGER blocking on expired/invalid — those
+//- states run in soft read-only mode so paying users whose card just
+//- failed can still look at existing tabs while they fix billing. The
+//- dialog opens non-blocking when the user clicks the Reactivate pill
+//- in the dock; the dialog's own close + "Clear local session" paths
+//- stay reachable, no wall-of-app.
 tlink-activation-dialog(
     [visible]='showLicenseActivation',
-    [blocking]='licenseSvc.licenseStatus === "expired" || licenseSvc.licenseStatus === "invalid"',
+    [blocking]='false',
     (activated)='showLicenseActivation = false',
     (closed)='showLicenseActivation = false'
 )
