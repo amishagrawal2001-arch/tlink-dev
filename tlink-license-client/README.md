@@ -1,208 +1,101 @@
-# @tlink/license-client
+# Tlink License — activating & managing
 
-Reusable Angular library for license management UI in Tlink applications. Provides license activation, trial management, server communication, and pre-built UI components.
+**How to sign in, activate a license, and keep your installation licensed.**
 
-## Installation
+Tlink runs a free 30-day local trial on first launch. After that you either sign in to a paid plan (Individual or Team) or activate with an offline code supplied by your admin. Everything is managed from the pill in the bottom-right of the window.
 
-```bash
-npm install @tlink/license-client
-```
+## Quickstart (first launch)
 
-Or link locally during development:
+1. **Install and open Tlink.** A **"Sign in to activate"** modal opens automatically. The bottom-right pill shows **Trial: 30d**.
+2. **Try before you buy.** Click the modal's **×** button (or press Escape) — you have a full 30-day local trial. The pill keeps counting down.
+3. **When you're ready to pay**, click the green **Upgrade** pill next to the trial countdown. The pricing page opens in your browser; after paying you'll receive a sign-in email.
+4. **Sign in.** Click the trial pill → **"Sign in to activate"** → enter the email + password you set during purchase → **Sign in**.
+5. **Done.** Pill now shows **Individual** (solo plan) or **Team** (seat-based plan). You're licensed on this device.
 
-```bash
-cd tlink-license-client && npm run build
-cd ../your-app && npm link ../tlink-license-client/dist
-```
+## The bottom-right pill — one place for every state
 
-## Setup
+| What you see | What it means | Click to |
+|---|---|---|
+| **Trial: Nd** (orange) | Local 30-day trial, N days remaining. App is fully functional. | Open account menu (Sign in, License settings). |
+| **Upgrade** (green) | Shown next to the trial pill. Pricing / checkout page. | Open the pricing page in your browser. |
+| **Sign in** (blue) | You haven't signed in yet (or you signed out). Not on trial. | Open the Sign-in modal. |
+| **Individual** (blue) | Signed in on a paid solo plan. | Open account menu. |
+| **Team** (purple) | Signed in on a team plan — seat allocated by your admin. | Open account menu. |
+| **Trial** (orange, no number) | Server-side trial (purchased trial, not local). | Open account menu. |
+| **Reactivate** (red) | License expired, invalid, or seat revoked. **App drops into read-only mode** — existing tabs keep working, new SSH / RDP / collector / gNMI sessions are blocked. | Open the activation modal to fix. |
 
-Import the module in your app module with configuration:
+Hover any pill for a tooltip explaining the exact state (e.g. *"Trial: 5 days remaining — subscribe to keep access"*).
 
-```typescript
-import { TlinkLicenseModule } from '@tlink/license-client';
+## Online activation (standard)
 
-@NgModule({
-  imports: [
-    TlinkLicenseModule.forRoot({
-      serverUrl: 'https://license.yourapp.com',
-      appCode: 'NO',            // 2-letter app identifier
-      appVersion: '2.0.0',
-      appName: 'NetOps',
-      appLogoUrl: '/assets/logo.png',
-      trialDurationDays: 14,
-      splashDurationMs: 2500,
-      purchaseUrl: 'https://yourapp.com/pricing',
-      serverKeySalt: 'your-production-salt',
-      proFeatures: ['save', 'export', 'templates'],
-    }),
-  ],
-})
-export class AppModule {}
-```
+1. Click the **Sign in** or **Reactivate** pill.
+2. Type your account email + password.
+3. Click **Sign in**.
+4. On success the modal closes and the pill flips to your plan name.
 
-## Components
+Tokens are stored in your OS keychain (macOS Keychain · Windows Credential Manager · Linux libsecret) so you stay signed in across restarts. Tlink refreshes the session automatically in the background every hour.
 
-### Trial Banner
+## Offline activation (air-gapped / restricted networks)
 
-Displays license status: amber for trial, blue for Pro, purple for Enterprise.
+Used when the device can't reach the license server (secure labs, segmented networks, customer sites behind strict firewalls).
 
-```html
-<tlink-trial-banner (upgrade)="openActivation()"></tlink-trial-banner>
-```
+1. Click the **Sign in** pill to open the modal.
+2. Click **"Have an activation code?"** at the bottom of the modal.
+3. The modal flips to offline mode and shows your **device fingerprint** — a short hash that uniquely identifies this install. Click **Copy** and send it to your admin.
+4. Your admin mints an **offline activation code** bound to that fingerprint and sends it back. The code is a long string starting with `eyJ…`.
+5. Paste the code into the **Activation code** textarea → click **Activate**.
+6. The pill flips to your plan name — this device is licensed with no further network contact needed until the code's expiry date.
 
-### Activation Dialog
+Offline codes carry their own expiry (set by your admin at mint time). You'll get a Reactivate pill when the code expires; repeat the process with a fresh code.
 
-Modal dialog for entering and activating license keys.
+## Managing your license
 
-```html
-<tlink-activation-dialog
-  [visible]="showActivation"
-  (activated)="onActivated()"
-  (closed)="showActivation = false">
-</tlink-activation-dialog>
-```
+**Settings → License** (open from the gear icon in the sidebar, then click **License** in the left column):
 
-### Splash Screen
+- **Account** — your signed-in email, plan, device fingerprint.
+- **Refresh from server** — force a heartbeat if the status pill shows stale state. Useful after your admin changes your plan or adds you to a team.
+- **Session details** — last server contact, heartbeat count, round-trip time, offline grace status.
+- **Server URL** — override if your organization runs a self-hosted license server (Team plan).
+- **Sign out of this device** — frees the seat on the server. You'll land back in the "Sign in" state (not the trial — one trial per device).
 
-Full-screen splash with logo, app name, version, and loading bar.
+The **license dropdown** in the bottom-right pill is a lighter version of the same page: signed-in email, Sign out, License settings, Switch account.
 
-```html
-<tlink-splash-screen (dismissed)="onSplashDone()"></tlink-splash-screen>
-```
+## What happens when things go wrong
 
-### Admin Panel
+Tlink prefers to keep working rather than block you. The failure modes:
 
-Displays license details: masked key, status, tier, expiry, machine ID, source.
+- **Trial expired, you haven't paid yet** → **Reactivate** pill, read-only mode. Existing tabs stay viewable, new sessions blocked. Click the pill to sign in or activate.
+- **Paid license expired (billing failed, card declined)** → same **Reactivate** pill, same read-only mode. Fix billing in your account, click **Refresh from server** in Settings → License, and you're back.
+- **Seat revoked by admin** → **Reactivate** pill with tooltip *"Your seat was revoked by your admin — contact them"*. Read-only mode.
+- **Device limit reached** (you've installed on more devices than your plan allows) → **Reactivate** pill with tooltip *"Device limit reached — sign out of another device or upgrade your plan"*. Sign out of an older device from this one via Settings → License → **Sign out of this device**, or do it from your account web page.
+- **License server unreachable** → **"Offline"** banner briefly. Tlink grants a **48-hour offline grace** so a flaky VPN or an airport Wi-Fi dropout doesn't lock you out. After 48h without server contact the Reactivate pill appears.
 
-```html
-<tlink-admin-panel
-  [visible]="showAdmin"
-  (closed)="showAdmin = false">
-</tlink-admin-panel>
-```
+In all failure modes the activation dialog is **non-blocking** — you can close it, keep looking at existing tabs, and open it again whenever you're ready. The **"Clear local session and start over"** link in the modal is the nuclear option: wipes the keychain token and local trial state, drops you back to the first-launch flow.
 
-### License Menu
+## Team plans — admin notes
 
-Dropdown menu with license actions: Info, Activate, Deactivate, Server Settings, Buy.
+- Your admin invites you by email from the Team dashboard. You'll get a sign-in email; sign in as usual.
+- The admin can also mint **offline codes** for team members on restricted networks — same offline flow as above.
+- The **Admin panel** inside Tlink (visible only to admins) shows seat usage, pending invites, and lets you remove devices. Open it via Settings → License → **Open admin panel** (admins only).
+- Team plans ship with a **self-hostable license server** — point `Settings → License → Server URL` at your deployment.
 
-```html
-<tlink-license-menu
-  (showInfo)="showAdmin = true"
-  (showActivation)="showActivation = true"
-  (showDeactivation)="licenseService.deactivateLicense()"
-  (showServerSettings)="showServerSettings = true"
-  (buyLicense)="openPurchaseUrl()">
-</tlink-license-menu>
-```
+## FAQ
 
-### Server Settings
+**I don't want to sign up for an account to try Tlink.** You don't have to — the 30-day local trial starts automatically on first launch. The sign-in modal is skippable with Escape.
 
-Dialog for configuring the license server URL with connection testing.
+**Do I need to be online for Tlink to work?** Only to activate. After sign-in Tlink heartbeats every hour but tolerates up to 48 hours offline before asking you to reconnect. Offline-activated installs don't heartbeat at all until their code expires.
 
-```html
-<tlink-server-settings
-  [visible]="showServerSettings"
-  (saved)="onServerSaved($event)"
-  (closed)="showServerSettings = false">
-</tlink-server-settings>
-```
+**Can I use one license on multiple devices?** Individual plan: 2 devices concurrent. Team plan: configured per-seat by your admin (typically 1-3 devices per seat).
 
-## Service API
+**I signed out and now I'm stuck in "Sign in" state — can I get my trial back?** The 30-day trial is per-device. Once consumed you need a paid plan or an admin-minted offline code. **Clear local session and start over** in the activation modal wipes device state but does not reset the trial clock.
 
-Inject `TlinkLicenseService` to interact with license state programmatically:
+**My card failed and the app went into read-only mode — did I lose my work?** No. All open tabs stay viewable. SSH / RDP sessions you had open keep running. You just can't open NEW profile sessions until you reactivate. Fix billing, click **Refresh from server** in Settings → License, and the pill flips back to your plan name.
 
-```typescript
-import { TlinkLicenseService } from '@tlink/license-client';
+**I just upgraded from Individual to Team / my admin just added me to a team — my pill still says the old plan.** Settings → License → **Refresh from server**. Takes 1-2 seconds. If still wrong after a minute, Sign out and Sign back in.
 
-@Component({ ... })
-export class AppComponent {
-  constructor(public licenseService: TlinkLicenseService) {}
+## Source
 
-  async activate(key: string) {
-    const result = await this.licenseService.activateLicense(key);
-    console.log(result.success, result.message);
-  }
-
-  checkFeature(feature: string): boolean {
-    return this.licenseService.isFeatureAvailable(feature);
-  }
-}
-```
-
-### Key Methods
-
-| Method | Description |
-|--------|-------------|
-| `activateLicense(key)` | Async activation with server fallback to local |
-| `activateLicenseSync(key)` | Synchronous local-only activation |
-| `deactivateLicense()` | Remove stored license |
-| `startTrial()` | Start the free trial period |
-| `checkLicense()` | Re-evaluate and return current status |
-| `validateKey(key)` | Offline key validation (5 and 6 segment) |
-| `isFeatureAvailable(feature)` | Check if a feature is available |
-| `testServerConnection(url?)` | Test license server reachability |
-| `getMachineId()` | Get browser-based machine fingerprint |
-| `setServerKeySalt(salt)` | Override the server key checksum salt |
-
-### Reactive State
-
-Subscribe to `licenseInfo$` for reactive updates:
-
-```typescript
-this.licenseService.licenseInfo$.subscribe(info => {
-  console.log(info.status, info.tier, info.trialDaysRemaining);
-});
-```
-
-### Key Properties
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `licenseStatus` | `LicenseStatus` | Current status |
-| `licenseTier` | `LicenseTier` | Current tier |
-| `trialDaysRemaining` | `number` | Days left in trial |
-| `maskedKey` | `string` | Partially hidden key for display |
-| `formattedExpiry` | `string` | Human-readable expiry date |
-| `tierDisplayName` | `string` | Display name for current tier |
-| `shouldBlockApp` | `boolean` | Whether app should show blocking overlay |
-| `showTrialBanner` | `boolean` | Whether trial banner should show |
-| `heartbeatWarning` | `string \| null` | Warning from failed heartbeats |
-
-## Key Formats
-
-The library supports two license key formats:
-
-- **5-segment (local):** `TLINK-XXXX-YYMM-XXXX-CCCC`
-- **6-segment (server):** `TLINK-AA-TXXX-YYMM-XXXX-CCCC`
-
-6-segment keys attempt server activation first, then fall back to local validation if the server is unreachable.
-
-## Theming
-
-All components use CSS custom properties for theming:
-
-```css
-:root {
-  --tlink-primary: #2563eb;
-  --tlink-primary-hover: #1d4ed8;
-  --tlink-font-family: 'Inter', sans-serif;
-  --tlink-dialog-bg: #fff;
-  --tlink-dialog-color: #1a1a2e;
-  --tlink-dialog-muted: #666;
-  --tlink-input-border: #ddd;
-  --tlink-input-bg: #fff;
-  --tlink-border: #e5e7eb;
-  --tlink-border-light: #f3f4f6;
-  --tlink-banner-trial-bg: #d97706;
-  --tlink-banner-pro-bg: #2563eb;
-  --tlink-banner-enterprise-bg: #7c3aed;
-  --tlink-splash-bg: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-  --tlink-splash-color: #f1f5f9;
-  --tlink-dialog-z-index: 10000;
-}
-```
-
-## License
-
-Proprietary - Tlink Technologies
+- Service: [`src/lib/tlink-license.service.ts`](./src/lib/tlink-license.service.ts)
+- Activation dialog: [`src/lib/components/activation-dialog/activation-dialog.component.ts`](./src/lib/components/activation-dialog/activation-dialog.component.ts)
+- Config: [`src/lib/tlink-license.config.ts`](./src/lib/tlink-license.config.ts)
+- Dock pill template: [`../tlink-core/src/components/appRoot.component.pug`](../tlink-core/src/components/appRoot.component.pug) (search for `license-dock-`)
