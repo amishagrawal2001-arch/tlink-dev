@@ -99,3 +99,7 @@ In all failure modes the activation dialog is **non-blocking** — you can close
 - Activation dialog: [`src/lib/components/activation-dialog/activation-dialog.component.ts`](./src/lib/components/activation-dialog/activation-dialog.component.ts)
 - Config: [`src/lib/tlink-license.config.ts`](./src/lib/tlink-license.config.ts)
 - Dock pill template: [`../tlink-core/src/components/appRoot.component.pug`](../tlink-core/src/components/appRoot.component.pug) (search for `license-dock-`)
+
+## Developers / library integrators
+
+Embedding `@tlink/license-client` in another Angular app? See [`INTEGRATION.md`](./INTEGRATION.md) for the module setup, service API, provider configuration, and server-side contract.
