@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tlink — License & activation guide</title>
+    <meta name="description" content="How to activate your Tlink license, manage your account, and recover when things go wrong. Online + offline activation, dock pill reference, and troubleshooting.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* License guide — amber accent, calmer than the Terminal landing. */
+        .lic-hero { padding: 120px 0 50px; text-align: center; position: relative; overflow: hidden; }
+        .lic-hero .hero-glow {
+            position: absolute; top: -160px; left: 50%; transform: translateX(-50%);
+            width: 700px; height: 500px;
+            background: radial-gradient(ellipse, rgba(217, 119, 6, 0.14) 0%, rgba(74, 158, 255, 0.07) 40%, transparent 70%);
+            pointer-events: none;
+        }
+        .lic-badge {
+            display: inline-flex; align-items: center; gap: 8px; padding: 8px 20px;
+            border-radius: 999px; background: rgba(217, 119, 6, 0.10); border: 1px solid rgba(217, 119, 6, 0.25);
+            color: #f59e0b; font-size: 13px; font-weight: 500; margin-bottom: 20px;
+        }
+        .lic-gradient { background: linear-gradient(135deg, #f59e0b, #4a9eff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+        /* On-page section nav */
+        .toc-strip {
+            display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;
+            padding: 20px 14px; margin-top: 40px;
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+        }
+        .toc-strip a {
+            padding: 6px 14px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border);
+            font-size: 12px; font-weight: 500; color: var(--text-secondary); text-decoration: none;
+            transition: all 0.15s;
+        }
+        .toc-strip a:hover { color: var(--text-primary); border-color: rgba(74,158,255,0.4); }
+
+        /* Numbered steps for quickstart */
+        .steps-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-top: 40px; }
+        .step-card {
+            padding: 20px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+            position: relative;
+        }
+        .step-num {
+            width: 28px; height: 28px; border-radius: 50%;
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: white; font-weight: 700; font-size: 13px;
+            display: flex; align-items: center; justify-content: center;
+            margin-bottom: 12px;
+        }
+        .step-card h3 { font-size: 0.95rem; margin-bottom: 6px; }
+        .step-card p { color: var(--text-secondary); font-size: 13px; line-height: 1.55; margin: 0; }
+
+        /* Dock pill reference — the signature visual */
+        .pill-table {
+            width: 100%; border-collapse: collapse; font-size: 13.5px;
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+            overflow: hidden;
+        }
+        .pill-table th {
+            padding: 14px 16px; text-align: left; background: var(--bg);
+            font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--text-secondary); border-bottom: 1px solid var(--border);
+        }
+        .pill-table td {
+            padding: 14px 16px; border-bottom: 1px solid var(--border); color: var(--text-secondary); line-height: 1.5;
+        }
+        .pill-table tr:last-child td { border-bottom: none; }
+        .pill-chip {
+            display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px;
+            border-radius: 999px; font-size: 11px; font-weight: 600; color: white;
+            letter-spacing: 0.02em; white-space: nowrap;
+        }
+        .pill-chip.trial { background: #d97706; }
+        .pill-chip.upgrade { background: #16a34a; }
+        .pill-chip.signin { background: #2563eb; }
+        .pill-chip.individual { background: #2563eb; }
+        .pill-chip.team { background: #7c3aed; }
+        .pill-chip.trial-server { background: #d97706; }
+        .pill-chip.reactivate { background: #dc2626; }
+
+        /* Two-column flow blocks (online / offline activation) */
+        .flow-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 48px; }
+        .flow-card {
+            padding: 28px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+        }
+        .flow-card h3 { font-size: 1.1rem; margin-bottom: 6px; display: flex; align-items: center; gap: 10px; }
+        .flow-card h3 i { color: #4a9eff; }
+        .flow-card .flow-tag {
+            font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--text-muted); margin-bottom: 16px;
+        }
+        .flow-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 14px; }
+        .flow-list li { display: flex; gap: 12px; font-size: 14px; color: var(--text-secondary); line-height: 1.55; }
+        .flow-list li .num {
+            flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+            background: var(--bg); border: 1px solid var(--border);
+            font-size: 11px; font-weight: 600; color: var(--text-primary);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .flow-list li code {
+            background: var(--bg); padding: 1px 6px; border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #f59e0b;
+        }
+        .flow-list li strong { color: var(--text-primary); font-weight: 600; }
+
+        /* Failure-mode cards */
+        .fail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 40px; }
+        .fail-card {
+            padding: 20px 22px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+            border-left: 3px solid #dc2626;
+        }
+        .fail-card.offline { border-left-color: #f59e0b; }
+        .fail-card.seat { border-left-color: #a78bfa; }
+        .fail-card h4 { font-size: 0.95rem; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+        .fail-card p { font-size: 13.5px; color: var(--text-secondary); line-height: 1.55; margin: 0; }
+        .fail-card p + p { margin-top: 10px; }
+        .fail-card .pill-chip { margin-right: 6px; }
+
+        /* FAQ */
+        .faq-list { display: flex; flex-direction: column; gap: 14px; margin-top: 40px; }
+        .faq-item {
+            padding: 20px 22px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+        }
+        .faq-item .q { font-weight: 600; color: var(--text-primary); margin-bottom: 6px; font-size: 14.5px; }
+        .faq-item .a { color: var(--text-secondary); font-size: 13.5px; line-height: 1.6; margin: 0; }
+
+        .section-note {
+            margin-top: 24px; padding: 16px 20px; font-size: 13px;
+            background: rgba(74, 158, 255, 0.06); border: 1px solid rgba(74, 158, 255, 0.2); border-radius: var(--radius);
+            color: var(--text-secondary); line-height: 1.6;
+        }
+        .section-note strong { color: var(--text-primary); }
+
+        @media (max-width: 900px) {
+            .steps-grid { grid-template-columns: repeat(2, 1fr); }
+            .flow-grid, .fail-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 600px) {
+            .steps-grid { grid-template-columns: 1fr; }
+            .pill-table { font-size: 12px; }
+            .pill-table th, .pill-table td { padding: 10px 12px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container nav-container">
+            <a href="tlink-terminal.html" class="nav-brand">
+                <span class="brand-icon" style="background:linear-gradient(135deg,#4a9eff,#22d3ee)"><i class="fas fa-terminal"></i></span>
+                <span class="brand-text">Tlink Terminal</span>
+            </a>
+            <div class="nav-links">
+                <a href="#quickstart">Quickstart</a>
+                <a href="#pills">Dock pills</a>
+                <a href="#activate">Activate</a>
+                <a href="#manage">Manage</a>
+                <a href="#when-things-go-wrong">Troubleshoot</a>
+                <a href="#faq">FAQ</a>
+            </div>
+            <div class="nav-actions">
+                <a href="tlink-terminal.html" class="btn btn-ghost">
+                    <i class="fas fa-arrow-left"></i> Back to Terminal
+                </a>
+            </div>
+            <button class="nav-toggle" onclick="document.querySelector('.nav-links').classList.toggle('open');document.querySelector('.nav-actions').classList.toggle('open')">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="lic-hero">
+        <div class="hero-glow"></div>
+        <div class="container">
+            <div class="lic-badge">
+                <i class="fas fa-key"></i> License &amp; activation guide
+            </div>
+            <h1 class="hero-title">
+                Everything about <span class="lic-gradient">licensing Tlink</span>
+            </h1>
+            <p class="hero-subtitle">
+                Sign in, activate online or offline, and recover when things break &mdash;
+                all without leaving the app. The pill in the bottom-right is the single source of truth
+                for license state, and we never block the app over a billing hiccup.
+            </p>
+
+            <div class="toc-strip">
+                <a href="#quickstart">Quickstart</a>
+                <a href="#pills">The dock pill</a>
+                <a href="#activate-online">Online activation</a>
+                <a href="#activate-offline">Offline activation</a>
+                <a href="#manage">Managing your license</a>
+                <a href="#when-things-go-wrong">When things go wrong</a>
+                <a href="#team">Team admin</a>
+                <a href="#faq">FAQ</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Quickstart -->
+    <section id="quickstart" class="section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge" style="background:rgba(217,119,6,0.1);border-color:rgba(217,119,6,0.25);color:#f59e0b">Quickstart</span>
+                <h2>Your first launch</h2>
+                <p>Install Tlink and you&rsquo;re on a 30-day local trial from the moment it opens. Here&rsquo;s the path from trial to signed-in paid plan.</p>
+            </div>
+            <div class="steps-grid">
+                <div class="step-card">
+                    <div class="step-num">1</div>
+                    <h3>Install &amp; open</h3>
+                    <p>The <strong>Sign in to activate</strong> modal opens automatically. The pill in the bottom-right shows <strong>Trial: 30d</strong>.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-num">2</div>
+                    <h3>Try before you buy</h3>
+                    <p>Press <strong>Escape</strong> to dismiss the modal. You have the full 30-day trial. The pill keeps counting down.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-num">3</div>
+                    <h3>Click Upgrade</h3>
+                    <p>When you&rsquo;re ready, click the green <strong>Upgrade</strong> pill next to the trial countdown. Pricing opens in your browser.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-num">4</div>
+                    <h3>Pay &amp; receive email</h3>
+                    <p>After checkout you get a sign-in email with the email + password for your account.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-num">5</div>
+                    <h3>Sign in</h3>
+                    <p>Click the trial pill &rarr; <strong>Sign in to activate</strong> &rarr; enter credentials. Pill flips to <strong>Individual</strong> or <strong>Team</strong>. Done.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Dock pills reference -->
+    <section id="pills" class="section section-dark">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge" style="background:rgba(74,158,255,0.1);border-color:rgba(74,158,255,0.25);color:#4a9eff">Dock pill reference</span>
+                <h2>One pill, every state</h2>
+                <p>The pill in the bottom-right of the window shows your current license state at a glance. Hover any pill for a tooltip with the exact detail; click opens the matching action.</p>
+            </div>
+
+            <table class="pill-table">
+                <thead>
+                    <tr>
+                        <th style="width:160px">Pill</th>
+                        <th>Means</th>
+                        <th>Click to</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="pill-chip trial">Trial: Nd</span></td>
+                        <td>Local 30-day trial, N days remaining. App is fully functional.</td>
+                        <td>Open account menu (Sign in, License settings).</td>
+                    </tr>
+                    <tr>
+                        <td><span class="pill-chip upgrade"><i class="fas fa-arrow-up-right-from-square"></i> Upgrade</span></td>
+                        <td>Shown <em>next to</em> the trial pill. Opens the pricing / checkout page.</td>
+                        <td>Open the pricing page in your browser.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="pill-chip signin"><i class="fas fa-sign-in-alt"></i> Sign in</span></td>
+                        <td>You haven&rsquo;t signed in yet (or you signed out) and aren&rsquo;t on a trial.</td>
+                        <td>Open the Sign-in modal.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="pill-chip individual">Individual</span></td>
+                        <td>Signed in on a paid solo plan.</td>
+                        <td>Open account menu.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="pill-chip team">Team</span></td>
+                        <td>Signed in on a team plan &mdash; a seat allocated by your admin.</td>
+                        <td>Open account menu.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="pill-chip trial-server">Trial</span></td>
+                        <td>Server-side trial (a purchased trial seat, not the local 30-day one).</td>
+                        <td>Open account menu.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="pill-chip reactivate"><i class="fas fa-triangle-exclamation"></i> Reactivate</span></td>
+                        <td>License expired, invalid, or seat revoked. App drops into <strong>read-only mode</strong> &mdash; existing tabs keep working, new SSH / RDP / collector / gNMI sessions are blocked.</td>
+                        <td>Open the activation modal to fix.</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="section-note">
+                <strong>Why doesn&rsquo;t Tlink block the app on expiry?</strong>
+                Paying users whose card just failed shouldn&rsquo;t get the same hammer as someone who never paid. We keep your existing tabs viewable and let you look at your work while you fix billing &mdash; the Reactivate pill stays visible until you&rsquo;re back.
+            </div>
+        </div>
+    </section>
+
+    <!-- Activation flows -->
+    <section id="activate" class="section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge" style="background:rgba(217,119,6,0.1);border-color:rgba(217,119,6,0.25);color:#f59e0b">Activate</span>
+                <h2>Two activation paths</h2>
+                <p>Most users sign in with email + password. Air-gapped or restricted networks use the offline-code path &mdash; your admin mints a device-bound code so the app never touches the license server.</p>
+            </div>
+
+            <div class="flow-grid">
+                <div class="flow-card" id="activate-online">
+                    <div class="flow-tag">Standard</div>
+                    <h3><i class="fas fa-globe"></i> Online activation</h3>
+                    <ol class="flow-list">
+                        <li><span class="num">1</span><span>Click the <strong>Sign in</strong> or <strong>Reactivate</strong> pill in the bottom-right.</span></li>
+                        <li><span class="num">2</span><span>Type your account email &amp; password.</span></li>
+                        <li><span class="num">3</span><span>Click <strong>Sign in</strong>. The modal closes and the pill flips to your plan name.</span></li>
+                    </ol>
+                    <div class="section-note" style="margin-top:16px;background:rgba(16,163,74,0.06);border-color:rgba(16,163,74,0.2)">
+                        Tokens are saved to your OS keychain (macOS Keychain &middot; Windows Credential Manager &middot; Linux libsecret) so you stay signed in across restarts. Tlink refreshes the session automatically every hour.
+                    </div>
+                </div>
+
+                <div class="flow-card" id="activate-offline">
+                    <div class="flow-tag">Air-gapped / restricted networks</div>
+                    <h3><i class="fas fa-shield-halved"></i> Offline activation</h3>
+                    <ol class="flow-list">
+                        <li><span class="num">1</span><span>Click the <strong>Sign in</strong> pill to open the modal.</span></li>
+                        <li><span class="num">2</span><span>Click <strong>Have an activation code?</strong> at the bottom &mdash; the modal flips to offline mode.</span></li>
+                        <li><span class="num">3</span><span>Copy your <strong>device fingerprint</strong> (a short hash). Send it to your admin.</span></li>
+                        <li><span class="num">4</span><span>Admin mints an <strong>offline code</strong> bound to that fingerprint and sends it back. The code starts with <code>eyJ&hellip;</code></span></li>
+                        <li><span class="num">5</span><span>Paste the code into <strong>Activation code</strong> &rarr; click <strong>Activate</strong>. Pill flips to your plan name.</span></li>
+                    </ol>
+                    <div class="section-note" style="margin-top:16px">
+                        Offline codes carry their own expiry (set by your admin at mint time). When the code expires you&rsquo;ll get a Reactivate pill; repeat the process with a fresh code.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Managing license -->
+    <section id="manage" class="section section-dark">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge" style="background:rgba(74,158,255,0.1);border-color:rgba(74,158,255,0.25);color:#4a9eff">Manage</span>
+                <h2>Settings &rarr; License</h2>
+                <p>The full license management page lives at Settings &rarr; License (sidebar gear icon &rarr; License). Everything you can do from the dock pill, plus the full picture.</p>
+            </div>
+
+            <div class="features-grid" style="margin-top:40px">
+                <div class="feature-card">
+                    <div class="feature-icon" style="background:rgba(74,158,255,0.15);color:#4a9eff"><i class="fas fa-user"></i></div>
+                    <h3>Account</h3>
+                    <p>Your signed-in email, plan name, device fingerprint &mdash; everything that identifies this install.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background:rgba(16,163,74,0.15);color:#16a34a"><i class="fas fa-rotate"></i></div>
+                    <h3>Refresh from server</h3>
+                    <p>Force a heartbeat if the pill shows stale state. Useful after your admin changes your plan or adds you to a team.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background:rgba(167,139,250,0.15);color:#a78bfa"><i class="fas fa-chart-line"></i></div>
+                    <h3>Session details</h3>
+                    <p>Last server contact, heartbeat count, round-trip time, offline grace status &mdash; everything about the client/server link.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background:rgba(217,119,6,0.15);color:#f59e0b"><i class="fas fa-server"></i></div>
+                    <h3>Server URL</h3>
+                    <p>Override the license server endpoint if your organization runs a self-hosted deployment (Team plan).</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background:rgba(220,38,38,0.15);color:#dc2626"><i class="fas fa-sign-out-alt"></i></div>
+                    <h3>Sign out of this device</h3>
+                    <p>Frees the seat on the server. You&rsquo;ll land in the Sign-in state &mdash; not back to the trial (one trial per device).</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background:rgba(248,113,113,0.15);color:#f87171"><i class="fas fa-eraser"></i></div>
+                    <h3>Clear local session</h3>
+                    <p>Nuclear option, available from the activation modal&rsquo;s footer. Wipes keychain tokens &amp; local state &mdash; use when the app is wedged.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- When things go wrong -->
+    <section id="when-things-go-wrong" class="section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge" style="background:rgba(220,38,38,0.1);border-color:rgba(220,38,38,0.25);color:#dc2626">Troubleshoot</span>
+                <h2>When things go wrong</h2>
+                <p>Tlink prefers to keep working rather than block you. Every failure mode is a <strong>Reactivate</strong> pill plus read-only mode &mdash; existing tabs stay viewable, only new sessions are blocked.</p>
+            </div>
+
+            <div class="fail-grid">
+                <div class="fail-card">
+                    <h4><span class="pill-chip reactivate" style="font-size:9px;padding:1px 7px">R</span> Trial expired, haven&rsquo;t paid</h4>
+                    <p>Read-only mode. Click the Reactivate pill to sign in or activate &mdash; nothing you had open goes away.</p>
+                </div>
+                <div class="fail-card">
+                    <h4><span class="pill-chip reactivate" style="font-size:9px;padding:1px 7px">R</span> Paid license expired (card declined)</h4>
+                    <p>Same Reactivate pill, same read-only mode. Fix billing in your account; back in Tlink click <strong>Settings &rarr; License &rarr; Refresh from server</strong> and you&rsquo;re back.</p>
+                </div>
+                <div class="fail-card seat">
+                    <h4><span class="pill-chip team" style="font-size:9px;padding:1px 7px">T</span> Seat revoked by admin</h4>
+                    <p>Reactivate pill with tooltip <em>&ldquo;Your seat was revoked by your admin&rdquo;</em>. Contact your admin.</p>
+                </div>
+                <div class="fail-card seat">
+                    <h4><span class="pill-chip team" style="font-size:9px;padding:1px 7px">T</span> Device limit reached</h4>
+                    <p>You&rsquo;ve installed on more devices than your plan allows. Sign out of an older device from <strong>Settings &rarr; License &rarr; Sign out of this device</strong> on that machine, or do it from your account web page.</p>
+                </div>
+                <div class="fail-card offline">
+                    <h4><span class="pill-chip trial-server" style="font-size:9px;padding:1px 7px">O</span> License server unreachable</h4>
+                    <p>You&rsquo;ll see an <strong>Offline</strong> banner briefly. Tlink grants a <strong>48-hour offline grace</strong> &mdash; a flaky VPN or airport Wi-Fi dropout won&rsquo;t lock you out.</p>
+                    <p>After 48 h without server contact the Reactivate pill appears.</p>
+                </div>
+                <div class="fail-card offline">
+                    <h4><span class="pill-chip trial-server" style="font-size:9px;padding:1px 7px">O</span> Offline code expired</h4>
+                    <p>Reactivate pill. Request a fresh offline code from your admin and repeat the <a href="#activate-offline">offline activation</a> steps.</p>
+                </div>
+            </div>
+
+            <div class="section-note">
+                <strong>In every failure mode the activation dialog is non-blocking.</strong>
+                You can close it, keep looking at existing tabs, and open it again whenever you&rsquo;re ready. The <strong>Clear local session and start over</strong> link in the modal footer is the nuclear option: wipes keychain tokens and local trial state, drops you back to the first-launch flow.
+            </div>
+        </div>
+    </section>
+
+    <!-- Team admin -->
+    <section id="team" class="section section-dark">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge" style="background:rgba(167,139,250,0.1);border-color:rgba(167,139,250,0.25);color:#a78bfa">Team admin</span>
+                <h2>Running Tlink for a team</h2>
+                <p>Team plans ship with centrally managed seats, offline-code minting for restricted networks, and an optional self-hostable license server.</p>
+            </div>
+
+            <div class="features-grid" style="margin-top:40px">
+                <div class="feature-card">
+                    <div class="feature-icon" style="background:linear-gradient(135deg,#a78bfa,#7c3aed);color:white"><i class="fas fa-envelope"></i></div>
+                    <h3>Invite by email</h3>
+                    <p>Add team members from the Team dashboard. They get a sign-in email and activate like any Individual plan.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background:linear-gradient(135deg,#a78bfa,#7c3aed);color:white"><i class="fas fa-shield-halved"></i></div>
+                    <h3>Mint offline codes</h3>
+                    <p>Generate device-bound codes for team members on air-gapped networks. Same offline-activation flow from the user side.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background:linear-gradient(135deg,#a78bfa,#7c3aed);color:white"><i class="fas fa-sliders"></i></div>
+                    <h3>Admin panel in-app</h3>
+                    <p>Settings &rarr; License &rarr; Open admin panel (admins only). Seat usage, pending invites, device management.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon" style="background:linear-gradient(135deg,#a78bfa,#7c3aed);color:white"><i class="fas fa-server"></i></div>
+                    <h3>Self-hosted server</h3>
+                    <p>Point <code>Settings &rarr; License &rarr; Server URL</code> at your own deployment. Keeps license traffic on your network.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-badge" style="background:rgba(74,158,255,0.1);border-color:rgba(74,158,255,0.25);color:#4a9eff">FAQ</span>
+                <h2>Common questions</h2>
+            </div>
+
+            <div class="faq-list">
+                <div class="faq-item">
+                    <div class="q">I don&rsquo;t want to sign up for an account to try Tlink.</div>
+                    <p class="a">You don&rsquo;t have to. The 30-day local trial starts automatically on first launch. The sign-in modal is skippable with Escape.</p>
+                </div>
+                <div class="faq-item">
+                    <div class="q">Do I need to be online for Tlink to work?</div>
+                    <p class="a">Only to activate. After sign-in Tlink heartbeats every hour but tolerates up to <strong>48 hours offline</strong> before asking you to reconnect. Offline-activated installs don&rsquo;t heartbeat at all until their code expires.</p>
+                </div>
+                <div class="faq-item">
+                    <div class="q">Can I use one license on multiple devices?</div>
+                    <p class="a">Individual plan: 2 devices concurrent. Team plan: configured per-seat by your admin (typically 1-3 devices per seat).</p>
+                </div>
+                <div class="faq-item">
+                    <div class="q">I signed out and now I&rsquo;m stuck in &ldquo;Sign in&rdquo; state &mdash; can I get my trial back?</div>
+                    <p class="a">The 30-day trial is per-device. Once consumed you need a paid plan or an admin-minted offline code. <strong>Clear local session and start over</strong> in the activation modal wipes device state but does not reset the trial clock.</p>
+                </div>
+                <div class="faq-item">
+                    <div class="q">My card failed and the app went into read-only mode &mdash; did I lose my work?</div>
+                    <p class="a">No. All open tabs stay viewable. SSH / RDP sessions you had open keep running. You just can&rsquo;t open <strong>new</strong> profile sessions until you reactivate. Fix billing, click <strong>Refresh from server</strong> in Settings &rarr; License, and the pill flips back to your plan name.</p>
+                </div>
+                <div class="faq-item">
+                    <div class="q">I just upgraded from Individual to Team / my admin added me to a team &mdash; my pill still shows the old plan.</div>
+                    <p class="a">Settings &rarr; License &rarr; <strong>Refresh from server</strong>. Takes 1-2 seconds. If still wrong after a minute, Sign out and Sign back in.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta-section">
+        <div class="container">
+            <h2>Still stuck?</h2>
+            <p>Hit a case this guide doesn&rsquo;t cover? Open an issue with your <strong>device fingerprint</strong> (from Settings &rarr; License) and the pill state you&rsquo;re seeing &mdash; we&rsquo;ll get back to you.</p>
+            <div class="cta-actions">
+                <a href="https://github.com/amishagrawal2001-arch/tlink-dev/issues" target="_blank" class="btn btn-primary btn-lg" style="background:linear-gradient(135deg,#f59e0b,#d97706)">
+                    <i class="fab fa-github"></i> Report an issue
+                </a>
+                <a href="tlink-terminal.html" class="btn btn-outline btn-lg">
+                    <i class="fas fa-arrow-left"></i> Back to Tlink Terminal
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <div class="nav-brand">
+                        <span class="brand-icon" style="background:linear-gradient(135deg,#f59e0b,#d97706)"><i class="fas fa-key"></i></span>
+                        <span class="brand-text">License &amp; activation</span>
+                    </div>
+                    <p>User guide to activating Tlink and recovering when billing hiccups happen.</p>
+                </div>
+                <div class="footer-links">
+                    <h4>Products</h4>
+                    <a href="tlink-terminal.html">Tlink Terminal</a>
+                    <a href="tlink-studio.html">Tlink Studio</a>
+                    <a href="tlink-terminal.html#pricing">Pricing</a>
+                    <a href="tlink-terminal.html#download">Download</a>
+                </div>
+                <div class="footer-links">
+                    <h4>This guide</h4>
+                    <a href="#quickstart">Quickstart</a>
+                    <a href="#pills">Dock pill reference</a>
+                    <a href="#activate">Activation flows</a>
+                    <a href="#when-things-go-wrong">Troubleshoot</a>
+                </div>
+                <div class="footer-links">
+                    <h4>Developers</h4>
+                    <a href="https://github.com/amishagrawal2001-arch/tlink-dev/blob/main/tlink-license-client/INTEGRATION.md" target="_blank">Library integration</a>
+                    <a href="https://github.com/amishagrawal2001-arch/tlink-dev/blob/main/tlink-license-client/README.md" target="_blank">README (same content)</a>
+                    <a href="https://github.com/amishagrawal2001-arch/tlink-dev" target="_blank">GitHub</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2025-2026 Tlink. MIT License.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
