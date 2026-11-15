@@ -1,9 +1,12 @@
 /* eslint-disable @typescript-eslint/explicit-module-boundary-types */
 import { Injectable } from '@angular/core'
-import { ToolbarButtonProvider, ToolbarButton, TranslateService, ProfilesService, SelectorService, AppService } from 'tlink-core'
+import { ToolbarButtonProvider, ToolbarButton, TranslateService, ProfilesService, SelectorService } from 'tlink-core'
 import { TerminalService } from './services/terminal.service'
+// NB: TerminalTabComponent + AppService removed along with the
+// active-profile weighting below — "New connection" is now a launcher,
+// not a profile picker, so there's no "which tab is active" state to
+// consult.
 import { LocalProfile } from './api'
-import { TerminalTabComponent } from './components/terminalTab.component'
 
 /** @hidden */
 @Injectable()
@@ -12,7 +15,6 @@ export class ButtonProvider extends ToolbarButtonProvider {
         private terminal: TerminalService,
         private profiles: ProfilesService,
         private selector: SelectorService,
-        private app: AppService,
         private translate: TranslateService,
     ) {
         super()
@@ -27,20 +29,24 @@ export class ButtonProvider extends ToolbarButtonProvider {
                     if (this.selector.active) {
                         return
                     }
-                    const active = this.app.activeTab instanceof TerminalTabComponent ? this.app.activeTab.profile : null
-                    const activeId = (active as any)?.id ?? null
+                    // "New connection" is a LAUNCHER, not a profile browser.
+                    // Only show the small set of builtin "tool" profiles
+                    // that function as entry points (AI Chat, API client).
+                    // User-saved SSH / RDP / gNMI / etc. profiles already
+                    // live in the profiles sidebar / Ctrl+P selector; piling
+                    // them in here made the list unreadable once the user
+                    // had more than a handful of saved profiles. The
+                    // per-provider "Connect to…" (Quick Connect) entries
+                    // appended below cover ad-hoc new sessions.
+                    const LAUNCHER_PROFILE_TYPES = new Set(['chatgpt', 'api-client'])
                     const profiles = (await this.profiles.getProfiles({ includeBuiltin: true }))
-                        .filter(p => !p.isBuiltin || p.type === 'chatgpt')
-                    if (!profiles.length) {
-                        return
-                    }
+                        .filter(p => p.isBuiltin && LAUNCHER_PROFILE_TYPES.has(p.type))
                     const options = profiles.map(p => {
                         const { result, ...opt } = this.profiles.selectorOptionForProfile(p)
                         return {
                             ...opt,
                             result: undefined,
-                            // Keep active profile near top
-                            weight: (activeId && (p as any).id === activeId) ? -1000 : 0,
+                            weight: 0,
                             callback: () => {
                                 void this.profiles.openNewTabForProfile(p)
                             },
