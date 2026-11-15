@@ -27,6 +27,8 @@ export class GnmiProfileSettingsComponent implements ProfileSettingsComponent<Gn
     testResult: {
         success: boolean
         message?: string
+        /** One-line human hint derived from error-pattern matching; empty when no pattern matched. */
+        hint?: string
         gnmiVersion?: string
         modelCount?: number
         encodings?: string
@@ -94,14 +96,61 @@ export class GnmiProfileSettingsComponent implements ProfileSettingsComponent<Gn
                 latencyMs: Date.now() - startedAt,
             }
         } catch (err) {
+            const { message } = err as Error
             this.testResult = {
                 success: false,
-                message: (err as Error).message,
+                message,
+                hint: this.diagnoseFailure(message),
                 latencyMs: Date.now() - startedAt,
             }
         } finally {
             this.testing = false
         }
+    }
+
+    /**
+     * Turn common gnmic error shapes into a one-line human hint. Users
+     * hit "transport: authentication handshake failed … connection
+     * reset by peer" and don't know that means "the device isn't
+     * actually doing TLS on this port, flip Security → Insecure";
+     * similarly for cert-trust and timeout and auth failures. Returns
+     * empty string when nothing matches so the UI can conditionally
+     * render the hint row.
+     */
+    private diagnoseFailure (message: string): string {
+        const m = message.toLowerCase()
+        // Juniper Junos `grpc clear-text` / Arista `management api gnmi
+        // transport grpc INSECURE` both reset the TCP connection the
+        // moment a TLS ClientHello arrives. Classic symptom: handshake
+        // "read … connection reset by peer".
+        if (m.includes('handshake failed') && m.includes('reset by peer')) {
+            return 'Device may not be using TLS on this port. Try Security tab → Insecure (plain gRPC).'
+        }
+        if (m.includes('certificate signed by unknown authority') ||
+            m.includes('x509: ') ||
+            m.includes('certificate has expired')) {
+            return 'Server certificate isn\'t trusted. Try Security tab → "TLS · skip cert verification", or supply the device\'s CA cert.'
+        }
+        if (m.includes('tls: handshake failure') || m.includes('tls: no cipher suite supported')) {
+            return 'TLS version or cipher mismatch between client and device. Try Security tab → "TLS · skip cert verification" first; if that still fails, the device is using unsupported TLS settings.'
+        }
+        if (m.includes('context deadline exceeded') || m.includes('deadline exceeded') || m.includes('i/o timeout')) {
+            return 'Connection timed out. Check that the port is open end-to-end (firewall, ACLs, device reachability).'
+        }
+        if (m.includes('no such host') || m.includes('name resolution')) {
+            return 'Hostname didn\'t resolve. Check DNS or use the device IP.'
+        }
+        if (m.includes('connection refused')) {
+            return 'Device isn\'t listening on this port. Check the gNMI service config on the target (port + enabled state).'
+        }
+        if (m.includes('code = unauthenticated') || m.includes('invalid credentials') || m.includes('authentication failed')) {
+            return 'Credentials rejected. Check the Auth tab username/password.'
+        }
+        if (m.includes('code = unavailable') && m.includes('handshake')) {
+            // Falls through from other handshake cases — generic hint.
+            return 'Device didn\'t complete the gNMI handshake. If the target is in plaintext mode, flip Security → Insecure; otherwise check vendor + encoding on the Target tab.'
+        }
+        return ''
     }
 
     async saveToKeychain (): Promise<void> {

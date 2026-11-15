@@ -68,6 +68,14 @@ ul.nav-tabs(ngbNav, #nav='ngbNav')
                         strong Failed
                         span.text-muted.ms-2
                             | ({{ testResult.latencyMs }}ms)
+                        //- Human-friendly hint when the raw error matches a
+                        //- known pattern — e.g. "clear-text reset by peer"
+                        //- → "flip Security → Insecure". Rendered above the
+                        //- raw message so users see the fix before the
+                        //- traceback they'd otherwise have to decode.
+                        .test-err-hint.mt-1(*ngIf='testResult.hint')
+                            i.fas.fa-lightbulb.me-1
+                            | {{ testResult.hint }}
                         .test-err-body.mt-1 {{ testResult.message }}
 
     li(ngbNavItem)

@@ -51,6 +51,16 @@
         white-space: pre-wrap;
         width: 100%;
     }
+    // Friendly one-line hint above the raw message. Warm amber ("try
+    // this") rather than the red of the error body — this is advice,
+    // not the failure itself.
+    .test-err-hint {
+        font-size: 12px;
+        color: #d29922;
+        font-weight: 500;
+        width: 100%;
+        i.fa-lightbulb { color: #d29922; }
+    }
 
     // Retention status strip — sits under the days-input field. Same
     // visual weight as .test-result strips so the eye reads them as
