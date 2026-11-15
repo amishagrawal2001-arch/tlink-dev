@@ -134,13 +134,22 @@ export class GnmiProfilesService extends QuickConnectProfileProvider<GnmiProfile
         }
         if (!host) { return null }
 
+        // Explicitly set the Arista default (6030) when the user omits
+        // the port. Leaving `port` undefined let gnmic fall through to
+        // its own built-in default of 57400 (Cisco/Nokia), which
+        // doesn't match this profile provider's configDefaults.port of
+        // 6030 and surprised users typing bare IPs — they'd get
+        // "capabilities request failed: HOST:57400" when they expected
+        // 6030. Users with Cisco/Nokia / Junos targets still type the
+        // port inline (host:57400 or host:32767), so this only affects
+        // the implicit case.
         return {
             name: username ? `${username}@${host}` : host,
             type: 'gnmi',
             icon: 'fas fa-satellite-dish',
             options: {
                 host,
-                port,
+                port: port ?? 6030,
                 username,
                 security: 'tls',
                 encoding: 'JSON_IETF',
