@@ -150,6 +150,17 @@ export class GnmiProfileSettingsComponent implements ProfileSettingsComponent<Gn
             // Falls through from other handshake cases — generic hint.
             return 'Device didn\'t complete the gNMI handshake. If the target is in plaintext mode, flip Security → Insecure; otherwise check vendor + encoding on the Target tab.'
         }
+        // HTTP/2 preface error: TCP connected but device reset before
+        // completing the HTTP/2 handshake. Service is listening but
+        // something about the request shape confuses it. Common on
+        // Junos when (a) skip-authentication is set and we send auth
+        // metadata, (b) the grpc service is configured for the wrong
+        // mode (request-response vs subscribe), or (c) ACL on the
+        // management plane drops gRPC frames from non-trusted hosts.
+        if (m.includes('error reading server preface') ||
+            (m.includes('reset by peer') && m.includes('server preface'))) {
+            return 'Device accepted the TCP connection but reset the gRPC handshake. On Junos: clear username/password in the Auth tab (skip-authentication rejects auth metadata). Also verify the device\'s grpc service is enabled and the management-plane ACL allows your source IP.'
+        }
         return ''
     }
 
