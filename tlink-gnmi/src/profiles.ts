@@ -143,6 +143,18 @@ export class GnmiProfilesService extends QuickConnectProfileProvider<GnmiProfile
         // 6030. Users with Cisco/Nokia / Junos targets still type the
         // port inline (host:57400 or host:32767), so this only affects
         // the implicit case.
+        // Security defaults to insecure (plain gRPC) for QuickConnect —
+        // most users typing a bare IP are hitting a lab box with
+        // clear-text config (Junos skip-authentication, Arista
+        // `management api gnmi transport grpc INSECURE`, etc.) rather
+        // than a TLS-fronted production device. Defaulting to TLS made
+        // Test Connection fail with "authentication handshake failed:
+        // read … connection reset by peer" on first try, forcing users
+        // to dive into the Security tab before anything worked. Users
+        // on real TLS deployments flip to `tls` / `mtls` in the modal
+        // before launching; the per-profile default in configDefaults
+        // stays at `tls` so Settings → New Profile remains secure by
+        // default.
         return {
             name: username ? `${username}@${host}` : host,
             type: 'gnmi',
@@ -151,7 +163,7 @@ export class GnmiProfilesService extends QuickConnectProfileProvider<GnmiProfile
                 host,
                 port: port ?? 6030,
                 username,
-                security: 'tls',
+                security: 'insecure',
                 encoding: 'JSON_IETF',
                 vendor: 'other',
             },
