@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/explicit-module-boundary-types */
 import { Injectable } from '@angular/core'
-import { ToolbarButtonProvider, ToolbarButton, TranslateService, ProfilesService, SelectorService } from 'tlink-core'
+import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
+import { ToolbarButtonProvider, ToolbarButton, TranslateService, ProfilesService, SelectorService, PartialProfile, Profile } from 'tlink-core'
 import { TerminalService } from './services/terminal.service'
 // NB: TerminalTabComponent + AppService removed along with the
 // active-profile weighting below — "New connection" is now a launcher,
@@ -11,13 +12,59 @@ import { LocalProfile } from './api'
 /** @hidden */
 @Injectable()
 export class ButtonProvider extends ToolbarButtonProvider {
+    // eslint-disable-next-line @typescript-eslint/max-params
     constructor (
         private terminal: TerminalService,
         private profiles: ProfilesService,
         private selector: SelectorService,
         private translate: TranslateService,
+        private ngbModal: NgbModal,
     ) {
         super()
+    }
+
+    /**
+     * Provider ids whose QuickConnect results are too under-specified
+     * for a direct launch — they need the user to fill in port / creds
+     * / TLS mode / etc. before the session actually tries to connect.
+     *
+     * Routing these through the EditProfileModal (same path the Tools
+     * menu uses) mirrors the common-sense: SSH `user@host:port` is
+     * usually enough, gNMI / RDP / Prometheus / Telnet / Collector
+     * profiles aren't. Previously ALL providers launched directly from
+     * the Quick connect entry, which gave users a gNMI tab that
+     * immediately failed with "capabilities request failed: HOST:6030"
+     * because they'd typed only the IP.
+     */
+    private readonly LAUNCH_VIA_EDIT_MODAL = new Set(['gnmi', 'rdp', 'collector', 'telnet'])
+
+    /**
+     * Open the Settings plugin's EditProfileModalComponent (loaded
+     * dynamically so tlink-local keeps no compile-time dep on
+     * tlink-settings), seeded with the QuickConnect-derived partial
+     * profile. On Save: launch the tab. On Cancel: no-op. Falls back
+     * to a direct launch if tlink-settings isn't available.
+     */
+    private async launchViaEditModal (profile: PartialProfile<Profile>): Promise<void> {
+        let EditProfileModalComponent: any = null
+        try {
+            ({ EditProfileModalComponent } = window['nodeRequire']('tlink-settings'))
+        } catch {
+            await this.profiles.openNewTabForProfile(profile)
+            return
+        }
+        const provider = this.profiles.providerForProfile(profile as Profile)
+        if (!provider) {
+            await this.profiles.openNewTabForProfile(profile)
+            return
+        }
+        const modal = this.ngbModal.open(EditProfileModalComponent, { size: 'lg' })
+        modal.componentInstance.profile = JSON.parse(JSON.stringify(profile))
+        modal.componentInstance.profileProvider = provider
+        const result = await modal.result.catch(() => null)
+        if (!result) { return }
+        result.type = provider.id
+        await this.profiles.openNewTabForProfile(result)
     }
 
     provide (): ToolbarButton[] {
@@ -69,7 +116,10 @@ export class ButtonProvider extends ToolbarButtonProvider {
                                         return
                                     }
                                     const profile = quickConnectProvider.quickConnect(query)
-                                    if (profile) {
+                                    if (!profile) { return }
+                                    if (this.LAUNCH_VIA_EDIT_MODAL.has(provider.id)) {
+                                        await this.launchViaEditModal(profile)
+                                    } else {
                                         await this.profiles.openNewTabForProfile(profile)
                                     }
                                 },
