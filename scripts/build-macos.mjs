@@ -127,7 +127,12 @@ const requestedMacArtifacts = (process.env.TLINK_MAC_ARTIFACTS || '')
     .map(x => x.trim())
     .filter(Boolean)
 
-const macTargets = requestedMacArtifacts.length ? requestedMacArtifacts : ['dmg', 'zip']
+// Default to DMG only — the Mac convention, handles signing /
+// notarization / Gatekeeper cleanly. The ZIP target duplicated the same
+// bundle without adding user value (nobody launches a Mac app from a
+// bare zip anymore). Set TLINK_MAC_ARTIFACTS=dmg,zip to re-enable both
+// for a one-off release that needs the zip (e.g. Sparkle auto-updater).
+const macTargets = requestedMacArtifacts.length ? requestedMacArtifacts : ['dmg']
 
 function removeNestedBinDirs () {
     const dirs = [

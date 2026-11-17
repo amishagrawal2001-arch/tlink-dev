@@ -38,7 +38,13 @@ const requestedLinuxArtifacts = (process.env.TLINK_LINUX_ARTIFACTS || '')
     .map(x => x.trim())
     .filter(Boolean)
 
-const linuxTargets = requestedLinuxArtifacts.length ? requestedLinuxArtifacts : ['deb', 'tar.gz', 'rpm', 'pacman', 'appimage']
+// Default to AppImage only — runs on every distro without root,
+// no package-manager coupling. deb/rpm/pacman/tar.gz produced a flood
+// of near-duplicate assets per release (5 formats × 3 arches = 15) for
+// one actual binary; most Linux users reach for AppImage or install
+// from source anyway. Set TLINK_LINUX_ARTIFACTS=deb,appimage (etc.)
+// to override per-release when a distro-native package is needed.
+const linuxTargets = requestedLinuxArtifacts.length ? requestedLinuxArtifacts : ['appimage']
 
 // Remove nested .bin symlink directories to prevent EEXIST errors during packaging
 const repoRoot = path.resolve(__dirname, '..')

@@ -30,7 +30,13 @@ const requestedWindowsArtifacts = (process.env.TLINK_WINDOWS_ARTIFACTS || '')
     .map(x => x.trim())
     .filter(Boolean)
 
-const windowsTargets = requestedWindowsArtifacts.length ? requestedWindowsArtifacts : ['nsis', 'zip']
+// Default to NSIS installer only — the installer handles both install
+// and uninstall flows, and allowToChangeInstallationDirectory already
+// covers the "install anywhere" use case the portable zip used to. The
+// portable zip was duplicate packaging of the same binary. Set
+// TLINK_WINDOWS_ARTIFACTS=nsis,zip to re-enable both when a release
+// genuinely needs a no-installer portable build.
+const windowsTargets = requestedWindowsArtifacts.length ? requestedWindowsArtifacts : ['nsis']
 
 // Remove nested .bin symlink directories to prevent EEXIST errors during packaging
 function removeNestedBinDirs (baseDir) {
