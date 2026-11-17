@@ -7,4 +7,42 @@
     .form-control::placeholder { color: var(--theme-fg-more-2); }
     select.form-control { color: var(--theme-fg); }
     label { color: var(--theme-fg); }
+
+    // Retention status strip — mirrors the gNMI profile settings
+    // retention block so the two UIs read identically.
+    .retention-status {
+        background: var(--theme-bg-more);
+        border: 1px solid var(--theme-bg-less);
+        border-radius: 6px;
+        padding: 8px 12px;
+        font-size: 12px;
+
+        .retention-usage {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            color: var(--theme-fg-more-1);
+        }
+        .usage-label {
+            color: var(--theme-fg-more-2);
+            font-size: 11px;
+            font-weight: 500;
+        }
+        .usage-value { font-family: 'SF Mono', 'Source Code Pro', monospace; font-size: 12px; }
+        .usage-empty { color: var(--theme-fg-more-2); font-style: italic; }
+        .usage-oldest { color: var(--theme-fg-more-2); font-size: 11px; }
+        .usage-refresh {
+            margin-left: auto;
+            color: var(--theme-fg-more-2);
+            font-size: 10px;
+            &:hover { color: var(--theme-fg); }
+        }
+
+        // Confirming state — amber to signal "one more click deletes".
+        .btn.confirming {
+            background: rgba(210, 153, 34, 0.15);
+            border-color: #d29922;
+            color: #d29922;
+        }
+    }
 }

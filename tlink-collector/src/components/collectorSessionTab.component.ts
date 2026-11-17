@@ -5,6 +5,7 @@ import { CollectorProfile, CollectorSample } from '../api'
 import { CollectorHandle, CollectorMockService } from '../services/mock.service'
 import { PrometheusCollectorService } from '../services/prometheus.service'
 import { CollectorValueFormatterService, FormattedValue } from '../services/valueFormatter.service'
+import { CollectorHistoryRetentionService } from '../services/historyRetention.service'
 
 /** Center-pane view mode. Wire is the original per-notification log. */
 export type ViewMode = 'wire' | 'latest' | 'graphical'
@@ -182,6 +183,7 @@ export class CollectorSessionTabComponent extends BaseTabComponent implements On
     private prometheus: PrometheusCollectorService
     private notifications: NotificationsService
     private formatter: CollectorValueFormatterService
+    private retention: CollectorHistoryRetentionService
     private zone: NgZone
     private cdr: ChangeDetectorRef
 
@@ -191,6 +193,7 @@ export class CollectorSessionTabComponent extends BaseTabComponent implements On
         this.prometheus = injector.get(PrometheusCollectorService)
         this.notifications = injector.get(NotificationsService)
         this.formatter = injector.get(CollectorValueFormatterService)
+        this.retention = injector.get(CollectorHistoryRetentionService)
         this.zone = injector.get(NgZone)
         this.cdr = injector.get(ChangeDetectorRef)
     }
@@ -212,13 +215,44 @@ export class CollectorSessionTabComponent extends BaseTabComponent implements On
             }, 1000)
         })
 
+        // Hydrate the Latest / Graphical views from any persisted
+        // samples before the live stream starts. Prune stale files
+        // (older than savedHistoryDays) right after so the first scrape
+        // isn't racing a background cleanup.
+        this.hydrateFromDisk()
+        this.retention.prune(this.profile)
+
         this.start()
     }
 
     ngOnDestroy (): void {
         this.stop()
+        // Flush any pending retained samples so the last 0-2 s of data
+        // don't evaporate on a quick tab close.
+        try { this.retention.flush(this.profile) } catch { /* profile may lack id */ }
         if (this.rateTimer) { clearInterval(this.rateTimer) }
         if (this.pendingCheckTimer) { clearTimeout(this.pendingCheckTimer) }
+    }
+
+    /**
+     * Replay persisted samples through the same updateLatestEntry path
+     * the live stream uses, so cached history on tab open behaves
+     * identically to history that accumulated in the tab. Skips the
+     * Wire-log push (the raw per-sample log is only interesting for
+     * live traffic; a hydrated Wire log would mix historical samples
+     * into what should be a real-time view).
+     */
+    private hydrateFromDisk (): void {
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (!this.profile?.id) { return }
+        this.retention.load(this.profile, (path, timestampNs, value) => {
+            this.updateLatestEntry({
+                timestampNs,
+                path,
+                value,
+                kind: 'update',
+            })
+        })
     }
 
     // ─── Lifecycle ──────────────────────────────────────────────────
@@ -274,6 +308,10 @@ export class CollectorSessionTabComponent extends BaseTabComponent implements On
     private onSample (s: CollectorSample): void {
         this.totalReceived += 1
         this.updateLatestEntry(s)
+        // Persist for across-tab-close recovery. No-op when the profile
+        // hasn't opted in via savedHistoryDays, so the fast path stays
+        // zero-cost.
+        this.retention.record(this.profile, s)
         const row: StreamRow = {
             id: ++this.rowIdSeq,
             timestampNs: s.timestampNs,

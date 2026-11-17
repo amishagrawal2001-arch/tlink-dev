@@ -45,6 +45,18 @@ export interface CollectorProfileOptions {
      * switching source types doesn't require nulling other fields.
      */
     mock?: MockSourceConfig
+
+    // ─── On-disk retention ─────────────────────────────────────────
+    /**
+     * Days of per-sample history to persist on disk. 0 / undefined
+     * disables retention entirely (tab-scoped in-memory history only,
+     * which evaporates on tab close). N > 0 appends each numeric
+     * sample to a JSONL file under <userData>/collector-history/<id>/,
+     * one file per UTC day, and loads the last N days back on tab
+     * open. Older files are pruned automatically. Mirrors gNMI's
+     * savedHistoryDays.
+     */
+    savedHistoryDays?: number
 }
 
 /** Knobs for the built-in Mock data source. */
