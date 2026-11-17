@@ -76,19 +76,24 @@ export class ButtonProvider extends ToolbarButtonProvider {
                     if (this.selector.active) {
                         return
                     }
-                    // "New connection" is a LAUNCHER, not a profile browser.
-                    // Only show the small set of builtin "tool" profiles
-                    // that function as entry points (AI Chat, API client).
-                    // User-saved SSH / RDP / gNMI / etc. profiles already
-                    // live in the profiles sidebar / Ctrl+P selector; piling
-                    // them in here made the list unreadable once the user
-                    // had more than a handful of saved profiles. The
-                    // per-provider "Connect to…" (Quick Connect) entries
-                    // appended below cover ad-hoc new sessions.
+                    // "New connection" layout:
+                    //   Default (empty search box):
+                    //     weight 0  — launcher builtins (AI Chat, API client)
+                    //     weight 100 — per-provider Quick Connect entries
+                    //   When the user types in the search box, saved
+                    //   user profiles become visible too (fuzzy-searched
+                    //   on name / group / description) so they can
+                    //   reconnect to an existing SSH / gNMI / RDP / etc.
+                    //   session without first opening Ctrl+P or the
+                    //   sidebar. They're hiddenWithoutFilter to keep the
+                    //   default view a compact launcher instead of a flat
+                    //   dump of every saved session — matches the user's
+                    //   feedback that "New connection" should feel like
+                    //   a launcher, with search as the discovery path.
                     const LAUNCHER_PROFILE_TYPES = new Set(['chatgpt', 'api-client'])
-                    const profiles = (await this.profiles.getProfiles({ includeBuiltin: true }))
-                        .filter(p => p.isBuiltin && LAUNCHER_PROFILE_TYPES.has(p.type))
-                    const options = profiles.map(p => {
+                    const allProfiles = await this.profiles.getProfiles({ includeBuiltin: true })
+                    const launcherProfiles = allProfiles.filter(p => p.isBuiltin && LAUNCHER_PROFILE_TYPES.has(p.type))
+                    const options = launcherProfiles.map(p => {
                         const { result, ...opt } = this.profiles.selectorOptionForProfile(p)
                         return {
                             ...opt,
@@ -98,6 +103,33 @@ export class ButtonProvider extends ToolbarButtonProvider {
                                 void this.profiles.openNewTabForProfile(p)
                             },
                         }
+                    })
+
+                    // Saved, connectable user profiles. Skip templates,
+                    // blacklisted entries, and builtin launcher shells —
+                    // those either aren't real connections (templates,
+                    // "New terminal" picker fodder) or are already in the
+                    // launcher group above.
+                    const providerNameById = new Map(this.profiles.getProviders().map(pv => [pv.id, pv.name]))
+                    const userProfiles = allProfiles.filter(p =>
+                        !p.isBuiltin &&
+                        !p.isTemplate &&
+                        p.id &&
+                        !LAUNCHER_PROFILE_TYPES.has(p.type) &&
+                        providerNameById.has(p.type),
+                    )
+                    userProfiles.forEach(p => {
+                        const { result, ...opt } = this.profiles.selectorOptionForProfile(p)
+                        options.push({
+                            ...opt,
+                            result: undefined,
+                            group: providerNameById.get(p.type) ?? p.type,
+                            weight: 1,
+                            hiddenWithoutFilter: true,
+                            callback: () => {
+                                void this.profiles.openNewTabForProfile(p)
+                            },
+                        })
                     })
 
                     // Add quick connect options for each protocol provider

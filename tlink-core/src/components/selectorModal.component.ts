@@ -76,11 +76,17 @@ export class SelectorModalComponent<T> {
     onFilterChange (): void {
         const f = this.filter.trim().toLowerCase()
         if (!f) {
-            this.filteredOptions = this.options.slice().sort(
-                firstBy<SelectorOption<T>, number>(x => x.weight ?? 0)
-                    .thenBy<SelectorOption<T>, string>(x => x.group ?? '')
-                    .thenBy<SelectorOption<T>, string>(x => x.name),
-            )
+            // Exclude hiddenWithoutFilter entries from the default view —
+            // they only surface once the user starts typing. Used by
+            // "New connection" to keep saved-session entries out of the
+            // top-level launcher list.
+            this.filteredOptions = this.options
+                .filter(x => !x.hiddenWithoutFilter)
+                .sort(
+                    firstBy<SelectorOption<T>, number>(x => x.weight ?? 0)
+                        .thenBy<SelectorOption<T>, string>(x => x.group ?? '')
+                        .thenBy<SelectorOption<T>, string>(x => x.name),
+                )
         } else {
             // eslint-disable-next-line @typescript-eslint/restrict-plus-operands
             this.filteredOptions = new FuzzySearch(
