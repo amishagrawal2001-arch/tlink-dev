@@ -166,11 +166,15 @@ jobs:
         SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
 
     - name: Package artifacts
+      # Tolerate missing formats — build-macos.mjs defaults to dmg only
+      # now (zip opt-in via TLINK_MAC_ARTIFACTS). A bare `mv dist/*.zip`
+      # fails on no match and used to break the whole leg; find-exec
+      # succeeds with an empty match, and the upload steps below handle
+      # empty directories via if-no-files-found: ignore.
       run: |
-        mkdir artifact-dmg
-        mv dist/*.dmg artifact-dmg/
-        mkdir artifact-zip
-        mv dist/*.zip artifact-zip/
+        mkdir -p artifact-dmg artifact-zip
+        find dist -maxdepth 1 -name '*.dmg' -exec mv {} artifact-dmg/ \;
+        find dist -maxdepth 1 -name '*.zip' -exec mv {} artifact-zip/ \;
 
     - uses: actions/upload-artifact@master
       name: Upload DMG
@@ -178,6 +182,7 @@ jobs:
         name: macOS .dmg (${{matrix.arch}})
         path: artifact-dmg
         retention-days: 7
+        if-no-files-found: ignore
 
     - uses: actions/upload-artifact@master
       name: Upload ZIP
@@ -185,12 +190,14 @@ jobs:
         name: macOS .zip (${{matrix.arch}})
         path: artifact-zip
         retention-days: 7
+        if-no-files-found: ignore
 
     - name: Upload to GitHub Release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
         draft: true
+        fail_on_unmatched_files: false
         files: |
           artifact-dmg/*
           artifact-zip/*
@@ -335,12 +342,16 @@ jobs:
         rpmvers: 'el/9 el/8 ol/6 ol/7'
         debvers: 'ubuntu/bionic ubuntu/focal ubuntu/hirsute ubuntu/impish ubuntu/jammy ubuntu/kinetic ubuntu/noble ubuntu/oracular debian/jessie debian/stretch debian/buster debian/bullseye debian/bookworm debian/trixie debian/testing debian/unstable'
 
+    # build-linux.mjs defaults to appimage only now (deb/rpm/pacman/tar.gz
+    # opt-in via TLINK_LINUX_ARTIFACTS). Each format uploader tolerates
+    # an empty glob so the leg stays green when a format isn't built.
     - uses: actions/upload-artifact@master
       name: Upload AppImage (${{matrix.arch}})
       with:
         name: Linux AppImage (${{matrix.arch}})
         path: dist/*.AppImage
         retention-days: 7
+        if-no-files-found: ignore
 
     - uses: actions/upload-artifact@master
       name: Upload DEB (${{matrix.arch}})
@@ -348,6 +359,7 @@ jobs:
         name: Linux DEB (${{matrix.arch}})
         path: dist/*.deb
         retention-days: 7
+        if-no-files-found: ignore
 
     - uses: actions/upload-artifact@master
       name: Upload RPM (${{matrix.arch}})
@@ -355,6 +367,7 @@ jobs:
         name: Linux RPM (${{matrix.arch}})
         path: dist/*.rpm
         retention-days: 7
+        if-no-files-found: ignore
 
     - uses: actions/upload-artifact@master
       name: Upload Pacman Package (${{matrix.arch}})
@@ -362,6 +375,7 @@ jobs:
         name: Linux Pacman (${{matrix.arch}})
         path: dist/*.pacman
         retention-days: 7
+        if-no-files-found: ignore
 
     - uses: actions/upload-artifact@master
       name: Upload Linux tarball (${{matrix.arch}})
@@ -369,6 +383,7 @@ jobs:
         name: Linux tarball (${{matrix.arch}})
         path: dist/*.tar.gz
         retention-days: 7
+        if-no-files-found: ignore
 
     - uses: actions/upload-artifact@master
       name: Upload web tarball (amd64 only)
@@ -376,6 +391,7 @@ jobs:
         name: Web tarball
         path: tlink-web.tar.gz
         retention-days: 7
+        if-no-files-found: ignore
       if: matrix.build-arch == 'x64'
 
     - name: Upload to GitHub Release
@@ -383,6 +399,7 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         draft: true
+        fail_on_unmatched_files: false
         files: |
           dist/*.AppImage
           dist/*.deb
@@ -540,11 +557,15 @@ jobs:
         SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
 
     - name: Package artifacts
+      # Tolerate missing formats — build-windows.mjs defaults to nsis only
+      # now (zip opt-in via TLINK_WINDOWS_ARTIFACTS). A bare `mv dist/*.zip`
+      # fails on no match and used to break the whole leg; find-exec
+      # succeeds with an empty match, and the upload steps below handle
+      # empty directories via if-no-files-found: ignore.
       run: |
-        mkdir artifact-setup
-        mv dist/*-setup-*.exe artifact-setup/
-        mkdir artifact-portable
-        mv dist/*-portable-*.zip artifact-portable/
+        mkdir -p artifact-setup artifact-portable
+        find dist -maxdepth 1 -name '*-setup-*.exe' -exec mv {} artifact-setup/ \;
+        find dist -maxdepth 1 -name '*-portable-*.zip' -exec mv {} artifact-portable/ \;
 
     - uses: actions/upload-artifact@master
       name: Upload installer
@@ -552,6 +573,7 @@ jobs:
         name: Windows installer (${{matrix.arch}})
         path: artifact-setup
         retention-days: 7
+        if-no-files-found: ignore
 
     - uses: actions/upload-artifact@master
       name: Upload portable build
@@ -559,12 +581,14 @@ jobs:
         name: Windows portable build (${{matrix.arch}})
         path: artifact-portable
         retention-days: 7
+        if-no-files-found: ignore
 
     - name: Upload to GitHub Release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
         draft: true
+        fail_on_unmatched_files: false
         files: |
           artifact-setup/*
           artifact-portable/*

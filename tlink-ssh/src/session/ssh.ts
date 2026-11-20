@@ -601,7 +601,10 @@ export class SSHSession {
                 },
                 keepaliveIntervalSeconds: Math.round((this.profile.options.keepaliveInterval ?? 15000) / 1000),
                 keepaliveCountMax: this.profile.options.keepaliveCountMax,
-                connectionTimeoutSeconds: this.profile.options.readyTimeout ? Math.round(this.profile.options.readyTimeout / 1000) : undefined,
+                // Default to 30s so a stalled handshake (algo negotiation hung on a
+                // legacy sshd, dead peer mid-kex) fails with a visible error instead
+                // of leaving the user staring at "2/4 Key exchange..." forever.
+                connectionTimeoutSeconds: this.profile.options.readyTimeout ? Math.round(this.profile.options.readyTimeout / 1000) : 30,
             },
         )
 
