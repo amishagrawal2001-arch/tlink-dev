@@ -68,6 +68,37 @@ export interface TileThreshold {
 export const DASHBOARD_GRID_COLS = 3
 
 /**
+ * Top-level JSON envelope written by `buildExport()` and consumed by
+ * the import flow. The format version lets future shape changes land
+ * without breaking older exports — `migrate()` upgrades any supported
+ * version to the current one before the preview modal opens.
+ *
+ * Privacy posture: this envelope deliberately omits credentials,
+ * bearer tokens, and keychain refs. Dashboards reference profiles by
+ * id only (`DashboardSourceRef`), and profiles themselves (with their
+ * secrets) are NOT serialized here. `exportedBy` is optional and only
+ * written when the caller supplies it.
+ */
+export interface DashboardExportV1 {
+    tlinkDashboardFormat: 1
+    /** ISO-8601 timestamp recorded at `buildExport()` call time. */
+    exportedAt: string
+    /** Caller-supplied identifier. Omitted if absent — never auto-filled. */
+    exportedBy?: string
+    /** The serialized dashboard. Round-trips every optional field. */
+    dashboard: Dashboard
+}
+
+/** Current exported shape. Keep in sync with the latest `DashboardExportVn`. */
+export type DashboardExport = DashboardExportV1
+
+/**
+ * Union over every supported input version. `migrate()` walks this
+ * union up to the latest shape. Add `| DashboardExportV2` when v2 lands.
+ */
+export type DashboardExportAny = DashboardExportV1
+
+/**
  * Reference to a data source for a tile. The profile id matches an
  * existing `GnmiProfile.id` or `CollectorProfile.id` registered with
  * ProfilesService; the shared subscription runner in M4.2 will resolve

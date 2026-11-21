@@ -1,13 +1,21 @@
 .panel-root(click)='closeMenu()'
     .panel-header
         .panel-title {{ 'Dashboards' | translate }}
-        button.btn.btn-sm.btn-primary.add-btn(
-            type='button',
-            (click)='addDashboard()',
-            [title]="'Add dashboard' | translate",
-        )
-            i.fas.fa-plus
-            span.btn-label {{ 'Add' | translate }}
+        .panel-header-actions
+            button.btn.btn-sm.btn-outline-secondary.import-btn(
+                type='button',
+                (click)='importDashboard()',
+                [title]="'Import dashboard from file' | translate",
+            )
+                i.fas.fa-upload
+                span.btn-label {{ 'Import' | translate }}
+            button.btn.btn-sm.btn-primary.add-btn(
+                type='button',
+                (click)='addDashboard()',
+                [title]="'Add dashboard' | translate",
+            )
+                i.fas.fa-plus
+                span.btn-label {{ 'Add' | translate }}
 
     .panel-empty(*ngIf='!dashboards.length')
         .empty-head {{ 'No dashboards yet' | translate }}

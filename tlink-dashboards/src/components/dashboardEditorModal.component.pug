@@ -111,5 +111,12 @@
                     i.fas.fa-times
 
 .modal-footer
+    button.btn.btn-outline-secondary.me-auto(
+        type='button',
+        (click)='exportDraft()',
+        [title]="'Export this dashboard to a JSON file' | translate",
+    )
+        i.fas.fa-download
+        |  {{ 'Export…' | translate }}
     button.btn.btn-outline-secondary(type='button', (click)='cancel()') {{ 'Cancel' | translate }}
     button.btn.btn-primary(type='button', [disabled]='!canSave()', (click)='save()') {{ 'Save' | translate }}

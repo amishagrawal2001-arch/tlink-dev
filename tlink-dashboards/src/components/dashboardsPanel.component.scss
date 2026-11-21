@@ -24,7 +24,14 @@
         letter-spacing: 0.02em;
     }
 
-    .add-btn {
+    .panel-header-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .add-btn,
+    .import-btn {
         display: inline-flex;
         align-items: center;
         gap: 0.3rem;

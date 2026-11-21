@@ -10,9 +10,11 @@ import { DashboardsButtonProvider } from './buttonProvider'
 import { DashboardsSidePanelProvider } from './sidePanelProvider'
 import { DashboardsTelemetryBroker } from './services/telemetryBroker.service'
 import { DashboardsEditorService } from './services/dashboardsEditor.service'
+import { DashboardsImportExportService } from './services/dashboardsImportExport.service'
 import { DashboardTabComponent } from './components/dashboardTab.component'
 import { DashboardsPanelComponent } from './components/dashboardsPanel.component'
 import { DashboardEditorModalComponent } from './components/dashboardEditorModal.component'
+import { ImportDashboardModalComponent } from './components/importDashboardModal.component'
 import { ValueTileComponent } from './components/tiles/valueTile.component'
 import { SparklineTileComponent } from './components/tiles/sparklineTile.component'
 import { ChartTileComponent } from './components/tiles/chartTile.component'
@@ -42,12 +44,14 @@ import { ChartTileComponent } from './components/tiles/chartTile.component'
         { provide: ToolbarButtonProvider, useClass: DashboardsButtonProvider, multi: true },
         DashboardsTelemetryBroker,
         DashboardsEditorService,
+        DashboardsImportExportService,
         DashboardsSidePanelProvider,
     ],
     declarations: [
         DashboardTabComponent,
         DashboardsPanelComponent,
         DashboardEditorModalComponent,
+        ImportDashboardModalComponent,
         ValueTileComponent,
         SparklineTileComponent,
         ChartTileComponent,
@@ -63,10 +67,15 @@ export default class DashboardsModule {
 
 export * from './api'
 export { DashboardsTelemetryBroker } from './services/telemetryBroker.service'
+export { DashboardsImportExportService } from './services/dashboardsImportExport.service'
+export type { ImportPreview, SourceResolution } from './services/dashboardsImportExport.service'
 export { DashboardTabComponent } from './components/dashboardTab.component'
 export { DashboardsPanelComponent } from './components/dashboardsPanel.component'
 export { DashboardEditorModalComponent } from './components/dashboardEditorModal.component'
+export { ImportDashboardModalComponent } from './components/importDashboardModal.component'
 export { ValueTileComponent } from './components/tiles/valueTile.component'
 export { SparklineTileComponent } from './components/tiles/sparklineTile.component'
 export { ChartTileComponent } from './components/tiles/chartTile.component'
 export { DASHBOARDS_PANEL } from './sidePanelProvider'
+export { buildExport, slugifyDashboardName, validateDashboardExport, formatValidationError, migrate } from './import'
+export type { BuildExportOptions, ValidationResult } from './import'

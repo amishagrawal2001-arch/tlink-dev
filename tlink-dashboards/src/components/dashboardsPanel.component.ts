@@ -6,6 +6,8 @@ import { NgbModal } from '@ng-bootstrap/ng-bootstrap'
 import { Dashboard } from '../api'
 import { DashboardTabComponent } from './dashboardTab.component'
 import { DashboardsEditorService } from '../services/dashboardsEditor.service'
+import { DashboardsImportExportService } from '../services/dashboardsImportExport.service'
+import { ImportDashboardModalComponent } from './importDashboardModal.component'
 
 /**
  * Side panel that lists every entry in `config.dashboards[]`. The row
@@ -43,6 +45,7 @@ export class DashboardsPanelComponent implements OnInit, OnDestroy {
         private readonly translate: TranslateService,
         private readonly ngbModal: NgbModal,
         private readonly editor: DashboardsEditorService,
+        private readonly importExport: DashboardsImportExportService,
         private readonly cdr: ChangeDetectorRef,
     ) { }
 
@@ -79,6 +82,31 @@ export class DashboardsPanelComponent implements OnInit, OnDestroy {
             this.commit(draft)
             this.notifications.notice(this.translate.instant('Dashboard added'))
         }
+    }
+
+    async importDashboard (): Promise<void> {
+        const preview = await this.importExport.readImportFile()
+        if (!preview) {
+            // Cancelled or failed; the service surfaced any error toast.
+            return
+        }
+        const modal = this.ngbModal.open(ImportDashboardModalComponent, {
+            size: 'lg',
+            backdrop: 'static',
+        })
+        modal.componentInstance.preview = preview
+        try {
+            await modal.result
+        } catch {
+            return
+        }
+        const imported = await this.importExport.commitImport(preview)
+        this.refresh()
+        this.cdr.markForCheck()
+        this.app.openNewTab({
+            type: DashboardTabComponent,
+            inputs: { dashboardId: imported.id },
+        })
     }
 
     async editDashboard (d: Dashboard): Promise<void> {

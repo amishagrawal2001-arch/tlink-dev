@@ -1,0 +1,43 @@
+.modal-header
+    h4.modal-title {{ 'Import dashboard' | translate }}
+    button.btn-close(type='button', [attr.aria-label]="'Close' | translate", (click)='cancel()')
+
+.modal-body
+    .summary
+        .summary-name {{ preview.dashboard.name }}
+        .summary-meta
+            span {{ preview.dashboard.tiles.length }} {{ (preview.dashboard.tiles.length === 1 ? 'tile' : 'tiles') | translate }}
+
+    .warn-banner(*ngIf='unmatchedCount > 0')
+        i.fas.fa-exclamation-triangle
+        span.warn-text
+            | {{ '{n} tile(s) reference profiles not found on this workspace. They will import but render as "profile not found" until re-pointed in the editor.' | translate: { n: unmatchedCount } }}
+
+    .rewrite-banner(*ngIf='preview.rewrittenId')
+        i.fas.fa-info-circle
+        span.rewrite-text
+            | {{ 'A dashboard with this id already exists; this copy will be saved as {id}.' | translate: { id: preview.rewrittenId } }}
+
+    table.tiles-table
+        thead
+            tr
+                th(scope='col') {{ 'Tile' | translate }}
+                th(scope='col') {{ 'Type' | translate }}
+                th(scope='col') {{ 'Source' | translate }}
+                th(scope='col') {{ 'Profile' | translate }}
+                th.match-col(scope='col') {{ 'Match' | translate }}
+        tbody
+            tr(*ngFor='let r of preview.resolutions; trackBy: trackByTileId')
+                td.mono.path {{ r.tilePath }}
+                td.mono {{ r.tileType }}
+                td.mono {{ r.kind }}
+                td.mono.profile-id
+                    span.profile-name(*ngIf='r.localProfileName') {{ r.localProfileName }}
+                    span.profile-id-text(*ngIf='!r.localProfileName') {{ r.profileId }}
+                td.match-col
+                    i.fas.fa-check.check-ok(*ngIf='r.matched')
+                    i.fas.fa-times.check-bad(*ngIf='!r.matched')
+
+.modal-footer
+    button.btn.btn-outline-secondary(type='button', (click)='cancel()') {{ 'Cancel' | translate }}
+    button.btn.btn-primary(type='button', (click)='confirm()') {{ 'Import' | translate }}

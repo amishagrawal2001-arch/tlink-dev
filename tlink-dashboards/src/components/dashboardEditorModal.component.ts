@@ -6,6 +6,7 @@ import { GnmiPathCatalogService } from 'tlink-gnmi'
 import { CollectorPathCatalogService } from 'tlink-collector'
 import { Dashboard, DashboardTile, DashboardSourceRef, DASHBOARD_GRID_COLS, TileThreshold } from '../api'
 import { findFreeCell } from '../util/layout'
+import { DashboardsImportExportService } from '../services/dashboardsImportExport.service'
 
 type SourceKind = DashboardSourceRef['kind']
 type TileType = DashboardTile['type']
@@ -64,6 +65,7 @@ export class DashboardEditorModalComponent implements OnInit {
         private readonly translate: TranslateService,
         private readonly gnmiCatalog: GnmiPathCatalogService,
         private readonly collectorCatalog: CollectorPathCatalogService,
+        private readonly importExport: DashboardsImportExportService,
     ) { }
 
     async ngOnInit (): Promise<void> {
@@ -159,6 +161,28 @@ export class DashboardEditorModalComponent implements OnInit {
 
     cancel (): void {
         this.modal.dismiss()
+    }
+
+    /**
+     * Export the CURRENT draft state (post-trim) to a JSON file. Named
+     * `exportDraft` to make it clear this writes what's in the editor
+     * right now — including unsaved changes — not whatever is on disk.
+     * Users expect "Export" to match what they see; waiting for Save
+     * first would surprise them.
+     */
+    async exportDraft (): Promise<void> {
+        const snapshot: Dashboard = {
+            id: this.draft.id,
+            name: (this.draft.name ?? '').trim() || this.draft.id,
+            tiles: this.draft.tiles.map(t => ({
+                ...t,
+                source: { ...t.source },
+                path: (t.path ?? '').trim(),
+                title: t.title ? t.title.trim() : t.title,
+                ...(t.threshold ? { threshold: { ...t.threshold } } : {}),
+            })),
+        }
+        await this.importExport.exportToFile(snapshot)
     }
 
     async toggleSuggest (tile: DashboardTile): Promise<void> {
