@@ -145,10 +145,21 @@ export abstract class ConnectableTerminalTabComponent<P extends ConnectableTermi
         this.reconnectOffered = false
         const previousDisconnectState = this.isDisconnectedByHand
         this.isDisconnectedByHand = true
+        // clearServiceMessagesOnConnect is meant to strip the "Connecting..."
+        // service lines at attach time, but xterm.clear() wipes the whole
+        // buffer — on reconnect that erases the user's prior scrollback.
+        // Snapshot it first, then replay after the clear so only the lines
+        // this reconnect produced are discarded.
+        const preservedScrollback = this.profile.clearServiceMessagesOnConnect
+            ? this.frontend?.saveState()
+            : undefined
         try {
             await this.session?.destroy()
             await this.initializeSession()
             this.clearServiceMessagesOnConnect()
+            if (preservedScrollback) {
+                this.frontend?.restoreState(preservedScrollback)
+            }
             this.session?.releaseInitialDataBuffer()
         } finally {
             this.isDisconnectedByHand = previousDisconnectState
