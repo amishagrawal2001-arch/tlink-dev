@@ -14,8 +14,9 @@ export interface Dashboard {
 
 /**
  * One tile on a dashboard. Rendered by the matching tile component.
- * M4.1: grid position is implicit (sequential 3-col flow). M4.3 (editor)
- * will add explicit col/row/w/h fields here for drag-to-resize.
+ * M4.1: grid position was implicit (sequential 3-col flow). M4.3 adds
+ * explicit col/row/w/h fields here; w/h default to 1×1 (resize is a
+ * future slice). Legacy no-layout tiles are normalized on load.
  */
 export interface DashboardTile {
     /** Stable id unique within a dashboard. */
@@ -28,7 +29,18 @@ export interface DashboardTile {
     source: DashboardSourceRef
     /** Metric path on that source. */
     path: string
+    /** 0-indexed column on the 3-column grid (M4.3+). Legacy: assigned from array order. */
+    col?: number
+    /** 0-indexed row — unbounded (M4.3+). Legacy: assigned from array order. */
+    row?: number
+    /** Width in grid cells. Defaults to 1. Resize affordance is a future slice. */
+    w?: number
+    /** Height in grid cells. Defaults to 1. */
+    h?: number
 }
+
+/** Number of columns on a dashboard grid. Fixed at 3 for M4.3. */
+export const DASHBOARD_GRID_COLS = 3
 
 /**
  * Reference to a data source for a tile. The profile id matches an

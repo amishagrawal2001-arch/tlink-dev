@@ -3,18 +3,61 @@
         .empty-head No dashboard loaded
         .empty-body {{ missingMessage }}
         .empty-hint
-            | Add one to your Tlink config under
+            | Add one through
+            strong  the Dashboards side panel
+            |  or hand-edit your config under
             code.mono  dashboards
-            |  — see the plugin README for the shape.
-    .dashboard-grid(*ngIf='dashboard')
-        // TODO(M4.3): mobile-collapse grid to 1 column at narrow widths.
-        ng-container(*ngFor='let tile of dashboard.tiles; trackBy: trackByTileId')
-            .tile-slot([class.tile-error]='tileError(tile)')
-                .tile-error-banner(*ngIf='tileError(tile)') {{ tileError(tile) }}
-                ng-container([ngSwitch]='tile.type')
-                    dashboard-value-tile(*ngSwitchCase='"value"', [tile]='tile', [data]='tileData(tile)')
-                    dashboard-sparkline-tile(*ngSwitchCase='"sparkline"', [tile]='tile', [data]='tileData(tile)')
-                    dashboard-chart-tile(*ngSwitchCase='"chart"', [tile]='tile', [data]='tileData(tile)')
-                    .unknown-tile(*ngSwitchDefault)
-                        .unknown-type Unknown tile type:&nbsp;
-                            code.mono {{ tile.type }}
+            | .
+    .dashboard-chrome(*ngIf='dashboard')
+        .dashboard-toolbar
+            .dashboard-name {{ dashboard.name }}
+            .toolbar-actions
+                button.btn.btn-sm.btn-outline-secondary(
+                    type='button',
+                    (click)='openEditor()',
+                    [title]="'Edit dashboard' | translate",
+                )
+                    i.fas.fa-pen
+                    |  {{ 'Edit' | translate }}
+                button.btn.btn-sm(
+                    type='button',
+                    [class.btn-primary]='isEditing',
+                    [class.btn-outline-secondary]='!isEditing',
+                    (click)='toggleEdit()',
+                    [title]="'Toggle drag-reorder mode' | translate",
+                )
+                    i.fas.fa-grip-vertical
+                    |  {{ isEditing ? ('Done' | translate) : ('Rearrange' | translate) }}
+        .dashboard-grid(
+            cdkDropList,
+            cdkDropListOrientation='horizontal',
+            [cdkDropListDisabled]='!isEditing',
+            (cdkDropListDropped)='onTileDrop($event)',
+        )
+            // TODO(M4.3): mobile-collapse grid to 1 column at narrow widths.
+            ng-container(*ngFor='let tile of orderedTiles(); trackBy: trackByTileId')
+                .tile-slot(
+                    cdkDrag,
+                    [cdkDragDisabled]='!isEditing',
+                    [class.tile-error]='tileError(tile)',
+                    [class.tile-editing]='isEditing',
+                    [style.grid-column]='tileColumn(tile)',
+                    [style.grid-row]='tileRow(tile)',
+                )
+                    .edit-chrome(*ngIf='isEditing')
+                        .drag-handle(cdkDragHandle, [title]="'Drag to move' | translate")
+                            i.fas.fa-grip-vertical
+                        button.tile-delete(
+                            type='button',
+                            (click)='deleteTileInline(tile)',
+                            [title]="'Delete tile' | translate",
+                        )
+                            i.fas.fa-times
+                    .tile-error-banner(*ngIf='tileError(tile)') {{ tileError(tile) }}
+                    ng-container([ngSwitch]='tile.type')
+                        dashboard-value-tile(*ngSwitchCase='"value"', [tile]='tile', [data]='tileData(tile)')
+                        dashboard-sparkline-tile(*ngSwitchCase='"sparkline"', [tile]='tile', [data]='tileData(tile)')
+                        dashboard-chart-tile(*ngSwitchCase='"chart"', [tile]='tile', [data]='tileData(tile)')
+                        .unknown-tile(*ngSwitchDefault)
+                            .unknown-type Unknown tile type:&nbsp;
+                                code.mono {{ tile.type }}

@@ -1,0 +1,33 @@
+.panel-root(click)='closeMenu()'
+    .panel-header
+        .panel-title {{ 'Dashboards' | translate }}
+        button.btn.btn-sm.btn-primary.add-btn(
+            type='button',
+            (click)='addDashboard()',
+            [title]="'Add dashboard' | translate",
+        )
+            i.fas.fa-plus
+            span.btn-label {{ 'Add' | translate }}
+
+    .panel-empty(*ngIf='!dashboards.length')
+        .empty-head {{ 'No dashboards yet' | translate }}
+        .empty-hint {{ 'Click Add to create your first dashboard.' | translate }}
+
+    .panel-list(*ngIf='dashboards.length')
+        .panel-row(*ngFor='let d of dashboards; trackBy: trackById')
+            .row-main((click)='openDashboard(d)')
+                .row-name {{ d.name }}
+                .row-meta {{ tileCountLabel(d) }}
+            button.row-menu-btn(
+                type='button',
+                (click)='toggleMenu(d.id, $event)',
+                [title]="'More' | translate",
+            )
+                i.fas.fa-ellipsis-h
+            .row-menu(*ngIf='menuOpenFor === d.id', (click)='$event.stopPropagation()')
+                button.menu-item(type='button', (click)='openDashboard(d)') {{ 'Open' | translate }}
+                button.menu-item(type='button', (click)='editDashboard(d)') {{ 'Edit' | translate }}
+                button.menu-item(type='button', (click)='duplicateDashboard(d)') {{ 'Duplicate' | translate }}
+                button.menu-item(type='button', (click)='renameDashboard(d)') {{ 'Rename' | translate }}
+                .menu-sep
+                button.menu-item.menu-danger(type='button', (click)='deleteDashboard(d)') {{ 'Delete' | translate }}

@@ -10,6 +10,7 @@ import { PrometheusCollectorService } from './services/prometheus.service'
 import { CollectorValueFormatterService } from './services/valueFormatter.service'
 import { CollectorHistoryRetentionService } from './services/historyRetention.service'
 import { CollectorTelemetryBroker } from './services/telemetryBroker.service'
+import { CollectorPathCatalogService } from './services/pathCatalog.service'
 import { CollectorProfilesService } from './profiles'
 import { CollectorRecoveryProvider } from './recoveryProvider'
 import { CollectorProfileSettingsComponent } from './components/collectorProfileSettings.component'
@@ -48,6 +49,7 @@ import { CollectorSessionTabComponent } from './components/collectorSessionTab.c
         CollectorValueFormatterService,
         CollectorHistoryRetentionService,
         CollectorTelemetryBroker,
+        CollectorPathCatalogService,
     ],
     declarations: [
         CollectorProfileSettingsComponent,
@@ -60,5 +62,6 @@ export default class CollectorModule { }
 export * from './api'
 export { CollectorMockService } from './services/mock.service'
 export { CollectorTelemetryBroker } from './services/telemetryBroker.service'
+export { CollectorPathCatalogService } from './services/pathCatalog.service'
 export { CollectorProfilesService } from './profiles'
 export { CollectorSessionTabComponent } from './components/collectorSessionTab.component'

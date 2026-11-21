@@ -1,11 +1,14 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, HostBinding, Injector, Input, OnDestroy, OnInit } from '@angular/core'
+import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop'
 import { Subject, Subscription } from 'rxjs'
 import { takeUntil } from 'rxjs/operators'
 import { BaseTabComponent, TelemetrySample } from 'tlink-core'
-import { Dashboard, DashboardTile } from '../api'
+import { Dashboard, DashboardTile, DASHBOARD_GRID_COLS } from '../api'
 import { TileData, TileDelta } from './tileData'
 import { Sample } from '../util/paths'
+import { normalizeDashboard, orderTiles } from '../util/layout'
 import { DashboardsTelemetryBroker } from '../services/telemetryBroker.service'
+import { DashboardsEditorService } from '../services/dashboardsEditor.service'
 
 /** How many recent samples each tile keeps for sparkline / chart rendering. */
 const TILE_BUFFER_SIZE = 60
@@ -51,6 +54,9 @@ export class DashboardTabComponent extends BaseTabComponent implements OnInit, O
 
     dashboard: Dashboard | null = null
     missingMessage = ''
+    isEditing = false
+
+    readonly gridCols = DASHBOARD_GRID_COLS
 
     private readonly runtime = new Map<string, TileRuntime>()
     private readonly destroy$ = new Subject<void>()
@@ -60,6 +66,7 @@ export class DashboardTabComponent extends BaseTabComponent implements OnInit, O
         injector: Injector,
         private readonly broker: DashboardsTelemetryBroker,
         private readonly cdr: ChangeDetectorRef,
+        private readonly editor: DashboardsEditorService,
     ) {
         super(injector)
         this.icon = 'fas fa-chart-line'
@@ -69,7 +76,11 @@ export class DashboardTabComponent extends BaseTabComponent implements OnInit, O
     ngOnInit (): void {
         const store = this.config.store as { dashboards?: Dashboard[] }
         const list = store.dashboards ?? []
-        const found = list.find(d => d.id === this.dashboardId) ?? null
+        const raw = list.find(d => d.id === this.dashboardId) ?? null
+        // Normalize on load so legacy no-layout tiles get stable
+        // col/row for render. Non-destructive — config stays untouched
+        // until the user explicitly saves or drags.
+        const found = raw ? normalizeDashboard(raw) : null
         this.dashboard = found
         if (found) {
             this.setTitle(found.name || 'Dashboard')
@@ -100,6 +111,100 @@ export class DashboardTabComponent extends BaseTabComponent implements OnInit, O
 
     trackByTileId (_i: number, tile: DashboardTile): string {
         return tile.id
+    }
+
+    orderedTiles (): DashboardTile[] {
+        return this.dashboard ? orderTiles(this.dashboard.tiles) : []
+    }
+
+    toggleEdit (): void {
+        this.isEditing = !this.isEditing
+        this.cdr.markForCheck()
+    }
+
+    async openEditor (): Promise<void> {
+        if (!this.dashboard) { return }
+        const next = await this.editor.openForDashboard(this.dashboard)
+        if (next) {
+            this.applyUpdatedDashboard(next)
+        }
+    }
+
+    onTileDrop (event: CdkDragDrop<DashboardTile[]>): void {
+        if (!this.dashboard || event.previousIndex === event.currentIndex) { return }
+        const ordered = this.orderedTiles()
+        moveItemInArray(ordered, event.previousIndex, event.currentIndex)
+        // Rewrite positions on all tiles in the new render order so
+        // layout stays stable. w/h preserved.
+        ordered.forEach((t, i) => {
+            t.col = i % DASHBOARD_GRID_COLS
+            t.row = Math.floor(i / DASHBOARD_GRID_COLS)
+        })
+        // Persist via config.save() — the underlying array is the same
+        // reference that lives in config.store.dashboards[].tiles, so
+        // mutations have already landed; config.save() flushes to disk.
+        this.persistDashboard()
+        this.cdr.markForCheck()
+    }
+
+    tileColumn (tile: DashboardTile): string {
+        const col = (tile.col ?? 0) + 1
+        const w = tile.w ?? 1
+        return `${col} / span ${w}`
+    }
+
+    tileRow (tile: DashboardTile): string {
+        const row = (tile.row ?? 0) + 1
+        const h = tile.h ?? 1
+        return `${row} / span ${h}`
+    }
+
+    deleteTileInline (tile: DashboardTile): void {
+        if (!this.dashboard) { return }
+        // eslint-disable-next-line no-alert
+        if (!confirm(`Delete tile ${tile.title || tile.path}?`)) { return }
+        this.dashboard.tiles = this.dashboard.tiles.filter(t => t.id !== tile.id)
+        const r = this.runtime.get(tile.id)
+        r?.sub?.unsubscribe()
+        this.runtime.delete(tile.id)
+        this.persistDashboard()
+        this.cdr.markForCheck()
+    }
+
+    private persistDashboard (): void {
+        if (!this.dashboard) { return }
+        const store = this.config.store as { dashboards?: Dashboard[] }
+        const list = store.dashboards ?? []
+        const i = list.findIndex(x => x.id === this.dashboard!.id)
+        if (i === -1) {
+            list.push(this.dashboard)
+        } else {
+            list.splice(i, 1, this.dashboard)
+        }
+        store.dashboards = list
+        void this.config.save()
+    }
+
+    private applyUpdatedDashboard (next: Dashboard): void {
+        if (!this.dashboard) { return }
+        // Teardown stale subscriptions for removed tiles.
+        const nextIds = new Set(next.tiles.map(t => t.id))
+        for (const [id, r] of this.runtime) {
+            if (!nextIds.has(id)) {
+                r.sub?.unsubscribe()
+                this.runtime.delete(id)
+            }
+        }
+        // Normalize incoming layout so any new tiles pick up positions.
+        this.dashboard = normalizeDashboard(next)
+        this.setTitle(this.dashboard.name || 'Dashboard')
+        for (const tile of this.dashboard.tiles) {
+            if (!this.runtime.has(tile.id)) {
+                this.startTile(tile)
+            }
+        }
+        this.persistDashboard()
+        this.cdr.markForCheck()
     }
 
     /**

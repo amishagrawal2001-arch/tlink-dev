@@ -1,0 +1,88 @@
+.modal-header
+    h4.modal-title
+        span(*ngIf='isNew') {{ 'New dashboard' | translate }}
+        span(*ngIf='!isNew') {{ 'Edit dashboard' | translate }}
+    button.btn-close(type='button', [attr.aria-label]="'Close' | translate", (click)='cancel()')
+.modal-body
+    .field
+        label.form-label {{ 'Name' | translate }}
+        input.form-control(
+            type='text',
+            [(ngModel)]='draft.name',
+            [placeholder]="'e.g. Edge router overview' | translate",
+            autofocus,
+        )
+
+    .tiles-section
+        .tiles-header
+            h5 {{ 'Tiles' | translate }}
+            button.btn.btn-sm.btn-outline-secondary(type='button', (click)='addTile()')
+                i.fas.fa-plus
+                |  {{ 'Add tile' | translate }}
+
+        .tiles-empty(*ngIf='!draft.tiles.length')
+            | {{ 'No tiles yet — add one to start.' | translate }}
+
+        .tile-rows(cdkDropList, (cdkDropListDropped)='onTileReordered($event)')
+            .tile-row(
+                *ngFor='let tile of draft.tiles; trackBy: trackByTileId; let i = index',
+                cdkDrag,
+            )
+                .drag-handle(cdkDragHandle, [title]="'Drag to reorder' | translate")
+                    i.fas.fa-grip-vertical
+                .tile-fields
+                    .field-row
+                        label.inline-label {{ 'Title' | translate }}
+                        input.form-control.form-control-sm(type='text', [(ngModel)]='tile.title', placeholder='(auto)')
+                        label.inline-label {{ 'Type' | translate }}
+                        select.form-select.form-select-sm([(ngModel)]='tile.type')
+                            option(*ngFor='let tt of tileTypes', [value]='tt') {{ tt }}
+                    .field-row
+                        label.inline-label {{ 'Source' | translate }}
+                        select.form-select.form-select-sm(
+                            [ngModel]='tile.source.kind',
+                            (ngModelChange)='onKindChange(tile, $event)',
+                        )
+                            option(*ngFor='let k of sourceKinds', [value]='k') {{ k }}
+                        label.inline-label {{ 'Profile' | translate }}
+                        select.form-select.form-select-sm([(ngModel)]='tile.source.profileId')
+                            option(value='') {{ '(select)' | translate }}
+                            option(*ngFor='let p of profilesByKind[tile.source.kind]', [value]='p.id') {{ p.name }}
+                        .warn-chip(*ngIf='showProfileWarning(tile)', [title]="'Profile not found in this workspace' | translate")
+                            i.fas.fa-exclamation-triangle
+                    .field-row
+                        label.inline-label {{ 'Path' | translate }}
+                        input.form-control.form-control-sm.path-input(
+                            type='text',
+                            [(ngModel)]='tile.path',
+                            placeholder='/path/to/metric',
+                        )
+                        button.btn.btn-sm.btn-outline-secondary(
+                            type='button',
+                            (click)='toggleSuggest(tile)',
+                            [title]="'Suggest' | translate",
+                        )
+                            i.fas.fa-list
+                            |  {{ 'Suggest' | translate }}
+                    .suggest-dropdown(*ngIf='suggestOpenFor === tile.id')
+                        .suggest-loading(*ngIf='suggestLoading[tile.id]')
+                            i.fas.fa-spinner.fa-spin
+                            |  {{ 'Observing scrape…' | translate }}
+                        .suggest-empty(*ngIf='!suggestions[tile.id]?.length && !suggestLoading[tile.id]')
+                            | {{ 'No suggestions — type a path manually.' | translate }}
+                        .suggest-list
+                            button.suggest-item(
+                                *ngFor='let s of suggestions[tile.id] || []',
+                                type='button',
+                                (click)='pickSuggestion(tile, s)',
+                            )
+                                .suggest-path.mono {{ s.path }}
+                                .suggest-meta
+                                    span.suggest-label(*ngIf='s.label') {{ s.label }}
+                                    span.suggest-category(*ngIf='s.category') {{ s.category }}
+                button.row-remove(type='button', (click)='removeTile(tile)', [title]="'Remove tile' | translate")
+                    i.fas.fa-times
+
+.modal-footer
+    button.btn.btn-outline-secondary(type='button', (click)='cancel()') {{ 'Cancel' | translate }}
+    button.btn.btn-primary(type='button', [disabled]='!canSave()', (click)='save()') {{ 'Save' | translate }}
