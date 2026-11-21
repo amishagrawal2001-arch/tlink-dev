@@ -114,6 +114,28 @@
         font-size: 0.9rem;
         padding: 0 0.3rem;
     }
+
+    &.threshold-row {
+        .threshold-op,
+        .threshold-value,
+        .threshold-severity,
+        .threshold-cooldown {
+            flex: 0 0 auto;
+            min-width: 0;
+            width: auto;
+        }
+        .threshold-op { width: 3.5rem; }
+        .threshold-value { width: 5rem; }
+        .threshold-severity { width: 6.5rem; }
+        .threshold-cooldown { width: 4.5rem; }
+
+        .threshold-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            min-width: auto;
+        }
+    }
 }
 
 .suggest-dropdown {

@@ -4,7 +4,7 @@ import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop'
 import { PartialProfile, Profile, ProfilesService, TranslateService } from 'tlink-core'
 import { GnmiPathCatalogService } from 'tlink-gnmi'
 import { CollectorPathCatalogService } from 'tlink-collector'
-import { Dashboard, DashboardTile, DashboardSourceRef, DASHBOARD_GRID_COLS } from '../api'
+import { Dashboard, DashboardTile, DashboardSourceRef, DASHBOARD_GRID_COLS, TileThreshold } from '../api'
 import { findFreeCell } from '../util/layout'
 
 type SourceKind = DashboardSourceRef['kind']
@@ -55,6 +55,8 @@ export class DashboardEditorModalComponent implements OnInit {
 
     readonly tileTypes: TileType[] = ['value', 'sparkline', 'chart']
     readonly sourceKinds: SourceKind[] = ['gnmi', 'collector']
+    readonly thresholdOps: TileThreshold['op'][] = ['>', '>=', '<', '<=', '==']
+    readonly thresholdSeverities: NonNullable<TileThreshold['severity']>[] = ['info', 'warning', 'critical']
 
     constructor (
         private readonly modal: NgbActiveModal,
@@ -111,6 +113,20 @@ export class DashboardEditorModalComponent implements OnInit {
 
     onKindChange (tile: DashboardTile, kind: SourceKind): void {
         tile.source = { kind, profileId: '' }
+    }
+
+    addThreshold (tile: DashboardTile): void {
+        tile.threshold = {
+            op: '>',
+            value: 0,
+            severity: 'critical',
+            notify: true,
+            cooldownSec: 60,
+        }
+    }
+
+    removeThreshold (tile: DashboardTile): void {
+        delete tile.threshold
     }
 
     profileExists (tile: DashboardTile): boolean {

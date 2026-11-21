@@ -64,6 +64,33 @@
                         )
                             i.fas.fa-list
                             |  {{ 'Suggest' | translate }}
+                    .field-row.threshold-row(*ngIf='!tile.threshold')
+                        button.btn.btn-sm.btn-outline-secondary(type='button', (click)='addThreshold(tile)')
+                            i.fas.fa-bell
+                            |  {{ 'Add threshold' | translate }}
+                    .field-row.threshold-row(*ngIf='tile.threshold')
+                        label.inline-label {{ 'Alert' | translate }}
+                        select.form-select.form-select-sm.threshold-op([(ngModel)]='tile.threshold.op')
+                            option(*ngFor='let op of thresholdOps', [value]='op') {{ op }}
+                        input.form-control.form-control-sm.threshold-value(
+                            type='number',
+                            step='any',
+                            [(ngModel)]='tile.threshold.value',
+                        )
+                        label.inline-label {{ 'Severity' | translate }}
+                        select.form-select.form-select-sm.threshold-severity([(ngModel)]='tile.threshold.severity')
+                            option(*ngFor='let s of thresholdSeverities', [value]='s') {{ s }}
+                        label.inline-label.threshold-toggle
+                            input(type='checkbox', [(ngModel)]='tile.threshold.notify')
+                            |  {{ 'Notify' | translate }}
+                        label.inline-label {{ 'Cooldown (s)' | translate }}
+                        input.form-control.form-control-sm.threshold-cooldown(
+                            type='number',
+                            min='10',
+                            [(ngModel)]='tile.threshold.cooldownSec',
+                        )
+                        button.row-remove(type='button', (click)='removeThreshold(tile)', [title]="'Remove threshold' | translate")
+                            i.fas.fa-times
                     .suggest-dropdown(*ngIf='suggestOpenFor === tile.id')
                         .suggest-loading(*ngIf='suggestLoading[tile.id]')
                             i.fas.fa-spinner.fa-spin

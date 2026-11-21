@@ -1,4 +1,7 @@
-.chart-tile
+.chart-tile([class.alert-active]='data.alert', [class.alert-info]='data.alert?.severity === "info"', [class.alert-warning]='data.alert?.severity === "warning"', [class.alert-critical]='data.alert?.severity === "critical"')
+    .alert-badge(*ngIf='data.alert', [class.alert-badge-info]='data.alert.severity === "info"', [class.alert-badge-warning]='data.alert.severity === "warning"', [class.alert-badge-critical]='data.alert.severity === "critical"', [title]='data.alert.predicate')
+        .dot
+        .chip {{ data.alert.severity | uppercase }}
     .head
         .label(title='{{ tile.path }}') {{ label }}
         .current(*ngIf='hasValue')

@@ -37,6 +37,31 @@ export interface DashboardTile {
     w?: number
     /** Height in grid cells. Defaults to 1. */
     h?: number
+    /**
+     * Optional threshold predicate — when the latest numeric sample
+     * satisfies it, the tile lights up (border + badge) and (if
+     * `notify`) fires an in-app toast or OS notification. M4.4.
+     */
+    threshold?: TileThreshold
+}
+
+/**
+ * A single-op predicate against a tile's latest numeric sample.
+ * Non-numeric samples (gnmi string labels, etc.) are skipped silently.
+ * Compound AND/OR expressions are out of scope for M4.4 — a future
+ * slice can add a discriminated-union variant alongside this shape.
+ */
+export interface TileThreshold {
+    /** Comparison operator applied as `(latest op value)`. */
+    op: '>' | '>=' | '<' | '<=' | '=='
+    /** Right-hand side of the comparison. */
+    value: number
+    /** Drives the badge/border color and notification tag. Default 'warning'. */
+    severity?: 'info' | 'warning' | 'critical'
+    /** Fire in-app toast + native OS notification on 0→1 crossing. Default true. */
+    notify?: boolean
+    /** Minimum seconds between notifications for the same tile while active. Default 60. */
+    cooldownSec?: number
 }
 
 /** Number of columns on a dashboard grid. Fixed at 3 for M4.3. */

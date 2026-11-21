@@ -1,0 +1,65 @@
+// Shared alert-state styling for all three tile shapes. Each tile
+// scss imports this partial and composes the `.alert-active` +
+// `.alert-<severity>` class pair on its outer container. Adds a bold
+// border + tinted lift on the tile, plus a corner badge (dot + chip)
+// anchored top-right. M4.4.
+
+@mixin tile-alert-styling {
+    position: relative;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+
+    &.alert-active {
+        border-width: 2px;
+
+        &.alert-info {
+            border-color: var(--bs-info, #17a2b8);
+            box-shadow: 0 0 0 1px rgba(23, 162, 184, 0.22);
+        }
+        &.alert-warning {
+            border-color: var(--bs-warning, #ffc107);
+            box-shadow: 0 0 0 1px rgba(255, 193, 7, 0.22);
+        }
+        &.alert-critical {
+            border-color: var(--bs-danger, #dc3545);
+            box-shadow: 0 0 0 1px rgba(220, 53, 69, 0.22);
+        }
+    }
+
+    .alert-badge {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.1rem 0.35rem;
+        border-radius: 3px;
+        background: rgba(0, 0, 0, 0.04);
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .chip {
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            line-height: 1;
+        }
+
+        &.alert-badge-info {
+            .dot { background: var(--bs-info, #17a2b8); }
+            .chip { color: var(--bs-info, #17a2b8); }
+        }
+        &.alert-badge-warning {
+            .dot { background: var(--bs-warning, #ffc107); }
+            .chip { color: var(--bs-warning, #ffc107); }
+        }
+        &.alert-badge-critical {
+            .dot { background: var(--bs-danger, #dc3545); }
+            .chip { color: var(--bs-danger, #dc3545); }
+        }
+    }
+}

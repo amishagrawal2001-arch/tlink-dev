@@ -18,9 +18,21 @@ export interface TileData {
     delta?: TileDelta
     /** Human-readable age of the latest sample ('3s', '2m'). */
     ageLabel?: string
+    /**
+     * Present when the latest sample satisfies the tile's threshold
+     * predicate. Ephemeral — re-evaluated on every sample, never
+     * persisted across tab reopen (M4.4).
+     */
+    alert?: TileAlertState
 }
 
 export interface TileDelta {
     kind: 'up' | 'down' | 'same'
     label: string
+}
+
+export interface TileAlertState {
+    severity: 'info' | 'warning' | 'critical'
+    /** Short human predicate for tooltip, e.g. '> 80'. */
+    predicate: string
 }

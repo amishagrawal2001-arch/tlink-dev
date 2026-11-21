@@ -2,13 +2,14 @@ import { ChangeDetectionStrategy, ChangeDetectorRef, Component, HostBinding, Inj
 import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop'
 import { Subject, Subscription } from 'rxjs'
 import { takeUntil } from 'rxjs/operators'
-import { BaseTabComponent, TelemetrySample } from 'tlink-core'
+import { AppService, BaseTabComponent, TelemetrySample } from 'tlink-core'
 import { Dashboard, DashboardTile, DASHBOARD_GRID_COLS } from '../api'
-import { TileData, TileDelta } from './tileData'
+import { TileAlertState, TileData, TileDelta } from './tileData'
 import { Sample } from '../util/paths'
 import { normalizeDashboard, orderTiles } from '../util/layout'
 import { DashboardsTelemetryBroker } from '../services/telemetryBroker.service'
 import { DashboardsEditorService } from '../services/dashboardsEditor.service'
+import { DashboardAlertService, evaluateThreshold } from '../services/alertService.service'
 
 /** How many recent samples each tile keeps for sparkline / chart rendering. */
 const TILE_BUFFER_SIZE = 60
@@ -26,6 +27,8 @@ interface TileRuntime {
     error: string | null
     /** rxjs teardown for this tile's observe() subscription. */
     sub: Subscription | null
+    /** True when the latest sample satisfies tile.threshold (M4.4). Ephemeral. */
+    alertActive: boolean
 }
 
 /**
@@ -67,6 +70,8 @@ export class DashboardTabComponent extends BaseTabComponent implements OnInit, O
         private readonly broker: DashboardsTelemetryBroker,
         private readonly cdr: ChangeDetectorRef,
         private readonly editor: DashboardsEditorService,
+        private readonly alerts: DashboardAlertService,
+        private readonly app: AppService,
     ) {
         super(injector)
         this.icon = 'fas fa-chart-line'
@@ -223,11 +228,21 @@ export class DashboardTabComponent extends BaseTabComponent implements OnInit, O
         const current = r.latest
         const delta = this.computeDelta(r.latest, r.previous)
         const ageLabel = r.latestWallMs ? formatAge(Date.now() - r.latestWallMs) : undefined
+        const alert = this.buildAlertState(tile, r)
         return {
             current,
             samples: tile.type === 'value' ? undefined : [...r.samples],
             delta,
             ageLabel,
+            alert,
+        }
+    }
+
+    private buildAlertState (tile: DashboardTile, r: TileRuntime): TileAlertState | undefined {
+        if (!r.alertActive || !tile.threshold) { return undefined }
+        return {
+            severity: tile.threshold.severity ?? 'warning',
+            predicate: `${tile.threshold.op} ${tile.threshold.value}`,
         }
     }
 
@@ -244,6 +259,7 @@ export class DashboardTabComponent extends BaseTabComponent implements OnInit, O
             latestWallMs: null,
             error: null,
             sub: null,
+            alertActive: false,
         }
         this.runtime.set(tile.id, r)
         r.sub = this.broker.observe(tile.source, tile.path)
@@ -287,7 +303,36 @@ export class DashboardTabComponent extends BaseTabComponent implements OnInit, O
         }
         r.latest = numericValue !== null ? Number(numericValue.toFixed(2)) : (s.value == null ? null : String(s.value))
         r.latestWallMs = Date.now()
+        this.evaluateTileThreshold(tile, r, numericValue)
         this.cdr.markForCheck()
+    }
+
+    /**
+     * Run the tile's threshold predicate against the just-arrived sample.
+     * String values are skipped silently (gnmi paths can return labels
+     * like 'UP' / 'DOWN' — a numeric threshold never matches those).
+     * Fires the alert service only on an inactive→active transition
+     * so a steady-state over-threshold value doesn't spam notifications.
+     */
+    private evaluateTileThreshold (tile: DashboardTile, r: TileRuntime, numericValue: number | null): void {
+        if (!tile.threshold) {
+            r.alertActive = false
+            return
+        }
+        if (numericValue === null) {
+            // Non-numeric sample — leave existing state as-is. No
+            // flip-to-false either, since a transient null shouldn't
+            // clear a legitimate active alert.
+            return
+        }
+        const nowActive = evaluateThreshold(numericValue, tile.threshold)
+        if (nowActive !== r.alertActive) {
+            r.alertActive = nowActive
+            if (nowActive && this.dashboard) {
+                const dashboard = this.dashboard
+                this.alerts.fire(dashboard, tile, numericValue, () => this.app.selectTab(this))
+            }
+        }
     }
 
     private computeDelta (latest: number | string | null, previous: number | null): TileDelta | undefined {
