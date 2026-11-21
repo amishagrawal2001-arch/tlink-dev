@@ -57,6 +57,17 @@ export interface CollectorProfileOptions {
      * savedHistoryDays.
      */
     savedHistoryDays?: number
+
+    // ─── Starred paths ─────────────────────────────────────────────
+    /**
+     * Metric paths the user has starred as important for this profile.
+     * Pinned to the top of the Latest view as a dedicated ★ Starred
+     * group while also remaining in their natural group below, so the
+     * baseline layout is unchanged. Populated by the star toggle on
+     * each Latest row. Kept optional so existing profiles don't need
+     * migration on upgrade.
+     */
+    starredPaths?: string[]
 }
 
 /** Knobs for the built-in Mock data source. */

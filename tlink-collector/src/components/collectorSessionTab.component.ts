@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/explicit-module-boundary-types, @typescript-eslint/max-params */
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Injector, Input, NgZone, OnDestroy } from '@angular/core'
-import { BaseTabComponent, NotificationsService } from 'tlink-core'
+import { BaseTabComponent, NotificationsService, ProfilesService } from 'tlink-core'
 import { CollectorProfile, CollectorSample } from '../api'
 import { CollectorHandle, CollectorMockService } from '../services/mock.service'
 import { PrometheusCollectorService } from '../services/prometheus.service'
@@ -184,8 +184,12 @@ export class CollectorSessionTabComponent extends BaseTabComponent implements On
     private notifications: NotificationsService
     private formatter: CollectorValueFormatterService
     private retention: CollectorHistoryRetentionService
+    private profilesService: ProfilesService
     private zone: NgZone
     private cdr: ChangeDetectorRef
+
+    /** Memoised Set wrapper around profile.options.starredPaths; rebuilt only when the array reference changes. */
+    private starredPathSetCache: { ref: string[] | undefined; set: Set<string> } = { ref: undefined, set: new Set() }
 
     constructor (injector: Injector) {
         super(injector)
@@ -194,6 +198,7 @@ export class CollectorSessionTabComponent extends BaseTabComponent implements On
         this.notifications = injector.get(NotificationsService)
         this.formatter = injector.get(CollectorValueFormatterService)
         this.retention = injector.get(CollectorHistoryRetentionService)
+        this.profilesService = injector.get(ProfilesService)
         this.zone = injector.get(NgZone)
         this.cdr = injector.get(ChangeDetectorRef)
     }
@@ -468,11 +473,82 @@ export class CollectorSessionTabComponent extends BaseTabComponent implements On
     trackCardSizeByValue = (_: number, c: { value: string }): string => c.value
     trackGraphCard = (_: number, c: GraphCard): string => c.entry.path
 
+    // ─── Starred paths (per-profile) ────────────────────────────────
+
+    /**
+     * Memoised Set over profile.options.starredPaths. Rebuilt only when
+     * the underlying array reference changes (toggleStar mutates by
+     * replacement, so reference equality is enough to invalidate).
+     * O(1) lookup inside the Latest render loop.
+     */
+    get starredPathSet (): Set<string> {
+        const ref = this.profile.options.starredPaths
+        if (this.starredPathSetCache.ref !== ref) {
+            this.starredPathSetCache = { ref, set: new Set(ref ?? []) }
+        }
+        return this.starredPathSetCache.set
+    }
+
+    isStarred (path: string): boolean {
+        return this.starredPathSet.has(path)
+    }
+
+    /**
+     * Toggle a path into / out of this profile's starred list. Persists
+     * via ProfilesService.writeProfile + ConfigService.save — same
+     * mechanism Settings uses, so the write behaves identically to any
+     * other config change. Fires an info toast on success.
+     */
+    async toggleStar (path: string): Promise<void> {
+        const current = this.profile.options.starredPaths ?? []
+        const idx = current.indexOf(path)
+        const next = idx >= 0
+            ? [...current.slice(0, idx), ...current.slice(idx + 1)]
+            : [...current, path]
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (!this.profile.options) {
+            this.profile.options = {} as CollectorProfile['options']
+        }
+        this.profile.options.starredPaths = next
+        this.latestDirtySeq += 1
+        await this.profilesService.writeProfile(this.profile)
+        await this.config.save()
+        this.notifications.info(idx >= 0 ? `Unstarred ${path}` : `Starred ${path}`)
+    }
+
     // ─── Latest values view (derived) ───────────────────────────────
 
     get latestGroups (): LatestGroup[] {
+        const base = this.computeLatestGroups()
+        const starred = this.buildStarredGroup(base)
+        const out = starred ? [starred, ...base] : base
+        return this.filterLatestGroups(out)
+    }
+
+    /**
+     * Build the pinned ★ Starred group from the currently-rendered
+     * Latest rows. Rows stay inside their natural group below so the
+     * baseline layout doesn't shift when the user stars something —
+     * starred rows appear in both places. Returns null when nothing is
+     * starred, so the top band doesn't render an empty section.
+     */
+    private buildStarredGroup (groups: LatestGroup[]): LatestGroup | null {
+        const set = this.starredPathSet
+        if (!set.size) { return null }
+        const rows: LatestRow[] = []
+        for (const g of groups) {
+            for (const r of g.rows) {
+                if (set.has(r.entry.path)) { rows.push(r) }
+            }
+        }
+        if (!rows.length) { return null }
+        rows.sort((a, b) => a.entry.path.localeCompare(b.entry.path))
+        return { id: '__starred__', prefixPath: '★ Starred', key: null, rows }
+    }
+
+    private computeLatestGroups (): LatestGroup[] {
         if (this.latestGroupsCache.seq === this.latestDirtySeq) {
-            return this.filterLatestGroups(this.latestGroupsCache.groups)
+            return this.latestGroupsCache.groups
         }
         const buckets = new Map<string, { key: string | null; prefix: string; rows: LatestRow[] }>()
         for (const entry of this.latestByPath.values()) {
@@ -498,7 +574,7 @@ export class CollectorSessionTabComponent extends BaseTabComponent implements On
         }))
         groups.sort((a, b) => (a.key ?? '').localeCompare(b.key ?? '') || a.prefixPath.localeCompare(b.prefixPath))
         this.latestGroupsCache = { seq: this.latestDirtySeq, groups }
-        return this.filterLatestGroups(groups)
+        return groups
     }
 
     private filterLatestGroups (groups: LatestGroup[]): LatestGroup[] {

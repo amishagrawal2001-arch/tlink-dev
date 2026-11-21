@@ -89,19 +89,29 @@
             span(*ngIf='latestByPath.size && !latestGroups.length') No rows match filter.
 
         .lv-header(*ngIf='latestGroups.length')
+            .lv-col-star
             .lv-col-path Path
             .lv-col-spark History
             .lv-col-val.right Value
             .lv-col-delta.right Δ
             .lv-col-age.right Age
 
-        .lv-group(*ngFor='let group of latestGroups; trackBy: trackLatestGroup')
+        .lv-group(*ngFor='let group of latestGroups; trackBy: trackLatestGroup', [class.lv-group-starred]='group.id === "__starred__"')
             .lv-group-header
                 span.lv-group-name {{ group.prefixPath }}
                 span.lv-group-chip(*ngIf='group.key') {{ group.key }}
                 span.lv-group-count {{ group.rows.length }} leaves
 
             .lv-row(*ngFor='let row of group.rows; trackBy: trackLatestRow')
+                .lv-col-star
+                    button.star-btn(
+                        type='button',
+                        [class.starred]='isStarred(row.entry.path)',
+                        [title]='isStarred(row.entry.path) ? "Unstar path" : "Star path"',
+                        (click)='toggleStar(row.entry.path)',
+                    )
+                        svg(viewBox='0 0 16 16', aria-hidden='true')
+                            path(d='M8 1.5l1.9 4.2 4.6.4-3.5 3 1.1 4.5L8 11.2l-4.1 2.4 1.1-4.5L1.5 6.1l4.6-.4z')
                 .lv-col-path
                     span.dim …/
                     | {{ row.shortPath.replace('…/', '') }}
