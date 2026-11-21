@@ -561,7 +561,10 @@ jobs:
       # now (zip opt-in via TLINK_WINDOWS_ARTIFACTS). A bare `mv dist/*.zip`
       # fails on no match and used to break the whole leg; find-exec
       # succeeds with an empty match, and the upload steps below handle
-      # empty directories via if-no-files-found: ignore.
+      # empty directories via if-no-files-found: ignore. Shell is pinned
+      # to bash because the Windows runner defaults to PowerShell, which
+      # doesn't understand `mkdir -p` or `find -exec`.
+      shell: bash
       run: |
         mkdir -p artifact-setup artifact-portable
         find dist -maxdepth 1 -name '*-setup-*.exe' -exec mv {} artifact-setup/ \;
