@@ -24,6 +24,33 @@ export interface TelemetryBroker {
      * Observable errors synchronously on subscribe.
      */
     observe(ref: TelemetrySourceRef, path: string): Observable<TelemetrySample>
+
+    /**
+     * Subscribe to every sample from the source identified by `ref`,
+     * regardless of path. Intended for consumers that natively want
+     * the full stream (a session tab's Wire log + Latest view). The
+     * collector broker implements this upstream of its per-path
+     * fan-out; the gNMI broker rejects it synchronously because gNMI
+     * subscriptions are inherently per-path. Optional on the
+     * interface so a broker can refuse.
+     */
+    observeAll?(ref: TelemetrySourceRef): Observable<PathedSample>
+
+    /**
+     * Error channel for the subscription identified by (ref, path).
+     * Decoupled from `observe()`'s sample stream so a transient
+     * underlying error (gnmic reconnect stderr, flaky scrape) does
+     * NOT terminate every observer's Observable. The broker's
+     * internal error handler emits here; `observe()` continues to
+     * emit samples. For a FATAL error, the broker completes the
+     * sample Observable AFTER emitting the error, so observers can
+     * distinguish "the stream is done" from "a transient hiccup".
+     *
+     * For brokers whose errors are profile-scoped rather than
+     * per-path (collector), `path` is ignored — every observer of
+     * that profile's errors sees the same stream.
+     */
+    observeErrors?(ref: TelemetrySourceRef, path: string): Observable<Error>
 }
 
 /**
@@ -58,4 +85,15 @@ export interface TelemetrySample {
     value: unknown
     /** 'update' for new/changed values; 'delete' for dropped series. */
     kind: 'update' | 'delete'
+}
+
+/**
+ * Sibling of `TelemetrySample` carrying the path. Emitted only by
+ * `observeAll()`, which exposes the full profile-level stream to
+ * consumers that need the path per sample (session tab Wire log).
+ * `observe(ref, path)` keeps emitting `TelemetrySample` because its
+ * caller already knows the path it subscribed for.
+ */
+export interface PathedSample extends TelemetrySample {
+    path: string
 }

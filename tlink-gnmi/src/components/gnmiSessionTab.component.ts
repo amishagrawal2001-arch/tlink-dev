@@ -1,8 +1,10 @@
 /* eslint-disable @typescript-eslint/explicit-module-boundary-types */
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Injector, Input, NgZone, OnDestroy } from '@angular/core'
-import { BaseTabComponent, NotificationsService, ProfilesService } from 'tlink-core'
+import { Subscription } from 'rxjs'
+import { BaseTabComponent, NotificationsService, ProfilesService, TelemetrySample, TelemetrySourceRef } from 'tlink-core'
 import { GnmiCapabilities, GnmiNotification, GnmiProfile, GnmiSavedSubscription, GnmiStreamMode, GnmiSubscribeMode } from '../api'
-import { GnmiService, GnmiSubscribeHandle } from '../services/gnmi.service'
+import { GnmiService } from '../services/gnmi.service'
+import { GnmiTelemetryBroker } from '../services/telemetryBroker.service'
 import { FormattedValue, GnmiValueFormatterService } from '../services/valueFormatter.service'
 import { GnmiCatalogEntry, GnmiCatalogGroup, GnmiPathCatalogService } from '../services/pathCatalog.service'
 import { GnmiHistoryRetentionService } from '../services/historyRetention.service'
@@ -162,7 +164,16 @@ interface ActiveSubscription {
     sampleIntervalSec: number
     running: boolean
     receiveCount: number
-    handle: GnmiSubscribeHandle | null
+    /**
+     * rxjs subscription returned by the broker's `observe()`. Null
+     * when the row is paused / stopped; non-null otherwise. Teardown
+     * calls `unsubscribe()`, which decrements the broker's ref count
+     * (grace timer closes the gnmic subprocess if no other observer
+     * holds the same key — e.g. a dashboard tile keeping it alive).
+     */
+    brokerSub: Subscription | null
+    /** Error-channel subscription, torn down alongside `brokerSub`. */
+    brokerErrorSub: Subscription | null
     lastError?: string
     /**
      * Count of transient errors observed since the last successful
@@ -395,6 +406,7 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     // NB: `config: ConfigService` is inherited protected on BaseTabComponent
     // — no need to redeclare or re-inject.
     private gnmi: GnmiService
+    private broker: GnmiTelemetryBroker
     private notifications: NotificationsService
     private formatter: GnmiValueFormatterService
     private profilesService: ProfilesService
@@ -425,6 +437,7 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     constructor (injector: Injector) {
         super(injector)
         this.gnmi = injector.get(GnmiService)
+        this.broker = injector.get(GnmiTelemetryBroker)
         this.notifications = injector.get(NotificationsService)
         this.formatter = injector.get(GnmiValueFormatterService)
         this.profilesService = injector.get(ProfilesService)
@@ -556,7 +569,10 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
 
     ngOnDestroy (): void {
         for (const sub of this.subscriptions) {
-            sub.handle?.kill()
+            sub.brokerSub?.unsubscribe()
+            sub.brokerErrorSub?.unsubscribe()
+            sub.brokerSub = null
+            sub.brokerErrorSub = null
         }
         if (this.rateTimer) {
             clearInterval(this.rateTimer)
@@ -633,7 +649,8 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
             sampleIntervalSec: spec.sampleIntervalSec,
             running: false,
             receiveCount: 0,
-            handle: null,
+            brokerSub: null,
+            brokerErrorSub: null,
             transientErrorCount: 0,
         }
         this.subscriptions = [...this.subscriptions, sub]
@@ -642,7 +659,10 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
     }
 
     removeSubscription (sub: ActiveSubscription): void {
-        sub.handle?.kill()
+        sub.brokerSub?.unsubscribe()
+        sub.brokerErrorSub?.unsubscribe()
+        sub.brokerSub = null
+        sub.brokerErrorSub = null
         this.subscriptions = this.subscriptions.filter(s => s !== sub)
     }
 
@@ -682,8 +702,17 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
 
     toggleSubscription (sub: ActiveSubscription): void {
         if (sub.running) {
-            sub.handle?.kill()
-            sub.handle = null
+            // Pause semantics shift in M4.2b: unsubscribing from the
+            // broker drops the ref count for this key. If a dashboard
+            // tile (or another session tab) still observes the same
+            // key, the subprocess stays alive — the user's view of
+            // this sub freezes without killing the device poll. If
+            // no one else observes, the broker's grace timer closes
+            // the subprocess after ~500ms.
+            sub.brokerSub?.unsubscribe()
+            sub.brokerErrorSub?.unsubscribe()
+            sub.brokerSub = null
+            sub.brokerErrorSub = null
             sub.running = false
         } else {
             this.startSubscription(sub)
@@ -692,61 +721,73 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
 
     private startSubscription (sub: ActiveSubscription): void {
         try {
-            const handle = this.gnmi.subscribe(this.profile, {
+            const ref: TelemetrySourceRef = {
+                kind: 'gnmi',
+                profileId: this.profile.id,
                 mode: sub.mode,
-                subscriptions: [{
-                    path: sub.path,
-                    streamMode: sub.streamMode,
-                    sampleIntervalNs: sub.sampleIntervalSec * 1_000_000_000,
-                }],
-            })
-            sub.handle = handle
-            sub.running = true
+                streamMode: sub.streamMode,
+                sampleIntervalSec: sub.sampleIntervalSec,
+            }
             sub.lastError = undefined
 
-            handle.on('notification', (n: GnmiNotification) => {
-                // Update state OUTSIDE the zone (no per-notification CD
-                // storm), then let the throttled scheduler batch a
-                // markForCheck for the next tick. On a fast device
-                // pushing 100 notifications per second, this collapses
-                // ~100 CD passes into ~10.
-                this.onNotification(n, sub)
-                // Successful data means the current "streak" of
-                // transient errors has ended — reset the counter so
-                // the sub row reflects healthy state.
-                if (sub.transientErrorCount) { sub.transientErrorCount = 0 }
-                if (sub.lastError) { sub.lastError = undefined }
-                this.scheduleCheck()
+            // Subscribe to the sample stream first. The broker creates
+            // its internal StreamEntry synchronously inside this call's
+            // Observable factory, so a subsequent observeErrors() call
+            // finds an entry to attach to.
+            sub.brokerSub = this.broker.observe(ref, sub.path).subscribe({
+                next: s => this.onBrokerSample(s, sub),
+                complete: () => {
+                    // Broker completes on subprocess close OR after
+                    // a fatal error (which emits on observeErrors
+                    // first). Mark the sub inactive but leave the UI
+                    // row intact so the user can restart it.
+                    sub.running = false
+                    sub.brokerSub = null
+                    this.scheduleCheck()
+                },
             })
-            handle.on('sync', () => {
-                // Nothing user-facing yet — could add a "sync received"
-                // marker in the stream table in a future iteration.
-            })
-            handle.on('error', (err: Error & { transient?: boolean }) => {
-                sub.lastError = err.message
-                if (err.transient) {
-                    // Silent-per-error to avoid spam; the counter on
-                    // the sub row is the user-visible signal instead.
-                    sub.transientErrorCount += 1
-                } else {
-                    // NotificationsService uses toastr which re-enters
-                    // the zone on its own — safe to call from outside.
-                    this.notifications.error(`gNMI subscribe error: ${err.message}`)
-                }
-                this.scheduleCheck()
-            })
-            handle.on('close', (code: number | null) => {
-                sub.running = false
-                sub.handle = null
-                if (code && code !== 0 && !sub.lastError) {
-                    sub.lastError = `gnmic exited with code ${code}`
-                }
-                this.scheduleCheck()
-            })
+            sub.brokerErrorSub = this.broker.observeErrors(ref, sub.path).subscribe(
+                (err: Error & { transient?: boolean }) => {
+                    sub.lastError = err.message
+                    if (err.transient) {
+                        // Silent per-error to avoid toast spam; the
+                        // counter on the sub row is the user-visible
+                        // signal instead.
+                        sub.transientErrorCount += 1
+                    } else {
+                        this.notifications.error(`gNMI subscribe error: ${err.message}`)
+                    }
+                    this.scheduleCheck()
+                },
+            )
+            sub.running = true
         } catch (err) {
             sub.lastError = (err as Error).message
             this.notifications.error(`Failed to start subscription: ${sub.lastError}`)
         }
+    }
+
+    /**
+     * Adapter from broker's `TelemetrySample` (path-less) to the
+     * existing `onNotification` body (expects a full `GnmiNotification`).
+     * The sub record already knows its path, so we reconstruct the
+     * notification shape without a wire change.
+     */
+    private onBrokerSample (s: TelemetrySample, sub: ActiveSubscription): void {
+        const n: GnmiNotification = {
+            timestampNs: s.timestampNs,
+            path: sub.path,
+            value: s.value,
+            kind: s.kind,
+            target: this.profile.name,
+        }
+        this.onNotification(n, sub)
+        // Successful data means the current "streak" of transient
+        // errors has ended — reset the counter so the sub row
+        // reflects healthy state.
+        if (sub.transientErrorCount) { sub.transientErrorCount = 0 }
+        if (sub.lastError) { sub.lastError = undefined }
+        this.scheduleCheck()
     }
 
     // ─── Notification handling ──────────────────────────────────────

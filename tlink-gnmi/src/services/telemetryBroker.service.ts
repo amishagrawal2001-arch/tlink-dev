@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core'
-import { Observable, Subject } from 'rxjs'
+import { EMPTY, Observable, Subject } from 'rxjs'
 import { ProfilesService, TelemetryBroker, TelemetrySample, TelemetrySourceRef } from 'tlink-core'
 import { GnmiProfile } from '../api'
 import { GnmiService, GnmiSubscribeHandle } from './gnmi.service'
@@ -13,6 +13,13 @@ interface StreamEntry {
     key: string
     handle: GnmiSubscribeHandle
     subject: Subject<TelemetrySample>
+    /**
+     * Sibling error channel — see `TelemetryBroker.observeErrors`.
+     * Decoupled from `subject` so a transient gnmic error doesn't
+     * terminate every observer's sample stream. A fatal error emits
+     * here AND completes `subject`; a transient error emits here only.
+     */
+    errors: Subject<Error>
     refCount: number
     graceTimer: ReturnType<typeof setTimeout> | null
 }
@@ -24,10 +31,11 @@ interface StreamEntry {
  * `gnmic` subprocess. Two tiles on the same path at different
  * intervals legitimately spawn two subscriptions.
  *
- * Session tabs in M4.2a still call `gnmi.subscribe()` directly — a
- * live tab plus a dashboard tile on the same tuple will spawn TWO
- * subprocesses for now. M4.2b migrates session tabs to this broker
- * so they share one.
+ * M4.2b: added `observeErrors()` and reworked error forwarding so a
+ * transient gnmic stderr line no longer terminates the sample
+ * Observable (which would kill every tile + session-tab view of the
+ * same key). Session tabs migrated to `observe()` in the same slice
+ * so a live tab + a dashboard tile share one subprocess.
  */
 @Injectable({ providedIn: 'root' })
 export class GnmiTelemetryBroker implements TelemetryBroker {
@@ -40,33 +48,7 @@ export class GnmiTelemetryBroker implements TelemetryBroker {
 
     observe (ref: TelemetrySourceRef, path: string): Observable<TelemetrySample> {
         return new Observable<TelemetrySample>(subscriber => {
-            const mode = ref.mode ?? DEFAULT_MODE
-            const streamMode = ref.streamMode ?? DEFAULT_STREAM_MODE
-            const intervalSec = ref.sampleIntervalSec ?? DEFAULT_INTERVAL_SEC
-            const key = buildKey(ref.profileId, path, mode, streamMode, intervalSec)
-
-            let entry = this.streams.get(key)
-            if (!entry) {
-                // Async lookup + spawn — resolve the profile, build a
-                // SubscribeRequest, open the stream. Errors on the way
-                // are forwarded to this subscriber (the first observer
-                // after a cold start); existing-entry observers below
-                // skip this path entirely.
-                const pending = new Subject<TelemetrySample>()
-                entry = {
-                    key,
-                    handle: null as unknown as GnmiSubscribeHandle,
-                    subject: pending,
-                    refCount: 0,
-                    graceTimer: null,
-                }
-                this.streams.set(key, entry)
-                this.spawn(ref.profileId, path, mode, streamMode, intervalSec, entry)
-                    .catch(err => {
-                        pending.error(err instanceof Error ? err : new Error(String(err)))
-                        this.streams.delete(key)
-                    })
-            }
+            const entry = this.ensureEntry(ref, path)
             if (entry.graceTimer) {
                 clearTimeout(entry.graceTimer)
                 entry.graceTimer = null
@@ -75,17 +57,65 @@ export class GnmiTelemetryBroker implements TelemetryBroker {
             const inner = entry.subject.subscribe(subscriber)
             return () => {
                 inner.unsubscribe()
-                entry!.refCount -= 1
-                if (entry!.refCount === 0) {
-                    entry!.graceTimer = setTimeout(() => {
-                        if (entry!.refCount === 0) {
-                            entry!.handle?.kill()
-                            this.streams.delete(entry!.key)
+                entry.refCount -= 1
+                if (entry.refCount === 0) {
+                    entry.graceTimer = setTimeout(() => {
+                        if (entry.refCount === 0) {
+                            entry.handle?.kill()
+                            this.streams.delete(entry.key)
                         }
                     }, TEARDOWN_GRACE_MS)
                 }
             }
         })
+    }
+
+    /**
+     * Attach to an existing stream entry's error channel. Does NOT
+     * spawn an entry on its own — a consumer must call `observe()`
+     * first (as the session tab does synchronously inside
+     * `startSubscription`). If no entry exists, returns an empty
+     * Observable so no-op callers don't crash.
+     */
+    observeErrors (ref: TelemetrySourceRef, path: string): Observable<Error> {
+        const key = buildKey(
+            ref.profileId,
+            path,
+            ref.mode ?? DEFAULT_MODE,
+            ref.streamMode ?? DEFAULT_STREAM_MODE,
+            ref.sampleIntervalSec ?? DEFAULT_INTERVAL_SEC,
+        )
+        const entry = this.streams.get(key)
+        if (!entry) { return EMPTY }
+        return entry.errors.asObservable()
+    }
+
+    private ensureEntry (ref: TelemetrySourceRef, path: string): StreamEntry {
+        const mode = ref.mode ?? DEFAULT_MODE
+        const streamMode = ref.streamMode ?? DEFAULT_STREAM_MODE
+        const intervalSec = ref.sampleIntervalSec ?? DEFAULT_INTERVAL_SEC
+        const key = buildKey(ref.profileId, path, mode, streamMode, intervalSec)
+
+        const existing = this.streams.get(key)
+        if (existing) { return existing }
+
+        const entry: StreamEntry = {
+            key,
+            handle: null as unknown as GnmiSubscribeHandle,
+            subject: new Subject<TelemetrySample>(),
+            errors: new Subject<Error>(),
+            refCount: 0,
+            graceTimer: null,
+        }
+        this.streams.set(key, entry)
+        this.spawn(ref.profileId, path, mode, streamMode, intervalSec, entry)
+            .catch(err => {
+                const e = err instanceof Error ? err : new Error(String(err))
+                entry.errors.next(e)
+                entry.subject.complete()
+                this.streams.delete(key)
+            })
+        return entry
     }
 
     private async spawn (
@@ -115,12 +145,15 @@ export class GnmiTelemetryBroker implements TelemetryBroker {
         handle.on('notification', (n: { timestampNs: number; value: unknown; kind: 'update' | 'delete' }) => {
             entry.subject.next({ timestampNs: n.timestampNs, value: n.value, kind: n.kind })
         })
-        handle.on('error', (err: Error) => {
-            // Transient errors keep the stream alive; the gnmic
-            // subprocess retries internally. Non-transient errors
-            // propagate to observers.
-            if (!(err as Error & { transient?: boolean }).transient) {
-                entry.subject.error(err)
+        handle.on('error', (err: Error & { transient?: boolean }) => {
+            // Always forward to the sibling error channel so session
+            // tabs can track transient-error counters AND surface fatal
+            // errors. For fatal errors, also complete the sample
+            // Observable so observers can distinguish stream-ended
+            // from transient-hiccup.
+            entry.errors.next(err)
+            if (!err.transient) {
+                entry.subject.complete()
                 this.streams.delete(entry.key)
             }
         })

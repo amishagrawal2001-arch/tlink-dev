@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/explicit-module-boundary-types, @typescript-eslint/max-params */
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Injector, Input, NgZone, OnDestroy } from '@angular/core'
-import { BaseTabComponent, NotificationsService, ProfilesService } from 'tlink-core'
+import { Subscription } from 'rxjs'
+import { BaseTabComponent, NotificationsService, PathedSample, ProfilesService, TelemetrySourceRef } from 'tlink-core'
 import { CollectorProfile, CollectorSample } from '../api'
-import { CollectorHandle, CollectorMockService } from '../services/mock.service'
-import { PrometheusCollectorService } from '../services/prometheus.service'
+import { CollectorTelemetryBroker } from '../services/telemetryBroker.service'
 import { CollectorValueFormatterService, FormattedValue } from '../services/valueFormatter.service'
 import { CollectorHistoryRetentionService } from '../services/historyRetention.service'
 
@@ -166,7 +166,14 @@ export class CollectorSessionTabComponent extends BaseTabComponent implements On
     hoverIndex: number | null = null
 
     // ─── Private plumbing ───────────────────────────────────────────
-    private handle: CollectorHandle | null = null
+    /**
+     * Broker-side rxjs subscription for the profile's full stream.
+     * Teardown via `brokerSub.unsubscribe()` drops the broker's
+     * allRefCount for this profile; the scrape loop closes when no
+     * other observer (dashboard tile on any path) is holding it.
+     */
+    private brokerSub: Subscription | null = null
+    private brokerErrorSub: Subscription | null = null
     private rowIdSeq = 0
     private pausedBuffer: StreamRow[] = []
     private prevTotalForRate = 0
@@ -179,8 +186,7 @@ export class CollectorSessionTabComponent extends BaseTabComponent implements On
 
     private candidatesCache: { seq: number; list: GraphMetric[] } = { seq: -1, list: [] }
 
-    private mock: CollectorMockService
-    private prometheus: PrometheusCollectorService
+    private broker: CollectorTelemetryBroker
     private notifications: NotificationsService
     private formatter: CollectorValueFormatterService
     private retention: CollectorHistoryRetentionService
@@ -193,8 +199,7 @@ export class CollectorSessionTabComponent extends BaseTabComponent implements On
 
     constructor (injector: Injector) {
         super(injector)
-        this.mock = injector.get(CollectorMockService)
-        this.prometheus = injector.get(PrometheusCollectorService)
+        this.broker = injector.get(CollectorTelemetryBroker)
         this.notifications = injector.get(NotificationsService)
         this.formatter = injector.get(CollectorValueFormatterService)
         this.retention = injector.get(CollectorHistoryRetentionService)
@@ -265,18 +270,46 @@ export class CollectorSessionTabComponent extends BaseTabComponent implements On
     start (): void {
         this.stop()
         this.lastError = ''
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        if (!this.profile?.id) {
+            this.lastError = 'Collector profile has no id — cannot subscribe'
+            this.notifications.error(this.lastError)
+            return
+        }
+        const ref: TelemetrySourceRef = { kind: 'collector', profileId: this.profile.id }
         try {
-            switch (this.profile.options.source) {
-                case 'mock':
-                    this.handle = this.mock.start(this.profile)
-                    break
-                case 'prometheus':
-                    this.handle = this.prometheus.start(this.profile)
-                    break
-                default:
-                    throw new Error(`Unknown source: ${this.profile.options.source}`)
-            }
-            this.wireHandle(this.handle)
+            // Single profile-level stream from the shared broker.
+            // The broker's spawn() resolves the profile via
+            // ProfilesService + starts mock.start / prometheus.start
+            // on demand — same services this tab used to call
+            // directly, now ref-counted so a dashboard tile can
+            // observe the same profile without duplicating the
+            // scrape.
+            this.brokerSub = this.broker.observeAll(ref).subscribe({
+                next: (ps: PathedSample) => {
+                    this.onSample({
+                        timestampNs: ps.timestampNs,
+                        path: ps.path,
+                        value: ps.value,
+                        kind: ps.kind,
+                    } satisfies CollectorSample)
+                    this.scheduleCheck()
+                },
+                complete: () => {
+                    // Upstream profile-level Subject completed —
+                    // currently only happens if the broker's spawn
+                    // failed. onError below already reported it; mark
+                    // this tab stopped so the user can restart it.
+                    this.running = false
+                    this.brokerSub = null
+                    this.scheduleCheck()
+                },
+            })
+            this.brokerErrorSub = this.broker.observeErrors(ref, '').subscribe((err: Error) => {
+                this.lastError = err.message
+                this.notifications.error(`Collector error: ${err.message}`)
+                this.scheduleCheck()
+            })
             this.running = true
         } catch (err) {
             this.lastError = (err as Error).message
@@ -286,26 +319,16 @@ export class CollectorSessionTabComponent extends BaseTabComponent implements On
     }
 
     stop (): void {
-        this.handle?.stop()
-        this.handle = null
+        this.brokerSub?.unsubscribe()
+        this.brokerErrorSub?.unsubscribe()
+        this.brokerSub = null
+        this.brokerErrorSub = null
         this.running = false
         this.scheduleCheck()
     }
 
     toggleRunning (): void {
         if (this.running) { this.stop() } else { this.start() }
-    }
-
-    private wireHandle (h: CollectorHandle): void {
-        h.on('sample', (s: CollectorSample) => {
-            this.onSample(s)
-            this.scheduleCheck()
-        })
-        h.on('error', (err: Error) => {
-            this.lastError = err.message
-            this.notifications.error(`Collector error: ${err.message}`)
-            this.scheduleCheck()
-        })
     }
 
     // ─── Sample handling ────────────────────────────────────────────
