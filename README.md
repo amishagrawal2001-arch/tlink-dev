@@ -66,6 +66,7 @@ Notes:
 * **Backup & Restore** - Automatic and manual local backups of configuration, workspaces, and profiles
 * **Enhanced Collaboration** - Real-time terminal sharing, workspace templates, and team workspaces
 * **Remote Desktop (RDP)** - Connect to Windows servers with bundled FreeRDP, embedded viewer, or system RDP client
+* **Dashboards** - Compose live telemetry tiles from gNMI and collector profiles on one page, with threshold alerts and JSON import/export ([docs](./docs/dashboards.md))
 * **All Original Tlink Features** - SSH, serial terminal, theming, split panes, and more
 
 <br/>
