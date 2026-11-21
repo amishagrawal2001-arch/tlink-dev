@@ -1,0 +1,18 @@
+.dashboard-root
+    .empty-state(*ngIf='!dashboard')
+        .empty-head No dashboard loaded
+        .empty-body {{ missingMessage }}
+        .empty-hint
+            | Add one to your Tlink config under
+            code.mono  dashboards
+            |  — see the plugin README for the shape.
+    .dashboard-grid(*ngIf='dashboard')
+        // TODO(M4.3): mobile-collapse grid to 1 column at narrow widths.
+        ng-container(*ngFor='let tile of dashboard.tiles; trackBy: trackByTileId')
+            .tile-slot([ngSwitch]='tile.type')
+                dashboard-value-tile(*ngSwitchCase='"value"', [tile]='tile', [data]='mockData(tile)')
+                dashboard-sparkline-tile(*ngSwitchCase='"sparkline"', [tile]='tile', [data]='mockData(tile)')
+                dashboard-chart-tile(*ngSwitchCase='"chart"', [tile]='tile', [data]='mockData(tile)')
+                .unknown-tile(*ngSwitchDefault)
+                    .unknown-type Unknown tile type:&nbsp;
+                        code.mono {{ tile.type }}

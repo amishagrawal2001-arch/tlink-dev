@@ -1,0 +1,16 @@
+.sparkline-tile
+    .head
+        .label(title='{{ tile.path }}') {{ label }}
+        .current(*ngIf='hasValue')
+            span.value.mono {{ data.current }}
+            span.unit(*ngIf='data.unit')  {{ data.unit }}
+        .current.dash(*ngIf='!hasValue') —
+    .spark-wrap
+        svg.spark(*ngIf='spark', viewBox='0 0 100 22', preserveAspectRatio='none')
+            path.fill([attr.d]='spark.fill')
+            path.line([attr.d]='spark.line')
+            circle.endpoint([attr.cx]='spark.endX', [attr.cy]='spark.endY', r='2.5')
+        .spark-empty.dash(*ngIf='!spark') —
+    .foot(*ngIf='data.delta || data.ageLabel')
+        .delta.mono(*ngIf='data.delta', [class.delta-up]='data.delta.kind === "up"', [class.delta-down]='data.delta.kind === "down"', [class.delta-same]='data.delta.kind === "same"') {{ data.delta.label }}
+        .age.mono(*ngIf='data.ageLabel') {{ data.ageLabel }}

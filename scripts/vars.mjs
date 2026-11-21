@@ -46,6 +46,7 @@ export const builtinPlugins = [
     'tlink-api-client',
     'tlink-gnmi',
     'tlink-collector',
+    'tlink-dashboards',
 ]
 
 export const packagesWithDocs = [

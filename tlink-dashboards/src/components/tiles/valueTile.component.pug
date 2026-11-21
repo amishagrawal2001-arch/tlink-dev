@@ -1,0 +1,9 @@
+.value-tile
+    .label(title='{{ tile.path }}') {{ label }}
+    .value-row
+        .value.mono(*ngIf='hasValue') {{ data.current }}
+        .value.mono.dash(*ngIf='!hasValue') —
+        .unit(*ngIf='data.unit') {{ data.unit }}
+    .foot(*ngIf='data.delta || data.ageLabel')
+        .delta.mono(*ngIf='data.delta', [class.delta-up]='data.delta.kind === "up"', [class.delta-down]='data.delta.kind === "down"', [class.delta-same]='data.delta.kind === "same"') {{ data.delta.label }}
+        .age.mono(*ngIf='data.ageLabel') {{ data.ageLabel }}

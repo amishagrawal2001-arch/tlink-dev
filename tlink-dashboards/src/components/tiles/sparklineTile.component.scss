@@ -1,0 +1,99 @@
+:host {
+    display: block;
+    height: 100%;
+}
+
+.sparkline-tile {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+    padding: 1rem;
+    border: 1px solid var(--bs-border-color, rgba(128, 128, 128, 0.25));
+    border-radius: 6px;
+    background: var(--bs-card-bg, transparent);
+
+    .head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+
+    .label {
+        font-size: 0.8rem;
+        color: var(--bs-secondary-color, rgba(128, 128, 128, 0.85));
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .current {
+        font-size: 1.1rem;
+        white-space: nowrap;
+
+        .unit {
+            color: var(--bs-secondary-color, rgba(128, 128, 128, 0.85));
+            font-size: 0.85rem;
+        }
+
+        &.dash {
+            color: var(--bs-secondary-color, rgba(128, 128, 128, 0.6));
+        }
+    }
+
+    .spark-wrap {
+        margin: 0.5rem 0;
+        flex: 1;
+        display: flex;
+        align-items: center;
+
+        .spark {
+            width: 100%;
+            height: 44px;
+
+            .fill {
+                fill: var(--bs-primary, #4a90e2);
+                opacity: 0.15;
+            }
+
+            .line {
+                fill: none;
+                stroke: var(--bs-primary, #4a90e2);
+                stroke-width: 1.5;
+                vector-effect: non-scaling-stroke;
+            }
+
+            .endpoint {
+                fill: var(--bs-primary, #4a90e2);
+            }
+        }
+
+        .spark-empty {
+            color: var(--bs-secondary-color, rgba(128, 128, 128, 0.6));
+        }
+    }
+
+    .foot {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.75rem;
+
+        .delta {
+            padding: 0.1rem 0.4rem;
+            border-radius: 3px;
+            background: rgba(128, 128, 128, 0.12);
+
+            &.delta-up { color: #28a745; background: rgba(40, 167, 69, 0.14); }
+            &.delta-down { color: #dc3545; background: rgba(220, 53, 69, 0.14); }
+            &.delta-same { color: var(--bs-secondary-color, rgba(128, 128, 128, 0.85)); }
+        }
+
+        .age {
+            color: var(--bs-secondary-color, rgba(128, 128, 128, 0.85));
+        }
+    }
+}

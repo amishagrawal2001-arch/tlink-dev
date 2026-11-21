@@ -1,0 +1,60 @@
+:host {
+    display: block;
+    height: 100%;
+    overflow: auto;
+}
+
+.dashboard-root {
+    height: 100%;
+    box-sizing: border-box;
+    padding: 1rem;
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    grid-auto-rows: minmax(160px, auto);
+}
+
+.tile-slot {
+    min-width: 0;  // prevents grid column blow-out from long paths
+}
+
+.unknown-tile {
+    padding: 1rem;
+    border: 1px dashed var(--bs-danger, #dc3545);
+    border-radius: 6px;
+    color: var(--bs-danger, #dc3545);
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-width: 480px;
+    margin: 4rem auto;
+    padding: 1.5rem;
+    border: 1px dashed var(--bs-border-color, rgba(128, 128, 128, 0.35));
+    border-radius: 8px;
+    text-align: center;
+
+    .empty-head {
+        font-size: 1.25rem;
+        font-weight: 500;
+    }
+
+    .empty-body {
+        color: var(--bs-secondary-color, rgba(128, 128, 128, 0.85));
+    }
+
+    .empty-hint {
+        color: var(--bs-secondary-color, rgba(128, 128, 128, 0.85));
+        font-size: 0.85rem;
+        margin-top: 0.5rem;
+    }
+}
+
+.mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
