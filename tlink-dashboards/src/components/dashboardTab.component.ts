@@ -1,17 +1,42 @@
-import { ChangeDetectionStrategy, Component, HostBinding, Injector, Input, OnInit } from '@angular/core'
-import { BaseTabComponent } from 'tlink-core'
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, HostBinding, Injector, Input, OnDestroy, OnInit } from '@angular/core'
+import { Subject, Subscription } from 'rxjs'
+import { takeUntil } from 'rxjs/operators'
+import { BaseTabComponent, TelemetrySample } from 'tlink-core'
 import { Dashboard, DashboardTile } from '../api'
 import { TileData, TileDelta } from './tileData'
 import { Sample } from '../util/paths'
+import { DashboardsTelemetryBroker } from '../services/telemetryBroker.service'
+
+/** How many recent samples each tile keeps for sparkline / chart rendering. */
+const TILE_BUFFER_SIZE = 60
+
+interface TileRuntime {
+    /** Rolling buffer of recent numeric samples (oldest-first). */
+    samples: Sample[]
+    /** Most recent value, numeric or string. Null before the first sample. */
+    latest: number | string | null
+    /** Value just before `latest` — drives the delta chip. */
+    previous: number | null
+    /** Wall-clock ms of the most recent sample for age label. */
+    latestWallMs: number | null
+    /** Error message, when the broker reported one. */
+    error: string | null
+    /** rxjs teardown for this tile's observe() subscription. */
+    sub: Subscription | null
+}
 
 /**
  * A tab rendering one dashboard. Reads the Dashboard by id from
  * `config.store.dashboards[]`, renders its tiles in a 3-column grid.
  *
- * M4.1 scope: layout + static tile components. Tile data comes from
- * `mockData()` — a deterministic stub per tile.id so you can see the
- * grid, tile shapes, and theming without any data plumbing. M4.2
- * replaces `mockData()` with a shared subscription runner feed.
+ * M4.2a: each tile opens an observe() on the dashboards-side
+ * TelemetryBroker, which dispatches to the gNMI or collector broker
+ * by `tile.source.kind`. Samples are buffered in a rolling 60-slot
+ * ring per tile; the tile components receive the derived TileData
+ * through the same @Input contract the M4.1 mock stub used. Session
+ * tabs still call their source services directly — M4.2b migrates
+ * them so a live tab and a dashboard tile on the same (profile,
+ * path) really share one underlying process.
  */
 @Component({
     selector: 'dashboard-tab',
@@ -19,7 +44,7 @@ import { Sample } from '../util/paths'
     styleUrls: ['./dashboardTab.component.scss'],
     changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class DashboardTabComponent extends BaseTabComponent implements OnInit {
+export class DashboardTabComponent extends BaseTabComponent implements OnInit, OnDestroy {
     @HostBinding('class.dashboard-tab') hostClass = true
 
     @Input() dashboardId!: string
@@ -27,7 +52,15 @@ export class DashboardTabComponent extends BaseTabComponent implements OnInit {
     dashboard: Dashboard | null = null
     missingMessage = ''
 
-    constructor (injector: Injector) {
+    private readonly runtime = new Map<string, TileRuntime>()
+    private readonly destroy$ = new Subject<void>()
+    private ageTicker: ReturnType<typeof setInterval> | null = null
+
+    constructor (
+        injector: Injector,
+        private readonly broker: DashboardsTelemetryBroker,
+        private readonly cdr: ChangeDetectorRef,
+    ) {
         super(injector)
         this.icon = 'fas fa-chart-line'
         this.setTitle('Dashboard')
@@ -40,82 +73,144 @@ export class DashboardTabComponent extends BaseTabComponent implements OnInit {
         this.dashboard = found
         if (found) {
             this.setTitle(found.name || 'Dashboard')
+            for (const tile of found.tiles) {
+                this.startTile(tile)
+            }
+            // Age labels refresh on a timer because samples don't arrive
+            // in time with wall-clock seconds.
+            this.ageTicker = setInterval(() => this.cdr.markForCheck(), 1000)
         } else {
             this.missingMessage = `Dashboard "${this.dashboardId}" not found in config`
         }
+    }
+
+    override ngOnDestroy (): void {
+        this.destroy$.next()
+        this.destroy$.complete()
+        if (this.ageTicker) {
+            clearInterval(this.ageTicker)
+            this.ageTicker = null
+        }
+        for (const r of this.runtime.values()) {
+            r.sub?.unsubscribe()
+        }
+        this.runtime.clear()
+        super.ngOnDestroy()
     }
 
     trackByTileId (_i: number, tile: DashboardTile): string {
         return tile.id
     }
 
-    // TODO(M4.2): replace mockData() with shared subscription runner feed.
-    mockData (tile: DashboardTile): TileData {
-        const seed = this.hashSeed(tile.id)
-        const samples = this.mockSamples(seed, tile.type)
-        const latest = samples.length ? samples[samples.length - 1].v : null
-        const prev = samples.length > 1 ? samples[samples.length - 2].v : null
-
-        if (tile.type === 'value') {
-            return {
-                current: 42,
-                unit: '%',
-                delta: { kind: 'up', label: '+2.1' },
-                ageLabel: '3s',
-            }
-        }
-
-        let delta: TileDelta | undefined
-        if (latest !== null && prev !== null) {
-            const d = latest - prev
-            if (d > 0) {
-                delta = { kind: 'up', label: `▲ +${d.toFixed(2)}` }
-            } else if (d < 0) {
-                delta = { kind: 'down', label: `▼ ${d.toFixed(2)}` }
-            } else {
-                delta = { kind: 'same', label: '·' }
-            }
-        }
-
-        return {
-            current: latest !== null ? Number(latest.toFixed(2)) : null,
-            unit: tile.type === 'chart' ? 'ms' : '',
-            samples,
-            delta,
-            ageLabel: '2s',
-        }
-    }
-
     /**
-     * Deterministic mock series — slow sine wave + light noise seeded
-     * off the tile id so the chart actually looks like something and
-     * the same tile always shows the same series between renders.
+     * Resolve a tile to its live TileData. Called on each CD cycle.
+     * Returns null-current until the first sample arrives — tile
+     * components render `—` for null and keep the structural shape.
      */
-    private mockSamples (seed: number, kind: 'value' | 'sparkline' | 'chart'): Sample[] {
-        if (kind === 'value') { return [] }
-        const count = 30
-        const now = Date.now()
-        const out: Sample[] = []
-        for (let i = 0; i < count; i++) {
-            const phase = seed * 0.37 + i * 0.3
-            const base = 50 + Math.sin(phase) * 20
-            const noise = this.deterministicNoise(seed + i) * 6
-            out.push({ t: now - (count - 1 - i) * 1000, v: base + noise })
+    tileData (tile: DashboardTile): TileData {
+        const r = this.runtime.get(tile.id)
+        if (!r) {
+            return { current: null }
         }
-        return out
+        if (r.error) {
+            return { current: null, unit: undefined }
+        }
+        const current = r.latest
+        const delta = this.computeDelta(r.latest, r.previous)
+        const ageLabel = r.latestWallMs ? formatAge(Date.now() - r.latestWallMs) : undefined
+        return {
+            current,
+            samples: tile.type === 'value' ? undefined : [...r.samples],
+            delta,
+            ageLabel,
+        }
     }
 
-    private hashSeed (s: string): number {
-        let h = 2166136261
-        for (let i = 0; i < s.length; i++) {
-            h ^= s.charCodeAt(i)
-            h = (h * 16777619) >>> 0
-        }
-        return h % 1000
+    /** Error message for a tile, or '' when the stream is healthy or pending. */
+    tileError (tile: DashboardTile): string {
+        return this.runtime.get(tile.id)?.error ?? ''
     }
 
-    private deterministicNoise (n: number): number {
-        const x = Math.sin(n * 12.9898) * 43758.5453
-        return x - Math.floor(x) - 0.5
+    private startTile (tile: DashboardTile): void {
+        const r: TileRuntime = {
+            samples: [],
+            latest: null,
+            previous: null,
+            latestWallMs: null,
+            error: null,
+            sub: null,
+        }
+        this.runtime.set(tile.id, r)
+        r.sub = this.broker.observe(tile.source, tile.path)
+            .pipe(takeUntil(this.destroy$))
+            .subscribe({
+                next: (s: TelemetrySample) => this.applySample(tile, r, s),
+                error: (err: Error) => {
+                    r.error = err.message || 'Stream error'
+                    this.cdr.markForCheck()
+                },
+                complete: () => {
+                    // Stream closed server-side — show the latest
+                    // known value with an age-only label; no error.
+                },
+            })
     }
+
+    private applySample (tile: DashboardTile, r: TileRuntime, s: TelemetrySample): void {
+        if (s.kind === 'delete') {
+            return
+        }
+        const numericValue = coerceNumber(s.value)
+        // Chart / sparkline want a continuous numeric series. Value
+        // tile may show a string label too.
+        if (tile.type !== 'value' && numericValue === null) {
+            return
+        }
+
+        if (tile.type !== 'value' && numericValue !== null) {
+            r.samples.push({ t: Math.floor(s.timestampNs / 1_000_000), v: numericValue })
+            if (r.samples.length > TILE_BUFFER_SIZE) {
+                r.samples.splice(0, r.samples.length - TILE_BUFFER_SIZE)
+            }
+        }
+
+        const prevLatest = r.latest
+        if (typeof prevLatest === 'number') {
+            r.previous = prevLatest
+        } else if (numericValue !== null) {
+            r.previous = r.previous
+        }
+        r.latest = numericValue !== null ? Number(numericValue.toFixed(2)) : (s.value == null ? null : String(s.value))
+        r.latestWallMs = Date.now()
+        this.cdr.markForCheck()
+    }
+
+    private computeDelta (latest: number | string | null, previous: number | null): TileDelta | undefined {
+        if (typeof latest !== 'number' || previous === null) {
+            return undefined
+        }
+        const d = latest - previous
+        if (d > 0) { return { kind: 'up', label: `▲ +${d.toFixed(2)}` } }
+        if (d < 0) { return { kind: 'down', label: `▼ ${d.toFixed(2)}` } }
+        return { kind: 'same', label: '·' }
+    }
+}
+
+function coerceNumber (v: unknown): number | null {
+    if (typeof v === 'number' && Number.isFinite(v)) { return v }
+    if (typeof v === 'string') {
+        const n = Number(v)
+        return Number.isFinite(n) ? n : null
+    }
+    return null
+}
+
+function formatAge (ms: number): string {
+    if (ms < 2000) { return '·' }
+    const sec = Math.round(ms / 1000)
+    if (sec < 60) { return `${sec}s` }
+    const min = Math.round(sec / 60)
+    if (min < 60) { return `${min}m` }
+    const hr = Math.round(min / 60)
+    return `${hr}h`
 }

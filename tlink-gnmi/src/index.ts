@@ -11,6 +11,7 @@ import { GnmiPasswordStorageService } from './services/passwordStorage.service'
 import { GnmiValueFormatterService } from './services/valueFormatter.service'
 import { GnmiPathCatalogService } from './services/pathCatalog.service'
 import { GnmiHistoryRetentionService } from './services/historyRetention.service'
+import { GnmiTelemetryBroker } from './services/telemetryBroker.service'
 
 import { GnmiProfilesService } from './profiles'
 import { GnmiRecoveryProvider } from './recoveryProvider'
@@ -50,6 +51,7 @@ import { GnmiSessionTabComponent } from './components/gnmiSessionTab.component'
         GnmiValueFormatterService,
         GnmiPathCatalogService,
         GnmiHistoryRetentionService,
+        GnmiTelemetryBroker,
         GnmiProfilesService,
     ],
     declarations: [
@@ -63,5 +65,6 @@ export default class GnmiModule { }
 export * from './api'
 export { GnmiService } from './services/gnmi.service'
 export { GnmicDiscoveryService } from './services/gnmicDiscovery.service'
+export { GnmiTelemetryBroker } from './services/telemetryBroker.service'
 export { GnmiProfilesService } from './profiles'
 export { GnmiSessionTabComponent } from './components/gnmiSessionTab.component'

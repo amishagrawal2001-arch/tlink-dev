@@ -32,7 +32,9 @@
     "@angular/platform-browser": "^15",
     "@ng-bootstrap/ng-bootstrap": "^14",
     "rxjs": "^7",
+    "tlink-collector": "*",
     "tlink-core": "*",
+    "tlink-gnmi": "*",
     "tlink-settings": "*",
     "tlink-terminal": "*"
   }

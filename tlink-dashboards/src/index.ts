@@ -6,6 +6,7 @@ import TlinkCoreModule, { ConfigProvider, ToolbarButtonProvider } from 'tlink-co
 
 import { DashboardsConfigProvider } from './config'
 import { DashboardsButtonProvider } from './buttonProvider'
+import { DashboardsTelemetryBroker } from './services/telemetryBroker.service'
 import { DashboardTabComponent } from './components/dashboardTab.component'
 import { ValueTileComponent } from './components/tiles/valueTile.component'
 import { SparklineTileComponent } from './components/tiles/sparklineTile.component'
@@ -36,6 +37,7 @@ import { ChartTileComponent } from './components/tiles/chartTile.component'
     providers: [
         { provide: ConfigProvider, useClass: DashboardsConfigProvider, multi: true },
         { provide: ToolbarButtonProvider, useClass: DashboardsButtonProvider, multi: true },
+        DashboardsTelemetryBroker,
     ],
     declarations: [
         DashboardTabComponent,
@@ -48,6 +50,7 @@ import { ChartTileComponent } from './components/tiles/chartTile.component'
 export default class DashboardsModule { }
 
 export * from './api'
+export { DashboardsTelemetryBroker } from './services/telemetryBroker.service'
 export { DashboardTabComponent } from './components/dashboardTab.component'
 export { ValueTileComponent } from './components/tiles/valueTile.component'
 export { SparklineTileComponent } from './components/tiles/sparklineTile.component'

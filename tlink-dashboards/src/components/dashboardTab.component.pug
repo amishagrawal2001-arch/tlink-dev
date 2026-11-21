@@ -9,10 +9,12 @@
     .dashboard-grid(*ngIf='dashboard')
         // TODO(M4.3): mobile-collapse grid to 1 column at narrow widths.
         ng-container(*ngFor='let tile of dashboard.tiles; trackBy: trackByTileId')
-            .tile-slot([ngSwitch]='tile.type')
-                dashboard-value-tile(*ngSwitchCase='"value"', [tile]='tile', [data]='mockData(tile)')
-                dashboard-sparkline-tile(*ngSwitchCase='"sparkline"', [tile]='tile', [data]='mockData(tile)')
-                dashboard-chart-tile(*ngSwitchCase='"chart"', [tile]='tile', [data]='mockData(tile)')
-                .unknown-tile(*ngSwitchDefault)
-                    .unknown-type Unknown tile type:&nbsp;
-                        code.mono {{ tile.type }}
+            .tile-slot([class.tile-error]='tileError(tile)')
+                .tile-error-banner(*ngIf='tileError(tile)') {{ tileError(tile) }}
+                ng-container([ngSwitch]='tile.type')
+                    dashboard-value-tile(*ngSwitchCase='"value"', [tile]='tile', [data]='tileData(tile)')
+                    dashboard-sparkline-tile(*ngSwitchCase='"sparkline"', [tile]='tile', [data]='tileData(tile)')
+                    dashboard-chart-tile(*ngSwitchCase='"chart"', [tile]='tile', [data]='tileData(tile)')
+                    .unknown-tile(*ngSwitchDefault)
+                        .unknown-type Unknown tile type:&nbsp;
+                            code.mono {{ tile.type }}

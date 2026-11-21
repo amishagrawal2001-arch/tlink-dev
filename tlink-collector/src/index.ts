@@ -9,6 +9,7 @@ import { CollectorMockService } from './services/mock.service'
 import { PrometheusCollectorService } from './services/prometheus.service'
 import { CollectorValueFormatterService } from './services/valueFormatter.service'
 import { CollectorHistoryRetentionService } from './services/historyRetention.service'
+import { CollectorTelemetryBroker } from './services/telemetryBroker.service'
 import { CollectorProfilesService } from './profiles'
 import { CollectorRecoveryProvider } from './recoveryProvider'
 import { CollectorProfileSettingsComponent } from './components/collectorProfileSettings.component'
@@ -46,6 +47,7 @@ import { CollectorSessionTabComponent } from './components/collectorSessionTab.c
         CollectorProfilesService,
         CollectorValueFormatterService,
         CollectorHistoryRetentionService,
+        CollectorTelemetryBroker,
     ],
     declarations: [
         CollectorProfileSettingsComponent,
@@ -57,5 +59,6 @@ export default class CollectorModule { }
 
 export * from './api'
 export { CollectorMockService } from './services/mock.service'
+export { CollectorTelemetryBroker } from './services/telemetryBroker.service'
 export { CollectorProfilesService } from './profiles'
 export { CollectorSessionTabComponent } from './components/collectorSessionTab.component'
