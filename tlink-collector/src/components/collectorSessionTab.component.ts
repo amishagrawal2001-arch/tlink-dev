@@ -908,6 +908,324 @@ export class CollectorSessionTabComponent extends BaseTabComponent implements On
         this.hoverIndex = null
     }
 
+    // ─── Report download (HTML) ─────────────────────────────────────
+
+    /**
+     * Trigger a download of the current session state as a self-
+     * contained HTML file. Includes source metadata, a compact
+     * source-config table, Latest values with sparklines, and
+     * Graphical view with charts — everything inline (SVG + CSS)
+     * so the file is portable and works offline.
+     */
+    downloadReport (): void {
+        const html = this.buildReportHtml()
+        const blob = new Blob([html], { type: 'text/html' })
+        const url = URL.createObjectURL(blob)
+        const stamp = this.formatClock(this.now, true).replace(/:/g, '-')
+        const dateStr = new Date(this.now).toISOString().slice(0, 10)
+        const safeName = (this.profile.name || 'collector').replace(/[^a-zA-Z0-9._-]/g, '_')
+        const filename = `collector-report-${safeName}-${dateStr}-${stamp}.html`
+
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        // Free the object URL after the browser has picked it up.
+        setTimeout(() => URL.revokeObjectURL(url), 1000)
+
+        this.notifications.info(`Report saved as ${filename}`)
+    }
+
+    /**
+     * Serialize the session's visible state as a self-contained HTML
+     * document. Inline CSS + inline SVG so the file is one artifact
+     * with no external deps — safe to share via email / attach to a
+     * ticket. Chart rendering reuses the same paths the app draws,
+     * just embedded at a fixed size.
+     */
+    private buildReportHtml (): string {
+        const stamp = new Date(this.now).toISOString()
+        const p = this.profile
+        const opts = p.options
+        const source = opts.source
+        const groups = this.latestGroups
+        const graphicalMetric = this.selectedGraphicalMetric
+        const { graphicalCards } = this
+
+        const escape = (s: string): string => s
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+
+        // Sparkline SVG for a single entry (Latest view size).
+        const sparkSvg = (entry: LatestEntry): string => {
+            const s = this.sparklinePaths(entry)
+            if (!s) { return '<span class="dash">—</span>' }
+            return `<svg viewBox="0 0 100 22" preserveAspectRatio="none" class="spark">
+                <path class="fill" d="${escape(s.fill)}"/>
+                <path class="line" d="${escape(s.line)}"/>
+                <circle class="endpoint" cx="${s.endX}" cy="${s.endY}" r="2.5"/>
+            </svg>`
+        }
+
+        // Full chart SVG for a Graphical card.
+        const chartSvg = (card: GraphCard): string => {
+            const c = this.chartPaths(card.entry)
+            if (!c) { return '<span class="dash">—</span>' }
+            const minLabel = escape(c.singleSample ? '' : this.compactNumber(c.min))
+            const maxLabel = escape(c.singleSample ? '' : this.compactNumber(c.max))
+            return `<svg viewBox="0 0 100 50" preserveAspectRatio="none" class="chart">
+                <line class="grid" x1="0" y1="12" x2="100" y2="12"/>
+                <line class="grid" x1="0" y1="25" x2="100" y2="25"/>
+                <line class="grid" x1="0" y1="38" x2="100" y2="38"/>
+                <path class="area" d="${escape(c.area)}"/>
+                <path class="line" d="${escape(c.line)}"/>
+                <circle class="endpoint" cx="${c.endX}" cy="${c.endY}" r="2.5"/>
+                ${minLabel ? `<text class="y-min" x="1" y="48">${minLabel}</text>` : ''}
+                ${maxLabel ? `<text class="y-max" x="1" y="10">${maxLabel}</text>` : ''}
+            </svg>`
+        }
+
+        // Auth type derived from options presence (never emit the credential value).
+        const authType = opts.bearerToken ? 'bearer' : (opts.username ? 'basic' : 'none')
+        const scrapeSec = opts.scrapeIntervalSec ?? 0
+        const intervalLabel = scrapeSec > 0 ? `${scrapeSec}s` : '—'
+
+        // Source section — one row describing the scrape endpoint.
+        // Shape differs per source kind (prometheus has URL + auth +
+        // filter + TLS; mock has scenario + host count).
+        const sourceRow = source === 'prometheus' ? `
+            <tr>
+                <td class="mono path">${escape(opts.url || '—')}</td>
+                <td class="mono num">${escape(intervalLabel)}</td>
+                <td class="mono">${escape(opts.metricFilter || '—')}</td>
+                <td class="mono">${opts.insecureTls ? '<span class="chip chip-grey">insecure</span>' : 'verify'}</td>
+                <td class="mono">${escape(authType)}</td>
+            </tr>` : `
+            <tr>
+                <td class="mono">${escape(opts.mock?.scenario ?? '—')}</td>
+                <td class="mono num">${opts.mock?.hostCount ?? 0}</td>
+                <td class="mono num">${escape(intervalLabel)}</td>
+            </tr>`
+
+        const sourceTableHead = source === 'prometheus'
+            ? '<tr><th>URL</th><th class="right">Interval</th><th>Filter</th><th>TLS</th><th>Auth</th></tr>'
+            : '<tr><th>Scenario</th><th class="right">Hosts</th><th class="right">Interval</th></tr>'
+
+        const groupSections = groups.map(g => `
+            <section class="lv-group">
+                <header class="lv-group-head">
+                    <span class="mono">${escape(g.prefixPath)}</span>
+                    ${g.key ? `<span class="chip chip-blue">${escape(g.key)}</span>` : ''}
+                    <span class="count">${g.rows.length} leaf${g.rows.length === 1 ? '' : 'es'}</span>
+                </header>
+                <table class="lv">
+                    <thead>
+                        <tr><th>Path</th><th>History</th><th class="right">Value</th><th class="right">Δ</th><th class="right">Age</th></tr>
+                    </thead>
+                    <tbody>
+                        ${g.rows.map(row => {
+        const delta = this.deltaOf(row.entry)
+        return `
+                            <tr>
+                                <td class="mono path">${escape(row.shortPath)}</td>
+                                <td class="spark-cell">${sparkSvg(row.entry)}</td>
+                                <td class="mono num">${escape(row.entry.formatted.value)}${row.entry.formatted.unit ? ` <span class="unit">${escape(row.entry.formatted.unit)}</span>` : ''}</td>
+                                <td class="mono num delta-${delta.kind}">${escape(delta.label)}</td>
+                                <td class="mono num">${escape(this.ageLabel(row.entry))}</td>
+                            </tr>`
+    }).join('')}
+                    </tbody>
+                </table>
+            </section>
+        `).join('')
+
+        const graphicalSection = graphicalMetric && graphicalCards.length ? `
+            <section class="graphical" id="graphical">
+                <h2>Graphical — ${escape(graphicalMetric)}</h2>
+                <div class="gr-grid">
+                    ${graphicalCards.map(card => {
+        const delta = this.deltaOf(card.entry)
+        const c = this.chartPaths(card.entry)
+        return `
+                        <div class="gr-card">
+                            <div class="gr-head"><strong>${escape(card.label)}</strong></div>
+                            <div class="gr-value mono">${c ? escape(c.currentLabel) : ''}<span class="unit">${c ? escape(c.currentUnit) : ''}</span></div>
+                            ${chartSvg(card)}
+                            <div class="gr-foot">
+                                <span class="mono">${c && !c.singleSample ? `${c.sampleCount} samples · ${escape(c.windowSpanLabel)}` : ''}</span>
+                                <span class="mono delta-${delta.kind}">${escape(delta.label)}</span>
+                            </div>
+                        </div>
+                    `
+    }).join('')}
+                </div>
+            </section>
+        ` : ''
+
+        return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Collector report — ${escape(p.name)}</title>
+<style>
+:root {
+    --bg: #0f1419; --panel: #1a2028; --line: #2a3441;
+    --text: #e6edf3; --muted: #7d8590; --accent: #58a6ff;
+    --good: #3fb950; --warn: #d29922; --crit: #f85149;
+}
+@media (prefers-color-scheme: light) {
+    :root {
+        --bg: #f6f8fa; --panel: #ffffff; --line: #d0d7de;
+        --text: #1f2328; --muted: #656d76; --accent: #0969da;
+        --good: #1a7f37; --warn: #9a6700; --crit: #cf222e;
+    }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.5; margin: 0; padding: 32px 40px;
+}
+/* Anchor offset so a jump doesn't jam the section title under the sticky nav. */
+:target { scroll-margin-top: 72px; }
+h2 { scroll-margin-top: 72px; }
+.mono { font-family: 'SF Mono', 'Menlo', 'Source Code Pro', Consolas, monospace; font-variant-numeric: tabular-nums; }
+.num { text-align: right; }
+.right { text-align: right; }
+.dash { color: var(--muted); }
+.unit { color: var(--muted); font-size: 0.9em; }
+h1 { margin: 0 0 4px; font-size: 24px; font-weight: 600; }
+h2 { margin: 24px 0 12px; font-size: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.eyebrow { text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); font-size: 11px; font-weight: 600; }
+.meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin: 16px 0 24px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.meta-grid .k { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); font-weight: 600; margin-bottom: 2px; }
+.meta-grid .v { font-family: 'SF Mono', monospace; font-size: 13px; color: var(--text); }
+.meta-grid .v.big { font-size: 20px; font-weight: 600; }
+table { width: 100%; border-collapse: collapse; margin: 8px 0 20px; font-size: 12px; }
+th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+th { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); font-weight: 600; }
+tbody tr:hover { background: var(--panel); }
+.path { max-width: 500px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spark-cell { width: 120px; }
+svg.spark { width: 100%; height: 22px; overflow: visible; }
+svg.spark .line { fill: none; stroke: var(--accent); stroke-width: 1.4; }
+svg.spark .fill { fill: var(--accent); opacity: 0.14; stroke: none; }
+svg.spark .endpoint { fill: var(--accent); stroke: var(--bg); stroke-width: 1.5; }
+svg.chart { width: 100%; height: 60px; overflow: visible; }
+svg.chart .line { fill: none; stroke: var(--accent); stroke-width: 1.4; }
+svg.chart .area { fill: var(--accent); opacity: 0.14; }
+svg.chart .grid { stroke: var(--line); stroke-width: 0.5; stroke-dasharray: 2 3; }
+svg.chart .endpoint { fill: var(--accent); stroke: var(--panel); stroke-width: 2; }
+svg.chart .y-min, svg.chart .y-max { font-family: 'SF Mono', monospace; font-size: 7px; fill: var(--muted); }
+.chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-family: 'SF Mono', monospace; font-size: 10px; font-weight: 500; margin: 0 4px; }
+.chip-blue { background: rgba(88, 166, 255, 0.15); color: var(--accent); }
+.chip-green { background: rgba(63, 185, 80, 0.15); color: var(--good); }
+.chip-grey { background: var(--panel); color: var(--muted); }
+.count { margin-left: auto; color: var(--muted); font-family: 'SF Mono', monospace; font-size: 11px; }
+.lv-group-head { display: flex; align-items: center; gap: 10px; padding: 6px 0 6px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.lv-group { margin-bottom: 20px; }
+.delta-up { color: var(--good); }
+.delta-down { color: var(--crit); }
+.delta-changed { color: var(--warn); }
+.delta-same { color: var(--muted); }
+.gr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.gr-card { padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.gr-head { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.gr-head strong { color: var(--text); font-weight: 500; }
+.gr-value { font-size: 20px; font-weight: 600; margin-bottom: 6px; }
+.gr-foot { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 6px; }
+footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 11px; color: var(--muted); text-align: center; }
+.footer-sep { margin: 0 8px; opacity: 0.5; }
+.back-to-top { color: var(--muted); text-decoration: none; }
+.back-to-top:hover { color: var(--text); text-decoration: underline; }
+
+/* Sticky top nav — anchor links to jump between sections. Sits under
+   the h1 so scrolling still hides it initially but sticks once the
+   user scrolls into the content. Backdrop-filter blurs the content
+   behind so it's readable over dense tables. */
+.report-nav {
+    position: sticky;
+    top: 0;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    margin: 8px -40px 24px;
+    padding: 10px 40px;
+    background: color-mix(in srgb, var(--bg) 90%, transparent);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--line);
+    z-index: 10;
+    font-size: 12px;
+}
+.report-nav a {
+    color: var(--muted);
+    text-decoration: none;
+    padding: 4px 10px;
+    border-radius: 5px;
+    font-weight: 500;
+    transition: color 0.12s, background 0.12s;
+}
+.report-nav a:hover {
+    color: var(--text);
+    background: var(--panel);
+}
+@media (prefers-reduced-motion: reduce) {
+    .report-nav a { transition: none; }
+}
+</style>
+</head>
+<body id="top">
+<span class="eyebrow">Collector Session Report</span>
+<h1>${escape(p.name)}</h1>
+
+<nav class="report-nav" aria-label="Report sections">
+    <a href="#overview">Overview</a>
+    <a href="#source">Source</a>
+    <a href="#latest-values">Latest values</a>
+    ${graphicalMetric && graphicalCards.length ? '<a href="#graphical">Graphical</a>' : ''}
+</nav>
+
+<section id="overview">
+<div class="meta-grid">
+    <div><div class="k">Source</div><div class="v">${escape(source)}</div></div>
+    <div><div class="k">${source === 'prometheus' ? 'URL' : 'Scenario'}</div><div class="v">${escape(source === 'prometheus' ? (opts.url || '—') : (opts.mock?.scenario ?? '—'))}</div></div>
+    <div><div class="k">Scrape interval</div><div class="v">${escape(intervalLabel)}</div></div>
+    ${source === 'prometheus' && opts.metricFilter ? `<div><div class="k">Metric filter</div><div class="v">${escape(opts.metricFilter)}</div></div>` : ''}
+    <div><div class="k">Unique paths</div><div class="v big">${this.latestByPath.size.toLocaleString('en-US')}</div></div>
+    <div><div class="k">Samples received</div><div class="v big">${this.totalReceived.toLocaleString('en-US')}</div></div>
+    <div><div class="k">Retention (days)</div><div class="v">${opts.savedHistoryDays ?? 0}</div></div>
+    <div><div class="k">Report generated</div><div class="v">${escape(stamp)}</div></div>
+</div>
+</section>
+
+<h2 id="source">Source</h2>
+<table>
+    <thead>${sourceTableHead}</thead>
+    <tbody>${sourceRow}</tbody>
+</table>
+
+<h2 id="latest-values">Latest values</h2>
+${groups.length ? groupSections : '<p class="dash">No values recorded.</p>'}
+
+${graphicalSection}
+
+<footer>
+    Generated by tlink-collector · ${escape(stamp)}
+    <span class="footer-sep">·</span>
+    <a href="#top" class="back-to-top">↑ Back to top</a>
+</footer>
+</body>
+</html>`
+    }
+
     // ─── Helpers ────────────────────────────────────────────────────
 
     private rateUnit (path: string): string {

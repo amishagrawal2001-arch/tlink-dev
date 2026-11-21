@@ -54,6 +54,13 @@
         button.toolbar-btn(*ngIf='viewMode === "wire"', (click)='exportJsonl()')
             i.fas.fa-copy.me-1
             span JSONL
+        button.toolbar-btn(
+            *ngIf='latestByPath.size || totalReceived',
+            (click)='downloadReport()',
+            title='Download session as a self-contained HTML report'
+        )
+            i.fas.fa-file-download.me-1
+            span Report
 
     //- ───────────── Wire log ─────────────
     .stream(*ngIf='viewMode === "wire"')
