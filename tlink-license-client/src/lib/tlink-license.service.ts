@@ -1010,9 +1010,51 @@ export class TlinkLicenseService implements OnDestroy {
         this.emit()
     }
 
-    /** True when the app should refuse to operate (hard-block). */
+    /**
+     * True when the app should refuse to start NEW sessions. This is the
+     * gate `profiles.service.openNewTabForProfile` consults — existing tabs
+     * stay read-only-but-visible, Settings stays reachable, but no new SSH,
+     * RDP, gNMI, collector, serial, telnet session can be opened.
+     *
+     * Covers every non-active state: `expired` (trial / paid lapsed),
+     * `invalid` (SEAT_REVOKED, DEVICE_LIMIT_REACHED, SIGNATURE_INVALID,
+     * DEVICE_MISMATCH, …), and `unauthenticated` (sign-out AND the
+     * expired-offline-code path, which drops to `unauthenticated` after
+     * the bundle fails re-verification on relaunch). A brief `unknown`
+     * state during bootstrap is also blocked — bootstrap resolves fast,
+     * and letting a user race it would leak access.
+     *
+     * A user whose trial is still running is `active` (TRIAL billing),
+     * so this doesn't gate fresh installs during their trial window.
+     */
     get shouldBlockApp (): boolean {
         return this.licenseStatus !== 'active'
+    }
+
+    /**
+     * Human-readable reason for the current block, keyed off licenseStatus
+     * and lastReasonCode. The UI shows this verbatim when a new-session
+     * open is refused.
+     */
+    get blockedReason (): string {
+        if (!this.shouldBlockApp) {return ''}
+        if (this.licenseStatus === 'expired') {
+            return 'License expired — reactivate to open new sessions. Existing tabs stay read-only.'
+        }
+        if (this.licenseStatus === 'invalid') {
+            const code = this.lastReasonCode
+            if (code === 'SEAT_REVOKED') {
+                return 'Your seat was revoked — contact your admin to open new sessions.'
+            }
+            if (code === 'DEVICE_LIMIT_REACHED') {
+                return 'Device limit reached — deactivate another device to open new sessions.'
+            }
+            return 'License is invalid — reactivate to open new sessions.'
+        }
+        if (this.licenseStatus === 'unauthenticated') {
+            return 'Sign in (or redeem an offline code) to open new sessions.'
+        }
+        return 'License state is resolving — try again in a moment.'
     }
 
     /** True when a trial banner should be shown. */

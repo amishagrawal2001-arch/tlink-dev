@@ -204,17 +204,21 @@ export class ProfilesService {
     }
 
     async openNewTabForProfile <P extends Profile> (profile: PartialProfile<P>, direction: SplitDirection = 'r', inputs?: Record<string, any>): Promise<BaseTabComponent|null> {
-        // Soft read-only gate: license expired / invalid. Blocks NEW
-        // profile sessions (SSH, RDP, collector, gNMI, ...) but leaves
-        // Settings, existing tabs, and the activation dialog itself
-        // reachable — users whose card just failed can still look at
-        // their work while they fix billing. Clicking the Reactivate
-        // pill in the bottom bar opens the activation modal; see
-        // tlink-license-client isReadOnly for the state transitions.
-        if (this.licenseSvc.isReadOnly) {
-            this.notifications.error(this.translate.instant(
-                'License expired — reactivate to open new sessions. Existing tabs are read-only.',
-            ))
+        // Soft gate on every non-active license state: expired (trial /
+        // paid lapsed), invalid (SEAT_REVOKED, DEVICE_LIMIT_REACHED, …),
+        // and unauthenticated (sign-out AND the expired-offline-code
+        // relaunch path). Blocks NEW profile sessions (SSH, RDP, gNMI,
+        // collector, serial, telnet) but leaves Settings, existing tabs
+        // and the activation dialog reachable — users whose card just
+        // failed can still look at their work while they fix billing,
+        // users who just signed out see a clear "sign in" prompt instead
+        // of silently getting tabs they shouldn't have. Previously this
+        // gated on `isReadOnly` which excluded `unauthenticated` —
+        // audit finding #6 — so sign-out and offline-code-expiry left a
+        // hole where new sessions still opened. shouldBlockApp is now
+        // the real gate; blockedReason supplies the state-aware message.
+        if (this.licenseSvc.shouldBlockApp) {
+            this.notifications.error(this.translate.instant(this.licenseSvc.blockedReason))
             return null
         }
         const params = await this.newTabParametersForProfile(profile)
