@@ -128,7 +128,6 @@ a:hover { text-decoration: underline; }
     <a href="#shortcuts">Keyboard Shortcuts</a>
     <a href="#ai">AI Assistant</a>
     <a href="#agent">AI Agent (coding + lab)</a>
-    <a href="#copilot-agent">Copilot / VS Code Agent</a>
     <a href="#intellij">IntelliJ Bridge</a>
     <a href="#tabby">Tabby (Self-hosted AI)</a>
     <a href="#sharing">Session Sharing &amp; WebSocket</a>
@@ -244,7 +243,7 @@ a:hover { text-decoration: underline; }
 <p>When the AI Assistant is configured (<b>Settings &rarr; AI Assistant</b>), Studio surfaces inline explain / fix actions from the right-click menu &mdash; selects code, sends it to the configured provider, returns suggestions inline or in the AI sidebar. Works with any AI provider, not just cloud ones &mdash; Ollama / vLLM / Tabby all route through the same path.</p>
 
 <h3>Limits</h3>
-<p>Studio isn't a full IDE &mdash; no language-server integration, no debugger, no project tree. For heavy editing use the IntelliJ Bridge or Copilot Agent to keep your real IDE in the loop; Studio is for quick edits without tab-switching to another window.</p>
+<p>Studio isn't a full IDE &mdash; no language-server integration, no debugger, no project tree. For heavy editing use the IntelliJ Bridge to keep your real IDE in the loop; Studio is for quick edits without tab-switching to another window.</p>
 </div>
 <a href="#" class="back-top">&uarr; Back to top</a>
 
@@ -424,7 +423,7 @@ a:hover { text-decoration: underline; }
 <tr><td><b>Editor</b></td><td><code>get_active_editor_context</code>, <code>get_editor_diagnostics</code>, <code>insert_at_cursor</code>, <code>replace_selection</code></td></tr>
 <tr><td><b>Code intel</b></td><td><code>search_symbols</code>, <code>get_type_info</code>, <code>get_definition</code>, <code>get_references</code>, <code>get_hover_info</code>, <code>get_project_info</code></td></tr>
 <tr><td><b>Git</b></td><td><code>git_status</code>, <code>git_diff</code>, <code>git_log</code>, <code>git_show</code>, <code>git_branch_list</code>, <code>git_add</code>, <code>git_commit</code></td></tr>
-<tr><td><b>External</b></td><td>Any tool exposed by connected MCP servers (see <a href="#copilot-agent">Copilot Agent</a> / <a href="#intellij">IntelliJ Bridge</a>)</td></tr>
+<tr><td><b>External</b></td><td>Any tool exposed by connected MCP servers (see <a href="#intellij">IntelliJ Bridge</a>)</td></tr>
 </table>
 <p>Destructive git operations (<code>reset --hard</code>, <code>push --force</code>, <code>branch -D</code>, <code>--amend</code>, <code>--no-verify</code>) are deliberately NOT exposed. The agent will ask you to run those in a terminal if it thinks they're needed.</p>
 
@@ -476,63 +475,6 @@ a:hover { text-decoration: underline; }
 </div>
 <a href="#" class="back-top">&uarr; Back to top</a>
 
-<h2 id="copilot-agent">Copilot / VS Code Agent</h2>
-<div class="section">
-<p>NexTerm ships an MCP server (the <b>Copilot Agent</b>, also known as the <b>VS Code Agent</b> — same plugin) so an external AI client like VS Code's Copilot Chat can drive your terminal sessions: read the buffer, run commands, inspect history, abort stuck jobs.</p>
-
-<h3>One-time setup (inside NexTerm)</h3>
-<p>1. Open <b>Settings &rarr; Copilot Agent</b>.</p>
-<p>2. Set the port (default <code>3001</code>; change only if it collides).</p>
-<p>3. Toggle <b>Start on Boot</b> if you want the server always available.</p>
-<p>4. Toggle <b>Pair Programming Mode</b> on — a confirmation dialog pops up in NexTerm before the AI runs any command. Strongly recommended.</p>
-<p>5. Click <b>Start Server</b>. Status indicator should flip to <span class="badge badge-green">&bull; Running</span>. Server URL becomes <code>http://localhost:3001/sse</code>.</p>
-
-<h3>One-time setup (inside VS Code)</h3>
-<p>Edit your MCP config (usually <code>~/.config/Code/User/globalStorage/mcp.json</code> on Linux/macOS; equivalent on Windows) and add:</p>
-<pre style="background:rgba(255,255,255,0.05);padding:12px;border-radius:6px;font-size:12px;overflow-x:auto;color:#d4d4d8">{
-  "servers": {
-    "nexterm": {
-      "url": "http://localhost:3001/sse",
-      "type": "http"
-    }
-  }
-}</pre>
-<p>Reload VS Code. Copilot Chat (or any other MCP client — Claude Desktop, Cursor, Zed) will now see the NexTerm tools.</p>
-
-<p><b>Stdio alternative:</b> if your client prefers stdio, the Copilot Agent settings page shows a path to the local node entry — add it as <code>{ "type": "stdio", "command": "node", "args": ["&lt;path-from-settings&gt;"] }</code>.</p>
-
-<h3>Things you can ask the AI</h3>
-<table>
-<tr><th>Ask</th><th>Tool used</th></tr>
-<tr><td><i>"What's in my first terminal session?"</i></td><td><code>get_terminal_buffer</code></td></tr>
-<tr><td><i>"List all my SSH sessions"</i></td><td><code>get_ssh_session_list</code></td></tr>
-<tr><td><i>"Run <code>npm test</code> in session 1"</i></td><td><code>execute_command</code> (approval dialog if Pair Mode is on)</td></tr>
-<tr><td><i>"What commands are still running?"</i></td><td><code>list_running_commands</code></td></tr>
-<tr><td><i>"Show me the output of the last command"</i></td><td><code>get_command_output</code></td></tr>
-<tr><td><i>"Abort the stuck process in session 0"</i></td><td><code>abort_command</code> (sends Ctrl+C)</td></tr>
-</table>
-
-<h3>Toolbar buttons the plugin adds</h3>
-<table>
-<tr><td><b>Open Copilot Chat</b></td><td>Opens VS Code directly</td></tr>
-<tr><td><b>Command History</b></td><td>Browse past commands + outputs</td></tr>
-<tr><td><b>Running Commands</b></td><td>Monitor / abort active commands across all sessions</td></tr>
-</table>
-
-<h3>Safety notes</h3>
-<p>Leave <b>Pair Programming Mode</b> on. An AI can issue <code>rm -rf /</code> just as easily as <code>ls</code>; the approval dialog is the last line of defense.</p>
-<p>The AI Assistant's risk-assessment flow (Low / Medium / High / Critical bands with password protection on high-risk) applies to commands that arrive via MCP too.</p>
-
-<h3>Troubleshooting</h3>
-<table>
-<tr><td>Server won't start</td><td>Port collision (try <code>3002</code>), firewall, or stale process on old port. Check NexTerm logs.</td></tr>
-<tr><td>VS Code doesn't see the server</td><td>Reload VS Code after editing <code>mcp.json</code>. Verify with <code>curl http://localhost:3001/sse</code> &mdash; should return an SSE handshake.</td></tr>
-<tr><td>Commands silently don't run</td><td>The MCP tools operate on <i>existing</i> terminal tabs &mdash; open at least one session before the AI tries to drive it.</td></tr>
-<tr><td>Approval dialog never appears</td><td>Check Pair Programming Mode is enabled, and the NexTerm window has focus.</td></tr>
-</table>
-</div>
-<a href="#" class="back-top">&uarr; Back to top</a>
-
 <h2 id="intellij">IntelliJ Bridge</h2>
 <div class="section">
 <p>The sibling plugin to the Copilot / VS Code Agent &mdash; same idea (let an external IDE drive your terminal sessions over an MCP-style bridge) but scoped to IntelliJ-family editors (IDEA, PyCharm, WebStorm, GoLand, CLion, Rider, etc.). Use this when your day job is in IntelliJ and you want to ask the IDE's built-in AI to work with your live terminal buffers.</p>
@@ -551,10 +493,10 @@ a:hover { text-decoration: underline; }
 <p>The <b>laptop-code icon</b> in the left dock opens IntelliJ on the current workspace (if one is detected). Without a detected project, it opens the most recent project. On first click NexTerm asks for the IntelliJ binary path; pick the <code>idea</code> / <code>pycharm</code> / etc. command-line launcher.</p>
 
 <h3>What you can ask from IntelliJ</h3>
-<p>The exact surface depends on which IntelliJ AI integration you use. If your IntelliJ plugin is MCP-aware (e.g., recent JetBrains AI builds, Continue.dev in IntelliJ), you get the same tool set as the VS Code Agent: buffer read, command execution with approval, history, running commands, abort. See the <a href="#copilot-agent">Copilot / VS Code Agent</a> section for the full tool list &mdash; it applies identically here.</p>
+<p>The exact surface depends on which IntelliJ AI integration you use. If your IntelliJ plugin is MCP-aware (recent JetBrains AI builds, Continue.dev in IntelliJ), it can discover NexTerm's tools and read buffers / run commands / inspect history through the same approval flow used by the in-app AI Agent.</p>
 
 <h3>Safety &amp; troubleshooting</h3>
-<p>Keep <b>Pair Programming Mode</b> on (same toggle as the VS Code Agent &mdash; they share the approval flow). If the bridge won't start, verify IntelliJ's built-in server is running (<code>curl http://localhost:63342</code> should return something) and the port isn't held by another IDE instance.</p>
+<p>Keep <b>Pair Programming Mode</b> on so the agent asks before running anything. If the bridge won't start, verify IntelliJ's built-in server is running (<code>curl http://localhost:63342</code> should return something) and the port isn't held by another IDE instance.</p>
 </div>
 <a href="#" class="back-top">&uarr; Back to top</a>
 

@@ -22,8 +22,6 @@ npm-debug.log
 
 builtin-plugins/*
 !builtin-plugins/
-!builtin-plugins/tabby-vscode-agent/
-!builtin-plugins/tabby-vscode-agent/**
 package-lock.json
 yarn-error.log
 

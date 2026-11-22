@@ -26,7 +26,6 @@ const criticalMainPlugins = new Set([
     'tlink-terminal',
     'tlink-electron',
     'tlink-intellij-bridge',
-    'builtin-plugins/tabby-vscode-agent',
 ])
 
 function getStagedFolderName(plugin) {

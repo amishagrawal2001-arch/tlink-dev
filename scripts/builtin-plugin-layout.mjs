@@ -1,5 +1,4 @@
 export const passthroughBuiltinPlugins = [
-    'builtin-plugins/tlink-agent-mcp',
     'tlink-intellij-editor',
 ]
 
@@ -8,6 +7,5 @@ export const passthroughBuiltinPlugins = [
  * Keys are staged folder names under build/builtin-plugins.
  */
 export const passthroughPluginValidation = {
-    'tlink-agent-mcp': 'package.json',
     'tlink-intellij-editor': 'tabby-agent/node/index.js',
 }

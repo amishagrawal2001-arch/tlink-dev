@@ -318,7 +318,7 @@ export class McpToolBridgeService {
         }
 
         throw new Error(
-            `MCP bridge is unavailable at ${baseUrl}. Open Settings > Copilot Agent and start the MCP server.`
+            `MCP bridge is unavailable at ${baseUrl}. Start an MCP server at this URL and try again.`
         );
     }
 

@@ -145,7 +145,6 @@ export class AppRootComponent implements OnInit {
         'sftp',
         'ssh',
         'ai-chat',
-        'copilot-chat',
         'intellij-editor',
         'ai-assistant',
         'tabby-url',
@@ -162,7 +161,6 @@ export class AppRootComponent implements OnInit {
         'ai-chat',
         'ai-assistant',
         'tabby-url',
-        'copilot-chat',
         'share-all-sessions',
         'websocket',
         'open-shared-session-link',
@@ -1039,7 +1037,6 @@ export class AppRootComponent implements OnInit {
             .filter(x => x.locations?.includes(aboveZero ? CommandLocation.RightToolbar : CommandLocation.LeftToolbar))
             .filter(x => !x.label.toLowerCase().includes('toggle ssh connections sidebar'))
             .filter(x => !x.label.toLowerCase().includes('ai assistant')) // Filter AI Assistant from toolbar (only in dock)
-            .filter(x => !x.label.toLowerCase().includes('open copilot')) // Filter Open Copilot Chat from toolbar (only in dock)
             .filter(x => !x.label.toLowerCase().includes('open tabby url')) // Filter Open Tabby URL from toolbar (only in dock)
 
         if (!aboveZero) {
@@ -1590,8 +1587,6 @@ export class AppRootComponent implements OnInit {
                 return 'AI Chat (Ollama / OpenAI / Claude)'
             case 'tabby-url':
                 return this.tabbyUrlCommand?.label || 'Open Tabby URL'
-            case 'copilot-chat':
-                return 'Copilot Agent (Code Assistant)'
             case 'share-all-sessions':
                 return this.shareAllSessionsInProgress
                     ? 'Sharing open sessions...'
@@ -1644,9 +1639,6 @@ export class AppRootComponent implements OnInit {
                 } else if (this.tabbyUrlCommand?.id) {
                     this.commands.run(this.tabbyUrlCommand.id, this.buildCommandContext())
                 }
-                break
-            case 'copilot-chat':
-                this.openCopilotChat()
                 break
             case 'share-all-sessions':
                 void this.shareAllOpenSessionsFromDock()
@@ -2134,40 +2126,6 @@ export class AppRootComponent implements OnInit {
             }
         }).catch((err) => {
             this.logger.warn('Failed to find AI Assistant command:', err)
-        })
-    }
-
-    openCopilotChat (): void {
-        // Open Copilot/Code Editor window directly via IPC (not command search)
-        try {
-            const electron = (window as any).require?.('electron')
-                ?? (window as any).nodeRequire?.('electron')
-            const ipcRenderer = electron?.ipcRenderer
-            if (ipcRenderer) {
-                ipcRenderer.send('app:open-code-editor-window')
-                return
-            }
-        } catch {
-            // Fallback to command search
-        }
-        this.commands.getCommands(this.buildCommandContext()).then(async commands => {
-            const copilotCmd = commands.find(cmd => {
-                const label = cmd.label.toLowerCase() ?? ''
-                return label === 'open copilot chat' || label.includes('copilot')
-            })
-            if (copilotCmd) {
-                await copilotCmd.run()
-                return
-            }
-            this.logger.warn('Open Copilot Chat command not found')
-            await this.platform.showMessageBox({
-                type: 'warning',
-                message: 'Copilot Agent not available',
-                detail: 'Enable the Copilot Agent plugin in Settings > Plugins to use Open Copilot Chat.',
-                buttons: ['OK'],
-            })
-        }).catch((err) => {
-            this.logger.warn('Failed to run Open Copilot Chat:', err)
         })
     }
 

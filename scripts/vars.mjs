@@ -29,7 +29,6 @@ export const builtinPlugins = [
     'tlink-settings',
     'tlink-terminal',
     'tlink-web',
-    'builtin-plugins/tabby-vscode-agent',
     'tlink-community-color-schemes',
     'tlink-ssh',
     'tlink-serial',

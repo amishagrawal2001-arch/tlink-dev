@@ -187,8 +187,8 @@ export function initModuleLookup (userPluginsPath: string): void {
         const repoRoot = getDevRepoRoot()
         paths.unshift(repoRoot)
         const repoBuiltinPluginsPath = path.join(repoRoot, 'builtin-plugins')
-        // Include nested built-in plugin wrappers (e.g., tlink-agent-mcp) for discovery
-        // while keeping module identity rooted at repoRoot.
+        // Include the nested built-in plugin tree for discovery while keeping
+        // module identity rooted at repoRoot.
         paths.push(repoBuiltinPluginsPath)
     }
 
