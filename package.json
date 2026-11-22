@@ -142,9 +142,9 @@
     "node-gyp": "^10.0.0"
   },
   "scripts": {
-    "build": "npm run build:typings && node scripts/build-modules.mjs",
+    "build": "cross-env NODE_OPTIONS=--max-old-space-size=8192 npm run build:typings && cross-env NODE_OPTIONS=--max-old-space-size=8192 node scripts/build-modules.mjs",
     "build:typings": "node scripts/build-typings.mjs",
-    "watch": "cross-env TLINK_DEV=1 webpack --progress --color --watch",
+    "watch": "cross-env TLINK_DEV=1 NODE_OPTIONS=--max-old-space-size=8192 webpack --progress --color --watch",
     "start": "cross-env TLINK_DEV=1 electron app -d --inspect",
     "start:prod": "electron app --debug",
     "prod": "cross-env TLINK_DEV=1 electron app",
