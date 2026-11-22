@@ -753,6 +753,22 @@ export class TlinkLicenseService implements OnDestroy {
     }
 
     /**
+     * True when the current `active` session was activated via an offline
+     * code (no server round-trip). Set exclusively by `applyOfflinePayload`
+     * via the `'offline:'` deviceId prefix — nothing else in the codebase
+     * writes that prefix, so it's a safe invariant. Used by the license
+     * menu to surface an "Offline Code" chip so users and admins can tell
+     * an offline session from an online one at a glance (an online session
+     * briefly showing offlineGrace during server outages is NOT the same
+     * thing).
+     */
+    get isOfflineSession (): boolean {
+        return this.licenseStatus === 'active'
+            && !!this.deviceId
+            && this.deviceId.startsWith('offline:')
+    }
+
+    /**
      * Hours left in the trial — for the "< 1 day" edge case where the day
      * counter has already hit 0 but we haven't actually expired yet. Callers
      * should show this when `trialDaysRemaining === 0` and the trial is still

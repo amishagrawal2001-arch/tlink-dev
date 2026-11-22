@@ -10,13 +10,22 @@ import { LicenseInfo } from '../../models/license.models'
     <div class="tlink-menu">
       <button class="tlink-menu__trigger" (click)="toggleMenu()">
         <span class="tlink-menu__badge" [ngClass]="badgeClass">{{ badgeLabel }}</span>
+        <span class="tlink-menu__badge tlink-menu__badge--offline"
+              *ngIf="isOfflineSession"
+              title="This session was activated with an offline code. No server contact is required; the session lasts until the code's embedded expiry.">
+          Offline Code
+        </span>
         <span class="tlink-menu__caret">&#9662;</span>
       </button>
 
       <div class="tlink-menu__dropdown" *ngIf="open">
         <div class="tlink-menu__header" *ngIf="info?.status === 'active'">
           <span class="tlink-menu__badge" [ngClass]="badgeClass">{{ badgeLabel | uppercase }}</span>
+          <span class="tlink-menu__badge tlink-menu__badge--offline" *ngIf="isOfflineSession">OFFLINE CODE</span>
           <span class="tlink-menu__header-expiry">{{ info?.endDate ? 'Expires ' + info?.endDate : '' }}</span>
+        </div>
+        <div class="tlink-menu__offline-note" *ngIf="isOfflineSession && open">
+          Activated with an offline code &mdash; no server contact required.
         </div>
         <button class="tlink-menu__item" (click)="onAction('activate')" *ngIf="info?.status !== 'active'">
           <span class="tlink-menu__item-icon">🔑</span>
@@ -79,6 +88,28 @@ import { LicenseInfo } from '../../models/license.models'
     .tlink-menu__badge--team { background: #7c3aed; }
     .tlink-menu__badge--expired { background: #dc2626; }
     .tlink-menu__badge--invalid { background: #6b7280; }
+
+    /* Outline chip for offline-code sessions. Lives alongside the tier
+       badge so users can tell an offline session from an online one at a
+       glance; styled as an outlined pill rather than a filled badge so it
+       reads as metadata rather than the primary tier color. */
+    .tlink-menu__badge--offline {
+      background: transparent;
+      color: var(--tlink-dialog-muted, #6b7280);
+      border: 1px solid var(--tlink-border, #d1d5db);
+      font-weight: 500;
+      padding: 1px 6px;
+      letter-spacing: 0.3px;
+    }
+
+    .tlink-menu__offline-note {
+      padding: 8px 12px;
+      font-size: 11px;
+      line-height: 1.4;
+      color: var(--tlink-dialog-muted, #6b7280);
+      background: var(--tlink-menu-item-hover, #f9fafb);
+      border-bottom: 1px solid var(--tlink-border-light, #f3f4f6);
+    }
 
     .tlink-menu__caret {
       font-size: 10px;
@@ -173,6 +204,10 @@ export class LicenseMenuComponent implements OnInit, OnDestroy {
     info: LicenseInfo | null = null
     badgeLabel = ''
     badgeClass = ''
+    // True when the current session was activated with an offline code.
+    // Derived from the service's `isOfflineSession` getter so the template
+    // doesn't have to call a getter on every change-detection cycle.
+    isOfflineSession = false
 
     private _sub?: Subscription
 
@@ -184,6 +219,7 @@ export class LicenseMenuComponent implements OnInit, OnDestroy {
     ngOnInit(): void {
         this._sub = this.licenseService.licenseInfo$.subscribe(info => {
             this.info = info
+            this.isOfflineSession = this.licenseService.isOfflineSession
             this._updateBadge(info)
         })
     }
