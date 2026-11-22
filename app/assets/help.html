@@ -128,7 +128,6 @@ a:hover { text-decoration: underline; }
     <a href="#shortcuts">Keyboard Shortcuts</a>
     <a href="#ai">AI Assistant</a>
     <a href="#agent">AI Agent (coding + lab)</a>
-    <a href="#intellij">IntelliJ Bridge</a>
     <a href="#tabby">Tabby (Self-hosted AI)</a>
     <a href="#sharing">Session Sharing &amp; WebSocket</a>
     <a href="#license">License</a>
@@ -243,7 +242,7 @@ a:hover { text-decoration: underline; }
 <p>When the AI Assistant is configured (<b>Settings &rarr; AI Assistant</b>), Studio surfaces inline explain / fix actions from the right-click menu &mdash; selects code, sends it to the configured provider, returns suggestions inline or in the AI sidebar. Works with any AI provider, not just cloud ones &mdash; Ollama / vLLM / Tabby all route through the same path.</p>
 
 <h3>Limits</h3>
-<p>Studio isn't a full IDE &mdash; no language-server integration, no debugger, no project tree. For heavy editing use the IntelliJ Bridge to keep your real IDE in the loop; Studio is for quick edits without tab-switching to another window.</p>
+<p>Studio isn't a full IDE &mdash; no language-server integration, no debugger, no project tree. Studio is for quick edits without tab-switching to a full editor.</p>
 </div>
 <a href="#" class="back-top">&uarr; Back to top</a>
 
@@ -423,7 +422,7 @@ a:hover { text-decoration: underline; }
 <tr><td><b>Editor</b></td><td><code>get_active_editor_context</code>, <code>get_editor_diagnostics</code>, <code>insert_at_cursor</code>, <code>replace_selection</code></td></tr>
 <tr><td><b>Code intel</b></td><td><code>search_symbols</code>, <code>get_type_info</code>, <code>get_definition</code>, <code>get_references</code>, <code>get_hover_info</code>, <code>get_project_info</code></td></tr>
 <tr><td><b>Git</b></td><td><code>git_status</code>, <code>git_diff</code>, <code>git_log</code>, <code>git_show</code>, <code>git_branch_list</code>, <code>git_add</code>, <code>git_commit</code></td></tr>
-<tr><td><b>External</b></td><td>Any tool exposed by connected MCP servers (see <a href="#intellij">IntelliJ Bridge</a>)</td></tr>
+<tr><td><b>External</b></td><td>Any tool exposed by connected MCP servers</td></tr>
 </table>
 <p>Destructive git operations (<code>reset --hard</code>, <code>push --force</code>, <code>branch -D</code>, <code>--amend</code>, <code>--no-verify</code>) are deliberately NOT exposed. The agent will ask you to run those in a terminal if it thinks they're needed.</p>
 
@@ -472,31 +471,6 @@ a:hover { text-decoration: underline; }
 <p>The plugin ships a small jest suite covering the pieces that have historically drifted: risk-pattern coverage, provider <code>transformMessages</code> round-tripping, <code>withRetry</code> 4xx handling, and history compression. Run from <code>tlink-ai-assistant/</code>:</p>
 <pre><code>./node_modules/.bin/jest</code></pre>
 <p>57 tests across 4 suites; takes ~5 seconds. Any change to the risk catalog, provider message shapes, or retry logic should keep them green.</p>
-</div>
-<a href="#" class="back-top">&uarr; Back to top</a>
-
-<h2 id="intellij">IntelliJ Bridge</h2>
-<div class="section">
-<p>The sibling plugin to the Copilot / VS Code Agent &mdash; same idea (let an external IDE drive your terminal sessions over an MCP-style bridge) but scoped to IntelliJ-family editors (IDEA, PyCharm, WebStorm, GoLand, CLion, Rider, etc.). Use this when your day job is in IntelliJ and you want to ask the IDE's built-in AI to work with your live terminal buffers.</p>
-
-<h3>One-time setup (inside NexTerm)</h3>
-<p>1. Open the left dock, right-click the <b>IntelliJ</b> icon &rarr; settings, or find the bridge under <b>Settings &rarr; IntelliJ Bridge</b>.</p>
-<p>2. Pick the IntelliJ port (default <code>63342</code>, matching IntelliJ's built-in HTTP server).</p>
-<p>3. Click <b>Start Bridge</b>. Status flips to <span class="badge badge-green">&bull; Running</span>.</p>
-
-<h3>One-time setup (inside IntelliJ)</h3>
-<p>1. <b>Settings &rarr; Tools &rarr; Startup/Shutdown Tasks</b> (or <b>Plugins</b> if the matching IntelliJ-side plugin is installed).</p>
-<p>2. Enable IntelliJ's built-in HTTP server (<b>Settings &rarr; Build, Execution, Deployment &rarr; Debugger &rarr; Built-in server</b>, port <code>63342</code>).</p>
-<p>3. If you're using AI Assistant inside IntelliJ (JetBrains AI or a third-party plugin), configure it to discover NexTerm at <code>http://localhost:63342/tlink</code>.</p>
-
-<h3>Click the left-dock icon to open IntelliJ</h3>
-<p>The <b>laptop-code icon</b> in the left dock opens IntelliJ on the current workspace (if one is detected). Without a detected project, it opens the most recent project. On first click NexTerm asks for the IntelliJ binary path; pick the <code>idea</code> / <code>pycharm</code> / etc. command-line launcher.</p>
-
-<h3>What you can ask from IntelliJ</h3>
-<p>The exact surface depends on which IntelliJ AI integration you use. If your IntelliJ plugin is MCP-aware (recent JetBrains AI builds, Continue.dev in IntelliJ), it can discover NexTerm's tools and read buffers / run commands / inspect history through the same approval flow used by the in-app AI Agent.</p>
-
-<h3>Safety &amp; troubleshooting</h3>
-<p>Keep <b>Pair Programming Mode</b> on so the agent asks before running anything. If the bridge won't start, verify IntelliJ's built-in server is running (<code>curl http://localhost:63342</code> should return something) and the port isn't held by another IDE instance.</p>
 </div>
 <a href="#" class="back-top">&uarr; Back to top</a>
 

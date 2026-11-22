@@ -116,7 +116,6 @@ export class AppRootComponent implements OnInit {
     leftDockChunks: LeftDockChunk[] = []
     sshSidePanel: SidePanelRegistration | null = null
     sshSidebarCommand: Command | null = null
-    intellijEditorCommand: Command | null = null
     tabbyUrlCommand: Command | null = null
     bottomPanelVisible = false
     bottomPanelComponent: Type<any> | null = null
@@ -145,7 +144,6 @@ export class AppRootComponent implements OnInit {
         'sftp',
         'ssh',
         'ai-chat',
-        'intellij-editor',
         'ai-assistant',
         'tabby-url',
     ]
@@ -157,7 +155,6 @@ export class AppRootComponent implements OnInit {
         'remote-desktop',
         'ssh',
         // 'code-editor',  // Tlink Studio - deactivated
-        'intellij-editor',
         'ai-chat',
         'ai-assistant',
         'tabby-url',
@@ -1030,7 +1027,6 @@ export class AppRootComponent implements OnInit {
         if (sshCmd) {
             this.sshSidebarCommand = sshCmd
         }
-        this.intellijEditorCommand = all.find(x => x.id === 'intellij-bridge:open-editor') ?? null
         this.tabbyUrlCommand = all.find(x => x.label.toLowerCase().includes('open tabby url')) ?? null
 
         const buttons = all
@@ -1527,9 +1523,6 @@ export class AppRootComponent implements OnInit {
         if (item === 'ssh') {
             return !!(this.sshSidePanel || this.sshSidebarCommand)
         }
-        if (item === 'intellij-editor') {
-            return !!this.intellijEditorCommand
-        }
         if (item === 'tabby-url') {
             return !!this.tabbyUrlCommand
         }
@@ -1579,8 +1572,6 @@ export class AppRootComponent implements OnInit {
                 return this.sshSidePanel?.label || this.sshSidebarCommand?.label || 'SSH sidebar'
             case 'code-editor':
                 return 'Tlink Studio'
-            case 'intellij-editor':
-                return this.intellijEditorCommand?.label || 'Open IntelliJ editor'
             case 'ai-chat':
                 return 'AI Chat'
             case 'ai-assistant':
@@ -1623,9 +1614,6 @@ export class AppRootComponent implements OnInit {
                 break
             case 'code-editor':
                 this.openCodeEditor()
-                break
-            case 'intellij-editor':
-                void this.openIntelliJEditor()
                 break
             case 'ai-chat':
                 void this.openAIChat()
@@ -2086,21 +2074,6 @@ export class AppRootComponent implements OnInit {
             context.tab = tab
         }
         await this.commands.run('tlink-chatgpt:open', context)
-    }
-
-    async openIntelliJEditor (): Promise<void> {
-        const preferredId = this.intellijEditorCommand?.id
-        if (preferredId) {
-            await this.commands.run(preferredId, this.buildCommandContext())
-            return
-        }
-        const commands = await this.commands.getCommands(this.buildCommandContext())
-        const fallback = commands.find(cmd => cmd.id === 'intellij-bridge:open-editor')
-        if (fallback) {
-            await fallback.run()
-            return
-        }
-        this.logger.warn('IntelliJ bridge command not found')
     }
 
     openAIAssistant (): void {

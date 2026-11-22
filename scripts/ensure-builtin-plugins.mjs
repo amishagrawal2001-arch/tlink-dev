@@ -14,7 +14,6 @@ const criticalMainPlugins = new Set([
     'tlink-settings',
     'tlink-terminal',
     'tlink-electron',
-    'tlink-intellij-bridge',
 ])
 
 function getStagedFolderName(plugin) {
