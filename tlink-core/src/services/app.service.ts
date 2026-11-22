@@ -111,13 +111,16 @@ export class AppService {
                     // subsequent launch will restore normally.
                     await this.licenseSvc.bootstrap()
                     if (this.licenseSvc.shouldBlockApp) {
-                        // Leave recovery enabled so new tabs opened AFTER
-                        // reactivation are tracked. Tabs from the prior
-                        // session remain on-disk until the user re-opens
-                        // the app in an active state.
+                        // Recovery deferred — wire a one-shot subscription so
+                        // the user's tabs come back automatically when they
+                        // reactivate in-session, instead of forcing them to
+                        // close and reopen the app. The subscription unsubs
+                        // after the first successful recovery.
+                        this.scheduleRecoveryOnReactivate()
                         this.tabRecovery.enabled = true
                         return
                     }
+                    this.recoveryAlreadyRan = true
                     const tabs = await this.tabRecovery.recoverTabs()
                     for (const tab of tabs) {
                         this.openNewTabRaw(tab)
@@ -183,6 +186,35 @@ export class AppService {
             this.selectTab(this.tabs[newIndex])
         }
         this.tabsChanged.next()
+    }
+
+    /**
+     * One-shot: when the license later flips from blocked to active in-session,
+     * run the deferred tab recovery we skipped at launch and tear down the
+     * subscription. Called by the constructor's recovery gate when the user
+     * launched while blocked. Guards against repeated fires (license flap,
+     * duplicate emissions) by using a flag so recovery runs at most once per
+     * app lifetime.
+     */
+    private recoveryAlreadyRan = false
+    private scheduleRecoveryOnReactivate (): void {
+        if (this.recoveryAlreadyRan) {return}
+        const sub = this.licenseSvc.licenseInfo$.subscribe(async () => {
+            if (this.licenseSvc.shouldBlockApp) {return}
+            if (this.recoveryAlreadyRan) {return}
+            this.recoveryAlreadyRan = true
+            sub.unsubscribe()
+            try {
+                const tabs = await this.tabRecovery.recoverTabs()
+                for (const tab of tabs) {
+                    this.openNewTabRaw(tab)
+                }
+            } catch {
+                // Recovery failure is non-fatal — the user is already in an
+                // active session, just without their prior tabs. They can
+                // still open new ones.
+            }
+        })
     }
 
     /**
