@@ -287,21 +287,22 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
                 { key: 'contextWindow', label: 'Context Window', type: 'number', default: 128000, required: false, placeholder: 'Default: 128000' }
             ]
         },
-        'tabby': {
-            name: 'Tabby',
-            description: 'Self-hosted AI coding assistant from TabbyML (OpenAI-compatible)',
-            icon: 'fa-code',
-            fields: [
-                { key: 'apiKey', label: 'API Key (Auth Token)', type: 'password', required: true, placeholder: 'Your Tabby auth token' },
-                { key: 'baseURL', label: 'Base URL', type: 'text', default: 'http://localhost:8080', required: true, placeholder: 'e.g. http://localhost:8080' },
-                { key: 'model', label: 'Model', type: 'text', default: 'default', required: false, placeholder: 'default (or specific model name)' },
-                { key: 'contextWindow', label: 'Context Window', type: 'number', default: 16384, required: false, placeholder: 'Default: 16384' }
-            ]
-        }
     };
 
     // 本地提供商模板（不需要 API Key）
     localProviderTemplates = {
+        'tabby': {
+            name: 'Tabby (Self-hosted)',
+            description: 'Self-hosted AI coding assistant from TabbyML (OpenAI-compatible). Auth optional — leave API Key blank for a stock local install.',
+            icon: 'fa-code',
+            defaultURL: 'http://localhost:8080',
+            fields: [
+                { key: 'baseURL', label: 'Base URL', type: 'text', default: 'http://localhost:8080', required: true, placeholder: 'e.g. http://localhost:8080' },
+                { key: 'apiKey', label: 'API Key (Optional)', type: 'password', required: false, placeholder: 'Only needed if your Tabby server has auth enabled' },
+                { key: 'model', label: 'Model', type: 'text', default: 'default', required: false, placeholder: 'default (or specific model name, e.g. Qwen2-1.5B-Instruct)' },
+                { key: 'contextWindow', label: 'Context Window', type: 'number', default: 16384, required: false, placeholder: 'Default: 16384' }
+            ]
+        },
         'ollama': {
             name: 'Ollama (Local)',
             description: 'Locally running Ollama service, supporting Llama, Qwen and other models',
@@ -1927,6 +1928,11 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
                     } else {
                         url = `${trimmedBase}/api/tags`;
                     }
+                } else if (name === 'tabby') {
+                    // Tabby serves /v1/health unauthenticated; previously
+                    // this path hit a bare /models which 404s on Tabby
+                    // and permanently showed Offline.
+                    url = `${trimmedBase}/v1/health`;
                 } else {
                     url = trimmedBase.endsWith('/models') ? trimmedBase : `${trimmedBase}/models`;
                 }
@@ -1973,9 +1979,18 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
         try {
             const trimmedBase = baseURL.replace(/\/+$/, '');
             const isOllama = providerName === 'ollama';
-            const url = isOllama && !/\/v1(\/|$)/.test(trimmedBase) && !trimmedBase.endsWith('/models')
-                ? `${trimmedBase}/api/tags`
-                : (trimmedBase.endsWith('/models') ? trimmedBase : `${trimmedBase}/models`);
+            const isTabby = providerName === 'tabby';
+            let url: string;
+            if (isTabby) {
+                // Tabby's /v1/health is public and lightweight — use it
+                // for the Test Connection button so a stock localhost:8080
+                // install returns success (bare /models 404s on Tabby).
+                url = `${trimmedBase}/v1/health`;
+            } else if (isOllama && !/\/v1(\/|$)/.test(trimmedBase) && !trimmedBase.endsWith('/models')) {
+                url = `${trimmedBase}/api/tags`;
+            } else {
+                url = trimmedBase.endsWith('/models') ? trimmedBase : `${trimmedBase}/models`;
+            }
 
             const response = await fetch(url, {
                 method: 'GET',

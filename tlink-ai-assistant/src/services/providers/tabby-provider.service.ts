@@ -79,11 +79,6 @@ export class TabbyProviderService extends BaseAiProvider {
     }
 
     private initializeClient(): void {
-        if (!this.config?.apiKey) {
-            this.logger.warn('Tabby API key not provided');
-            return;
-        }
-
         try {
             const normalizedBaseURL = this.normalizeBaseURL(this.getBaseURL());
             if (!normalizedBaseURL) {
@@ -91,18 +86,29 @@ export class TabbyProviderService extends BaseAiProvider {
                 return;
             }
 
+            // Tabby runs auth-optional by default (`brew services start tabby`,
+            // `docker run tabbyml/tabby`, the built-in install one-liners —
+            // none of them require a bearer token). Only attach the
+            // Authorization header when the user explicitly configured a key,
+            // otherwise localhost deployments fail with 401 against a server
+            // that doesn't check tokens.
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+            };
+            if (this.config?.apiKey) {
+                headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+            }
+
             this.client = axios.create({
                 baseURL: normalizedBaseURL,
                 timeout: this.getTimeout(),
-                headers: {
-                    'Authorization': `Bearer ${this.config.apiKey}`,
-                    'Content-Type': 'application/json'
-                }
+                headers,
             });
 
             this.logger.info('Tabby client initialized', {
                 baseURL: normalizedBaseURL,
-                model: this.config.model || 'default'
+                model: this.config?.model || 'default',
+                authenticated: !!this.config?.apiKey,
             });
         } catch (error) {
             this.logger.error('Failed to initialize Tabby client', error);
@@ -130,13 +136,21 @@ export class TabbyProviderService extends BaseAiProvider {
                     responseType: 'text'
                 });
 
-                // Parse streaming response and collect content
+                // Parse streaming response and collect content. Some Tabby
+                // builds / proxies silently ignore `stream:true` and return
+                // the full chat completion as a single JSON body (no
+                // `data: ` framing). If we never see a data-prefixed line
+                // we fall back to parsing the whole body as an OpenAI
+                // chat-completion response. Without this, the bubble
+                // stays blank with no toast (audit finding #3).
                 let fullContent = '';
+                let sawDataPrefix = false;
                 const text = result.data?.toString() || String(result.data || '');
                 const lines = text.split('\n').filter(Boolean);
 
                 for (const line of lines) {
                     if (line.startsWith('data: ')) {
+                        sawDataPrefix = true;
                         const data = line.slice(6);
                         if (data === '[DONE]') break;
 
@@ -145,10 +159,31 @@ export class TabbyProviderService extends BaseAiProvider {
                             const choice = parsed.choices?.[0];
                             if (choice?.delta?.content) {
                                 fullContent += choice.delta.content;
+                            } else if (choice?.message?.content) {
+                                // Some backends emit a single non-delta
+                                // chat-completion chunk; honor it.
+                                fullContent += choice.message.content;
                             }
                         } catch (e) {
-                            // Ignore parse errors
+                            // Ignore per-line parse errors; keep going.
                         }
+                    }
+                }
+
+                if (!sawDataPrefix && text.trim()) {
+                    // Non-SSE body — try parsing the whole payload as a
+                    // single OpenAI chat-completion response.
+                    try {
+                        const parsed = JSON.parse(text);
+                        const choice = parsed.choices?.[0];
+                        fullContent = choice?.message?.content
+                            ?? choice?.text
+                            ?? '';
+                    } catch (e) {
+                        this.logger.error('Tabby response was neither SSE nor JSON', {
+                            preview: text.slice(0, 500),
+                        });
+                        throw new Error('Tabby returned an unparseable response (not SSE, not JSON). Check the server logs.');
                     }
                 }
 
@@ -426,13 +461,10 @@ export class TabbyProviderService extends BaseAiProvider {
     validateConfig(): ValidationResult {
         const result = super.validateConfig();
 
-        if (!this.config?.apiKey) {
-            return {
-                valid: false,
-                errors: [...(result.errors || []), 'Tabby API key (auth token) is required']
-            };
-        }
-
+        // Only baseURL is required. Tabby is auth-optional — a bearer
+        // token is sent only if the user configured one (see
+        // initializeClient). Requiring it here used to block every stock
+        // local install (localhost:8080) with "API Key is required."
         if (!this.config?.baseURL) {
             return {
                 valid: false,

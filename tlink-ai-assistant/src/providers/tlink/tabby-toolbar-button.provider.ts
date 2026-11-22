@@ -122,18 +122,50 @@ export class TabbyToolbarButtonProvider extends ToolbarButtonProvider {
     }
 
     private async checkTabbyReachability(): Promise<boolean> {
-        const target = this.getTabbyHostPort();
-        if (!target) {
+        // Prefer a real HTTP health probe over a bare TCP accept — any
+        // process listening on the configured port (dev server, cached
+        // Docker container, Apache, a totally unrelated service) will
+        // light the toolbar dot green under TCP-only checks, giving
+        // users a false "Tabby is running" signal. A /v1/health probe
+        // confirms we're actually talking to Tabby. Falls back to the
+        // TCP check only if the fetch itself fails hard enough that we
+        // can't distinguish "offline" from "wrong app on this port."
+        const baseUrl = this.getTabbyServiceBaseUrl();
+        if (!baseUrl) {
             return false;
         }
 
-        const win: any = window as any;
-        const net = win?.require?.('net');
-        if (!net?.createConnection) {
-            return false;
+        try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 2200);
+            try {
+                const healthUrl = baseUrl.replace(/\/+$/, '') + '/v1/health';
+                const res = await fetch(healthUrl, {
+                    method: 'GET',
+                    signal: controller.signal,
+                    // Tabby's /v1/health is public (no auth).
+                });
+                return res.ok;
+            } finally {
+                clearTimeout(timer);
+            }
+        } catch {
+            // Fetch rejected (CORS, DNS, TLS, abort). Fall back to a TCP
+            // accept so we still light up for the user who has Tabby
+            // behind a proxy that blocks /v1/health but is otherwise
+            // reachable. Noisier false positives are still better than
+            // showing "offline" for a working server.
+            const target = this.getTabbyHostPort();
+            if (!target) {
+                return false;
+            }
+            const win: any = window as any;
+            const net = win?.require?.('net');
+            if (!net?.createConnection) {
+                return false;
+            }
+            return this.checkTcpPort(net, target.host, target.port, 2200);
         }
-
-        return this.checkTcpPort(net, target.host, target.port, 2200);
     }
 
     private getTabbyHostPort(): { host: string; port: number } | null {
