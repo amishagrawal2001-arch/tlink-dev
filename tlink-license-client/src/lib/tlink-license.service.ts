@@ -516,10 +516,22 @@ export class TlinkLicenseService implements OnDestroy {
      * show the activation dialog and call `activateLicense()` if needed.
      *
      * Returns the resolved LicenseStatus so the caller can hard-block.
+     *
+     * Idempotent: multiple call sites (appRoot.ngOnInit, app.service
+     * tab-recovery gate) share a single in-flight promise so the bootstrap
+     * only runs once per launch. Without this, two callers would race and
+     * potentially apply duplicate envelopes to the keychain.
      */
     async bootstrap (): Promise<LicenseStatus> {
         if (this.proxy) {return this.proxy.bootstrap()}
+        if (this.bootstrapPromise) {return this.bootstrapPromise}
+        this.bootstrapPromise = this._bootstrap()
+        return this.bootstrapPromise
+    }
 
+    private bootstrapPromise: Promise<LicenseStatus> | null = null
+
+    private async _bootstrap (): Promise<LicenseStatus> {
         // Fire-and-forget — pin the RSA public key for offline activation codes
         // while we (probably) have network. Next launch can redeem a code even
         // if the server is blocked by firewall/VPN.

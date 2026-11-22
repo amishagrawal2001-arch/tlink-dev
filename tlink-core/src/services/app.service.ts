@@ -15,6 +15,7 @@ import { ConfigService } from './config.service'
 import { TabRecoveryService } from './tabRecovery.service'
 import { TabsService, NewTabParameters } from './tabs.service'
 import { SelectorService } from './selector.service'
+import { TlinkLicenseService } from '../../../tlink-license-client/src/lib/tlink-license.service'
 
 class CompletionObserver {
     get done$ (): Observable<void> { return this.done }
@@ -83,6 +84,7 @@ export class AppService {
         private tabsService: TabsService,
         private selector: SelectorService,
         private ngbModal: NgbModal,
+        private licenseSvc: TlinkLicenseService,
         @Inject(BOOTSTRAP_DATA) private bootstrapData: BootstrapData,
     ) {
         this.tabsChanged$.subscribe(() => {
@@ -100,6 +102,22 @@ export class AppService {
         config.ready$.toPromise().then(async () => {
             if (this.bootstrapData.isMainWindow) {
                 if (config.store.recoverTabs) {
+                    // Wait for the license to resolve BEFORE restoring tabs.
+                    // Without this, openNewTabRaw replays every recovered SSH /
+                    // RDP / gNMI tab with no license check — a user who signed
+                    // out or whose license lapsed between sessions gets a full
+                    // working session back on next launch. The tab-recovery
+                    // snapshot stays on disk, so once the user reactivates, a
+                    // subsequent launch will restore normally.
+                    await this.licenseSvc.bootstrap()
+                    if (this.licenseSvc.shouldBlockApp) {
+                        // Leave recovery enabled so new tabs opened AFTER
+                        // reactivation are tracked. Tabs from the prior
+                        // session remain on-disk until the user re-opens
+                        // the app in an active state.
+                        this.tabRecovery.enabled = true
+                        return
+                    }
                     const tabs = await this.tabRecovery.recoverTabs()
                     for (const tab of tabs) {
                         this.openNewTabRaw(tab)

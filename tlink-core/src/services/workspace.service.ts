@@ -8,6 +8,7 @@ import { AppService } from './app.service'
 import { Logger, LogService } from './log.service'
 import { CodeEditorTabComponent } from '../components/codeEditorTab.component'
 import { PlatformService } from '../api/platform'
+import { TlinkLicenseService } from '../../../tlink-license-client/src/lib/tlink-license.service'
 
 @Injectable({ providedIn: 'root' })
 export class WorkspaceService {
@@ -18,6 +19,7 @@ export class WorkspaceService {
         private tabRecovery: TabRecoveryService,
         private app: AppService,
         private platform: PlatformService,
+        private licenseSvc: TlinkLicenseService,
         log: LogService,
     ) {
         this.logger = log.create('workspace')
@@ -196,6 +198,21 @@ export class WorkspaceService {
         const workspace = this.getWorkspace(id)
         if (!workspace) {
             this.logger.error('Workspace not found:', id)
+            return false
+        }
+
+        // License gate: workspace switch bulk-opens every saved tab via
+        // openNewTabRaw, same bypass vector as the launch-time recovery
+        // path. Refuse the switch outright rather than close current tabs
+        // and then fail to restore — the user keeps what they have and
+        // sees a clear notification.
+        if (this.licenseSvc.shouldBlockApp) {
+            this.platform.showMessageBox({
+                type: 'warning',
+                message: 'License required to switch workspaces',
+                detail: this.licenseSvc.blockedReason,
+                buttons: ['OK'],
+            }).catch(() => { /* non-fatal */ })
             return false
         }
 
