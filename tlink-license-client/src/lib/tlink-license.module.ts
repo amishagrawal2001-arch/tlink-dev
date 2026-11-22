@@ -10,7 +10,6 @@ import { ActivationDialogComponent } from './components/activation-dialog/activa
 import { SplashScreenComponent } from './components/splash-screen/splash-screen.component'
 import { AdminPanelComponent } from './components/admin-panel/admin-panel.component'
 import { LicenseMenuComponent } from './components/license-menu/license-menu.component'
-import { ServerSettingsComponent } from './components/server-settings/server-settings.component'
 
 const COMPONENTS = [
     TrialBannerComponent,
@@ -18,7 +17,6 @@ const COMPONENTS = [
     SplashScreenComponent,
     AdminPanelComponent,
     LicenseMenuComponent,
-    ServerSettingsComponent,
 ]
 
 @NgModule({

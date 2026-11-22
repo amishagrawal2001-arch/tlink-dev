@@ -103,7 +103,6 @@ export class AppRootComponent implements OnInit {
     transfersFloating = window.localStorage['transfersFloating'] === '1'
     showLicenseActivation = false
     showLicenseAdmin = false
-    showServerSettings = false
     sidePanelVisible = false
     sidePanelComponent: Type<any> | null = null
     sidePanelWidth = 240

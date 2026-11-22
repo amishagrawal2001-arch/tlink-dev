@@ -28,4 +28,3 @@ export { ActivationDialogComponent } from './lib/components/activation-dialog/ac
 export { SplashScreenComponent } from './lib/components/splash-screen/splash-screen.component'
 export { AdminPanelComponent } from './lib/components/admin-panel/admin-panel.component'
 export { LicenseMenuComponent } from './lib/components/license-menu/license-menu.component'
-export { ServerSettingsComponent } from './lib/components/server-settings/server-settings.component'

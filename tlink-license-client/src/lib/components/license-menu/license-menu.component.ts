@@ -32,10 +32,6 @@ import { LicenseInfo } from '../../models/license.models'
           <span class="tlink-menu__item-icon">✕</span>
           Sign out
         </button>
-        <button class="tlink-menu__item" (click)="onAction('server-settings')">
-          <span class="tlink-menu__item-icon">🌐</span>
-          Server Settings
-        </button>
         <div class="tlink-menu__separator"></div>
         <button class="tlink-menu__item" (click)="onAction('buy')">
           <span class="tlink-menu__item-icon">🛒</span>
@@ -171,7 +167,6 @@ export class LicenseMenuComponent implements OnInit, OnDestroy {
     @Output() showInfo = new EventEmitter<void>()
     @Output() showActivation = new EventEmitter<void>()
     @Output() showDeactivation = new EventEmitter<void>()
-    @Output() showServerSettings = new EventEmitter<void>()
     @Output() buyLicense = new EventEmitter<void>()
 
     open = false
@@ -214,7 +209,6 @@ export class LicenseMenuComponent implements OnInit, OnDestroy {
             case 'info': this.showInfo.emit(); break
             case 'activate': this.showActivation.emit(); break
             case 'deactivate': this.showDeactivation.emit(); break
-            case 'server-settings': this.showServerSettings.emit(); break
             case 'buy': this.buyLicense.emit(); break
         }
     }
