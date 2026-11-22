@@ -1169,9 +1169,25 @@ export class TlinkLicenseService implements OnDestroy {
             return { ok: false, message: 'Activation code has expired. Ask your admin for a new one.' }
         }
 
-        // If the code was bound to a specific fingerprint, enforce it here.
+        // Device binding is MANDATORY. A blob minted without a
+        // device_fingerprint_hash claim used to be treated as "any device" —
+        // one admin code then activated an unlimited number of machines by
+        // email forwarding alone (audit #12). We now refuse any offline blob
+        // that isn't bound to a specific device fingerprint. The server-side
+        // mint endpoint should always emit the claim; a missing claim means
+        // either the admin bypassed the normal mint flow or the blob was
+        // crafted by hand, neither of which should resolve to an active
+        // session.
         const fp = await this.fingerprint.get()
-        if (payload.device_fingerprint_hash && payload.device_fingerprint_hash !== fp) {
+        if (!payload.device_fingerprint_hash) {
+            return {
+                ok: false,
+                message:
+                    'Activation code is not device-bound. Ask your admin to mint a new code ' +
+                    'targeted at this device (fingerprint required).',
+            }
+        }
+        if (payload.device_fingerprint_hash !== fp) {
             return { ok: false, message: 'Activation code is bound to a different device.' }
         }
 
