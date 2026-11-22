@@ -19,13 +19,11 @@ import {
 import { FingerprintService } from './services/fingerprint.service'
 import { LicenseTokenStorageService, StoredLicenseBundle } from './services/tokenStorage.service'
 
-// Legacy localStorage keys that used to let the user override serverUrl and
-// productCode at runtime. Pinning these at build time closed a bypass where
-// a user could point the client at a mock server that always returned
-// `VALID/PAID/TEAM`. The constants are kept only so the constructor can
-// migrate them off existing installs.
-const LEGACY_STORAGE_KEY_SERVER_URL = 'tlink-license-server-url'
-const LEGACY_STORAGE_KEY_PRODUCT_CODE = 'tlink-license-product-code'
+// localStorage keys for the user-editable serverUrl and productCode
+// overrides (Settings → License → License Server). Fall back to the
+// build-time config when unset.
+const STORAGE_KEY_SERVER_URL = 'tlink-license-server-url'
+const STORAGE_KEY_PRODUCT_CODE = 'tlink-license-product-code'
 // Last signed-in email — kept in localStorage (NOT the keychain) so the
 // Settings UI can pre-fill the email field after a restart even when the
 // keychain bundle was cleared (offline grace expired, refresh failed, user
@@ -169,17 +167,6 @@ export class TlinkLicenseService implements OnDestroy {
         private storage: LicenseTokenStorageService,
     ) {
         this.config = { ...DEFAULT_LICENSE_CONFIG, ...(config ?? {}) } as Required<TlinkLicenseConfig>
-
-        // Wipe legacy runtime overrides from pre-pin builds. These keys used
-        // to shadow the build-time serverUrl / productCode; leaving them in
-        // place would mean a user who overrode them before the pin landed
-        // keeps that override (invisibly) after the upgrade. The cleanup is
-        // cheap and runs on every launch so it also catches values written
-        // out-of-band (e.g. via DevTools) between launches.
-        try {
-            localStorage.removeItem(LEGACY_STORAGE_KEY_SERVER_URL)
-            localStorage.removeItem(LEGACY_STORAGE_KEY_PRODUCT_CODE)
-        } catch { /* localStorage unavailable (e.g. tests) — ignore */ }
 
         // eslint-disable-next-line no-undef, @typescript-eslint/no-explicit-any
         const g = globalThis as any
@@ -365,19 +352,42 @@ export class TlinkLicenseService implements OnDestroy {
 
     // ─── Config / URL ─────────────────────────────────────────────────────
     //
-    // serverUrl and productCode are build-time pins. They used to be
-    // user-overridable via localStorage + a Settings UI, but that was a
-    // trivial bypass vector — a user could point the client at a mock
-    // server (or swap the product slug to one the real server accepts
-    // under weaker terms) and self-grant any tier. Now the only way to
-    // change either is to rebuild with a different TlinkLicenseConfig.
+    // serverUrl and productCode are user-overridable at runtime (via the
+    // Settings → License UI) and fall back to the build-time config. Known
+    // security trade-off: a user can point the client at a mock server that
+    // always returns VALID/PAID/TEAM and self-grant any tier. The forward
+    // fix is audit #7 — have the server sign every envelope with a key the
+    // client verifies against a build-pinned public key — which makes the
+    // URL + product code safe to leave user-editable.
 
     get serverUrl (): string {
-        return this.config.serverUrl
+        return localStorage.getItem(STORAGE_KEY_SERVER_URL) ?? this.config.serverUrl
     }
 
+    set serverUrl (url: string) {
+        localStorage.setItem(STORAGE_KEY_SERVER_URL, url)
+    }
+
+    /**
+     * Product code sent to the license server during activate / validate.
+     * Editable at runtime via the Settings UI so a user whose tenant uses
+     * a non-default product slug doesn't have to rebuild the app to fix a
+     * `PRODUCT_NOT_ENTITLED` rejection. Falls back to the build-time
+     * default in `TlinkLicenseConfig`.
+     */
     get productCode (): string {
-        return this.config.productCode
+        const stored = localStorage.getItem(STORAGE_KEY_PRODUCT_CODE)?.trim()
+        // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+        return stored || this.config.productCode
+    }
+
+    set productCode (code: string) {
+        const trimmed = (code || '').trim()
+        if (trimmed) {
+            localStorage.setItem(STORAGE_KEY_PRODUCT_CODE, trimmed)
+        } else {
+            localStorage.removeItem(STORAGE_KEY_PRODUCT_CODE)
+        }
     }
 
     /**

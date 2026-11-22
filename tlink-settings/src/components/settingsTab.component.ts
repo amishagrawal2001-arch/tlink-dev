@@ -51,6 +51,13 @@ export class SettingsTabComponent extends BaseTabComponent {
     // Latest license info snapshot; kept in sync via licenseInfo$ subscription so
     // templates that bind to it re-render deterministically after sign-in/out.
     licenseInfo: any = null
+    serverUrl = ''
+    serverTestResult = ''
+    // Product code sent to the license server during activate / validate.
+    // Editable at runtime so a tenant whose product slug differs from the
+    // build-time default can override it without rebuilding the app.
+    productCode = ''
+    productCodeSaved = false
     // Cached fingerprint of this machine. Resolved asynchronously in
     // ngOnInit — the UI shows "—" until populated. Users copy this value
     // and send it to their admin when requesting an offline activation code
@@ -139,6 +146,8 @@ export class SettingsTabComponent extends BaseTabComponent {
     ) {
         super(injector)
         this.setTitle(translate.instant(_('Settings')))
+        this.serverUrl = licenseSvc.serverUrl
+        this.productCode = licenseSvc.productCode
         // Pre-fill the sign-in email field. Prefer the live `userEmail`
         // (active session) so a user inspecting Settings sees what they're
         // signed in as; fall back to `lastSignInEmail` after a wipe / first
@@ -358,6 +367,29 @@ export class SettingsTabComponent extends BaseTabComponent {
         } finally {
             this.licenseRefreshing = false
         }
+    }
+
+    async testServerConnection () {
+        this.serverTestResult = 'Testing...'
+        try {
+            const result = await this.licenseSvc.testServerConnection(this.serverUrl)
+            this.serverTestResult = result.reachable ? `connected (${result.latencyMs}ms)` : `failed: ${result.message}`
+        } catch {
+            this.serverTestResult = 'Connection failed'
+        }
+    }
+
+    saveServerUrl () {
+        this.licenseSvc.serverUrl = this.serverUrl
+    }
+
+    saveProductCode () {
+        this.licenseSvc.productCode = this.productCode
+        // Reflect what actually got persisted (may have been blank-trimmed
+        // back to the config default).
+        this.productCode = this.licenseSvc.productCode
+        this.productCodeSaved = true
+        setTimeout(() => { this.productCodeSaved = false }, 2000)
     }
 
     /**

@@ -401,14 +401,43 @@
                                 i.fas.fa-check-circle.me-1
                                 | {{ offlineRedeemSuccess }}
 
-                    //- License server URL and product code are pinned at
-                    //- build time — the previous Settings fields that let
-                    //- users override them at runtime were a trivial
-                    //- bypass (point client at a mock server that always
-                    //- returns VALID/PAID/TEAM). The current server and
-                    //- product code are visible under Config Defaults
-                    //- below; to change them, rebuild with a different
-                    //- TlinkLicenseConfig.
+                    h5.mt-4
+                        i.fas.fa-server
+                        span(translate) License Server
+                    .form-line
+                        .header
+                            .title(translate) Server URL
+                            .description(translate) Host, API root, or licenses-rooted URL — endpoints derived automatically.
+                        .license-input-row
+                            .input-with-icon
+                                i.fas.fa-link.input-icon
+                                input.form-control(
+                                    type='text',
+                                    [(ngModel)]='serverUrl',
+                                    placeholder='http://localhost:4000 or https://…/api/v1'
+                                )
+                            button.btn.btn-secondary.license-btn((click)='testServerConnection()') Test
+                            button.btn.btn-primary.license-btn((click)='saveServerUrl()') Save
+                    .small.mt-1(*ngIf='serverTestResult')
+                        span([class.text-success]='serverTestResult.startsWith("connected")', [class.text-danger]='!serverTestResult.startsWith("connected")') {{ serverTestResult }}
+
+                    //- Product code override. Sent in the activate / validate
+                    //- request body. Lets a user fix a PRODUCT_NOT_ENTITLED
+                    //- rejection without rebuilding the app.
+                    .form-line
+                        .header
+                            .title(translate) Product Code
+                            .description(translate) Sent with activate/validate. Override only if your tenant uses a non-default product slug.
+                        .license-input-row
+                            .input-with-icon
+                                i.fas.fa-tag.input-icon
+                                input.form-control(
+                                    type='text',
+                                    [(ngModel)]='productCode',
+                                    placeholder='tyllink_terminal'
+                                )
+                            button.btn.btn-primary.license-btn((click)='saveProductCode()') Save
+                    .small.mt-1.text-success(*ngIf='productCodeSaved', translate) Saved
 
                     h5.mt-4
                         i.fas.fa-heartbeat
