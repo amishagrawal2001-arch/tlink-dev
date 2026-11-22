@@ -9,6 +9,17 @@ dist
 */typings
 *.tsbuildinfo
 
+# Compiled TypeScript output next to sources. The TS compiler emits each
+# .js + .js.map next to its .ts twin during dev/typecheck runs; these are
+# build artifacts, not source. Globally ignored here so they don't keep
+# turning up as untracked files.
+app/lib/*.js
+app/lib/*.js.map
+app/src/*.js
+app/src/*.js.map
+tlink-core/src/api/mainProcess.js
+tlink-core/src/api/mainProcess.js.map
+
 *.xcworkspacedata
 *.xcuserstate
 *.wixpdb

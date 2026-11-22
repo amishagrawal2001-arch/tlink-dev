@@ -1274,7 +1274,7 @@ export class GnmiSessionTabComponent extends BaseTabComponent implements OnDestr
             if (focus && !this.entryMatchesSubscription(entry.path, focus.path)) { continue }
             const prefix = this.formatter.parentPath(entry.path)
             const key = this.formatter.lastListKey(entry.path)
-            const bucketId = `${prefix} ${key ?? ''}`
+            const bucketId = `${prefix}${key ?? ''}`
             let bucket = buckets.get(bucketId)
             if (!bucket) {
                 bucket = { key, prefix, rows: [] }

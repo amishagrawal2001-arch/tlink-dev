@@ -139,7 +139,6 @@ export class AppRootComponent implements OnInit {
         'open-shared-session-link',
         'profiles',
         'session-manager',
-        // 'code-editor',  // Tlink Studio - deactivated
         'remote-desktop',
         'sftp',
         'ssh',
@@ -154,7 +153,6 @@ export class AppRootComponent implements OnInit {
         'session-manager',
         'remote-desktop',
         'ssh',
-        // 'code-editor',  // Tlink Studio - deactivated
         'ai-chat',
         'ai-assistant',
         'tabby-url',
@@ -169,7 +167,6 @@ export class AppRootComponent implements OnInit {
         'open-shared-session-link',
         'profiles',
         'session-manager',
-        // 'code-editor',  // Tlink Studio - deactivated
         'remote-desktop',
         'sftp',
         'ssh',
@@ -1517,9 +1514,6 @@ export class AppRootComponent implements OnInit {
     }
 
     isLeftDockItemVisible (item: string): boolean {
-        if (item === 'code-editor') {
-            return false // Tlink Studio - deactivated
-        }
         if (item === 'ssh') {
             return !!(this.sshSidePanel || this.sshSidebarCommand)
         }
@@ -1570,8 +1564,6 @@ export class AppRootComponent implements OnInit {
                 return 'Remote desktop'
             case 'ssh':
                 return this.sshSidePanel?.label || this.sshSidebarCommand?.label || 'SSH sidebar'
-            case 'code-editor':
-                return 'Tlink Studio'
             case 'ai-chat':
                 return 'AI Chat'
             case 'ai-assistant':
@@ -1611,9 +1603,6 @@ export class AppRootComponent implements OnInit {
                 break
             case 'ssh':
                 this.openSSHSidePanel()
-                break
-            case 'code-editor':
-                this.openCodeEditor()
                 break
             case 'ai-chat':
                 void this.openAIChat()

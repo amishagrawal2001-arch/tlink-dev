@@ -247,19 +247,18 @@ export class TlinkLicenseService implements OnDestroy {
     }
 
     /**
-     * Returns true when log redaction should be active.
+     * Returns true when tokens should print in FULL (unredacted).
      *
-     * Default INVERTED for now: tokens print in full, the head/tail
-     * redactor only kicks in when a debugger explicitly opts in via:
+     * Default: false — tokens are redacted to head/tail by default.
+     * Opt in to full-token logging for debugging via:
      *
-     *   window.__tlinkLicenseRedactTokens = true
+     *   window.__tlinkLicenseLogFullTokens = true
      *
-     * This is the opposite of the usual posture — full tokens in
-     * console logs leak via copy-paste, screen-share, Sentry
-     * breadcrumbs, and shoulder-surfing. Once the auth/heartbeat
-     * flow is stable in production, flip the default back so the
-     * code reads `Boolean(...)` (opt-in TO full tokens) instead of
-     * `!Boolean(...)` (opt-in TO redaction).
+     * Rationale: full access / refresh tokens in DevTools leak via
+     * copy-paste, screenshare, attached issue logs, and Sentry
+     * breadcrumbs. Audit finding #9 called out the previous opt-out
+     * posture as a live-token leak vector — this is the flipped
+     * default. Local debugging can still opt in on demand.
      */
     private fullTokenLoggingEnabled (): boolean {
         try {
@@ -267,9 +266,9 @@ export class TlinkLicenseService implements OnDestroy {
             const g: any = typeof globalThis !== 'undefined' ? globalThis
                 : typeof window !== 'undefined' ? window
                     : {}
-            return !g.__tlinkLicenseRedactTokens
+            return Boolean(g.__tlinkLicenseLogFullTokens)
         } catch {
-            return true
+            return false
         }
     }
 
