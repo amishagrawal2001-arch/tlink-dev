@@ -822,7 +822,15 @@ export class TlinkLicenseService implements OnDestroy {
             return { success: false, message: 'Email and password are required' }
         }
 
-        const fp = await this.fingerprint.get()
+        let fp: string
+        try {
+            fp = await this.fingerprint.get()
+        } catch (e) {
+            // Platform refused machine identity (audit #13). Can't activate
+            // without a bound fingerprint; surface the support code so the
+            // user can forward it to ops rather than retrying silently.
+            return { success: false, message: (e as Error).message || 'Machine identity unavailable.' }
+        }
         const body = {
             email: email.trim(),
             password,
@@ -1019,6 +1027,11 @@ export class TlinkLicenseService implements OnDestroy {
         // device-scoped /deactivate endpoint and calling it returns 403.
         if (!skipServerCall) {
             try {
+                // Swallows FingerprintUnavailableError too — if we can't
+                // compute the fp we obviously can't tell the server which
+                // device to deactivate, but we still want to clear local
+                // state. The outer catch handles both network + fp failures
+                // identically (log + continue).
                 const fp = await this.fingerprint.get()
                 const res = await this.loggedFetch('licenses/deactivate', this.licenseEndpoint('deactivate'), {
                     method: 'POST',
@@ -1032,9 +1045,9 @@ export class TlinkLicenseService implements OnDestroy {
                     console.warn(`[license] server-side deactivate returned ${res.status}; clearing local state anyway`)
                 }
             } catch (err) {
-                // Network error — same: log and keep going.
+                // Network error or fingerprint-unavailable — same: log and keep going.
                 // eslint-disable-next-line no-console
-                console.warn('[license] server-side deactivate failed (network):', (err as Error).message)
+                console.warn('[license] server-side deactivate skipped:', (err as Error).message)
             }
         }
         this.stopTimers()
@@ -1257,7 +1270,15 @@ export class TlinkLicenseService implements OnDestroy {
         // either the admin bypassed the normal mint flow or the blob was
         // crafted by hand, neither of which should resolve to an active
         // session.
-        const fp = await this.fingerprint.get()
+        let fp: string
+        try {
+            fp = await this.fingerprint.get()
+        } catch (e) {
+            // Platform refused to surface machine identity (audit #13).
+            // We can't verify binding without it, so refuse the blob with
+            // the support code the error carries.
+            return { ok: false, message: (e as Error).message || 'Machine identity unavailable.' }
+        }
         if (!payload.device_fingerprint_hash) {
             return {
                 ok: false,
@@ -1267,6 +1288,22 @@ export class TlinkLicenseService implements OnDestroy {
             }
         }
         if (payload.device_fingerprint_hash !== fp) {
+            // Rollover path: accept the pre-stability-pass hash composition
+            // too, so an offline code minted against the old fingerprint
+            // keeps working after this upgrade. Log a nudge so ops knows
+            // the user should ask the admin to re-mint on the new
+            // fingerprint before we remove this fallback in a later
+            // release.
+            const legacyFp = await this.fingerprint.getLegacy()
+            if (legacyFp && payload.device_fingerprint_hash === legacyFp) {
+                // eslint-disable-next-line no-console
+                console.warn(
+                    '[license] offline code verifies against legacy fingerprint composition. ' +
+                    'Ask the admin to re-mint on the new fingerprint (%s) before the next release.',
+                    fp,
+                )
+                return { ok: true, payload }
+            }
             return { ok: false, message: 'Activation code is bound to a different device.' }
         }
 
