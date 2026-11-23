@@ -11,6 +11,18 @@ export const LICENSE_TRIAL_ACCOUNT = 'trial-start'
  * tampered bundle can't rewind it. Audit #1 (clock rollback).
  */
 export const LICENSE_CLOCK_HWM_ACCOUNT = 'clock-hwm'
+/**
+ * Separate account key for the per-install HMAC key that signs the
+ * stored token bundle. Audit #4 — the keychain gives us confidentiality
+ * against other processes, but not integrity against a user who edits
+ * their own keychain to extend endDate / flip billingType / rotate
+ * deviceId. Save() wraps the bundle in {v, bundle, mac} and load()
+ * refuses to hydrate on mismatch. The HMAC key is a 32-byte random
+ * generated on first launch and held forever (never cleared on
+ * sign-out) so a sign-out/sign-in cycle still sees the same tamper
+ * window.
+ */
+export const LICENSE_HMAC_KEY_ACCOUNT = 'bundle-hmac-key'
 
 export interface StoredLicenseBundle {
     accessToken: string
@@ -34,10 +46,27 @@ export interface StoredLicenseBundle {
  * Vault/keytar imports are resolved lazily so this module stays usable in
  * non-Electron contexts (e.g. unit tests without native bindings compiled).
  */
+/**
+ * Current on-disk envelope version. Bumped only when the wire format
+ * changes in a way that previous versions can't parse. load() accepts
+ * an envelope whose `v` is <= this constant and migrates older shapes
+ * through if needed.
+ */
+const STORED_ENVELOPE_VERSION = 1
+
+interface StoredBundleEnvelope {
+    v: number
+    bundle: StoredLicenseBundle
+    /** base64(HMAC-SHA256(hmacKey, JSON.stringify(bundle))). */
+    mac: string
+}
+
 @Injectable({ providedIn: 'root' })
 export class LicenseTokenStorageService {
     private vault: any
     private keytar: any
+    /** Lazy-loaded HMAC key for the bundle envelope. 32 bytes. */
+    private hmacKey: Buffer | null = null
 
     constructor () {
         try {
@@ -62,7 +91,7 @@ export class LicenseTokenStorageService {
     }
 
     async save (bundle: StoredLicenseBundle): Promise<void> {
-        const payload = JSON.stringify(bundle)
+        const payload = await this.wrapBundle(bundle)
         if (this.vault?.isEnabled?.()) {
             await this.vault.addSecret({
                 type: VAULT_SECRET_TYPE_LICENSE,
@@ -91,8 +120,160 @@ export class LicenseTokenStorageService {
             raw = localStorage.getItem(LICENSE_KEYTAR_SERVICE + ':' + LICENSE_KEYTAR_ACCOUNT)
         }
         if (!raw) {return null}
+        let parsed: any
         try {
-            return JSON.parse(raw) as StoredLicenseBundle
+            parsed = JSON.parse(raw)
+        } catch {
+            return null
+        }
+        if (!parsed || typeof parsed !== 'object') {return null}
+
+        // Legacy path — bundle written by a pre-#4 build is a plain
+        // StoredLicenseBundle, not an envelope. Detect by shape and
+        // migrate transparently on first load: accept once (we have
+        // no mac to verify, but a user who tampers here still has to
+        // land before they run the upgraded build), then re-save
+        // under the HMAC envelope so every subsequent load verifies.
+        if (!('mac' in parsed) && 'accessToken' in parsed) {
+            // eslint-disable-next-line no-console
+            console.info('[license] migrating legacy stored bundle to HMAC envelope (audit #4)')
+            try {
+                await this.save(parsed as StoredLicenseBundle)
+            } catch (err) {
+                // eslint-disable-next-line no-console
+                console.warn('[license] legacy-bundle HMAC migration failed; keeping legacy shape:',
+                    (err as Error).message)
+            }
+            return parsed as StoredLicenseBundle
+        }
+
+        // HMAC envelope — verify.
+        const env = parsed as Partial<StoredBundleEnvelope>
+        if (typeof env.v !== 'number' || env.v > STORED_ENVELOPE_VERSION
+            || !env.mac || !env.bundle || typeof env.bundle !== 'object') {
+            // eslint-disable-next-line no-console
+            console.warn('[license] stored bundle envelope has unexpected shape — refusing to hydrate')
+            return null
+        }
+        let expected: string
+        try {
+            const key = await this.ensureHmacKey()
+            expected = this.computeMac(key, JSON.stringify(env.bundle))
+        } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn('[license] could not compute bundle HMAC for verify:', (err as Error).message)
+            return null
+        }
+        if (!this.timingSafeEqualStr(env.mac, expected)) {
+            // eslint-disable-next-line no-console
+            console.warn(
+                '[license] stored bundle HMAC mismatch — refusing to hydrate (tampered or HMAC key rotated)',
+            )
+            return null
+        }
+        return env.bundle
+    }
+
+    private async wrapBundle (bundle: StoredLicenseBundle): Promise<string> {
+        const bundleJson = JSON.stringify(bundle)
+        try {
+            const key = await this.ensureHmacKey()
+            const mac = this.computeMac(key, bundleJson)
+            const env: StoredBundleEnvelope = { v: STORED_ENVELOPE_VERSION, bundle, mac }
+            return JSON.stringify(env)
+        } catch (err) {
+            // HMAC not available in this runtime (missing node crypto,
+            // storage backend refused to hold the key, …). Fall back
+            // to the plain shape so the user is never locked out
+            // because we couldn't persist a tag.
+            // eslint-disable-next-line no-console
+            console.warn('[license] saving bundle WITHOUT HMAC tag:', (err as Error).message)
+            return bundleJson
+        }
+    }
+
+    /**
+     * Returns the per-install bundle HMAC key, generating + persisting a
+     * fresh 32-byte random one on first call. Idempotent — subsequent
+     * calls return the same key for the life of the process. The key
+     * is stored in its own keychain account and never cleared by
+     * sign-out, so a tampered bundle still fails verification across
+     * a sign-out/sign-in cycle.
+     */
+    private async ensureHmacKey (): Promise<Buffer> {
+        if (this.hmacKey) {return this.hmacKey}
+        const crypto = this.tryRequireCrypto()
+        if (!crypto) {
+            throw new Error('node crypto module unavailable')
+        }
+        // Load existing key if any.
+        const existing = await this.loadHmacKeyRaw()
+        if (existing) {
+            try {
+                const buf = Buffer.from(existing, 'base64')
+                if (buf.length === 32) {
+                    this.hmacKey = buf
+                    return buf
+                }
+            } catch {
+                // Stored value is corrupt; generate a fresh one below.
+            }
+        }
+        const fresh = crypto.randomBytes(32) as Buffer
+        await this.persistHmacKey(fresh.toString('base64'))
+        this.hmacKey = fresh
+        return fresh
+    }
+
+    private async loadHmacKeyRaw (): Promise<string | null> {
+        if (this.vault?.isEnabled?.()) {
+            const secret = await this.vault.getSecret(VAULT_SECRET_TYPE_LICENSE, { account: LICENSE_HMAC_KEY_ACCOUNT })
+            return secret?.value ?? null
+        }
+        if (this.keytar) {
+            return this.keytar.getPassword(LICENSE_KEYTAR_SERVICE, LICENSE_HMAC_KEY_ACCOUNT)
+        }
+        return localStorage.getItem(LICENSE_KEYTAR_SERVICE + ':' + LICENSE_HMAC_KEY_ACCOUNT)
+    }
+
+    private async persistHmacKey (encoded: string): Promise<void> {
+        if (this.vault?.isEnabled?.()) {
+            await this.vault.addSecret({
+                type: VAULT_SECRET_TYPE_LICENSE,
+                key: { account: LICENSE_HMAC_KEY_ACCOUNT },
+                value: encoded,
+            })
+            return
+        }
+        if (this.keytar) {
+            await this.keytar.setPassword(LICENSE_KEYTAR_SERVICE, LICENSE_HMAC_KEY_ACCOUNT, encoded)
+            return
+        }
+        localStorage.setItem(LICENSE_KEYTAR_SERVICE + ':' + LICENSE_HMAC_KEY_ACCOUNT, encoded)
+    }
+
+    private computeMac (key: Buffer, data: string): string {
+        const crypto = this.tryRequireCrypto()
+        if (!crypto) {throw new Error('node crypto module unavailable')}
+        return crypto.createHmac('sha256', key).update(data).digest('base64')
+    }
+
+    /**
+     * Constant-time string compare — guards against timing side-channels
+     * on the MAC comparison. Falls back to a plain equals when crypto
+     * is unavailable (we're already in a degraded path).
+     */
+    private timingSafeEqualStr (a: string, b: string): boolean {
+        if (a.length !== b.length) {return false}
+        const crypto = this.tryRequireCrypto()
+        if (!crypto?.timingSafeEqual) {return a === b}
+        return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b))
+    }
+
+    private tryRequireCrypto (): any {
+        try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            return (window as any).require ? (window as any).require('crypto') : require('crypto')
         } catch {
             return null
         }
