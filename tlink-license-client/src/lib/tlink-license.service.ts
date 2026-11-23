@@ -344,18 +344,49 @@ export class TlinkLicenseService implements OnDestroy {
         return copy
     }
 
-    private async loggedFetch (label: string, url: string, init: RequestInit = {}): Promise<any> {
+    /**
+     * Default per-request budget. A fetch with no AbortController hangs
+     * forever if the socket accepts the connection but never responds —
+     * exactly the class of fault a user-editable serverUrl (audit #7)
+     * can produce intentionally. Each endpoint overrides this at the
+     * call site; see the constants below.
+     */
+    private static readonly DEFAULT_FETCH_TIMEOUT_MS = 15_000
+    /** Activation: a user is actively watching a spinner, give it room. */
+    private static readonly FETCH_TIMEOUT_ACTIVATE_MS = 30_000
+    /** Refresh is bootstrap-blocking; keep it modest. */
+    private static readonly FETCH_TIMEOUT_REFRESH_MS = 15_000
+    /** Heartbeat + validate run in the background, short-circuit faster. */
+    private static readonly FETCH_TIMEOUT_HEARTBEAT_MS = 10_000
+    /** Deactivate is best-effort fire-and-forget on sign-out. */
+    private static readonly FETCH_TIMEOUT_DEACTIVATE_MS = 5_000
+    /** Health probe used by testServerConnection — short so UI feedback is fast. */
+    private static readonly FETCH_TIMEOUT_HEALTH_MS = 5_000
+
+    private async loggedFetch (
+        label: string,
+        url: string,
+        init: RequestInit = {},
+        timeoutMs: number = TlinkLicenseService.DEFAULT_FETCH_TIMEOUT_MS,
+    ): Promise<any> {
         const method = init.method ?? 'GET'
         const reqBody = init.body ? JSON.parse(init.body as string) : undefined
         // eslint-disable-next-line no-console
         console.info(
             `%c[license:http] → ${method} ${label}`,
             'color:#3b82f6;font-weight:600',
-            { url, headers: this.redactHeaders(init.headers as any), body: this.redactBody(reqBody) },
+            { url, headers: this.redactHeaders(init.headers as any), body: this.redactBody(reqBody), timeoutMs },
         )
         const t0 = Date.now()
+        // Audit #16 — every license request now carries an AbortController
+        // so a stalled server (DNS black hole, slowloris, user-pointed-us
+        // at evil.local) can't park a promise forever. The caller gets a
+        // TIMEOUT-tagged error they can route to offline-grace instead of
+        // an indeterminate "still trying" UI.
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), timeoutMs)
         try {
-            const res = await fetch(url, init)
+            const res = await fetch(url, { ...init, signal: controller.signal })
             const bodyText = await res.text()
             let body: any = bodyText
             try { body = JSON.parse(bodyText) } catch { /* non-JSON */ }
@@ -375,13 +406,29 @@ export class TlinkLicenseService implements OnDestroy {
             }
         } catch (e: any) {
             const ms = Date.now() - t0
+            // Distinguish "we gave up waiting" from "the network said no".
+            // Downstream callers (callRefresh, heartbeat) already map any
+            // thrown error to offline-grace, but the log line tells ops
+            // *why* without them having to open the devtools network tab.
+            const timedOut = controller.signal.aborted && ms + 50 >= timeoutMs
+            const msg = timedOut
+                ? `request timed out after ${timeoutMs}ms`
+                : (e?.message ?? String(e))
             // eslint-disable-next-line no-console
             console.error(
                 `%c[license:http] ✗ ${method} ${label} (${ms}ms)`,
                 'color:#dc2626;font-weight:600',
-                e?.message ?? e,
+                msg,
             )
-            throw e
+            const err = new Error(msg)
+            // Preserve a stable discriminator the caller can switch on.
+            // We keep throwing an Error subclass-less value (just tag it)
+            // so existing `catch (e: any)` blocks don't break.
+            ;(err as any).code = timedOut ? 'TIMEOUT' : (e?.code ?? 'NETWORK')
+            ;(err as any).cause = e
+            throw err
+        } finally {
+            clearTimeout(timer)
         }
     }
 
@@ -989,7 +1036,7 @@ export class TlinkLicenseService implements OnDestroy {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
-            })
+            }, TlinkLicenseService.FETCH_TIMEOUT_ACTIVATE_MS)
             const envelope = this.normalizeEnvelope(await res.json())
 
             if (envelope.license_status === 'VALID') {
@@ -1047,7 +1094,7 @@ export class TlinkLicenseService implements OnDestroy {
     async listMyDevices (): Promise<any[]> {
         if (this.proxy) {return this.proxy.listMyDevices()}
         if (!this.accessToken) {return []}
-        const res = await this.authedFetch('/api/licenses/devices', { method: 'GET' })
+        const res = await this.authedFetch('/api/licenses/devices', { method: 'GET' }, TlinkLicenseService.FETCH_TIMEOUT_HEARTBEAT_MS)
         if (!res || !res.ok) {return []}
         try {
             const body = await res.json()
@@ -1067,7 +1114,7 @@ export class TlinkLicenseService implements OnDestroy {
         if (!this.accessToken) {return false}
         const res = await this.authedFetch(`/api/licenses/devices/${activationId}/deactivate`, {
             method: 'POST',
-        })
+        }, TlinkLicenseService.FETCH_TIMEOUT_DEACTIVATE_MS)
         return !!res?.ok
     }
 
@@ -1078,7 +1125,11 @@ export class TlinkLicenseService implements OnDestroy {
      * it still fails, we treat the session as dead and call handleInvalid()
      * so the UI bounces back to sign-in. Network errors return null.
      */
-    private async authedFetch (path: string, init: any): Promise<Response | null> {
+    private async authedFetch (
+        path: string,
+        init: any,
+        timeoutMs: number = TlinkLicenseService.DEFAULT_FETCH_TIMEOUT_MS,
+    ): Promise<Response | null> {
         const doCall = async () => {
             const headers = { ...(init.headers || {}), Authorization: `Bearer ${this.accessToken ?? ''}` }
             // Map legacy `/api/licenses/<action>` paths through licenseEndpoint
@@ -1091,7 +1142,7 @@ export class TlinkLicenseService implements OnDestroy {
             const url = m
                 ? this.licenseEndpoint(m[1])
                 : `${this.trimmedServerUrl()}${path.startsWith('/') ? path : `/${path}`}`
-            return this.loggedFetch(path, url, { ...init, headers })
+            return this.loggedFetch(path, url, { ...init, headers }, timeoutMs)
         }
         try {
             let res = await doCall()
@@ -1179,7 +1230,7 @@ export class TlinkLicenseService implements OnDestroy {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.accessToken ?? ''}` },
                     body: JSON.stringify({ device_fingerprint_hash: fp }),
-                })
+                }, TlinkLicenseService.FETCH_TIMEOUT_DEACTIVATE_MS)
                 if (!res.ok) {
                     // Log — local state still clears below, but support wants to see WHY
                     // a deactivate was rejected (expired token vs revoked seat vs server 5xx).
@@ -1271,7 +1322,7 @@ export class TlinkLicenseService implements OnDestroy {
         const healthUrl = this.healthEndpoint(url)
         const t0 = Date.now()
         try {
-            const res = await this.loggedFetch('health', healthUrl, { method: 'GET' })
+            const res = await this.loggedFetch('health', healthUrl, { method: 'GET' }, TlinkLicenseService.FETCH_TIMEOUT_HEALTH_MS)
             const latencyMs = Date.now() - t0
             if (res.ok) {return { reachable: true, message: 'Server reachable', latencyMs }}
             return { reachable: false, message: `HTTP ${res.status}` }
@@ -1327,7 +1378,7 @@ export class TlinkLicenseService implements OnDestroy {
             if (localStorage.getItem(TlinkLicenseService.OFFLINE_KEY_STORAGE)) {return}
         } catch { /* ignore */ }
         try {
-            const res = await this.loggedFetch('licenses/public-key', this.licenseEndpoint('public-key'), { method: 'GET' })
+            const res = await this.loggedFetch('licenses/public-key', this.licenseEndpoint('public-key'), { method: 'GET' }, TlinkLicenseService.FETCH_TIMEOUT_HEALTH_MS)
             if (!res.ok) {return}
             const pem = await res.text()
             if (typeof pem === 'string' && pem.includes('BEGIN PUBLIC KEY')) {
@@ -1635,7 +1686,7 @@ export class TlinkLicenseService implements OnDestroy {
                     ...(this.accessToken ? { Authorization: `Bearer ${this.accessToken}` } : {}),
                 },
                 body: JSON.stringify(body),
-            })
+            }, TlinkLicenseService.FETCH_TIMEOUT_REFRESH_MS)
             // Defense: non-2xx is NOT a license-revocation signal. Return
             // null and let the caller route through unreachable/grace.
             // ONLY auto-disable when the 422 specifically demands a
@@ -1721,7 +1772,7 @@ export class TlinkLicenseService implements OnDestroy {
                     Authorization: `Bearer ${this.accessToken}`,
                 },
                 body: JSON.stringify(body),
-            })
+            }, TlinkLicenseService.FETCH_TIMEOUT_HEARTBEAT_MS)
             // Hard-stop: if the HTTP layer returned non-2xx, do NOT treat
             // the body as a license envelope. A 4xx/5xx means the server
             // rejected our REQUEST shape (or had an internal error) — it's
