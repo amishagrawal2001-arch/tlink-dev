@@ -5,6 +5,12 @@ export const LICENSE_KEYTAR_SERVICE = 'tlink-license-client'
 export const LICENSE_KEYTAR_ACCOUNT = 'tokens'
 /** Separate account key for local trial state (independent of token bundle). */
 export const LICENSE_TRIAL_ACCOUNT = 'trial-start'
+/**
+ * Separate account key for the monotonic clock high-water-mark.
+ * Kept out of the token bundle so it survives sign-out and so a
+ * tampered bundle can't rewind it. Audit #1 (clock rollback).
+ */
+export const LICENSE_CLOCK_HWM_ACCOUNT = 'clock-hwm'
 
 export interface StoredLicenseBundle {
     accessToken: string
@@ -151,5 +157,57 @@ export class LicenseTokenStorageService {
             return
         }
         localStorage.removeItem(LICENSE_KEYTAR_SERVICE + ':' + LICENSE_TRIAL_ACCOUNT)
+    }
+
+    // ─── Clock high-water-mark (audit #1 — clock rollback) ────────────────
+    //
+    // Stored as an integer unix-seconds timestamp. Updated whenever we
+    // successfully contact the server or verify an offline blob, and
+    // consulted on every verify so an attacker who rolls the OS clock
+    // back can't resurrect an expired offline code. Survives sign-out
+    // on purpose: rollback detection should keep working across a
+    // sign-out / re-redeem cycle.
+
+    async saveClockHwm (seconds: number): Promise<void> {
+        const value = String(seconds)
+        if (this.vault?.isEnabled?.()) {
+            await this.vault.addSecret({
+                type: VAULT_SECRET_TYPE_LICENSE,
+                key: { account: LICENSE_CLOCK_HWM_ACCOUNT },
+                value,
+            })
+            return
+        }
+        if (this.keytar) {
+            await this.keytar.setPassword(LICENSE_KEYTAR_SERVICE, LICENSE_CLOCK_HWM_ACCOUNT, value)
+            return
+        }
+        localStorage.setItem(LICENSE_KEYTAR_SERVICE + ':' + LICENSE_CLOCK_HWM_ACCOUNT, value)
+    }
+
+    async loadClockHwm (): Promise<number | null> {
+        let raw: string | null = null
+        if (this.vault?.isEnabled?.()) {
+            const secret = await this.vault.getSecret(VAULT_SECRET_TYPE_LICENSE, { account: LICENSE_CLOCK_HWM_ACCOUNT })
+            raw = secret?.value ?? null
+        } else if (this.keytar) {
+            raw = await this.keytar.getPassword(LICENSE_KEYTAR_SERVICE, LICENSE_CLOCK_HWM_ACCOUNT)
+        } else {
+            raw = localStorage.getItem(LICENSE_KEYTAR_SERVICE + ':' + LICENSE_CLOCK_HWM_ACCOUNT)
+        }
+        const n = raw ? Number(raw) : NaN
+        return Number.isFinite(n) ? n : null
+    }
+
+    async clearClockHwm (): Promise<void> {
+        if (this.vault?.isEnabled?.()) {
+            await this.vault.removeSecret(VAULT_SECRET_TYPE_LICENSE, { account: LICENSE_CLOCK_HWM_ACCOUNT })
+            return
+        }
+        if (this.keytar) {
+            await this.keytar.deletePassword(LICENSE_KEYTAR_SERVICE, LICENSE_CLOCK_HWM_ACCOUNT)
+            return
+        }
+        localStorage.removeItem(LICENSE_KEYTAR_SERVICE + ':' + LICENSE_CLOCK_HWM_ACCOUNT)
     }
 }

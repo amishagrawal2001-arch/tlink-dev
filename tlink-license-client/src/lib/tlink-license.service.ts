@@ -151,6 +151,40 @@ export class TlinkLicenseService implements OnDestroy {
      */
     private heartbeatDisabledByServer = false
 
+    // ─── Clock rollback protection (audit #1) ────────────────────────────
+    //
+    // We persist a monotonic high-water-mark of the unix-seconds timestamp
+    // we've observed on every successful server contact and offline verify.
+    // verifyOfflineBlob then uses max(now, hwm, iat) when checking `exp` so
+    // an attacker who rolls the OS clock back can't resurrect an expired
+    // offline code. The HWM lives in its own keychain account (not inside
+    // the token bundle) so it survives sign-out — rollback detection
+    // should work across a sign-out / re-redeem cycle.
+
+    /** Last-seen unix-seconds timestamp, monotonic. null until bootstrap loads it. */
+    private clockHwmSeconds: number | null = null
+    /** Last persisted HWM value — used to debounce keychain writes. */
+    private clockHwmPersistedSeconds = 0
+    /**
+     * Writes-debounce interval. Keychain writes are cheap but not free;
+     * bumping on every heartbeat (default 4h) is already fine, but
+     * network paths can also fire on every refresh. 15 min is a
+     * worst-case bound on how much HWM precision a crash can lose.
+     */
+    private static readonly CLOCK_HWM_PERSIST_INTERVAL_SECONDS = 15 * 60
+    /**
+     * Tolerance for legitimate backward motion (NTP correction after a
+     * drift-ahead, timezone-independent anyway since we use UTC
+     * seconds). 5 minutes is slack-but-not-exploitable.
+     */
+    private static readonly CLOCK_ROLLBACK_TOLERANCE_SECONDS = 5 * 60
+    /**
+     * True once we've seen the local clock behind the persisted HWM by
+     * more than the tolerance. Exposed via a getter so the UI can
+     * surface a banner and shouldBlockApp can refuse new sessions.
+     */
+    private _clockRollbackDetected = false
+
     /**
      * When each plugin webpack-bundles its own copy of this file (tlink-core
      * and tlink-settings both import via relative path), Angular's DI creates
@@ -187,6 +221,7 @@ export class TlinkLicenseService implements OnDestroy {
                 this.lastServerContactAt = info.lastServerContactAt
                 this.offlineGrace = info.offlineGrace
                 this.isLocalTrial = info.isLocalTrial
+                this._clockRollbackDetected = info.clockRollbackDetected
                 this.info$.next(info)
             }
             apply(primary.getLicenseInfo())
@@ -547,6 +582,12 @@ export class TlinkLicenseService implements OnDestroy {
         // if the server is blocked by firewall/VPN.
         this.seedOfflinePublicKeyFromServer().catch(() => { /* best-effort */ })
 
+        // Load the clock high-water-mark BEFORE the first verify so a
+        // rolled-back-clock launch can't resurrect an expired offline
+        // blob. See bumpClockHwm / effectiveNowSeconds for the full
+        // rollback-defense design (audit #1).
+        await this.loadClockHwm()
+
         const bundle = await this.storage.load()
 
         // Offline-session path: a previous launch redeemed an offline activation
@@ -812,6 +853,107 @@ export class TlinkLicenseService implements OnDestroy {
     getDeviceFingerprint (): Promise<string> {
         if (this.proxy) {return this.proxy.getDeviceFingerprint()}
         return this.fingerprint.get()
+    }
+
+    /**
+     * True once a verify/bootstrap/heartbeat has observed local time more
+     * than CLOCK_ROLLBACK_TOLERANCE_SECONDS behind the persisted HWM.
+     * Latches until the next successful server contact bumps HWM forward
+     * past local now (which only happens if the user corrects their
+     * clock and goes back online).
+     */
+    get clockRollbackDetected (): boolean {
+        if (this.proxy) {return this.proxy.clockRollbackDetected}
+        return this._clockRollbackDetected
+    }
+
+    /** Current persisted clock high-water-mark, in unix seconds. Exposed for UI. */
+    get clockHwmUnixSeconds (): number | null {
+        if (this.proxy) {return this.proxy.clockHwmUnixSeconds}
+        return this.clockHwmSeconds
+    }
+
+    // ─── Clock rollback helpers ──────────────────────────────────────────
+
+    /**
+     * Returns the "effective now" for freshness/expiration checks. We
+     * take the maximum of wall-clock now, the persisted HWM, and
+     * (optionally) a blob's `iat` claim. An attacker who rolls the OS
+     * clock back can't drag the effective now below what we've already
+     * seen, so an expired offline code stays expired.
+     */
+    private effectiveNowSeconds (iatSeconds?: number): number {
+        const nowSec = Math.floor(Date.now() / 1000)
+        return Math.max(nowSec, this.clockHwmSeconds ?? 0, iatSeconds ?? 0)
+    }
+
+    /**
+     * Bumps the in-memory HWM to max(current, sample), and persists to
+     * keychain if the delta since last persist crosses the debounce
+     * threshold. Called from every path that successfully observes a
+     * real time (server success, offline verify success).
+     *
+     * Also fires the rollback flag: if we just observed that wall-clock
+     * now is CLOCK_ROLLBACK_TOLERANCE_SECONDS behind the stored HWM,
+     * something moved the OS clock backward.
+     */
+    private async bumpClockHwm (sampleSec?: number): Promise<void> {
+        const nowSec = Math.floor(Date.now() / 1000)
+        const sample = sampleSec ?? nowSec
+        // Rollback check uses the pre-bump HWM — we want to alarm
+        // when wall-clock now is behind what we've ALREADY persisted,
+        // not after this call clamps it forward.
+        if (this.clockHwmSeconds
+            && nowSec + TlinkLicenseService.CLOCK_ROLLBACK_TOLERANCE_SECONDS < this.clockHwmSeconds) {
+            this._clockRollbackDetected = true
+        } else if (this._clockRollbackDetected
+            && nowSec >= this.clockHwmSeconds!) {
+            // Clock has caught back up; clear the flag. (A legit NTP
+            // skew-and-correct would land here; so would an attacker
+            // who fixed their clock after being blocked — which is
+            // the correct outcome.)
+            this._clockRollbackDetected = false
+        }
+        const next = Math.max(this.clockHwmSeconds ?? 0, sample)
+        if (next === this.clockHwmSeconds) {return}
+        this.clockHwmSeconds = next
+        if (next - this.clockHwmPersistedSeconds >= TlinkLicenseService.CLOCK_HWM_PERSIST_INTERVAL_SECONDS
+            || this.clockHwmPersistedSeconds === 0) {
+            this.clockHwmPersistedSeconds = next
+            try {
+                await this.storage.saveClockHwm(next)
+            } catch (err) {
+                // eslint-disable-next-line no-console
+                console.warn('[license] clock HWM persist failed:', (err as Error).message)
+            }
+        }
+    }
+
+    /**
+     * Loads the persisted HWM into memory. Called once at bootstrap
+     * before any verify. If local wall-clock now is already behind the
+     * stored HWM, latches `_clockRollbackDetected` immediately so the
+     * UI can surface the warning before the user tries an offline
+     * redeem.
+     */
+    private async loadClockHwm (): Promise<void> {
+        try {
+            this.clockHwmSeconds = await this.storage.loadClockHwm()
+        } catch {
+            this.clockHwmSeconds = null
+        }
+        if (this.clockHwmSeconds) {
+            this.clockHwmPersistedSeconds = this.clockHwmSeconds
+            const nowSec = Math.floor(Date.now() / 1000)
+            if (nowSec + TlinkLicenseService.CLOCK_ROLLBACK_TOLERANCE_SECONDS < this.clockHwmSeconds) {
+                this._clockRollbackDetected = true
+                // eslint-disable-next-line no-console
+                console.warn(
+                    '[license] clock rollback detected at bootstrap — local now=%d, persisted hwm=%d (delta=%ds)',
+                    nowSec, this.clockHwmSeconds, this.clockHwmSeconds - nowSec,
+                )
+            }
+        }
     }
 
     // ─── Public API ───────────────────────────────────────────────────────
@@ -1256,9 +1398,30 @@ export class TlinkLicenseService implements OnDestroy {
         if (payload.typ !== 'offline') {
             return { ok: false, message: 'Wrong code type — not an offline activation code.' }
         }
-        const now = Math.floor(Date.now() / 1000)
-        if (payload.exp && payload.exp < now) {
+        // Audit #1 — clock rollback. We don't trust wall-clock `now`
+        // alone: we take the max of (now, persisted HWM, iat claim). An
+        // attacker who rolls the OS clock back before an expired code's
+        // `exp` can't drag the effective time below the last timestamp
+        // we've already observed, so an expired code stays expired.
+        const effectiveNowSec = this.effectiveNowSeconds(payload.iat)
+        if (payload.exp && payload.exp < effectiveNowSec) {
             return { ok: false, message: 'Activation code has expired. Ask your admin for a new one.' }
+        }
+        // Also refuse outright if wall-clock now is well behind the
+        // persisted HWM — the blob might not be expired yet, but we
+        // don't want to issue a new local session under a tampered
+        // clock either.
+        const nowSec = Math.floor(Date.now() / 1000)
+        if (this.clockHwmSeconds
+            && nowSec + TlinkLicenseService.CLOCK_ROLLBACK_TOLERANCE_SECONDS < this.clockHwmSeconds) {
+            this._clockRollbackDetected = true
+            return {
+                ok: false,
+                message:
+                    'System clock appears to have been set back. ' +
+                    'Sync this machine\'s clock (System Settings → Date & Time → Set automatically) ' +
+                    'and try again.',
+            }
         }
 
         // Device binding is MANDATORY. A blob minted without a
@@ -1302,11 +1465,16 @@ export class TlinkLicenseService implements OnDestroy {
                     'Ask the admin to re-mint on the new fingerprint (%s) before the next release.',
                     fp,
                 )
+                await this.bumpClockHwm(payload.iat)
                 return { ok: true, payload }
             }
             return { ok: false, message: 'Activation code is bound to a different device.' }
         }
 
+        // Verified blob → bump HWM to at least `iat`. The blob was
+        // server-signed at that time, so we've now observed real time
+        // >= iat even if the local clock disagrees.
+        await this.bumpClockHwm(payload.iat)
         return { ok: true, payload }
     }
 
@@ -1736,6 +1904,11 @@ export class TlinkLicenseService implements OnDestroy {
         this.refreshExpiresAt = e.refresh_expires_in_sec ? Date.now() + e.refresh_expires_in_sec * 1000 : 0
         this.lastReasonCode = e.reason_code
         this.lastServerContactAt = new Date()
+        // We just successfully round-tripped the license server, so
+        // wall-clock `now` is as trustworthy as it ever gets. Bump
+        // the rollback-defense HWM. Fire-and-forget: a keychain
+        // persist failure doesn't fail the envelope application.
+        void this.bumpClockHwm()
         this.offlineGrace = false
         this.consecutiveHeartbeatFailures = 0
         this.licenseStatus = 'active'
@@ -1780,6 +1953,7 @@ export class TlinkLicenseService implements OnDestroy {
         if (h.refresh_expires_in_sec) {this.refreshExpiresAt = Date.now() + h.refresh_expires_in_sec * 1000}
         this.lastReasonCode = h.reason_code
         this.lastServerContactAt = new Date()
+        void this.bumpClockHwm()
         this.offlineGrace = false
         this.consecutiveHeartbeatFailures = 0
         this.emit()
@@ -1940,6 +2114,7 @@ export class TlinkLicenseService implements OnDestroy {
             offlineGrace: this.offlineGrace,
             isLocalTrial: this.isLocalTrial,
             trialDaysRemaining: this.trialDaysRemaining,
+            clockRollbackDetected: this._clockRollbackDetected,
         }
     }
 

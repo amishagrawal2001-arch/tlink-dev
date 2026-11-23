@@ -46,6 +46,14 @@ export interface LicenseInfo {
     isLocalTrial: boolean
     /** Days remaining in the local trial (0 if not on trial). */
     trialDaysRemaining: number
+    /**
+     * True when the local clock has been observed more than ~5 min
+     * behind a persisted high-water-mark. Audit #1 (clock rollback):
+     * keeps an expired offline code from being resurrected by setting
+     * the OS clock backwards. UI should surface a "your clock is set
+     * back" banner.
+     */
+    clockRollbackDetected: boolean
 }
 
 // ─── Server envelopes ───────────────────────────────────────────────────────
