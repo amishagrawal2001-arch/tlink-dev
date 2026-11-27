@@ -274,7 +274,7 @@ const NETWORK_ASSISTANT_DEFAULTS: NetworkAssistantSettings = {
 
 const AGENT_DEFAULTS: AgentSettings = {
     enabled: false,
-    maxRounds: 4,
+    maxRounds: 12,
     intent: 'auto',
     autoRunSafeCommands: false,
 }
