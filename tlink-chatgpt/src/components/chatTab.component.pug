@@ -364,11 +364,12 @@
                 span {{ suggestion.reason || (suggestion.safe ? 'Allowed by safety check' : 'Blocked by safety check') }}
             .suggestion-actions
                 button.btn.btn-outline-secondary.btn-sm(type='button', (click)='copyCommand(suggestion.command)') Copy
-                button.btn.btn-outline-primary.btn-sm(
-                    type='button',
-                    (click)='runSuggestedCommand(suggestion.command, suggestion.safe, undefined, suggestion.risk, suggestion.reason)',
-                    [disabled]='!networkForm.allowCommandRun || !suggestion.safe || !terminalTargets.length'
-                ) Run
+                span.d-inline-block([ngbTooltip]='getRunBlockReason(suggestion)', [disableTooltip]='!getRunBlockReason(suggestion)')
+                    button.btn.btn-outline-primary.btn-sm(
+                        type='button',
+                        (click)='runSuggestedCommand(suggestion.command, suggestion.safe, undefined, suggestion.risk, suggestion.reason)',
+                        [disabled]='!!getRunBlockReason(suggestion)'
+                    ) Run
 
 .chat-input
     .chat-quick-questions(*ngIf='quickQuestions.length')

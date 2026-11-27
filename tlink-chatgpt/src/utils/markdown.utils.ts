@@ -1,4 +1,18 @@
-import { marked } from 'marked'
+import { Marked } from 'marked'
+
+/*
+ * Marked v17's packaging needs the chatgpt plugin's webpack alias to
+ * reach the ESM build (`webpack.config.mjs` aliases `marked` to
+ * `lib/marked.esm.js`). The shared plugin webpack config's
+ * `mainFields: ['esm2015', 'browser', 'module', 'main']` otherwise
+ * prefers the `browser: ./lib/marked.umd.js` entry, which ships a
+ * CJS wrapper whose harmony-import interop here yields an object with
+ * no methods — the exact `markedFn.setOptions is not a function`
+ * runtime error we hit. Using the `Marked` class also avoids the
+ * module-shape question entirely: instance `.parse` is defined on
+ * the prototype.
+ */
+const markedInstance = new Marked({ gfm: true, breaks: true })
 
 /**
  * Markdown rendering for the chat tab's assistant messages.
@@ -62,21 +76,10 @@ function wrapCodeBlocks (html: string): string {
     return opened.replace(/<\/code><\/pre>/g, '</code></pre></div>')
 }
 
-let configured = false
-function configureMarkedOnce (): void {
-    if (configured) { return }
-    marked.setOptions({
-        gfm: true,
-        breaks: true,
-    })
-    configured = true
-}
-
 export function renderChatMarkdown (markdown: string): string {
     if (!markdown) { return '' }
-    configureMarkedOnce()
     try {
-        const html = marked.parse(markdown, { async: false })
+        const html = markedInstance.parse(markdown, { async: false })
         return wrapCodeBlocks(html)
     } catch {
         // Streaming partial markdown (unclosed fence) can throw mid-parse.

@@ -6110,6 +6110,19 @@ export class ChatTabComponent extends BaseTabComponent {
         this.suggestedCommandsCollapsed = false
     }
 
+    getRunBlockReason (suggestion: SuggestedCommand): string {
+        if (!this.networkForm.allowCommandRun) {
+            return '"Allow command run" is off - enable it in the Network Context card.'
+        }
+        if (!suggestion.safe) {
+            return suggestion.reason ? `Blocked by safety check: ${suggestion.reason}` : 'Blocked by safety check.'
+        }
+        if (!this.terminalTargets.length) {
+            return 'No terminal selected - open or pick a terminal tab from the header.'
+        }
+        return ''
+    }
+
     async runSuggestedCommand (
         command: string,
         safe: boolean,
