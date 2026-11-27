@@ -31,12 +31,17 @@ const THEME_VARIABLES: Record<Exclude<ThemeType, 'auto'>, Record<string, string>
         'ai-assistant-message': '#f5f5f5',
         'ai-system-message': '#fff3cd',
         // 背景和边框
+        // Widened the gap between the three bg tiers so panels actually
+        // read as distinct zones in light mode. The old values
+        // (#ffffff/#f8f9fa/#e9ecef) were so close that the chat, input
+        // area, settings sheet, and suggestion chips all blurred into
+        // one white surface. Border also darkened for the same reason.
         'ai-bg-primary': '#ffffff',
-        'ai-bg-secondary': '#f8f9fa',
-        'ai-bg-tertiary': '#e9ecef',
+        'ai-bg-secondary': '#eef1f5',
+        'ai-bg-tertiary': '#dde3eb',
         'ai-text-primary': '#212529',
         'ai-text-secondary': '#6c757d',
-        'ai-border': '#dee2e6',
+        'ai-border': '#c9d1d9',
         'ai-border-radius': '0.375rem',
         'ai-box-shadow': '0 0.125rem 0.25rem rgba(0, 0, 0, 0.075)',
         // 字体
