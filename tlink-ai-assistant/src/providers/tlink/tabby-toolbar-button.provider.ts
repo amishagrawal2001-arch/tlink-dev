@@ -7,7 +7,16 @@ import { LoggerService } from '../../services/core/logger.service';
 export class TabbyToolbarButtonProvider extends ToolbarButtonProvider {
     private tabbyRunning = false;
     private tabbyStatusChecked = false;
-    private readonly tabbyStatusPollMs = 5000;
+    // When Tabby is reachable we poll every 30s. When it isn't (the common
+    // case for users who don't run Tabby locally), we back off 30s -> 60s ->
+    // 2m -> 5m so the browser isn't logging a fresh 401/ECONNREFUSED every
+    // few seconds. Each poll is ONE network hit; the browser auto-logs any
+    // 4xx response and we can't suppress that from JS, so the fix is to
+    // make the hit rare.
+    private readonly tabbyPollIntervalOkMs = 30_000;
+    private readonly tabbyPollIntervalBackoffMs = [30_000, 60_000, 120_000, 300_000];
+    private tabbyPollBackoffStep = 0;
+    private tabbyPollTimer: ReturnType<typeof setTimeout> | null = null;
     private readonly statusIconClass = 'tlink-tabby-status-icon';
 
     constructor(
@@ -48,15 +57,25 @@ export class TabbyToolbarButtonProvider extends ToolbarButtonProvider {
 
     private startStatusPolling(): void {
         // Kick off immediately so the icon reflects current state soon after toolbar render.
-        this.refreshTabbyStatus().catch(error => {
-            this.logger.warn('Initial Tabby status check failed', { error: String(error) });
-        });
+        this.schedulePoll(0);
+    }
 
-        setInterval(() => {
+    private schedulePoll(delayMs: number): void {
+        if (this.tabbyPollTimer) {
+            clearTimeout(this.tabbyPollTimer);
+        }
+        this.tabbyPollTimer = setTimeout(() => {
             this.refreshTabbyStatus().catch(error => {
                 this.logger.warn('Tabby status poll failed', { error: String(error) });
+            }).then(() => {
+                const nextDelay = this.tabbyRunning
+                    ? this.tabbyPollIntervalOkMs
+                    : this.tabbyPollIntervalBackoffMs[
+                        Math.min(this.tabbyPollBackoffStep, this.tabbyPollIntervalBackoffMs.length - 1)
+                    ];
+                this.schedulePoll(nextDelay);
             });
-        }, this.tabbyStatusPollMs);
+        }, delayMs);
     }
 
     private getStatusIconSvg(): string {
@@ -115,9 +134,20 @@ export class TabbyToolbarButtonProvider extends ToolbarButtonProvider {
         const running = await this.checkTabbyReachability();
         this.tabbyRunning = running;
         this.tabbyStatusChecked = true;
+        if (running) {
+            this.tabbyPollBackoffStep = 0;
+        } else {
+            this.tabbyPollBackoffStep = Math.min(
+                this.tabbyPollBackoffStep + 1,
+                this.tabbyPollIntervalBackoffMs.length - 1,
+            );
+        }
         this.applyStatusToToolbarIcon();
         if (fromUserClick) {
             this.logger.info('Tabby toolbar status check', { running });
+            // User asked - reset backoff and poll again on the short cadence.
+            this.tabbyPollBackoffStep = 0;
+            this.schedulePoll(this.tabbyPollIntervalOkMs);
         }
     }
 
