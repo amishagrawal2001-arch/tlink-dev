@@ -16,8 +16,8 @@ export interface KeyEventData {
     metaKey?: boolean
     altKey?: boolean
     shiftKey?: boolean
-    key: string
-    code: string
+    key?: string
+    code?: string
     eventName: string
     time: number
     registrationTime: number
@@ -44,8 +44,12 @@ export function getKeyName (event: KeyEventData): KeyName {
     } else if (event.key === '~') {
         key = '~'
     } else {
-        key = event.code
-        if (REGEX_LATIN_KEYNAME.test(event.key)) {
+        // event.code can be undefined/empty for synthetic KeyboardEvents, IME
+        // composition events, or 'Unidentified' keys — guard before .replace
+        // so one odd key event doesn't blow up Angular's error handler and
+        // cascade into the UI (e.g. breaks click dispatch on nearby buttons).
+        key = event.code ?? ''
+        if (event.key && REGEX_LATIN_KEYNAME.test(event.key)) {
             // Handle Dvorak etc via the reported "character" instead of the scancode
             key = event.key.toUpperCase()
         } else {
