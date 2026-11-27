@@ -3941,7 +3941,7 @@ export class ChatTabComponent extends BaseTabComponent {
         }
 
         return [...candidates].map(command => {
-            const stripped = this.stripWrappingQuotes(command)
+            const stripped = this.stripInlineDescription(this.stripWrappingQuotes(command))
             const check = this.checkCommandSafety(stripped)
             return {
                 id: generateId(),
@@ -3951,6 +3951,33 @@ export class ChatTabComponent extends BaseTabComponent {
                 reason: check.reason,
             }
         })
+    }
+
+    /**
+     * LLM-suggested commands often land annotated like
+     *   `show version (to check the device's operating system and version)`
+     * or `show version - check firmware`. The parenthetical/dash tail is a
+     * human description, not shell input - sending it to a Junos CLI
+     * produces a wall of `syntax error, expecting <command>`. Strip a
+     * trailing natural-language description, but keep anything that
+     * contains shell metachars so we don't mangle e.g.
+     * `grep -E "(foo|bar)" file`.
+     */
+    private stripInlineDescription (value: string): string {
+        let cleaned = value.trim()
+        // Trailing "( description )" - only strip if the inside has a space
+        // and no shell metachars that would hint at a real argument.
+        const parenMatch = /\s+\(([^()]{2,})\)\s*$/.exec(cleaned)
+        if (parenMatch && parenMatch[1].includes(' ') && !/[|&;$<>`"']/.test(parenMatch[1])) {
+            cleaned = cleaned.slice(0, parenMatch.index).trim()
+        }
+        // Trailing " - description" / " — description" / " – description"
+        // (require space-dash-space so flags like `--foo` and `-x` survive).
+        const dashMatch = / [-—–]\s+\S.*$/.exec(cleaned)
+        if (dashMatch && !/[|&;$<>`"']/.test(dashMatch[0])) {
+            cleaned = cleaned.slice(0, dashMatch.index).trim()
+        }
+        return cleaned
     }
 
     private normalizeCommand (value: string): string {
@@ -6143,7 +6170,7 @@ export class ChatTabComponent extends BaseTabComponent {
             this.notifications.error('Blocked: "Allow command run" is off in settings (Network Context card).')
             return false
         }
-        const prepared = this.applyPaginationBypass(this.stripWrappingQuotes(command))
+        const prepared = this.applyPaginationBypass(this.stripInlineDescription(this.stripWrappingQuotes(command)))
         const label = source ? `${source} - ${prepared}` : `Run: ${prepared}`
 
         if (this.networkForm.dryRunCommandMode) {
