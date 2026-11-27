@@ -2708,8 +2708,26 @@ export class ChatTabComponent extends BaseTabComponent {
             }
 
             const assistantMessage = payload?.choices?.[0]?.message
-            const assistantText = this.extractOpenAiMessageContent(assistantMessage).trim()
-            const toolCalls = Array.isArray(assistantMessage?.tool_calls) ? assistantMessage.tool_calls : []
+            let assistantText = this.extractOpenAiMessageContent(assistantMessage).trim()
+            let toolCalls = Array.isArray(assistantMessage?.tool_calls) ? assistantMessage.tool_calls : []
+
+            // Small-model fallback: models below ~7B (qwen2.5-coder:3b was
+            // the trigger case) sometimes "describe" a tool call by
+            // printing `{"name": "<tool>", "parameters": {...}}` as plain
+            // text instead of emitting a proper `tool_calls` field. The
+            // agent loop would otherwise treat that JSON as a final reply
+            // and stop. Recover it: look for a strict shape, require the
+            // name to be in the known-tool allowlist (same set as the
+            // switch in executeAgentToolCall), require args to be an
+            // object, then synthesize a real tool_calls entry and drop
+            // the text so the user doesn't see raw JSON in chat.
+            if (!toolCalls.length && assistantText.length) {
+                const recovered = this.recoverInlineToolCall(assistantText)
+                if (recovered) {
+                    toolCalls = [recovered]
+                    assistantText = ''
+                }
+            }
 
             if (assistantText.length) {
                 latestAssistantText = assistantText
@@ -2805,6 +2823,67 @@ export class ChatTabComponent extends BaseTabComponent {
             }
         }
         return {}
+    }
+
+    private static readonly KNOWN_AGENT_TOOLS = new Set([
+        'list_terminal_targets',
+        'select_terminal_target',
+        'get_terminal_output',
+        'run_terminal_command',
+        'open_connection',
+        'disconnect_connection',
+        'task_complete',
+    ])
+
+    /**
+     * Scan an assistant text reply for a tool call that was emitted as
+     * JSON prose instead of in the OpenAI `tool_calls` field. Returns a
+     * synthetic tool_call compatible with executeAgentToolCall, or null
+     * if nothing safe matched.
+     *
+     * Strict acceptance:
+     *   - A JSON object with a string `name` that exists in the
+     *     KNOWN_AGENT_TOOLS allowlist (prevents us from "executing"
+     *     hallucinated tool names).
+     *   - Arguments under `parameters` or `arguments` must be a plain
+     *     object (not an array, not a primitive, not null).
+     *   - Picks the first valid match; ignores anything that doesn't
+     *     cleanly parse or doesn't fit the shape.
+     */
+    private recoverInlineToolCall (text: string): any | null {
+        if (!text) { return null }
+        const candidates: string[] = []
+        const fenceRe = /```(?:json)?\s*(\{[\s\S]*?\})\s*```/g
+        let m: RegExpExecArray | null
+        while ((m = fenceRe.exec(text)) !== null) {
+            candidates.push(m[1])
+        }
+        // Also catch un-fenced JSON blocks that mention a "name" key.
+        const inlineRe = /\{[^{}]*"name"\s*:\s*"[^"]+"[^{}]*(\{[^{}]*\}[^{}]*)?\}/g
+        while ((m = inlineRe.exec(text)) !== null) {
+            candidates.push(m[0])
+        }
+        for (const raw of candidates) {
+            let parsed: any
+            try {
+                parsed = JSON.parse(raw)
+            } catch {
+                continue
+            }
+            const name = typeof parsed?.name === 'string' ? parsed.name.trim() : ''
+            if (!name || !ChatTabComponent.KNOWN_AGENT_TOOLS.has(name)) { continue }
+            const rawArgs = parsed.parameters ?? parsed.arguments ?? {}
+            if (typeof rawArgs !== 'object' || Array.isArray(rawArgs) || rawArgs === null) { continue }
+            return {
+                id: generateId(),
+                type: 'function',
+                function: {
+                    name,
+                    arguments: JSON.stringify(rawArgs),
+                },
+            }
+        }
+        return null
     }
 
     private async executeAgentToolCall (toolCall: any): Promise<AgentToolExecutionResult> {
