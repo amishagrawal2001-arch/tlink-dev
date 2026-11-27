@@ -85,61 +85,147 @@
     box-shadow: var(--chat-card-shadow-subtle);
     position: relative;
 
-    .title {
-        display: flex;
-        align-items: center;
+    // Identity: profile name + current model, click = open settings.
+    // Single source of truth — binds to profileForm.model, not the
+    // lagging effectiveModel that caused the stale-header bug.
+    .identity {
+        display: inline-flex;
+        align-items: baseline;
         gap: 8px;
-        font-weight: 600;
+        min-width: 0;
+        cursor: pointer;
+        padding: 4px 8px;
+        border-radius: 6px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: inherit;
+        font: inherit;
 
-        span {
-            font-size: 13px;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
+        &:hover, &:focus-visible {
+            background: var(--chat-panel-bg);
+            border-color: var(--chat-border);
+            outline: none;
+        }
+
+        .identity-name {
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: -0.005em;
+            color: var(--chat-fg);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .identity-sep {
+            color: var(--chat-muted);
+            opacity: 0.6;
+        }
+        .identity-model {
+            font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+            font-size: 12px;
+            color: var(--chat-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
     }
 
-    .meta {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
+    .status-pill, .agent-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--chat-border);
+        background: var(--chat-panel-bg);
+        color: var(--chat-muted);
+        font-size: 11.5px;
+        font-weight: 500;
+        font-family: inherit;
+        cursor: pointer;
+        transition: color 0.12s, border-color 0.12s, background 0.12s;
+
+        &:hover { color: var(--chat-fg); border-color: var(--chat-border-strong, var(--chat-border)); }
+        &:focus-visible { outline: 2px solid var(--chat-accent, #f5a623); outline-offset: 1px; }
+    }
+
+    .status-pill .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #6c757d;
+        flex-shrink: 0;
+        transition: background 0.2s, box-shadow 0.2s;
+
+        &.dot--ok   { background: #22c55e; box-shadow: 0 0 5px rgba(34, 197, 94, 0.55); }
+        &.dot--warn { background: #f59e0b; box-shadow: 0 0 5px rgba(245, 158, 11, 0.55); animation: chat-dot-pulse 1.8s ease-in-out infinite; }
+        &.dot--err  { background: #ef4444; box-shadow: 0 0 5px rgba(239, 68, 68, 0.55); }
+        &.dot--unknown { background: #6c757d; }
+    }
+
+    .agent-pill {
+        color: var(--chat-accent, #f5a623);
+        border-color: color-mix(in srgb, var(--chat-accent, #f5a623) 40%, var(--chat-border));
+        background: color-mix(in srgb, var(--chat-accent, #f5a623) 8%, transparent);
+    }
+
+    .header-warning {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 9px;
+        border-radius: 999px;
         font-size: 11px;
         font-weight: 600;
-        color: var(--chat-muted);
-        letter-spacing: 0.02em;
-
-        span {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 3px 8px;
-            border-radius: 999px;
-            border: 1px solid var(--chat-border);
-            background: var(--chat-panel-bg);
-            color: var(--chat-muted);
-        }
-    }
-
-    .warning {
-        background: var(--chat-error-bg);
         color: var(--chat-error-fg);
-        border-color: var(--chat-error-fg);
+        background: color-mix(in srgb, var(--chat-error-fg) 10%, transparent);
+        border: 1px solid color-mix(in srgb, var(--chat-error-fg) 45%, transparent);
+        letter-spacing: 0.02em;
     }
 
     .actions {
         margin-left: auto;
         display: flex;
-        gap: 8px;
+        gap: 6px;
         flex-wrap: wrap;
+        align-items: center;
 
         .terminal-picker {
-            min-width: 200px;
+            min-width: 180px;
 
             select {
-                height: 32px;
-                padding: 4px 8px;
+                height: 30px;
+                padding: 3px 8px;
                 background: var(--chat-panel-bg);
                 color: var(--chat-fg);
                 border-color: var(--chat-border);
+                font-size: 12px;
+            }
+        }
+
+        .btn-icon {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            color: var(--chat-muted);
+            border: 1px solid transparent;
+            border-radius: 6px;
+            cursor: pointer;
+
+            &:hover:not(:disabled) {
+                color: var(--chat-fg);
+                background: var(--chat-panel-bg);
+                border-color: var(--chat-border);
+            }
+            &:disabled { opacity: 0.4; cursor: not-allowed; }
+            &[aria-pressed='true'] {
+                color: var(--chat-accent, #f5a623);
+                background: color-mix(in srgb, var(--chat-accent, #f5a623) 10%, transparent);
+                border-color: color-mix(in srgb, var(--chat-accent, #f5a623) 35%, var(--chat-border));
             }
         }
     }
@@ -149,6 +235,11 @@
         color: var(--chat-fg);
         border-color: var(--chat-border);
     }
+}
+
+@keyframes chat-dot-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.55; }
 }
 
 .chat-pinned-actions,
@@ -219,20 +310,29 @@
         grid-column: 1 / -1;
     }
 
+    // Stacked heading: title line with a subtitle beneath. Clearer than
+    // the old side-by-side layout where long hints collided with the
+    // title or truncated on narrow panes.
     .section-heading {
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        font-size: 13px;
-        font-weight: 700;
-        color: var(--chat-fg);
+        flex-direction: column;
+        gap: 3px;
+        margin-bottom: 4px;
+
+        > span:first-child {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--chat-accent, #f5a623);
+        }
     }
 
     .section-hint {
-        font-size: 11px;
+        font-size: 12px;
         color: var(--chat-muted);
-        font-weight: 500;
+        font-weight: 400;
+        line-height: 1.4;
     }
 
     .section-title {
@@ -998,7 +1098,6 @@
         .message-header {
             display: flex;
             align-items: center;
-            justify-content: space-between;
             gap: 8px;
         }
 
@@ -1010,7 +1109,75 @@
             font-weight: 700;
         }
 
+        // Trust chip (#07): compact badge showing where a message came
+        // from (local/cloud/custom) or whether the scrubber redacted
+        // secrets before sending. Sits beside the role label on the
+        // left; copy button is pushed right with margin-left: auto.
+        .trust-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font: 600 9px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            padding: 3px 7px;
+            border-radius: 10px;
+            border: 1px solid var(--chat-border);
+            color: var(--chat-muted);
+            background: var(--chat-panel-bg);
+            white-space: nowrap;
+            cursor: help;
+
+            &::before {
+                content: '';
+                display: inline-block;
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                background: currentColor;
+            }
+
+            // Assistant - local (Ollama, llama.cpp, LM Studio on localhost)
+            &.trust-chip-local {
+                color: #10b981;
+                border-color: rgba(16, 185, 129, 0.35);
+                background: rgba(16, 185, 129, 0.08);
+            }
+            // Assistant - known cloud brand (OpenAI, Anthropic, Gemini)
+            &.trust-chip-cloud {
+                color: #60a5fa;
+                border-color: rgba(96, 165, 250, 0.35);
+                background: rgba(96, 165, 250, 0.08);
+            }
+            // Assistant - custom endpoint (unknown destination)
+            &.trust-chip-custom {
+                color: #c084fc;
+                border-color: rgba(192, 132, 252, 0.35);
+                background: rgba(192, 132, 252, 0.08);
+            }
+            // User message where scrubber ran and redacted something
+            &.trust-chip-good {
+                color: #10b981;
+                border-color: rgba(16, 185, 129, 0.35);
+                background: rgba(16, 185, 129, 0.08);
+            }
+            // User message sent with secrets kept (user opted into risk)
+            &.trust-chip-warn {
+                color: #f59e0b;
+                border-color: rgba(245, 158, 11, 0.45);
+                background: rgba(245, 158, 11, 0.12);
+                &::before {
+                    animation: trust-chip-warn-pulse 1.4s ease-in-out infinite;
+                }
+            }
+        }
+        @keyframes trust-chip-warn-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
         .message-copy {
+            margin-left: auto;
             border: 1px solid var(--chat-border);
             border-radius: 6px;
             padding: 2px 8px;
@@ -1032,6 +1199,167 @@
             word-break: break-word;
             line-height: 1.5;
             font-size: 13px;
+        }
+
+        // Rendered-markdown prose (assistant messages only). Overrides
+        // the pre-wrap from .content so marked's <p>/<ul>/<pre> use
+        // their natural whitespace rules instead of double-spacing.
+        .content.assistant-prose {
+            white-space: normal;
+
+            p { margin: 0 0 8px; }
+            p:last-child { margin-bottom: 0; }
+
+            ul, ol { margin: 0 0 8px; padding-left: 20px; }
+            li { margin-bottom: 2px; }
+            li > p { margin-bottom: 4px; }
+
+            h1, h2, h3, h4 {
+                margin: 12px 0 6px;
+                font-weight: 600;
+                line-height: 1.3;
+            }
+            h1 { font-size: 16px; }
+            h2 { font-size: 15px; }
+            h3 { font-size: 14px; }
+            h4 { font-size: 13px; }
+
+            strong { font-weight: 600; }
+            em { font-style: italic; }
+
+            a {
+                color: var(--chat-accent, #2563eb);
+                text-decoration: none;
+                &:hover { text-decoration: underline; }
+            }
+
+            // Inline code — monospace chip
+            :not(pre) > code {
+                font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+                font-size: 12px;
+                background: var(--chat-panel-bg);
+                border: 1px solid var(--chat-border);
+                color: var(--chat-accent, #c47700);
+                padding: 1px 5px;
+                border-radius: 4px;
+            }
+
+            // Fenced code blocks wrapped by renderChatMarkdown. The
+            // outer .code-block-wrapper carries data-lang (shown top-
+            // left as a label pseudo-element) and holds a right-aligned
+            // action toolbar (Copy / optional Run) injected by the
+            // markdown util. Clicks are handled via delegation on
+            // .assistant-prose - see chatTab.component.ts
+            // handleAssistantClick().
+            .code-block-wrapper {
+                margin: 8px 0;
+                background: var(--chat-bg, #0d1117);
+                border: 1px solid var(--chat-border);
+                border-radius: 6px;
+                overflow: hidden;
+                position: relative;
+
+                &::before {
+                    content: attr(data-lang);
+                    position: absolute;
+                    top: 4px;
+                    left: 10px;
+                    font: 10px/1 ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+                    text-transform: uppercase;
+                    letter-spacing: 0.08em;
+                    color: var(--chat-muted);
+                    opacity: 0.6;
+                    z-index: 1;
+                    pointer-events: none;
+                }
+
+                .code-block-actions {
+                    position: absolute;
+                    top: 2px;
+                    right: 4px;
+                    display: flex;
+                    gap: 4px;
+                    opacity: 0;
+                    transition: opacity 120ms ease-out;
+                    z-index: 2;
+                }
+                &:hover .code-block-actions,
+                &:focus-within .code-block-actions {
+                    opacity: 1;
+                }
+
+                .code-block-btn {
+                    appearance: none;
+                    background: var(--chat-panel-bg, #1a1f26);
+                    color: var(--chat-muted);
+                    border: 1px solid var(--chat-border);
+                    border-radius: 4px;
+                    font: 500 10px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    letter-spacing: 0.04em;
+                    text-transform: uppercase;
+                    padding: 4px 8px;
+                    cursor: pointer;
+                    transition: background-color 120ms ease-out, color 120ms ease-out, border-color 120ms ease-out;
+
+                    &:hover {
+                        background: var(--chat-accent, #2563eb);
+                        color: #fff;
+                        border-color: var(--chat-accent, #2563eb);
+                    }
+                    &:focus-visible {
+                        outline: 2px solid var(--chat-accent, #2563eb);
+                        outline-offset: 1px;
+                    }
+                }
+                .code-block-btn-run:hover {
+                    background: #d97706; // amber for the irreversible one
+                    border-color: #d97706;
+                }
+
+                pre {
+                    margin: 0;
+                    // top padding leaves room for the lang label + action toolbar
+                    padding: 22px 14px 12px;
+                    overflow-x: auto;
+                    background: transparent;
+                    border: none;
+                    border-radius: 0;
+                }
+                code {
+                    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+                    font-size: 12px;
+                    line-height: 1.55;
+                    color: var(--chat-fg);
+                    background: transparent;
+                    padding: 0;
+                    border: none;
+                    white-space: pre;
+                }
+            }
+
+            // Blockquotes & tables (rare but worth it)
+            blockquote {
+                margin: 6px 0;
+                padding-left: 10px;
+                border-left: 3px solid var(--chat-border);
+                color: var(--chat-muted);
+            }
+            table {
+                border-collapse: collapse;
+                margin: 8px 0;
+                font-size: 12px;
+            }
+            th, td {
+                border: 1px solid var(--chat-border);
+                padding: 4px 8px;
+            }
+            th { background: var(--chat-panel-bg); font-weight: 600; }
+
+            hr {
+                margin: 10px 0;
+                border: none;
+                border-top: 1px solid var(--chat-border);
+            }
         }
     }
 
@@ -1136,6 +1464,43 @@
         font-size: 12px;
     }
 
+    .chat-context-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 8px;
+
+        .context-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            font-size: 11.5px;
+            font-weight: 500;
+            font-family: inherit;
+            color: var(--chat-muted);
+            background: var(--chat-panel-bg);
+            border: 1px solid var(--chat-border);
+            border-radius: 999px;
+            cursor: pointer;
+            transition: color 0.12s, background 0.12s, border-color 0.12s;
+
+            i { font-size: 10px; opacity: 0.8; }
+
+            &:hover {
+                color: var(--chat-fg);
+                background: var(--chat-bg);
+                border-color: var(--chat-accent, #f5a623);
+                i { opacity: 1; }
+            }
+            &:active { transform: scale(0.97); }
+            &:focus-visible {
+                outline: 2px solid var(--chat-accent, #f5a623);
+                outline-offset: 1px;
+            }
+        }
+    }
+
     .chat-input-box {
         position: relative;
         display: flex;
@@ -1223,4 +1588,34 @@
     top: 0;
     height: 1px;
     background: var(--theme-bg-less);
+}
+
+// Shown next to the Model field when Ollama has a /api/tags list but the
+// typed tag isn't on it — avoids silent 404s on chat submit.
+.model-missing-warning {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 6px;
+    padding: 8px 12px;
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.4;
+
+    i.fas.fa-exclamation-triangle { color: #f59e0b; margin-right: 2px; }
+    strong { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-weight: 600; }
+
+    a {
+        flex-shrink: 0;
+        font-size: 11.5px;
+        color: #f59e0b;
+        text-decoration: none;
+        white-space: nowrap;
+
+        &:hover { text-decoration: underline; }
+        i { margin-right: 3px; }
+    }
 }

@@ -777,6 +777,30 @@
                                     </option>
                                 </select>
                             </div>
+
+                            <!-- Ollama model-not-installed warning. Fires when the
+                                 server is online but the typed/selected model is
+                                 missing from the installed list. Pull button
+                                 kicks off a download + progress in the Model
+                                 Manager section below. -->
+                            <div *ngIf="providerName === 'ollama' && field.key === 'model'
+                                        && configs[providerName]?.model
+                                        && localStatus['ollama']
+                                        && !isOllamaModelKnown(configs[providerName].model)"
+                                 class="model-missing-warning">
+                                <div class="mmw-text">
+                                    <i class="fa fa-exclamation-triangle" aria-hidden="true"></i>
+                                    <strong>{{ configs[providerName].model }}</strong> is not installed on this Ollama server — chat will 404 until it's pulled.
+                                </div>
+                                <button type="button"
+                                    class="btn btn-sm btn-warning mmw-pull"
+                                    [disabled]="ollamaModelPulling[configs[providerName].model]"
+                                    (click)="pullRecommendedOllamaModel(configs[providerName].model)">
+                                    <i *ngIf="!ollamaModelPulling[configs[providerName].model]" class="fa fa-download"></i>
+                                    <i *ngIf="ollamaModelPulling[configs[providerName].model]" class="fa fa-spinner fa-spin"></i>
+                                    {{ ollamaModelPulling[configs[providerName].model] ? 'Pulling…' : 'Pull now' }}
+                                </button>
+                            </div>
                             <!-- API Key 验证提示 -->
                             <div *ngIf="field.key === 'apiKey' && configs[providerName]?.[field.key]"
                                  class="validation-feedback"
@@ -810,6 +834,19 @@
                                     </p>
                                     <button class="btn btn-sm btn-primary" (click)="startOllama($event)">
                                         <i class="fa fa-play"></i> Start Ollama
+                                    </button>
+                                </div>
+
+                                <!-- Running — show Stop control and the recommended-models chips. -->
+                                <div *ngIf="localStatus['ollama']" class="ollama-running-bar">
+                                    <span class="running-pill">
+                                        <span class="running-dot"></span>
+                                        Ollama is running
+                                    </span>
+                                    <button class="btn btn-sm btn-outline-danger"
+                                        (click)="stopOllama($event)"
+                                        title="Stop the Ollama server. Running chats will fail until you start it again.">
+                                        <i class="fa fa-stop"></i> Stop
                                     </button>
                                 </div>
                                 <!-- Installed Models List -->
@@ -861,12 +898,31 @@
                                     </div>
                                 </div>
 
+                                <!-- Recommended models -->
+                                <div *ngIf="localStatus['ollama']" class="recommended-models">
+                                    <h6>Recommended for terminal + code</h6>
+                                    <div class="rec-chip-list">
+                                        <button *ngFor="let rec of recommendedOllamaModels"
+                                            type="button"
+                                            class="rec-chip"
+                                            [class.rec-chip--installed]="isOllamaModelInstalled(rec.name)"
+                                            [disabled]="ollamaModelPulling[rec.name]"
+                                            [title]="rec.description + ' — ' + rec.size"
+                                            (click)="pullRecommendedOllamaModel(rec.name)">
+                                            <span class="rec-chip-name">{{ rec.name }}</span>
+                                            <span class="rec-chip-size">{{ rec.size }}</span>
+                                            <i *ngIf="isOllamaModelInstalled(rec.name)" class="fa fa-check" aria-hidden="true"></i>
+                                            <i *ngIf="ollamaModelPulling[rec.name]" class="fa fa-spinner fa-spin" aria-hidden="true"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
                                 <!-- Pull New Model -->
                                 <div class="pull-model-section">
                                     <h6>Pull New Model</h6>
                                     <div class="pull-model-form">
-                                        <input type="text" 
-                                               class="form-control" 
+                                        <input type="text"
+                                               class="form-control"
                                                [(ngModel)]="newModelName"
                                                placeholder="e.g., qwen2.5:7b, mistral:7b, codellama:13b"
                                                [disabled]="ollamaModelPulling[newModelName]">

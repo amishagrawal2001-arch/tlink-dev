@@ -96,7 +96,7 @@ export const PROVIDER_DEFAULTS: Record<string, ProviderDefaults> = {
     },
     ollama: {
         baseURL: 'http://localhost:11434',  // Use native API by default (can be changed to /v1 for OpenAI-compatible)
-        model: 'llama3.1',
+        model: 'qwen2.5-coder:3b',
         maxTokens: 1000,
         temperature: 0.7,
         timeout: 30000,

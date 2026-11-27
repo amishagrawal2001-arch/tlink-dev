@@ -353,6 +353,76 @@
     }
 }
 
+/* #07 - trust chip. Shows provenance (local/cloud/custom + model)
+   on assistant replies and scrubber state (redacted / sent-unscrubbed)
+   on user prompts. Sits at the top of the bubble. */
+.trust-chip-wrap {
+    display: flex;
+    margin: 0 0 6px 0;
+
+    &.align-right {
+        justify-content: flex-end;
+    }
+}
+
+.trust-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font: 600 9px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 3px 8px;
+    border-radius: 10px;
+    border: 1px solid var(--ai-border, rgba(255, 255, 255, 0.12));
+    color: var(--ai-muted, #94a3b8);
+    background: var(--ai-panel-bg, rgba(255, 255, 255, 0.04));
+    white-space: nowrap;
+    cursor: help;
+
+    &::before {
+        content: '';
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+    }
+
+    &.trust-chip-local {
+        color: #10b981;
+        border-color: rgba(16, 185, 129, 0.35);
+        background: rgba(16, 185, 129, 0.08);
+    }
+    &.trust-chip-cloud {
+        color: #60a5fa;
+        border-color: rgba(96, 165, 250, 0.35);
+        background: rgba(96, 165, 250, 0.08);
+    }
+    &.trust-chip-custom {
+        color: #c084fc;
+        border-color: rgba(192, 132, 252, 0.35);
+        background: rgba(192, 132, 252, 0.08);
+    }
+    &.trust-chip-good {
+        color: #10b981;
+        border-color: rgba(16, 185, 129, 0.35);
+        background: rgba(16, 185, 129, 0.08);
+    }
+    &.trust-chip-warn {
+        color: #f59e0b;
+        border-color: rgba(245, 158, 11, 0.45);
+        background: rgba(245, 158, 11, 0.12);
+        &::before {
+            animation: trust-chip-warn-pulse 1.4s ease-in-out infinite;
+        }
+    }
+}
+@keyframes trust-chip-warn-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
     .chat-message {

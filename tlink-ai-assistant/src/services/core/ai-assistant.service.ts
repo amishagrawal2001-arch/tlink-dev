@@ -5,10 +5,11 @@ import {
     ChatMessage, MessageRole, ChatRequest, ChatResponse, CommandRequest, CommandResponse,
     ExplainRequest, ExplainResponse, StreamEvent, ToolCall, ToolResult,
     AgentStreamEvent, AgentLoopConfig, TerminationReason, AgentState, ToolCallRecord,
-    TerminationResult
+    TerminationResult, ProviderCapability
 } from '../../types/ai.types';
 import { AiProviderManagerService } from './ai-provider-manager.service';
 import { ConfigProviderService } from './config-provider.service';
+import { isShellCommandSafe } from '../../utils/shell-command-safety';
 import { TerminalContextService } from '../terminal/terminal-context.service';
 import { TerminalToolsService } from '../terminal/terminal-tools.service';
 import { TerminalManagerService } from '../terminal/terminal-manager.service';
@@ -1308,18 +1309,43 @@ export class AiAssistantService {
         request: ChatRequest,
         config: AgentLoopConfig = {}
     ): Observable<AgentStreamEvent> {
-        const configuredEngine = (this.config.get<string>('agentEngine', 'auto') || 'auto').toLowerCase();
-        // Drop the deprecated "continue" option. Anything that isn't a known
-        // engine collapses to the auto-select path.
-        let engine: 'langgraph' | 'legacy' | 'auto';
-        if (configuredEngine === 'continue') {
-            this.logger.warn('Continue agent engine was removed. Falling back to auto.');
-            engine = 'auto';
-        } else if (configuredEngine === 'langgraph' || configuredEngine === 'legacy') {
-            engine = configuredEngine;
-        } else {
-            engine = 'auto';
+        // Capability gate — fail fast and loud when agent mode is on but
+        // the active provider / model can't actually do tool use. Before
+        // this, non-FUNCTION_CALL providers silently fell back to regex-
+        // parsing text for tool invocations, which hallucinates on weaker
+        // models. Claude-family bypasses the gate because the Legacy loop
+        // speaks Anthropic's native tool_use directly; the provider's
+        // `capabilities` array doesn't need FUNCTION_CALL declared for
+        // that path to work.
+        const activeProvider = this.providerManager.getActiveProvider();
+        const activeName = this.providerManager.getActiveProviderName() || '';
+        const isClaudeFamily = this.preferLegacyForCurrentProvider();
+        if (!activeProvider) {
+            return new Observable<AgentStreamEvent>(sub => {
+                sub.next({ type: 'error', error: 'No AI provider is active. Open Settings → AI Assistant → pick a provider, then try again.' });
+                sub.complete();
+            });
         }
+        const supportsTools = activeProvider.supportsCapability(ProviderCapability.FUNCTION_CALL);
+        if (!supportsTools && !isClaudeFamily) {
+            const displayName = activeProvider.displayName || activeName || 'the current provider';
+            const msg = `Agent mode needs tool-calling (function_call) support, and ${displayName} doesn't declare it. Either switch to OpenAI / Groq / a Claude model, or turn Agent mode off and send the message as direct chat.`;
+            this.logger.warn('Agent mode blocked by capability gate', { provider: activeName, declared: activeProvider.capabilities });
+            return new Observable<AgentStreamEvent>(sub => {
+                sub.next({ type: 'error', error: msg });
+                sub.complete();
+            });
+        }
+
+        const configuredEngine = (this.config.get<string>('agentEngine', 'auto') || 'auto').toLowerCase();
+        // Unknown engine values collapse to the auto-select path. (The
+        // deprecated 'continue' engine and its ContinueAgentService were
+        // deleted — any stale value in a user's config silently falls
+        // through here instead of being special-cased.)
+        let engine: 'langgraph' | 'legacy' | 'auto' =
+            (configuredEngine === 'langgraph' || configuredEngine === 'legacy')
+                ? configuredEngine
+                : 'auto';
 
         // Auto-select: Claude-family providers run best on the Legacy loop
         // (which mirrors Anthropic's native tool-use pattern — no planner /
@@ -1348,6 +1374,38 @@ export class AiAssistantService {
         if (name.includes('anthropic') || name.includes('claude')) return true;
         const model = (this.config.getProviderConfig(provider)?.model || '').toLowerCase();
         return model.startsWith('claude-');
+    }
+
+    /**
+     * Auto-decide whether the LangGraph planner node is worth running
+     * for the currently active model. Used only when the user hasn't
+     * explicitly set `agentPlannerEnabled` either way.
+     *
+     * Heuristic: a strong model can plan AND execute in one chat call
+     * — the pre-planner is pure latency with no accuracy gain. A weak
+     * / small model benefits from the explicit plan step because it
+     * stops it from thrashing on tool choice.
+     *
+     * The patterns below bucket today's common labels. Unknown model
+     * strings default to `true` (keep the planner) so weak-by-default
+     * is the safe fallback.
+     */
+    private shouldUsePlannerByDefault (): boolean {
+        const provider = this.config.getDefaultProvider() || '';
+        const model = (this.config.getProviderConfig(provider)?.model || '').toLowerCase().trim();
+        if (!model) { return true; }
+
+        // Strong proprietary models — skip planner.
+        if (/^gpt-4|^gpt-5|^o\d-|^o\d\b/.test(model)) { return false; }
+        if (/^claude-(3-opus|3-5|3\.5|4|5|opus|sonnet-4|sonnet-5)/.test(model)) { return false; }
+        if (/gemini-1\.5-pro|gemini-2/.test(model)) { return false; }
+
+        // Strong open-weight models (≥ 32B or known-strong families).
+        if (/[:\-](32|34|65|70|72|120|180|405)b\b/.test(model)) { return false; }
+        if (/mixtral|mistral-large|deepseek-v3|deepseek-chat|qwen2\.5-?72|command-r-plus/.test(model)) { return false; }
+
+        // Default: planner helps for small / unknown models.
+        return true;
     }
 
     /**
@@ -1911,7 +1969,18 @@ export class AiAssistantService {
         const timeoutMs = config.timeoutMs || 120000;
         const repeatThreshold = config.repeatThreshold || 3;
         const failureThreshold = config.failureThreshold || 3;
-        const plannerEnabled = (this.config.get<boolean>('agentPlannerEnabled', true) ?? true);
+        // Planner default used to be unconditional true, which cost a
+        // full LLM round-trip per message (~500ms–2s on Ollama) even
+        // when the main model was strong enough to plan + execute in
+        // one call. Now: if the user has explicitly set the flag we
+        // honour it; otherwise we auto-decide from the active model.
+        // Strong models skip the planner, weak ones still get it.
+        const plannerExplicit = this.config.get<boolean | null>('agentPlannerEnabled', null as any);
+        const plannerAuto = this.shouldUsePlannerByDefault();
+        const plannerEnabled = (plannerExplicit === true || plannerExplicit === false)
+            ? plannerExplicit
+            : plannerAuto;
+        this.logger.info('agent planner decision', { explicit: plannerExplicit, auto: plannerAuto, final: plannerEnabled });
         const reviewerEnabled = (this.config.get<boolean>('agentReviewerEnabled', true) ?? true);
 
         const callbacks = {
@@ -2929,16 +2998,26 @@ export class AiAssistantService {
             const startTime = Date.now();
 
             try {
-                // Always require approval for commands and patches
+                // Always require approval for commands and patches — with
+                // one exception: when the user has opted into
+                // agentAutoRunSafeCommands AND the shell-command safety
+                // classifier says the command is read-only / introspective
+                // (ls, pwd, cat, git status, …). The classifier denies by
+                // default and never lets mutating commands slip through.
                 if (toolCall.name === 'write_to_terminal' && toolCall.input?.command) {
                     const command = toolCall.input.command;
-                    const approved = await this.agentApproval.requestApproval({
+                    const autoRun = !!this.config.get('agentAutoRunSafeCommands', false);
+                    const safety = autoRun ? isShellCommandSafe(command) : { safe: false, reason: 'auto-run disabled' };
+                    const approved = safety.safe ? true : await this.agentApproval.requestApproval({
                         id: toolCall.id,
                         type: 'command',
                         title: 'Approve Command Execution',
                         command,
                         detail: 'The agent wants to run this command.'
                     });
+                    if (safety.safe) {
+                        this.logger.info('agent auto-ran safe command', { command, reason: safety.reason });
+                    }
 
                     if (!approved) {
                         const duration = Date.now() - startTime;
@@ -2988,13 +3067,19 @@ export class AiAssistantService {
                 // safe regex in the bridge, but the ACTION could still be
                 // destructive so the human stays in the loop).
                 if (toolCall.name === 'mcp_exec_command' && toolCall.input?.command) {
-                    const approved = await this.agentApproval.requestApproval({
+                    const mcpCmd = String(toolCall.input.command);
+                    const autoRun = !!this.config.get('agentAutoRunSafeCommands', false);
+                    const safety = autoRun ? isShellCommandSafe(mcpCmd) : { safe: false, reason: 'auto-run disabled' };
+                    const approved = safety.safe ? true : await this.agentApproval.requestApproval({
                         id: toolCall.id,
                         type: 'command',
                         title: 'Approve MCP Command Execution',
-                        command: String(toolCall.input.command),
+                        command: mcpCmd,
                         detail: `The agent wants to run this command via the MCP bridge (session ${toolCall.input.tabId || 'default'}).`
                     });
+                    if (safety.safe) {
+                        this.logger.info('agent auto-ran safe MCP command', { command: mcpCmd, reason: safety.reason });
+                    }
                     if (!approved) {
                         const duration = Date.now() - startTime;
                         subscriber.next({

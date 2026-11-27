@@ -1,22 +1,28 @@
 import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked, AfterViewInit, ViewEncapsulation, HostBinding, HostListener, ChangeDetectorRef, SecurityContext } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
-import { Subject } from 'rxjs';
+import { Subject, interval } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { NgbModal } from '@ng-bootstrap/ng-bootstrap';
-import { ChatMessage, MessageRole, StreamEvent, AgentStreamEvent } from '../../types/ai.types';
+import { ChatMessage, MessageRole, StreamEvent, AgentStreamEvent, HealthStatus } from '../../types/ai.types';
 import { AiAssistantService } from '../../services/core/ai-assistant.service';
+import { AiProviderManagerService } from '../../services/core/ai-provider-manager.service';
+import { FirstRunWizardComponent } from '../onboarding/first-run-wizard.component';
 import { ConfigProviderService } from '../../services/core/config-provider.service';
 import { LoggerService } from '../../services/core/logger.service';
 import { ChatHistoryService } from '../../services/chat/chat-history.service';
 import { AiSidebarService } from '../../services/chat/ai-sidebar.service';
 import { ThemeService, ThemeType } from '../../services/core/theme.service';
 import { ContextManager } from '../../services/context/manager';
+import { TerminalManagerService } from '../../services/terminal/terminal-manager.service';
 import { ToolStreamProcessorService } from '../../services/tools/tool-stream-processor.service';
 import { AgentApprovalService, AgentApprovalRequest } from '../../services/core/agent-approval.service';
 import { AnyUIStreamEvent } from '../../services/tools/types/ui-stream-event.types';
 import { PlatformDetectionService, OSType } from '../../services/platform/platform-detection.service';
 import { SelectorService, SelectorOption } from 'tlink-core';
 import { ProviderConfig, ProviderConfigUtils } from '../../types/provider.types';
+import { detectSecrets, redactSecrets, SecretMatch } from '../../utils/secret-scrubber';
+import { SecretScrubConfirmDialogComponent, SecretScrubChoice } from '../security/secret-scrub-confirm-dialog.component';
+import { ToastService } from '../../services/core/toast.service';
 
 /**
  * AI Sidebar Component - Replaces ChatInterfaceComponent
@@ -51,6 +57,12 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
     isLoading = false;
     currentProvider: string = '';
     currentModel: string = '';
+    // Provider health pill — probed on init, after each provider switch,
+    // and every PROVIDER_HEALTH_POLL_MS. Shown as a dot + label in the header
+    // so the user sees the state before they send a message that would fail.
+    providerHealth: HealthStatus | 'unknown' = 'unknown';
+    providerLatencyMs: number | null = null;
+    private readonly PROVIDER_HEALTH_POLL_MS = 30000;
     currentSessionId: string = '';
     showScrollTop = false;
     showScrollBottom = false;
@@ -67,6 +79,7 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
         { value: 'legacy', label: 'Legacy (Claude-native)' }
     ];
     selectedAgentEngine: string = 'auto';
+    agentAutoRunSafeCommands: boolean = false;
     private isSwitchingProvider: boolean = false;
     intentOptions: { value: string; label: string }[] = [
         { value: 'auto', label: 'Auto' },
@@ -115,7 +128,11 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
         private platformDetection: PlatformDetectionService,
         private selector: SelectorService,
         private cdr: ChangeDetectorRef,
-        private sanitizer: DomSanitizer
+        private sanitizer: DomSanitizer,
+        private providerManager: AiProviderManagerService,
+        private modal: NgbModal,
+        private terminalManager: TerminalManagerService,
+        private toastService: ToastService,
     ) {
         // Detect platform
         this.isMacOS = this.platformDetection.detectOS() === OSType.MACOS;
@@ -140,6 +157,7 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
         if ((configuredEngine || '').toLowerCase() !== this.selectedAgentEngine) {
             this.config.set('agentEngine', this.selectedAgentEngine);
         }
+        this.agentAutoRunSafeCommands = !!this.config.get('agentAutoRunSafeCommands', false);
 
         // Listen to provider changes (reload on any config change)
         // Note: We check periodically or reload when switching providers
@@ -153,11 +171,13 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
                 if (!this.isSwitchingProvider) {
                     this.loadCurrentProvider();
                     this.buildModelOptions();
+                    this.refreshProviderHealth();
                 }
                 this.workingDir = this.config.get<string>('agentWorkingDir', '') || '';
                 this.selectedAgentEngine = this.normalizeAgentEngine(
                     this.config.get<string>('agentEngine', 'auto') || 'auto'
                 );
+                this.agentAutoRunSafeCommands = !!this.config.get('agentAutoRunSafeCommands', false);
             });
 
         this.agentApproval.pending$
@@ -195,6 +215,57 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
 
         // Build model switcher options
         this.buildModelOptions();
+
+        // Prime + poll provider health for the header status pill.
+        this.refreshProviderHealth();
+        interval(this.PROVIDER_HEALTH_POLL_MS)
+            .pipe(takeUntil(this.destroy$))
+            .subscribe(() => this.refreshProviderHealth());
+
+        // First-run: if nothing is configured, open the wizard. Deferred
+        // by a tick so NgbModal attaches after the sidebar has mounted.
+        setTimeout(() => this.maybeShowFirstRunWizard(), 0);
+    }
+
+    /**
+     * Open the first-run wizard when no provider is usable. "Usable"
+     * means enabled AND has either an apiKey or a baseURL. The wizard
+     * writes a config, sets the default provider, smoke-tests, and
+     * closes; we then re-sync the sidebar state.
+     */
+    private maybeShowFirstRunWizard(): void {
+        if (this.hasAnyUsableProvider()) { return; }
+        try {
+            const ref = this.modal.open(FirstRunWizardComponent, {
+                backdrop: 'static',
+                keyboard: false,
+                size: 'lg',
+                centered: true,
+                windowClass: 'ai-first-run-wizard-modal',
+            });
+            const after = () => {
+                this.loadCurrentProvider();
+                this.buildModelOptions();
+                this.refreshProviderHealth();
+            };
+            ref.result.then(after, after);
+        } catch (err) {
+            this.logger.warn('first-run wizard open failed', { err });
+        }
+    }
+
+    private hasAnyUsableProvider(): boolean {
+        const activeName = this.getActiveProviderName();
+        if (activeName) {
+            const cfg = this.config.getProviderConfig(activeName);
+            if (cfg && (cfg.apiKey || cfg.baseURL)) { return true; }
+        }
+        const configs = this.config.getAllProviderConfigs();
+        for (const key of Object.keys(configs)) {
+            const c = configs[key];
+            if (c && c.enabled !== false && (c.apiKey || c.baseURL)) { return true; }
+        }
+        return false;
     }
 
     ngOnDestroy(): void {
@@ -299,6 +370,53 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
 
         this.logActiveProviderState('loadCurrentProvider');
         this.markUiDirty();
+    }
+
+    /**
+     * Probe the active provider's health and update the pill.
+     * Non-blocking — on any failure the pill shows "unknown" rather than hiding.
+     */
+    private async refreshProviderHealth(): Promise<void> {
+        const name = this.getActiveProviderName();
+        if (!name) {
+            this.providerHealth = 'unknown';
+            this.providerLatencyMs = null;
+            this.markUiDirty();
+            return;
+        }
+        const started = performance.now();
+        try {
+            const status = await this.providerManager.getProviderHealthStatus(name, false);
+            this.providerHealth = status;
+            this.providerLatencyMs = Math.round(performance.now() - started);
+        } catch (err) {
+            this.providerHealth = 'unknown';
+            this.providerLatencyMs = null;
+            this.logger.debug('provider health probe failed', { name, err });
+        }
+        this.markUiDirty();
+    }
+
+    /** CSS class suffix for the status dot. */
+    getHealthDotClass(): string {
+        switch (this.providerHealth) {
+            case HealthStatus.HEALTHY: return 'status-dot--healthy';
+            case HealthStatus.DEGRADED: return 'status-dot--degraded';
+            case HealthStatus.UNHEALTHY: return 'status-dot--unhealthy';
+            default: return 'status-dot--unknown';
+        }
+    }
+
+    /** Short label shown on hover; also drives the status pill a11y text. */
+    getHealthTooltip(): string {
+        const name = this.currentProvider || 'provider';
+        const latency = this.providerLatencyMs !== null ? ` (${this.providerLatencyMs}ms)` : '';
+        switch (this.providerHealth) {
+            case HealthStatus.HEALTHY: return `${name} • online${latency} — click to switch`;
+            case HealthStatus.DEGRADED: return `${name} • slow${latency} — click to switch`;
+            case HealthStatus.UNHEALTHY: return `${name} • offline — click to switch or reconfigure`;
+            default: return `${name} • status unknown — click to switch`;
+        }
     }
 
     /**
@@ -426,6 +544,147 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
      */
     private getActiveProviderName(): string {
         return this.aiService.getProviderStatus()?.active?.name || this.config.getDefaultProvider() || '';
+    }
+
+    // ------------------------------------------------------------------
+    // #07 - Secret scrubber + per-message trust metadata
+    // Mirrors tlink-chatgpt/src/components/chatTab.component.ts; shared
+    // utility is src/utils/secret-scrubber.ts.
+    // ------------------------------------------------------------------
+
+    /**
+     * Classify the active provider's endpoint into a trust tier so the
+     * UI can show the right badge AND the scrubber can decide whether
+     * to run (local = trusted, skip scan).
+     *
+     * `local`  - baseURL resolves to localhost / 127.0.0.1 / ::1
+     * `cloud`  - a known-branded cloud provider (openai, anthropic, gemini, google)
+     * `custom` - any other non-local endpoint we don't recognize
+     */
+    private classifyProviderTrust(providerName: string, baseURL: string | undefined): 'local' | 'cloud' | 'custom' {
+        if (baseURL && this.isLocalEndpointUrl(baseURL)) return 'local';
+        const name = (providerName || '').toLowerCase();
+        // Ollama defaults to localhost if baseURL is blank - treat as local.
+        if (!baseURL && (name === 'ollama' || name === 'vllm' || name === 'lm-studio')) return 'local';
+        if (name === 'openai' || name === 'anthropic' || name === 'gemini' || name === 'google') return 'cloud';
+        return 'custom';
+    }
+
+    private isLocalEndpointUrl(baseURL: string): boolean {
+        try {
+            const url = new URL(baseURL);
+            const host = url.hostname;
+            return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+        } catch {
+            return false;
+        }
+    }
+
+    private getActiveProviderHost(baseURL: string | undefined): string | undefined {
+        if (!baseURL) return undefined;
+        try {
+            return new URL(baseURL).hostname || undefined;
+        } catch {
+            return undefined;
+        }
+    }
+
+    /**
+     * Snapshot provider identity for stamping on a message's metadata.
+     * Captured at send time so later provider switches do not retroactively
+     * relabel earlier messages.
+     */
+    private snapshotProviderContext(): {
+        kind: 'local' | 'cloud' | 'custom';
+        provider: string;
+        providerLabel: string;
+        model: string;
+        host: string | undefined;
+    } {
+        const providerName = this.getActiveProviderName() || '';
+        const providerConfig = providerName ? this.config.getProviderConfig(providerName) : undefined;
+        const baseURL = providerConfig?.baseURL;
+        return {
+            kind: this.classifyProviderTrust(providerName, baseURL),
+            provider: providerName,
+            providerLabel: this.currentProvider || providerName,
+            model: this.currentModel || providerConfig?.model || '',
+            host: this.getActiveProviderHost(baseURL),
+        };
+    }
+
+    /**
+     * Scan prompt text for high-confidence credentials. For cloud/custom
+     * endpoints, ask the user how to handle them. Local endpoints
+     * bypass scanning entirely.
+     *
+     * Returns null when the user cancels; otherwise returns the (possibly
+     * redacted) outbound text plus the match list for trust metadata.
+     */
+    private async maybeScrubBeforeSend(prompt: string): Promise<null | { outbound: string; matches: SecretMatch[]; choice: 'redacted' | 'kept' | 'none' }> {
+        const ctx = this.snapshotProviderContext();
+        if (ctx.kind === 'local') {
+            return { outbound: prompt, matches: [], choice: 'none' };
+        }
+        const matches = detectSecrets(prompt);
+        if (!matches.length) {
+            return { outbound: prompt, matches: [], choice: 'none' };
+        }
+        const modalRef = this.modal.open(SecretScrubConfirmDialogComponent, {
+            backdrop: 'static',
+            keyboard: true,
+        });
+        modalRef.componentInstance.providerLabel = ctx.providerLabel;
+        modalRef.componentInstance.host = ctx.host || '';
+        modalRef.componentInstance.matches = matches;
+        let choice: SecretScrubChoice;
+        try {
+            choice = await modalRef.result;
+        } catch {
+            choice = 'cancel';
+        }
+        if (choice === 'cancel') {
+            this.toastService?.info?.('Send cancelled.', 2000);
+            return null;
+        }
+        if (choice === 'redact') {
+            const { redacted } = redactSecrets(prompt, matches);
+            this.toastService?.success?.(`Redacted ${matches.length} secret${matches.length === 1 ? '' : 's'} before sending.`, 2500);
+            return { outbound: redacted, matches, choice: 'redacted' };
+        }
+        this.toastService?.warning?.('Sending with secrets un-redacted. Trust badge marked on your message.', 3500);
+        return { outbound: prompt, matches, choice: 'kept' };
+    }
+
+    /**
+     * Build the `trust` subtree stamped onto a user message's metadata.
+     * Returns undefined when nothing's worth badging (local + no scrub).
+     */
+    private buildUserTrust(scrub: { matches: SecretMatch[]; choice: 'redacted' | 'kept' | 'none' }): Record<string, any> | undefined {
+        const ctx = this.snapshotProviderContext();
+        if (ctx.kind === 'local' && scrub.matches.length === 0) {
+            return undefined;
+        }
+        return {
+            kind: ctx.kind,
+            provider: ctx.provider,
+            providerLabel: ctx.providerLabel,
+            host: ctx.host,
+            scrubbed: scrub.choice === 'redacted' && scrub.matches.length > 0,
+            scrubbedCount: scrub.choice === 'redacted' ? scrub.matches.length : 0,
+            sentUnscrubbed: scrub.choice === 'kept' && scrub.matches.length > 0,
+        };
+    }
+
+    private buildAssistantTrust(): Record<string, any> {
+        const ctx = this.snapshotProviderContext();
+        return {
+            kind: ctx.kind,
+            provider: ctx.provider,
+            providerLabel: ctx.providerLabel,
+            model: ctx.model,
+            host: ctx.host,
+        };
     }
 
     /**
@@ -639,7 +898,7 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
         const welcomeMessage: ChatMessage = {
             id: this.generateId(),
             role: MessageRole.ASSISTANT,
-            content: `Hello! I am your AI Assistant.\n\nI can help you with:\n• Converting natural language to terminal commands\n• Explaining complex commands\n• Analyzing command execution results\n• Providing error fixing suggestions\n\nCurrent provider: ${this.currentProvider}\n\nPlease enter your question or describe the command you want to execute.`,
+            content: `Hello! I am your AI Assistant.\n\nI can help you with:\n• Converting natural language to terminal commands\n• Explaining complex commands\n• Analyzing command execution results\n• Providing error fixing suggestions\n\nTip: type \`/explain-error\` to send me the last ~120 lines of your active terminal and get an explanation of what went wrong.\n\nCurrent provider: ${this.currentProvider}\n\nPlease enter your question or describe the command you want to execute.`,
             timestamp: new Date()
         };
         this.messages.push(welcomeMessage);
@@ -748,18 +1007,32 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
             return;
         }
 
+        // #07 - secret scrubber pass. Runs for cloud/custom endpoints
+        // only; local Ollama is trusted. Returns null when the user
+        // cancels the send from the confirmation dialog.
+        const trimmed = content.trim();
+        const scrub = await this.maybeScrubBeforeSend(trimmed);
+        if (!scrub) {
+            return;
+        }
+        const outbound = scrub.outbound;
+
         // Remember the prompt so we can offer one-click retry on
         // recoverable failures. Clear the retry flag now that a new
         // run is starting.
-        this.lastAgentPrompt = content.trim();
+        this.lastAgentPrompt = outbound;
         this.canRetryAgent = false;
+
+        const userTrust = this.buildUserTrust(scrub);
+        const assistantTrust = this.buildAssistantTrust();
 
         // 添加用户消息
         const userMessage: ChatMessage = {
             id: this.generateId(),
             role: MessageRole.USER,
-            content: content.trim(),
-            timestamp: new Date()
+            content: outbound,
+            timestamp: new Date(),
+            ...(userTrust ? { metadata: { trust: userTrust } } : {}),
         };
         this.messages.push(userMessage);
 
@@ -775,7 +1048,8 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
             role: MessageRole.ASSISTANT,
             content: '',
             uiBlocks: [],
-            timestamp: new Date()
+            timestamp: new Date(),
+            metadata: { trust: assistantTrust },
         };
         this.messages.push(aiMessage);
 
@@ -966,12 +1240,23 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
             return;
         }
 
+        // #07 - secret scrubber pass (see onSendMessageWithAgent for details)
+        const trimmed = content.trim();
+        const scrub = await this.maybeScrubBeforeSend(trimmed);
+        if (!scrub) {
+            return;
+        }
+        const outbound = scrub.outbound;
+        const userTrust = this.buildUserTrust(scrub);
+        const assistantTrust = this.buildAssistantTrust();
+
         // 添加用户消息
         const userMessage: ChatMessage = {
             id: this.generateId(),
             role: MessageRole.USER,
-            content: content.trim(),
-            timestamp: new Date()
+            content: outbound,
+            timestamp: new Date(),
+            ...(userTrust ? { metadata: { trust: userTrust } } : {}),
         };
         this.messages.push(userMessage);
 
@@ -986,7 +1271,8 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
             id: this.generateId(),
             role: MessageRole.ASSISTANT,
             content: '',
-            timestamp: new Date()
+            timestamp: new Date(),
+            metadata: { trust: assistantTrust },
         };
         this.messages.push(aiMessage);
 
@@ -1427,6 +1713,17 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
     submit(): void {
         const message = this.inputValue.trim();
         if (message && !this.isLoading) {
+            // Slash commands. The /explain-error path grabs recent
+            // terminal output, wraps it in a prompt, and routes
+            // through the normal chat flow. Keep this at the top so
+            // the planner / greeting shortcuts below don't swallow a
+            // bare "/explain-error".
+            if (message.startsWith('/') && this.tryHandleSlashCommand(message)) {
+                this.inputValue = '';
+                setTimeout(() => this.autoResize(), 0);
+                this.textInput?.nativeElement.focus();
+                return;
+            }
             // Short-circuit trivial greetings / thanks even when the user has
             // forced agent mode on. Asking the planner to plan how to say
             // "hi" back is nonsensical, and the LangGraph planner has been
@@ -1449,6 +1746,146 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
             setTimeout(() => this.autoResize(), 0);
             this.textInput?.nativeElement.focus();
         }
+    }
+
+    /**
+     * One-click attach of the active terminal's state into the chat
+     * input. Four sources: last command, recent output, selection, cwd.
+     * Prepends a short, model-friendly block to whatever the user is
+     * typing, then re-focuses the textarea so they can keep writing.
+     *
+     * If the source yields nothing (no selection, no active terminal,
+     * empty buffer), we drop in a lightweight "no X available" hint via
+     * the assistant pane rather than mutate the input silently.
+     */
+    attachContext(kind: 'last-command' | 'last-output' | 'selection' | 'cwd'): void {
+        let block = '';
+        let emptyNote = '';
+        try {
+            switch (kind) {
+                case 'last-command': {
+                    const cmd = this.terminalManager.getLastCommand()?.trim();
+                    if (cmd) {
+                        block = `Last command I ran in my terminal: \`${cmd}\`\n\n`;
+                    } else {
+                        emptyNote = 'No recent command found in the active terminal.';
+                    }
+                    break;
+                }
+                case 'last-output': {
+                    const out = (this.terminalManager.readTerminalOutput(80) || '').trim();
+                    if (out) {
+                        block = `Recent terminal output:\n\n\`\`\`\n${out}\n\`\`\`\n\n`;
+                    } else {
+                        emptyNote = 'No recent terminal output to attach. Run a command first.';
+                    }
+                    break;
+                }
+                case 'selection': {
+                    const sel = (this.terminalManager.getSelection() || '').trim();
+                    if (sel) {
+                        block = `From my terminal selection:\n\n\`\`\`\n${sel}\n\`\`\`\n\n`;
+                    } else {
+                        emptyNote = 'No text selected in the active terminal. Highlight something first.';
+                    }
+                    break;
+                }
+                case 'cwd': {
+                    const cwd = this.terminalManager.getTerminalCwd();
+                    if (cwd) {
+                        block = `Working directory: \`${cwd}\`\n\n`;
+                    } else {
+                        emptyNote = 'Could not determine the active terminal\'s working directory.';
+                    }
+                    break;
+                }
+            }
+        } catch (err) {
+            this.logger.warn('attachContext failed', { kind, err });
+            emptyNote = 'Could not read that context from the terminal.';
+        }
+
+        if (!block) {
+            this.messages.push({
+                role: MessageRole.ASSISTANT,
+                content: emptyNote,
+                timestamp: new Date(),
+            } as ChatMessage);
+            this.scrollToBottom();
+            return;
+        }
+
+        // Prepend rather than append: context before question reads as
+        // "here's the situation, now the ask" — which is how most
+        // instruction-tuned models expect it.
+        this.inputValue = block + (this.inputValue || '');
+        setTimeout(() => {
+            this.autoResize();
+            this.textInput?.nativeElement?.focus();
+            // Place caret at the end so the user can keep typing.
+            const el = this.textInput?.nativeElement;
+            if (el) {
+                el.selectionStart = el.selectionEnd = el.value.length;
+            }
+        }, 0);
+    }
+
+    /**
+     * Slash commands. Returns true if the message was handled here
+     * (and should NOT fall through to the normal chat/agent flow).
+     * First-cut ships just /explain-error; the picker UI and the
+     * other commands in the roadmap will land in #05 full.
+     *
+     * Unknown slash commands are left alone (returns false), so the
+     * user can still send a plain message that happens to start with
+     * a '/'.
+     */
+    private tryHandleSlashCommand(raw: string): boolean {
+        const trimmed = raw.trim();
+        const firstToken = trimmed.split(/\s+/)[0].toLowerCase();
+        if (firstToken === '/explain-error') {
+            this.handleExplainError();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * /explain-error — pulls the recent output from the active terminal
+     * pane, wraps it in a prompt, and routes through the normal chat
+     * path so the model's reply streams into the sidebar like any
+     * other answer.
+     *
+     * We grab 120 lines rather than scanning for "the error block":
+     * context before the error (which command, what flags) is usually
+     * what makes the AI's explanation actually useful.
+     */
+    private handleExplainError(): void {
+        const output = this.terminalManager.readTerminalOutput(120) || '';
+        const trimmed = output.trim();
+        if (!trimmed) {
+            this.messages.push({
+                role: MessageRole.ASSISTANT,
+                content: 'No recent terminal output to analyze. Open a terminal, run a command, then try `/explain-error` again.',
+                timestamp: new Date(),
+            } as ChatMessage);
+            this.scrollToBottom();
+            return;
+        }
+
+        const prompt = [
+            'Please explain the error shown in my recent terminal output and suggest a fix. Keep the explanation focused on WHY the command failed, not a general tutorial.',
+            '',
+            'Terminal output (most recent at the bottom):',
+            '',
+            '```',
+            trimmed,
+            '```',
+        ].join('\n');
+
+        // Route through direct chat rather than the agent loop — the
+        // user wants a one-shot explanation, not a tool-using plan.
+        this.onSendMessage(prompt);
     }
 
     /**
@@ -1592,6 +2029,20 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
         this.selectedAgentEngine = normalized;
         this.config.set('agentEngine', normalized);
         this.logger.info('Agent engine updated', { engine: normalized });
+    }
+
+    /**
+     * Toggle auto-run for shell commands that pass the safety classifier.
+     * Opt-in, and the allowlist is conservative (ls / cat / git status /
+     * grep / pwd / which … and nothing that writes). Mutating commands
+     * (rm, sudo, npm install, git push, etc.) are always denied by the
+     * classifier and still trigger an approval card.
+     */
+    toggleAutoRunSafeCommands(ev: Event): void {
+        const next = !!(ev.target as HTMLInputElement)?.checked;
+        this.agentAutoRunSafeCommands = next;
+        this.config.set('agentAutoRunSafeCommands', next);
+        this.logger.info('agentAutoRunSafeCommands updated', { enabled: next });
     }
 
     private normalizeAgentEngine(value: string): 'auto' | 'langgraph' | 'legacy' {

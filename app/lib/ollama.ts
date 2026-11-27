@@ -26,7 +26,11 @@ function getNumber (value: string | undefined, fallback: number): number {
     return Number.isFinite(parsed) ? parsed : fallback
 }
 
-const DEFAULT_MODEL = process.env.TLINK_OLLAMA_MODEL ?? 'llama3.1:8b'
+// qwen2.5-coder:3b is ~2 GB vs llama3.1:8b's ~4.7 GB. Smaller first-run
+// download, strong at terminal/code tasks — NexTerm's audience. Users
+// can override via TLINK_OLLAMA_MODEL or pick a bigger model in-app
+// after the first pull completes.
+const DEFAULT_MODEL = process.env.TLINK_OLLAMA_MODEL ?? 'qwen2.5-coder:3b'
 const DEFAULT_HOST = process.env.TLINK_OLLAMA_HOST ?? '127.0.0.1:11434'
 const AUTO_PULL = parseBool(process.env.TLINK_OLLAMA_AUTO_PULL, true)
 const START_TIMEOUT_MS = getNumber(process.env.TLINK_OLLAMA_START_TIMEOUT_MS, 15000)
@@ -81,7 +85,22 @@ function getBundledOllamaDir (): string | null {
 }
 
 function getModelDir (): string {
-    return path.join(app.getPath('userData'), 'ollama')
+    // Use Ollama's standard location (~/.ollama/models) rather than an
+    // app-isolated dir. Two reasons:
+    //   1. Nuking the Electron profile shouldn't delete multi-GB model
+    //      downloads — users who clear app state to troubleshoot UI
+    //      shouldn't lose their models.
+    //   2. A system-installed Ollama (Homebrew / Ollama.app / apt) and
+    //      the bundled binary share the same cache. One `ollama pull`
+    //      from any source benefits both; `ollama list` outside the app
+    //      matches what the sidebar sees.
+    // Override via TLINK_OLLAMA_MODEL_DIR when a user really wants an
+    // app-isolated store.
+    const envOverride = process.env.TLINK_OLLAMA_MODEL_DIR
+    if (envOverride) {
+        return envOverride
+    }
+    return path.join(app.getPath('home'), '.ollama', 'models')
 }
 
 function buildOllamaEnv (modelDir: string) {
@@ -132,12 +151,32 @@ function findBundledOllamaBinary (): string | null {
 
 function startOllama (binary: string, modelDir: string): void {
     const env = buildOllamaEnv(modelDir)
+    // Keep stderr piped so a crash shows up in the main-process log instead
+    // of failing silently. The first real symptom of a silent failure is the
+    // renderer getting ECONNREFUSED on localhost:11434 with no server-side
+    // explanation — not helpful for anyone debugging on a user box.
     ollamaProcess = spawn(binary, ['serve'], {
         env,
-        stdio: 'ignore',
+        stdio: ['ignore', 'ignore', 'pipe'],
     })
 
-    ollamaProcess.on('exit', () => {
+    ollamaProcess.stderr?.on('data', (chunk: Buffer) => {
+        const text = chunk.toString().trim()
+        if (text) {
+            console.warn('[ollama]', text)
+        }
+    })
+
+    ollamaProcess.on('error', (err: Error) => {
+        console.warn('[ollama] spawn error:', err.message)
+    })
+
+    ollamaProcess.on('exit', (code, signal) => {
+        if (code !== null && code !== 0) {
+            console.warn(`[ollama] exited with code ${code}`)
+        } else if (signal) {
+            console.warn(`[ollama] killed by signal ${signal}`)
+        }
         ollamaProcess = null
     })
 

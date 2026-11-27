@@ -1,0 +1,179 @@
+<div class="first-run-wizard">
+    <div class="wiz-header">
+        <div class="wiz-step-dots" aria-hidden="true">
+            <span class="dot" [class.dot--active]="step === 'choose'" [class.dot--done]="step !== 'choose'"></span>
+            <span class="dot" [class.dot--active]="step === 'configure'" [class.dot--done]="step === 'verify'"></span>
+            <span class="dot" [class.dot--active]="step === 'verify'"></span>
+        </div>
+        <button type="button" class="btn btn-link btn-sm wiz-close" (click)="skip()" title="Skip setup">
+            <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Step 1: Choose path -->
+    <section *ngIf="step === 'choose'" class="wiz-body">
+        <h2 class="wiz-title">Pick how you want to run the AI assistant.</h2>
+        <p class="wiz-lede">You can change this anytime from Settings → AI.</p>
+
+        <div class="wiz-cards">
+            <button type="button" class="wiz-card" (click)="pickPath('local')">
+                <div class="wiz-card-badge">Recommended</div>
+                <div class="wiz-card-title">Built-in local</div>
+                <div class="wiz-card-desc">
+                    Runs the bundled Ollama server on your machine.
+                    Private, free, no API key. Downloads a small code model
+                    (~2 GB) once on first use.
+                </div>
+            </button>
+
+            <button type="button" class="wiz-card" (click)="pickPath('cloud')">
+                <div class="wiz-card-title">Cloud model</div>
+                <div class="wiz-card-desc">
+                    Use Anthropic, OpenAI or Groq with your own API key.
+                    Fastest response and strongest models — charges go to
+                    your provider account.
+                </div>
+            </button>
+
+            <button type="button" class="wiz-card" (click)="pickPath('remote')">
+                <div class="wiz-card-title">Point at an existing server</div>
+                <div class="wiz-card-desc">
+                    You already run Ollama, Tabby, vLLM, or another
+                    OpenAI-compatible endpoint somewhere. Just paste the URL.
+                </div>
+            </button>
+        </div>
+    </section>
+
+    <!-- Step 2: Configure -->
+    <section *ngIf="step === 'configure'" class="wiz-body">
+        <h2 class="wiz-title" *ngIf="path === 'local'">Start the built-in assistant.</h2>
+        <h2 class="wiz-title" *ngIf="path === 'cloud'">Connect a cloud model.</h2>
+        <h2 class="wiz-title" *ngIf="path === 'remote'">Point at your server.</h2>
+
+        <!-- Local -->
+        <div *ngIf="path === 'local'" class="wiz-local">
+            <p class="wiz-lede">
+                We'll start the bundled Ollama on <code>{{ baseURL }}</code> and
+                pull <code>{{ model }}</code>. The first pull is roughly 2 GB
+                and runs in the background — you can start chatting as soon as
+                it finishes.
+            </p>
+            <ul class="wiz-points">
+                <li>Nothing leaves your machine.</li>
+                <li>Works offline after the first pull.</li>
+                <li>Swap models later from Settings → AI.</li>
+            </ul>
+        </div>
+
+        <!-- Cloud -->
+        <div *ngIf="path === 'cloud'" class="wiz-form">
+            <label class="wiz-label">Provider</label>
+            <div class="wiz-pick">
+                <button type="button" *ngFor="let opt of cloudOptions"
+                    class="wiz-pick-btn"
+                    [class.wiz-pick-btn--active]="selectedCloud === opt"
+                    (click)="pickCloudOption(opt)">
+                    {{ opt.displayName }}
+                </button>
+            </div>
+
+            <label class="wiz-label">API key</label>
+            <input type="password" class="wiz-input"
+                [(ngModel)]="apiKey"
+                [placeholder]="selectedCloud.keyHint"
+                autocomplete="off" spellcheck="false">
+
+            <label class="wiz-label">Model</label>
+            <input type="text" class="wiz-input"
+                [(ngModel)]="model"
+                [placeholder]="selectedCloud.defaultModel">
+
+            <p class="wiz-hint">
+                API key is stored locally and sent only to {{ selectedCloud.displayName }}.
+                Base URL defaults to <code>{{ selectedCloud.defaultBaseURL }}</code>.
+            </p>
+        </div>
+
+        <!-- Remote -->
+        <div *ngIf="path === 'remote'" class="wiz-form">
+            <label class="wiz-label">What are you connecting to?</label>
+            <div class="wiz-pick">
+                <button type="button" *ngFor="let opt of remoteOptions"
+                    class="wiz-pick-btn"
+                    [class.wiz-pick-btn--active]="selectedRemote === opt"
+                    (click)="pickRemoteOption(opt)">
+                    {{ opt.displayName }}
+                </button>
+            </div>
+
+            <label class="wiz-label">Base URL</label>
+            <input type="text" class="wiz-input"
+                [(ngModel)]="baseURL"
+                [placeholder]="selectedRemote.defaultBaseURL"
+                autocomplete="off" spellcheck="false">
+
+            <label class="wiz-label">
+                API key
+                <small *ngIf="!selectedRemote.requiresKey">(optional)</small>
+            </label>
+            <input type="password" class="wiz-input"
+                [(ngModel)]="apiKey"
+                [placeholder]="selectedRemote.keyHint || 'optional'"
+                autocomplete="off" spellcheck="false">
+
+            <label class="wiz-label">Model</label>
+            <input type="text" class="wiz-input"
+                [(ngModel)]="model"
+                [placeholder]="selectedRemote.defaultModel || 'e.g. qwen2.5-coder:3b'">
+        </div>
+
+        <div class="wiz-actions">
+            <button type="button" class="btn btn-link wiz-back" (click)="back()">Back</button>
+            <button type="button" class="btn wiz-next"
+                [disabled]="!canContinue()"
+                (click)="verify()">
+                Test and save
+            </button>
+        </div>
+    </section>
+
+    <!-- Step 3: Verify -->
+    <section *ngIf="step === 'verify'" class="wiz-body">
+        <div *ngIf="verifying" class="wiz-verify wiz-verify--pending">
+            <div class="wiz-spinner" aria-hidden="true"></div>
+            <h2 class="wiz-title">Checking…</h2>
+            <p class="wiz-lede" *ngIf="path === 'local'">
+                Waiting for the bundled Ollama to come online. First launch
+                can take a few seconds while the model finishes pulling.
+            </p>
+            <p class="wiz-lede" *ngIf="path !== 'local'">
+                Sending a test request to the provider.
+            </p>
+        </div>
+
+        <div *ngIf="!verifying && verifySuccess" class="wiz-verify wiz-verify--ok">
+            <div class="wiz-check" aria-hidden="true">✓</div>
+            <h2 class="wiz-title">You're set.</h2>
+            <p class="wiz-lede">
+                The provider answered. Close this and start chatting — the status
+                pill in the sidebar will stay green while it's healthy.
+            </p>
+            <div class="wiz-actions wiz-actions--single">
+                <button type="button" class="btn wiz-next" (click)="finish()">Start chatting</button>
+            </div>
+        </div>
+
+        <div *ngIf="!verifying && verifyError" class="wiz-verify wiz-verify--err">
+            <div class="wiz-x" aria-hidden="true">!</div>
+            <h2 class="wiz-title">That didn't connect.</h2>
+            <p class="wiz-lede">{{ verifyError }}</p>
+            <div class="wiz-actions">
+                <button type="button" class="btn btn-link wiz-back" (click)="back()">Edit settings</button>
+                <button type="button" class="btn wiz-next" (click)="verify()">Try again</button>
+            </div>
+        </div>
+    </section>
+</div>

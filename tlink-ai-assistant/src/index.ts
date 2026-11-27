@@ -83,6 +83,7 @@ import { ChatMessageComponent } from './components/chat/chat-message.component';
 import { ChatInputComponent } from './components/chat/chat-input.component';
 import { ChatSettingsComponent } from './components/chat/chat-settings.component';
 import { AiSidebarComponent } from './components/chat/ai-sidebar.component';
+import { FirstRunWizardComponent } from './components/onboarding/first-run-wizard.component';
 
 import { AiSettingsTabComponent } from './components/settings/ai-settings-tab.component';
 import { ProviderConfigComponent } from './components/settings/provider-config.component';
@@ -95,6 +96,7 @@ import { TabbyServerSettingsTabComponent } from './components/settings/tabby-ser
 import { RiskConfirmDialogComponent } from './components/security/risk-confirm-dialog.component';
 import { PasswordPromptComponent } from './components/security/password-prompt.component';
 import { ConsentDialogComponent } from './components/security/consent-dialog.component';
+import { SecretScrubConfirmDialogComponent } from './components/security/secret-scrub-confirm-dialog.component';
 
 import { CommandSuggestionComponent } from './components/terminal/command-suggestion.component';
 import { CommandPreviewComponent } from './components/terminal/command-preview.component';
@@ -204,6 +206,7 @@ import { AiAssistantCLIHandler } from './cli';
         ChatInputComponent,
         ChatSettingsComponent,
         AiSidebarComponent,
+        FirstRunWizardComponent,
 
         // Settings Components
         AiSettingsTabComponent,
@@ -218,6 +221,7 @@ import { AiAssistantCLIHandler } from './cli';
         RiskConfirmDialogComponent,
         PasswordPromptComponent,
         ConsentDialogComponent,
+        SecretScrubConfirmDialogComponent,
 
         // Terminal Components
         CommandSuggestionComponent,
@@ -237,6 +241,7 @@ import { AiAssistantCLIHandler } from './cli';
         RiskConfirmDialogComponent,
         PasswordPromptComponent,
         ConsentDialogComponent,
+        SecretScrubConfirmDialogComponent,
         CommandSuggestionComponent,
         CommandPreviewComponent,
         DocViewerComponent

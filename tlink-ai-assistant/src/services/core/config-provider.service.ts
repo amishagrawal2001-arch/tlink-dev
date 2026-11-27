@@ -33,7 +33,7 @@ export interface AiAssistantConfig {
     /** Agent execution engine. 'auto' picks Legacy for Anthropic/Claude
      *  providers (closest to native tool-use) and LangGraph for everyone
      *  else (planner+reviewer scaffolding helps weaker models). */
-    agentEngine: 'auto' | 'langgraph' | 'legacy' | 'continue';
+    agentEngine: 'auto' | 'langgraph' | 'legacy';
     /** Enable planner node in agent flow */
     agentPlannerEnabled: boolean;
     /** Enable reviewer node in agent flow */
@@ -42,6 +42,12 @@ export interface AiAssistantConfig {
     agentMaxRounds: number;
     /** Agent working directory (optional) */
     agentWorkingDir?: string;
+    /** Skip the approval card for shell commands that pass the
+     *  shell-command-safety allowlist (ls, pwd, cat, git status, …).
+     *  Opt-in: default false, so the first-touch behaviour is still
+     *  "ask every time". Mutating / destructive commands are never
+     *  auto-run — the allowlist denies by default. */
+    agentAutoRunSafeCommands?: boolean;
 }
 
 const DEFAULT_CONFIG: AiAssistantConfig = {

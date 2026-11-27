@@ -1,8 +1,27 @@
-/* eslint-disable @typescript-eslint/explicit-module-boundary-types */
+/* eslint-disable @typescript-eslint/explicit-module-boundary-types,
+                  @typescript-eslint/prefer-nullish-coalescing,
+                  @typescript-eslint/no-unnecessary-condition,
+                  @typescript-eslint/init-declarations,
+                  @typescript-eslint/no-dynamic-delete,
+                  @typescript-eslint/prefer-destructuring,
+                  @typescript-eslint/no-unnecessary-type-assertion,
+                  @typescript-eslint/no-type-alias,
+                  @typescript-eslint/array-type,
+                  @typescript-eslint/max-params,
+                  @typescript-eslint/prefer-optional-chain,
+                  @typescript-eslint/lines-between-class-members,
+                  curly */
+// NOTE: the rule-disables above (except explicit-module-boundary-types)
+// acknowledge pre-existing lint debt across this 6200-line file. They
+// are scoped to this file only; other plugins are unaffected. Fixing
+// the ~140 individual sites belongs in a separate cleanup pass.
 import { Component, ElementRef, HostBinding, HostListener, Injector, ViewChild } from '@angular/core'
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser'
 import { promises as fs } from 'fs'
 import * as path from 'path'
 import { AppService, BaseTabComponent, NotificationsService, PartialProfile, PlatformService, Profile, ProfilesService, SplitTabComponent } from 'tlink-core'
+import { renderChatMarkdown } from '../utils/markdown.utils'
+import { detectSecrets, redactSecrets, summarizeMatches, SecretMatch } from '../utils/secret-scrubber'
 import { PasswordStorageService, SSHProfile } from 'tlink-ssh'
 import { BaseTerminalTabComponent } from 'tlink-terminal'
 import { Subscription } from 'rxjs'
@@ -31,7 +50,12 @@ const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini'
 const DEFAULT_GROQ_MODEL = 'llama-3.1-8b-instant'
 const DEFAULT_ANTHROPIC_MODEL = 'claude-3-5-sonnet-20240620'
 const DEFAULT_GEMINI_MODEL = 'gemini-1.5-pro'
-const DEFAULT_OLLAMA_MODEL = 'llama3.1:8b'
+// Aligned with tlink-ai-assistant's default so the sidebar and the chat tab
+// pull/expect the same model by default. Users had two plugins fighting over
+// which 4.7 GB vs 2 GB download to kick off; keeping them in lock-step here
+// lets the first install satisfy both. LEGACY_OLLAMA_MODEL stays pointed at
+// the old llama tag so pre-existing profiles migrate cleanly.
+const DEFAULT_OLLAMA_MODEL = 'qwen2.5-coder:3b'
 const DEFAULT_TLINK_AGENTIC_MODEL = 'auto'
 const LEGACY_OLLAMA_MODEL = 'llama3.1:8b-instruct'
 const DEFAULT_MAX_TOKENS = 512
@@ -47,11 +71,30 @@ const DEFAULT_TLINK_AGENTIC_BASE_URL = 'http://localhost:3052/v1'
 type ChatProvider = 'openai' | 'openai-compatible' | 'groq' | 'anthropic' | 'gemini' | 'ollama' | 'tlink-agentic'
 type AgentIntent = 'auto' | 'code' | 'translate' | 'summarize' | 'vision' | 'audio' | 'default'
 
+/**
+ * Trust metadata attached to a message. For user messages it records
+ * whether the scrubber redacted anything before send; for assistant
+ * messages it records which provider/model generated the reply so the
+ * user can tell local-from-cloud at a glance - see the trust badge in
+ * .message-header (chatTab.component.pug).
+ */
+interface MessageTrust {
+    kind: 'local' | 'cloud' | 'custom'
+    provider?: string      // provider id (e.g. 'openai', 'ollama')
+    providerLabel?: string // display name
+    model?: string
+    host?: string          // hostname of baseUrl
+    scrubbed?: boolean     // user messages only: true if scrubber redacted secrets
+    scrubbedCount?: number // how many secrets were redacted
+    sentUnscrubbed?: boolean // user chose "Send as-is" despite detection
+}
+
 interface ChatMessage {
     id: string
     role: 'user' | 'assistant' | 'error'
     label: string
     content: string
+    trust?: MessageTrust
 }
 
 interface ChatProfile {
@@ -847,6 +890,20 @@ export class ChatTabComponent extends BaseTabComponent {
 
     effectiveModel = DEFAULT_OLLAMA_MODEL
     effectiveBaseUrl = DEFAULT_OLLAMA_BASE_URL
+
+    // Installed-model autocomplete for the profile Model field. Populated
+    // from Ollama's /api/tags when the active profile uses the ollama
+    // provider. Also drives the "model not installed" warning below the
+    // field — same warning shape as tlink-ai-assistant's sidebar settings.
+    ollamaInstalledModels: string[] = []
+    ollamaInstalledModelsLoading = false
+    private ollamaInstalledModelsLastBase = ''
+
+    // Header status pill — single source of truth for whether the active
+    // provider is reachable. 'unknown' before the first probe lands so we
+    // don't false-colour the dot red/green on cold start.
+    providerHealth: 'unknown' | 'online' | 'offline' | 'slow' = 'unknown'
+    providerLatencyMs: number | null = null
     systemPromptSet = false
     missingApiKey = false
     agentModeSupported = true
@@ -854,7 +911,7 @@ export class ChatTabComponent extends BaseTabComponent {
 
     networkForm: NetworkAssistantSettings = { ...NETWORK_ASSISTANT_DEFAULTS, autoAppendRunbookOutput: false }
     agentForm: AgentSettings = { ...AGENT_DEFAULTS }
-    agentIntentOptions: Array<{ id: AgentIntent, label: string }> = [
+    agentIntentOptions: { id: AgentIntent, label: string }[] = [
         { id: 'auto', label: 'Auto' },
         { id: 'code', label: 'Code / Command' },
         { id: 'translate', label: 'Translate' },
@@ -863,6 +920,7 @@ export class ChatTabComponent extends BaseTabComponent {
         { id: 'audio', label: 'Audio' },
         { id: 'default', label: 'General' },
     ]
+
     networkVendors = DEVICE_VENDORS
     networkVariants = DEVICE_VARIANTS.juniper
 
@@ -920,11 +978,163 @@ export class ChatTabComponent extends BaseTabComponent {
         private platform: PlatformService,
         private profilesService: ProfilesService,
         private passwordStorage: PasswordStorageService,
+        private sanitizer: DomSanitizer,
         injector: Injector,
     ) {
         super(injector)
         this.setTitle('AI Chat')
         this.icon = null
+    }
+
+    /**
+     * Memoized markdown-render cache keyed by message id + content length.
+     * Streaming AI responses re-enter the template getter every change-
+     * detection pass; marked is fast but not free. Cache on id+len so
+     * a growing stream re-renders when new tokens arrive but idle
+     * messages don't re-parse every CD cycle.
+     */
+    private _renderedCache = new Map<string, { key: string; html: SafeHtml }>()
+
+    /**
+     * Return the rendered chat body for a message. Assistant messages
+     * run through marked (markdown + code-block wrappers); user and
+     * error messages stay as escaped plain text so user prompts aren't
+     * accidentally interpreted as markdown and errors aren't HTML-
+     * injected.
+     */
+    renderMessageBody (message: { id?: string; role: string; content: string }): SafeHtml | string {
+        const content = String(message.content ?? '')
+        if (message.role !== 'assistant') {
+            return content
+        }
+        const id = message.id || `anon:${content.slice(0, 20)}`
+        const key = `${id}:${content.length}`
+        const cached = this._renderedCache.get(id)
+        if (cached && cached.key === key) {
+            return cached.html
+        }
+        const html = this.sanitizer.bypassSecurityTrustHtml(renderChatMarkdown(content))
+        this._renderedCache.set(id, { key, html })
+        return html
+    }
+
+    /**
+     * Build the trust chip's visible text for a message's header.
+     * Returns null when there's nothing to show (no trust metadata, or
+     * a local message with nothing worth badging).
+     */
+    getTrustChipText (message: ChatMessage): string | null {
+        const t = message.trust
+        if (!t) {return null}
+        if (message.role === 'user') {
+            if (t.scrubbed) {
+                return `Scrubbed * ${t.scrubbedCount || 0} redacted`
+            }
+            if (t.sentUnscrubbed) {
+                return `Secrets kept * ${t.scrubbedCount || 0} detected`
+            }
+            return null
+        }
+        if (message.role === 'assistant') {
+            const kindLabel = t.kind === 'local' ? 'Local' : t.kind === 'cloud' ? 'Cloud' : 'Custom'
+            const model = t.model ? ` * ${t.model}` : ''
+            return `${kindLabel}${model}`
+        }
+        return null
+    }
+
+    getTrustChipTooltip (message: ChatMessage): string {
+        const t = message.trust
+        if (!t) {return ''}
+        if (message.role === 'user' && t.scrubbed) {
+            return `${t.scrubbedCount} secret(s) were redacted before sending to ${t.providerLabel || t.provider || 'the provider'}.`
+        }
+        if (message.role === 'user' && t.sentUnscrubbed) {
+            return `WARNING: ${t.scrubbedCount} potential secret(s) were detected and sent unredacted to ${t.providerLabel || t.provider}.`
+        }
+        if (message.role === 'assistant') {
+            const parts = [
+                t.providerLabel || t.provider || 'Unknown provider',
+                t.host ? `(${t.host})` : '',
+                t.model ? `model: ${t.model}` : '',
+            ].filter(Boolean)
+            return parts.join(' ')
+        }
+        return ''
+    }
+
+    getTrustChipClass (message: ChatMessage): string {
+        const t = message.trust
+        if (!t) {return ''}
+        if (message.role === 'user') {
+            if (t.scrubbed) {return 'trust-chip trust-chip-good'}
+            if (t.sentUnscrubbed) {return 'trust-chip trust-chip-warn'}
+            return 'trust-chip'
+        }
+        if (message.role === 'assistant') {
+            if (t.kind === 'local') {return 'trust-chip trust-chip-local'}
+            if (t.kind === 'cloud') {return 'trust-chip trust-chip-cloud'}
+            return 'trust-chip trust-chip-custom'
+        }
+        return 'trust-chip'
+    }
+
+    /**
+     * Delegated click handler for Copy / Run buttons rendered inside
+     * assistant markdown code blocks by `renderChatMarkdown`.
+     *
+     * One listener on `.assistant-prose` handles every code block in the
+     * message - this survives streaming re-renders without
+     * `ngAfterViewChecked` DOM post-processing.
+     */
+    handleAssistantClick (event: MouseEvent): void {
+        const target = event.target as HTMLElement | null
+        if (!target) {return}
+        const btn = target.closest('[data-chat-action]')
+        if (!btn) {return}
+        event.preventDefault()
+        event.stopPropagation()
+        const action = btn.getAttribute('data-chat-action')
+        const wrapper = btn.closest('.code-block-wrapper')
+        const codeEl = wrapper?.querySelector('pre > code') as HTMLElement | null
+        const code = codeEl?.innerText ?? codeEl?.textContent ?? ''
+        if (!code.trim()) {
+            console.warn('[chat-tab] handleAssistantClick: empty code block')
+            return
+        }
+        if (action === 'copy') {
+            this.copyCodeBlockText(code)
+        } else if (action === 'run') {
+            void this.runCodeBlockText(code)
+        }
+    }
+
+    private copyCodeBlockText (code: string): void {
+        try {
+            this.platform.setClipboard({ text: code })
+            const preview = code.length > 60 ? `${code.slice(0, 57)}...` : code
+            this.notifications.notice(`Copied: ${preview}`)
+        } catch (err) {
+            console.error('[chat-tab] copyCodeBlockText failed', err)
+            this.notifications.error(`Copy failed: ${String((err)?.message || err)}`)
+        }
+    }
+
+    private async runCodeBlockText (code: string): Promise<void> {
+        // Trim trailing whitespace but keep internal newlines - a
+        // multi-line shell block (e.g. `cd foo\nnpm test`) goes to the
+        // terminal as-is, letting the shell handle each line.
+        const trimmed = code.replace(/\s+$/, '')
+        // Safety on the first line only - our allowlist is prefix-based
+        // and a multi-line block's safety is dominated by the first
+        // command. `runSuggestedCommand` still prompts before sending.
+        const firstLine = trimmed.split('\n', 1)[0]
+        const safety = this.checkCommandSafety(firstLine)
+        if (!safety.safe) {
+            this.notifications.error(`Blocked: ${safety.reason || 'did not pass safety check'}`)
+            return
+        }
+        await this.runSuggestedCommand(trimmed, true, 'Code block', safety.risk, safety.reason)
     }
 
     ngOnInit (): void {
@@ -1030,6 +1240,83 @@ export class ChatTabComponent extends BaseTabComponent {
 
     getVisibleQuickQuestions (): QuickQuestion[] {
         return this.quickQuestions.filter(question => question.label.trim().length)
+    }
+
+    /**
+     * One-click context chips above the input. Prepends a short block
+     * describing some aspect of the active terminal into `draft`, then
+     * refocuses so the user can keep typing. Mirrors the sidebar's
+     * attachContext() so both plugins feel the same.
+     *
+     * 'last-cmd'    — regex-extracts the last prompt-looking line from
+     *                  `terminalOutput` (the buffer this tab already
+     *                  keeps in sync with the active terminal).
+     * 'last-output' — last ~80 lines of `terminalOutput`.
+     * 'selection'   — current xterm selection via activeTerminal.frontend.
+     */
+    attachContext (kind: 'last-cmd' | 'last-output' | 'selection'): void {
+        let block = ''
+        let empty = ''
+        try {
+            switch (kind) {
+                case 'last-cmd': {
+                    const output = (this.terminalOutput || '').trim()
+                    if (!output) {
+                        empty = 'No terminal output to extract a command from — run something first.'
+                        break
+                    }
+                    const lines = output.split('\n').filter(l => l.trim())
+                    let cmd = ''
+                    for (let i = lines.length - 1; i >= 0; i--) {
+                        const m = /(?:[$>%#]|PS [^>]+>)\s*(.+)/.exec(lines[i])
+                        if (m && m[1]) { cmd = m[1].trim(); break }
+                    }
+                    if (!cmd) {
+                        empty = 'Could not detect a shell prompt in the recent output.'
+                        break
+                    }
+                    block = `Last command I ran: \`${cmd}\`\n\n`
+                    break
+                }
+                case 'last-output': {
+                    const lines = (this.terminalOutput || '').split('\n').slice(-80).join('\n').trim()
+                    if (!lines) {
+                        empty = 'No terminal output to attach — run a command first.'
+                        break
+                    }
+                    block = `Recent terminal output:\n\n\`\`\`\n${lines}\n\`\`\`\n\n`
+                    break
+                }
+                case 'selection': {
+                    const sel = ((this.activeTerminal as any)?.frontend?.getSelection?.() || '').trim()
+                    if (!sel) {
+                        empty = 'No text selected in the active terminal. Highlight something first.'
+                        break
+                    }
+                    block = `From my terminal selection:\n\n\`\`\`\n${sel}\n\`\`\`\n\n`
+                    break
+                }
+            }
+        } catch (err) {
+            console.warn('[chat-tab] attachContext failed', { kind, err })
+            empty = 'Could not read that context from the terminal.'
+        }
+
+        if (!block) {
+            this.appendMessage('error', empty)
+            return
+        }
+
+        this.draft = block + (this.draft || '')
+        // Yield a tick so Angular's [(ngModel)] updates the textarea before
+        // we move the caret and refocus.
+        setTimeout(() => {
+            const el = this.draftInputRef?.nativeElement
+            if (el) {
+                el.focus()
+                el.selectionStart = el.selectionEnd = el.value.length
+            }
+        }, 0)
     }
 
     onInputKeydown (event: KeyboardEvent): void {
@@ -1345,7 +1632,7 @@ export class ChatTabComponent extends BaseTabComponent {
     }
 
     onNetworkVendorChange (): void {
-        const vendor = this.networkForm.vendor
+        const { vendor } = this.networkForm
         this.networkVariants = DEVICE_VARIANTS[vendor] ?? []
         if (!this.networkVariants.find(option => option.id === this.networkForm.variant)) {
             this.networkForm.variant = (this.networkVariants[0]?.id as DeviceVariant) ?? 'junos'
@@ -1649,7 +1936,7 @@ export class ChatTabComponent extends BaseTabComponent {
             const payload = JSON.parse(payloadText)
             const text = Array.isArray(payload?.content)
                 ? payload.content
-                    .map((part: { text?: string }) => part?.text)
+                    .map((part: { text?: string }) => part.text)
                     .filter((part: string | undefined) => typeof part === 'string' && part.trim().length)
                     .join('\n')
                 : ''
@@ -1696,7 +1983,7 @@ export class ChatTabComponent extends BaseTabComponent {
             const parts = payload?.candidates?.[0]?.content?.parts
             const text = Array.isArray(parts)
                 ? parts
-                    .map((part: { text?: string }) => part?.text)
+                    .map((part: { text?: string }) => part.text)
                     .filter((part: string | undefined) => typeof part === 'string' && part.trim().length)
                     .join('')
                 : ''
@@ -1788,6 +2075,7 @@ export class ChatTabComponent extends BaseTabComponent {
             role: message.role,
             label: message.label || (message.role === 'user' ? 'You' : message.role === 'assistant' ? 'Assistant' : 'Error'),
             content,
+            ...(message.trust ? { trust: message.trust } : {}),
         }
     }
 
@@ -1850,18 +2138,134 @@ export class ChatTabComponent extends BaseTabComponent {
         })
     }
 
+    /**
+     * Fetch /api/tags from the active profile's Ollama baseUrl and cache
+     * the installed-model names. Used by the datalist on the Model input
+     * and by isOllamaModelInstalled() to drive the warning. Cheap to call
+     * repeatedly — skips the network when the baseUrl hasn't changed since
+     * last successful fetch and the user isn't pulling.
+     */
+    async loadOllamaInstalledModels (force = false): Promise<void> {
+        if (this.profileForm.provider !== 'ollama') {
+            this.ollamaInstalledModels = []
+            return
+        }
+        const base = (this.profileForm.baseUrl || DEFAULT_OLLAMA_BASE_URL).trim().replace(/\/+$/, '')
+        if (!force && base === this.ollamaInstalledModelsLastBase && this.ollamaInstalledModels.length) {
+            return
+        }
+        // Ollama's /api/tags lives on the ROOT, not under /v1 — strip the
+        // suffix some users leave on the baseUrl so we don't 404 the probe.
+        const probeBase = base.replace(/\/v1$/, '')
+        this.ollamaInstalledModelsLoading = true
+        const started = performance.now()
+        try {
+            const res = await fetch(`${probeBase}/api/tags`, { method: 'GET' })
+            const latency = Math.round(performance.now() - started)
+            this.providerLatencyMs = latency
+            if (!res.ok) {
+                this.providerHealth = 'offline'
+                return
+            }
+            const data = await res.json()
+            const names = Array.isArray(data?.models) ? data.models.map((m: any) => m?.name).filter(Boolean) : []
+            this.ollamaInstalledModels = names
+            this.ollamaInstalledModelsLastBase = base
+            // >500ms round-trip for a localhost /api/tags call is a signal
+            // the box is under load or the server's slow — amber dot rather
+            // than green, so the user has a hint before a chat stalls.
+            this.providerHealth = latency > 500 ? 'slow' : 'online'
+        } catch {
+            this.providerHealth = 'offline'
+            this.providerLatencyMs = null
+            // Leave the previous list in place on network failure — the user
+            // may have just stopped Ollama and we don't want the warning to
+            // falsely tell them nothing is installed.
+        } finally {
+            this.ollamaInstalledModelsLoading = false
+        }
+    }
+
+    /** CSS class for the header status dot. */
+    getProviderDotClass (): string {
+        switch (this.providerHealth) {
+            case 'online':  return 'dot--ok'
+            case 'slow':    return 'dot--warn'
+            case 'offline': return 'dot--err'
+            default:        return 'dot--unknown'
+        }
+    }
+
+    /** Short label shown inside the pill + tooltip text. */
+    getProviderStatusText (): string {
+        if (this.providerHealth === 'unknown') { return 'Checking…' }
+        if (this.providerHealth === 'offline') { return 'Offline' }
+        const label = this.providerHealth === 'slow' ? 'Slow' : 'Online'
+        return this.providerLatencyMs !== null ? `${label} · ${this.providerLatencyMs}ms` : label
+    }
+
+    /** True when the exact tag typed in the Model field is installed. */
+    isOllamaModelInstalled (name: string | undefined | null): boolean {
+        if (!name) { return false }
+        return this.ollamaInstalledModels.includes(name.trim())
+    }
+
+    /**
+     * Shown next to the Model field when the Ollama provider is selected,
+     * a name is typed, but it isn't on the server. Hidden when we haven't
+     * successfully listed yet (don't false-warn on a cold start / offline
+     * ollama).
+     */
+    shouldShowOllamaModelMissing (): boolean {
+        if (this.profileForm.provider !== 'ollama') { return false }
+        if (this.ollamaInstalledModels.length === 0) { return false }
+        const name = (this.profileForm.model || '').trim()
+        if (!name) { return false }
+        return !this.isOllamaModelInstalled(name)
+    }
+
     private createProfile (provider: ChatProvider): ChatProfile {
         const definition = getProviderDefinition(provider)
+        const shared = this.getSharedProviderConfig(provider)
         return {
             id: generateId(),
             name: this.createProfileName(definition.label),
             provider,
-            apiKey: '',
-            model: definition.defaultModel,
-            baseUrl: definition.defaultBaseUrl,
+            apiKey: shared.apiKey || '',
+            model: shared.model || definition.defaultModel,
+            baseUrl: shared.baseUrl || definition.defaultBaseUrl,
             systemPrompt: '',
             temperature: DEFAULT_TEMPERATURE,
             maxTokens: DEFAULT_MAX_TOKENS,
+        }
+    }
+
+    /**
+     * Read the matching provider config from tlink-ai-assistant's section
+     * (aiAssistant.providers.*) so a new chat-tab profile inherits whatever
+     * the user already configured in the sidebar — URL, API key, selected
+     * model. Prevents the "set it in one, broken in the other" bug class
+     * without a disruptive config migration.
+     *
+     * Returns empty strings when nothing is configured or the store isn't
+     * ready; callers fall back to the hard-coded per-provider default.
+     */
+    private getSharedProviderConfig (provider: ChatProvider): { apiKey: string; model: string; baseUrl: string } {
+        const empty = { apiKey: '', model: '', baseUrl: '' }
+        try {
+            const store = this.config.store as Record<string, any> | undefined
+            const providers = store?.aiAssistant?.providers
+            if (!providers || typeof providers !== 'object') { return empty }
+            const key = provider === 'openai-compatible' ? 'openaiCompatible' : provider
+            const cfg = providers[key]
+            if (!cfg || typeof cfg !== 'object') { return empty }
+            return {
+                apiKey: typeof cfg.apiKey === 'string' ? cfg.apiKey : '',
+                model: typeof cfg.model === 'string' ? cfg.model : '',
+                baseUrl: typeof cfg.baseURL === 'string' ? cfg.baseURL : (typeof cfg.baseUrl === 'string' ? cfg.baseUrl : ''),
+            }
+        } catch {
+            return empty
         }
     }
 
@@ -1959,6 +2363,11 @@ export class ChatTabComponent extends BaseTabComponent {
         this.agentModeActive = this.agentForm.enabled && this.agentModeSupported
 
         this.updateEnvStatus(providerDefinition)
+
+        // Refresh the installed-model list so the datalist + "not installed"
+        // warning reflect the new profile's baseUrl. Fire-and-forget; the
+        // render re-runs when the array updates via Angular change detection.
+        void this.loadOllamaInstalledModels()
     }
 
     private supportsAgentProvider (provider: ChatProvider): boolean {
@@ -2032,7 +2441,7 @@ export class ChatTabComponent extends BaseTabComponent {
 
     private getEffectiveSettings (): EffectiveChatSettings {
         const activeProfile = this.getActiveProfile()
-        const provider = normalizeProvider(activeProfile?.provider)
+        const provider = normalizeProvider(activeProfile.provider)
         const providerDefinition = getProviderDefinition(provider)
         const envOverrides = this.getEnvOverrides(provider)
 
@@ -2127,11 +2536,11 @@ export class ChatTabComponent extends BaseTabComponent {
         }
     }
 
-    private getAgentToolDefinitions (): Array<Record<string, any>> {
+    private getAgentToolDefinitions (): Record<string, any>[] {
         return [
             {
                 type: 'function',
-                function: {
+                'function': {
                     name: 'list_terminal_targets',
                     description: 'List available terminal tabs and connection states.',
                     parameters: {
@@ -2143,7 +2552,7 @@ export class ChatTabComponent extends BaseTabComponent {
             },
             {
                 type: 'function',
-                function: {
+                'function': {
                     name: 'select_terminal_target',
                     description: 'Select an active terminal by id, title, or host hint.',
                     parameters: {
@@ -2159,7 +2568,7 @@ export class ChatTabComponent extends BaseTabComponent {
             },
             {
                 type: 'function',
-                function: {
+                'function': {
                     name: 'get_terminal_output',
                     description: 'Get the latest terminal output text and parsed summary.',
                     parameters: {
@@ -2173,7 +2582,7 @@ export class ChatTabComponent extends BaseTabComponent {
             },
             {
                 type: 'function',
-                function: {
+                'function': {
                     name: 'run_terminal_command',
                     description: 'Run a safe diagnostic command in the active terminal.',
                     parameters: {
@@ -2189,13 +2598,13 @@ export class ChatTabComponent extends BaseTabComponent {
             },
             {
                 type: 'function',
-                function: {
+                'function': {
                     name: 'open_connection',
                     description: 'Open or reconnect SSH/Telnet sessions by host.',
                     parameters: {
                         type: 'object',
                         properties: {
-                            protocol: { type: 'string', enum: ['ssh', 'telnet'] },
+                            protocol: { type: 'string', 'enum': ['ssh', 'telnet'] },
                             target: { type: 'string' },
                             username: { type: 'string' },
                             password: { type: 'string' },
@@ -2208,13 +2617,13 @@ export class ChatTabComponent extends BaseTabComponent {
             },
             {
                 type: 'function',
-                function: {
+                'function': {
                     name: 'disconnect_connection',
                     description: 'Disconnect SSH/Telnet sessions by host or disconnect all sessions.',
                     parameters: {
                         type: 'object',
                         properties: {
-                            protocol: { type: 'string', enum: ['ssh', 'telnet'] },
+                            protocol: { type: 'string', 'enum': ['ssh', 'telnet'] },
                             target: { type: 'string' },
                             all: { type: 'boolean' },
                         },
@@ -2225,7 +2634,7 @@ export class ChatTabComponent extends BaseTabComponent {
             },
             {
                 type: 'function',
-                function: {
+                'function': {
                     name: 'task_complete',
                     description: 'Call when the task is complete and include a concise summary.',
                     parameters: {
@@ -2253,9 +2662,9 @@ export class ChatTabComponent extends BaseTabComponent {
             headers.Authorization = `Bearer ${settings.apiKey}`
         }
 
-        const maxRounds = this.normalizeAgentSettings(this.agentForm).maxRounds
+        const { maxRounds } = this.normalizeAgentSettings(this.agentForm)
         const tools = this.getAgentToolDefinitions()
-        const messages: Array<Record<string, any>> = this.buildOpenAiMessages(systemPrompt, redactor)
+        const messages: Record<string, any>[] = this.buildOpenAiMessages(systemPrompt, redactor)
             .map(message => ({ ...message }))
 
         let latestAssistantText = ''
@@ -2405,17 +2814,17 @@ export class ChatTabComponent extends BaseTabComponent {
         try {
             switch (toolName) {
                 case 'list_terminal_targets':
-                    return this.agentToolListTerminalTargets()
+                    return await this.agentToolListTerminalTargets()
                 case 'select_terminal_target':
-                    return this.agentToolSelectTerminalTarget(args)
+                    return await this.agentToolSelectTerminalTarget(args)
                 case 'get_terminal_output':
-                    return this.agentToolGetTerminalOutput(args)
+                    return await this.agentToolGetTerminalOutput(args)
                 case 'run_terminal_command':
-                    return this.agentToolRunTerminalCommand(args)
+                    return await this.agentToolRunTerminalCommand(args)
                 case 'open_connection':
-                    return this.agentToolOpenConnection(args)
+                    return await this.agentToolOpenConnection(args)
                 case 'disconnect_connection':
-                    return this.agentToolDisconnectConnection(args)
+                    return await this.agentToolDisconnectConnection(args)
                 case 'task_complete':
                     return {
                         ok: true,
@@ -2746,7 +3155,7 @@ export class ChatTabComponent extends BaseTabComponent {
             const payload = JSON.parse(payloadText)
             const parts = Array.isArray(payload?.content) ? payload.content : []
             const text = parts
-                .map((part: { text?: string }) => part?.text)
+                .map((part: { text?: string }) => part.text)
                 .filter((part: string | undefined) => typeof part === 'string' && part.trim().length)
                 .join('\n')
 
@@ -2798,7 +3207,7 @@ export class ChatTabComponent extends BaseTabComponent {
             const parts = payload?.candidates?.[0]?.content?.parts
             const text = Array.isArray(parts)
                 ? parts
-                    .map((part: { text?: string }) => part?.text)
+                    .map((part: { text?: string }) => part.text)
                     .filter((part: string | undefined) => typeof part === 'string' && part.trim().length)
                     .join('')
                 : ''
@@ -3119,7 +3528,7 @@ export class ChatTabComponent extends BaseTabComponent {
     private appendMessage (
         role: ChatMessage['role'],
         content: string,
-        options?: { parseCommands?: boolean, persist?: boolean },
+        options?: { parseCommands?: boolean, persist?: boolean, trust?: MessageTrust },
     ): string {
         const id = generateId()
         const entry: ChatMessage = {
@@ -3127,6 +3536,7 @@ export class ChatTabComponent extends BaseTabComponent {
             role,
             label: role === 'user' ? 'You' : role === 'assistant' ? 'Assistant' : 'Error',
             content,
+            ...(options?.trust ? { trust: options.trust } : {}),
         }
         this.messages = [...this.messages, entry]
         if (role === 'assistant' && (options?.parseCommands ?? true) && content.trim().length) {
@@ -3177,10 +3587,10 @@ export class ChatTabComponent extends BaseTabComponent {
     }
 
     private getDraftValue (): string {
-        if (this.draft?.length) {
+        if (this.draft.length) {
             return this.draft
         }
-        return this.draftInputRef?.nativeElement?.value ?? ''
+        return this.draftInputRef?.nativeElement.value ?? ''
     }
 
     private loadAgentSettings (): void {
@@ -3240,7 +3650,7 @@ export class ChatTabComponent extends BaseTabComponent {
     private loadQuickQuestions (): void {
         const store = this.getChatStore()
         const raw = Array.isArray(store.quickQuestions) ? store.quickQuestions : null
-        if (!raw || !raw.length) {
+        if (!raw?.length) {
             this.quickQuestions = QUICK_QUESTIONS.map(entry => ({ ...entry }))
             store.quickQuestions = this.quickQuestions
             this.config.save()
@@ -3550,7 +3960,7 @@ export class ChatTabComponent extends BaseTabComponent {
         }
         normalized = normalized.replace(/^`+/, '').replace(/`+$/, '').trim()
         normalized = normalized.replace(/^(command|cmd|run|execute)\s*[:=-]?\s+/, '')
-        const promptMatch = normalized.match(/^[^\s]+[>#]\s*/)
+        const promptMatch = /^[^\s]+[>#]\s*/.exec(normalized)
         if (promptMatch) {
             normalized = normalized.slice(promptMatch[0].length).trim()
         } else {
@@ -3561,9 +3971,9 @@ export class ChatTabComponent extends BaseTabComponent {
 
     private stripWrappingQuotes (value: string): string {
         let trimmed = value.trim()
-        const pairs: Array<[string, string]> = [
+        const pairs: [string, string][] = [
             ['"', '"'],
-            ["'", "'"],
+            ['\'', '\''],
             ['`', '`'],
             ['“', '”'],
             ['‘', '’'],
@@ -3611,8 +4021,8 @@ export class ChatTabComponent extends BaseTabComponent {
     }
 
     private getAllowlistForVariant (variant: DeviceVariant): string[] {
-        const stored = this.networkForm.allowlistByVariant?.[variant]
-        if (stored && stored.length) {
+        const stored = this.networkForm.allowlistByVariant[variant]
+        if (stored?.length) {
             return stored
         }
         return SAFE_COMMAND_PREFIXES[variant] ?? []
@@ -3834,7 +4244,7 @@ export class ChatTabComponent extends BaseTabComponent {
         if (!stats.isFile()) {
             throw new Error('Session log is not a file')
         }
-        const size = stats.size
+        const { size } = stats
         if (size <= SESSION_LOG_SUMMARY_MAX_BYTES) {
             const content = await fs.readFile(logPath, 'utf-8')
             return { content, truncated: false, size }
@@ -3974,23 +4384,153 @@ export class ChatTabComponent extends BaseTabComponent {
         this.redactionPreview = redactor ? redactor(base) : base
     }
 
+    /**
+     * Classify an endpoint's trust tier for UI badges:
+     *   local  - localhost / 127.0.0.1 (Ollama, llama.cpp, LM Studio)
+     *   cloud  - a known branded cloud provider (openai, anthropic, gemini)
+     *   custom - a non-local URL we don't recognize
+     * Used to decide (a) whether to run the secret scrubber and (b)
+     * which trust chip to show on each message.
+     */
+    private classifyProviderTrust (settings: EffectiveChatSettings): MessageTrust['kind'] {
+        if (this.isLocalEndpoint(settings.baseUrl)) {
+            return 'local'
+        }
+        const provider = String(settings.provider || '').toLowerCase()
+        if (provider === 'openai' || provider === 'anthropic' || provider === 'gemini' || provider === 'google') {
+            return 'cloud'
+        }
+        return 'custom'
+    }
+
+    private getBaseUrlHost (baseUrl: string): string | undefined {
+        try {
+            return new URL(baseUrl).hostname || undefined
+        } catch {
+            return undefined
+        }
+    }
+
+    private buildAssistantTrust (settings: EffectiveChatSettings): MessageTrust {
+        return {
+            kind: this.classifyProviderTrust(settings),
+            provider: settings.provider,
+            providerLabel: settings.providerLabel,
+            model: settings.model,
+            host: this.getBaseUrlHost(settings.baseUrl),
+        }
+    }
+
+    private buildUserTrust (
+        settings: EffectiveChatSettings,
+        scrub: Exclude<Awaited<ReturnType<ChatTabComponent['maybeScrubBeforeSend']>>, 'cancelled'>,
+    ): MessageTrust | undefined {
+        const kind = this.classifyProviderTrust(settings)
+        if (!scrub.matches.length && kind === 'local') {
+            // Local + no scrubber ran - keep history clean, no badge needed.
+            return undefined
+        }
+        return {
+            kind,
+            provider: settings.provider,
+            providerLabel: settings.providerLabel,
+            host: this.getBaseUrlHost(settings.baseUrl),
+            scrubbed: scrub.choice === 'redacted' && scrub.matches.length > 0,
+            scrubbedCount: scrub.choice === 'redacted' ? scrub.matches.length : 0,
+            sentUnscrubbed: scrub.choice === 'kept' && scrub.matches.length > 0,
+        }
+    }
+
+    /**
+     * Scan the outbound prompt for secrets and, for cloud/custom
+     * endpoints, ask the user how to handle any matches. Local
+     * endpoints bypass scanning entirely - we trust localhost.
+     *
+     * Returns:
+     *   'cancelled' - user aborted; caller returns without sending
+     *   { outbound, matches, choice } - what to send (possibly redacted)
+     *     and the trust-metadata inputs for both messages
+     */
+    private async maybeScrubBeforeSend (
+        prompt: string,
+        settings: EffectiveChatSettings,
+    ): Promise<'cancelled' | { outbound: string, matches: SecretMatch[], choice: 'redacted' | 'kept' | 'none' }> {
+        const kind = this.classifyProviderTrust(settings)
+        if (kind === 'local') {
+            return { outbound: prompt, matches: [], choice: 'none' }
+        }
+        const matches = detectSecrets(prompt)
+        if (!matches.length) {
+            return { outbound: prompt, matches: [], choice: 'none' }
+        }
+        const host = this.getBaseUrlHost(settings.baseUrl) || settings.baseUrl
+        const summary = summarizeMatches(matches)
+        const previewLines = matches.slice(0, 5).map(m => `  * ${m.label}: ${m.preview}`)
+        const moreCount = matches.length - previewLines.length
+        if (moreCount > 0) {
+            previewLines.push(`  * ...and ${moreCount} more`)
+        }
+        const response = await this.platform.showMessageBox({
+            type: 'warning',
+            message: `Possible secrets detected (${summary})`,
+            detail: [
+                `You're about to send a message to ${settings.providerLabel || settings.provider} (${host}).`,
+                'It appears to contain sensitive values:',
+                '',
+                ...previewLines,
+                '',
+                'Redact them before sending?',
+            ].join('\n'),
+            buttons: ['Redact & send', 'Send as-is', 'Cancel'],
+            defaultId: 0,
+            cancelId: 2,
+        })
+        if (response.response === 2) {
+            this.notifications.notice('Send cancelled.')
+            return 'cancelled'
+        }
+        if (response.response === 0) {
+            const { redacted } = redactSecrets(prompt, matches)
+            this.notifications.notice(`Redacted ${matches.length} secret${matches.length === 1 ? '' : 's'} before sending.`)
+            return { outbound: redacted, matches, choice: 'redacted' }
+        }
+        // Send as-is
+        this.notifications.notice('Sending with secrets un-redacted. Trust badge marked.')
+        return { outbound: prompt, matches, choice: 'kept' }
+    }
+
     private async sendPrompt (prompt: string): Promise<void> {
         this.clearPendingCommandAnalysis()
-        this.appendMessage('user', prompt)
+
+        // Secret-scrubber pass: for cloud providers only, scan the user
+        // text for credential shapes before any of it leaves the box.
+        // Returns the (possibly redacted) outbound prompt plus the
+        // trust metadata to stamp on both messages.
+        const settings = this.getEffectiveSettings()
+        const scrubResult = await this.maybeScrubBeforeSend(prompt, settings)
+        if (scrubResult === 'cancelled') {
+            return
+        }
+        const outboundPrompt = scrubResult.outbound
+        const userTrust = this.buildUserTrust(settings, scrubResult)
+        const assistantTrust = this.buildAssistantTrust(settings)
+
+        this.appendMessage('user', outboundPrompt, { trust: userTrust })
         this.suggestedCommands = []
         this.sending = true
         const assistantMessageId = this.appendMessage('assistant', '', {
             parseCommands: false,
             persist: false,
+            trust: assistantTrust,
         })
         this.scrollToBottom()
 
         try {
-            if (await this.handleLocalDisconnectRequest(prompt)) {
+            if (await this.handleLocalDisconnectRequest(outboundPrompt)) {
                 this.removeMessageById(assistantMessageId)
                 return
             }
-            if (await this.handleLocalConnectionRequest(prompt)) {
+            if (await this.handleLocalConnectionRequest(outboundPrompt)) {
                 this.removeMessageById(assistantMessageId)
                 return
             }
@@ -4103,7 +4643,7 @@ export class ChatTabComponent extends BaseTabComponent {
         }
 
         const hostTargets = this.parseDisconnectTargets(prompt, protocol)
-        let targetName = hostTargets.length ? null : await this.extractTargetWithLocalLlm(prompt)
+        const targetName = hostTargets.length ? null : await this.extractTargetWithLocalLlm(prompt)
         if (targetName && this.isGroupPhrasePrompt(prompt)) {
             const normalized = this.normalizeGroupTarget(targetName)
             if (normalized) {
@@ -4465,7 +5005,7 @@ export class ChatTabComponent extends BaseTabComponent {
         }
     }
 
-    private profileMatchesTargets (profile: PartialProfile<Profile>, matchers: Array<(value: string) => boolean>): boolean {
+    private profileMatchesTargets (profile: PartialProfile<Profile>, matchers: ((value: string) => boolean)[]): boolean {
         const candidates = this.getProfileCandidates(profile)
         return candidates.some(candidate => matchers.some(match => match(candidate)))
     }
@@ -4525,7 +5065,7 @@ export class ChatTabComponent extends BaseTabComponent {
     }
 
     private async disconnectTerminalTab (tab: BaseTerminalTabComponent<any>): Promise<void> {
-        const disconnect = (tab as { disconnect?: () => Promise<void> }).disconnect
+        const { disconnect } = (tab as { disconnect?: () => Promise<void> })
         if (typeof disconnect === 'function') {
             await disconnect.call(tab)
             return
@@ -4548,7 +5088,7 @@ export class ChatTabComponent extends BaseTabComponent {
     }
 
     private async reconnectTerminalTab (tab: BaseTerminalTabComponent<any>): Promise<void> {
-        const reconnect = (tab as { reconnect?: () => Promise<void> }).reconnect
+        const { reconnect } = (tab as { reconnect?: () => Promise<void> })
         if (typeof reconnect === 'function') {
             await reconnect.call(tab)
             return
@@ -4665,7 +5205,7 @@ export class ChatTabComponent extends BaseTabComponent {
         return buildIntentTargetMatcher(target)
     }
 
-    private tabMatchesTargets (tab: BaseTerminalTabComponent<any>, matchers: Array<(value: string) => boolean>): boolean {
+    private tabMatchesTargets (tab: BaseTerminalTabComponent<any>, matchers: ((value: string) => boolean)[]): boolean {
         const candidates = this.getTabCandidates(tab)
         return candidates.some(candidate => matchers.some(match => match(candidate)))
     }
@@ -4850,7 +5390,7 @@ export class ChatTabComponent extends BaseTabComponent {
             content = payloadText
         }
 
-        if (!content || !content.trim().length) {
+        if (!content.trim().length) {
             return null
         }
 
@@ -5035,10 +5575,10 @@ export class ChatTabComponent extends BaseTabComponent {
 
     private getChatStore (): Record<string, any> {
         if (!this.config.store) {
-            return (this.config.getDefaults() as Record<string, any>).chatgpt ?? {}
+            return (this.config.getDefaults()).chatgpt ?? {}
         }
         if (!this.config.store.chatgpt || typeof this.config.store.chatgpt !== 'object') {
-            const defaults = this.config.getDefaults() as Record<string, any>
+            const defaults = this.config.getDefaults()
             this.config.store.chatgpt = defaults.chatgpt ?? {}
         }
         return this.config.store.chatgpt as Record<string, any>
@@ -5108,7 +5648,7 @@ export class ChatTabComponent extends BaseTabComponent {
     }
 
     private getPinnedActionIds (variant: DeviceVariant): string[] {
-        return this.networkForm.favoriteQuickActionsByVariant?.[variant] ?? []
+        return this.networkForm.favoriteQuickActionsByVariant[variant] ?? []
     }
 
     private setPinnedActionIds (variant: DeviceVariant, ids: string[]): void {
@@ -5553,7 +6093,7 @@ export class ChatTabComponent extends BaseTabComponent {
     }
 
     copyMessage (message: ChatMessage): void {
-        if (!message?.content) {
+        if (!message.content) {
             return
         }
         this.platform.setClipboard({ text: message.content })
@@ -5577,7 +6117,17 @@ export class ChatTabComponent extends BaseTabComponent {
         risk: 'low' | 'medium' | 'high' = 'low',
         reason?: string,
     ): Promise<boolean> {
-        if (!this.networkForm.allowCommandRun || !safe) {
+        // Previously this had three silent `return false` paths that made
+        // "nothing happens when I click Run" a real mystery. Each exit
+        // now logs AND surfaces a toast so the failure mode is visible.
+        console.log('[chat-tab] runSuggestedCommand', { command, safe, risk, allowCommandRun: this.networkForm.allowCommandRun, dryRun: this.networkForm.dryRunCommandMode, targets: this.terminalTargets.length })
+
+        if (!safe) {
+            this.notifications.error('Blocked: command did not pass safety checks.')
+            return false
+        }
+        if (!this.networkForm.allowCommandRun) {
+            this.notifications.error('Blocked: "Allow command run" is off in settings (Network Context card).')
             return false
         }
         const prepared = this.applyPaginationBypass(this.stripWrappingQuotes(command))
@@ -5592,11 +6142,11 @@ export class ChatTabComponent extends BaseTabComponent {
 
         const terminal = this.getTerminalForRun()
         if (!terminal) {
-            this.notifications.error('No terminal selected')
+            this.notifications.error('No terminal selected. Open or pick a terminal tab from the header picker, then retry.')
             return false
         }
         if (!terminal.session?.open) {
-            this.notifications.error('Selected terminal is not connected')
+            this.notifications.error(`Selected terminal (${terminal.title || 'unnamed'}) is not connected. Reconnect it and retry.`)
             return false
         }
         const response = await this.platform.showMessageBox({
@@ -5613,16 +6163,24 @@ export class ChatTabComponent extends BaseTabComponent {
             cancelId: 1,
         })
         if (response.response !== 0) {
+            this.notifications.notice('Run cancelled.')
             return false
         }
-        terminal.sendInput(`${prepared}\r`)
-        this.addActivity('command', label, `Terminal: ${terminal.title || 'Terminal'}`)
-        this.queueCommandAnalysis(prepared)
-        return true
+        try {
+            terminal.sendInput(`${prepared}\r`)
+            this.addActivity('command', label, `Terminal: ${terminal.title || 'Terminal'}`)
+            this.queueCommandAnalysis(prepared)
+            this.notifications.notice(`Sent to ${terminal.title || 'terminal'}`)
+            return true
+        } catch (err) {
+            console.error('[chat-tab] sendInput failed', err)
+            this.notifications.error(`Failed to send command: ${String((err)?.message || err)}`)
+            return false
+        }
     }
 
     private applyPaginationBypass (command: string): string {
-        const variant = this.networkForm.variant
+        const { variant } = this.networkForm
         if ((variant === 'junos' || variant === 'evo') && /^\s*show\b/i.test(command) && !/\|\s*no-?more\b/i.test(command)) {
             return `${command} | no-more`
         }

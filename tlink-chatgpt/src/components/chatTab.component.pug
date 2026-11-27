@@ -1,17 +1,36 @@
 .chat-header
-    .title
-        span AI Chat
-    .meta
-        span Profile: {{ activeProfileName }}
-        span Provider: {{ activeProviderLabel }}
-        span Model: {{ effectiveModel }}
-        span Base: {{ effectiveBaseUrl }}
-        span(*ngIf='systemPromptSet') System prompt set
-        span(*ngIf='agentModeActive') Agent mode on
-        span(*ngIf='networkForm.enabled && !networkForm.includeLastOutput') Raw output off
-        span(*ngIf='networkForm.enabled && networkForm.redactSensitiveData') Redaction on
-        span.warning(*ngIf='agentForm.enabled && !agentModeSupported') Agent unsupported for provider
-        span.warning(*ngIf='missingApiKey') API key missing
+    // Identity: one source of truth — profile name + the model that's
+    // actually in `profileForm.model`, not the lagging `effectiveModel`
+    // that used to drift from the field. Clicking either opens settings.
+    .identity(role='button', tabindex='0', (click)='toggleSettings()',
+        [title]='"Profile: " + activeProfileName + " · Provider: " + activeProviderLabel + " · Base: " + effectiveBaseUrl + "\\nClick to open settings"')
+        span.identity-name {{ activeProfileName }}
+        span.identity-sep ·
+        span.identity-model {{ profileForm.model || providerDefaultsModel }}
+
+    // Status pill: provider reachability + round-trip. Only meaningful for
+    // Ollama today; hidden for cloud providers where "health" is per-call.
+    button.status-pill(type='button',
+        *ngIf="profileForm.provider === 'ollama'",
+        (click)='toggleSettings()',
+        [title]='getProviderStatusText()')
+        span.dot([ngClass]='getProviderDotClass()')
+        span {{ getProviderStatusText() }}
+
+    // Agent mode pill: only shown when on. Click to toggle off.
+    button.agent-pill(type='button',
+        *ngIf='agentModeActive',
+        (click)='agentForm.enabled = !agentForm.enabled; onAgentSettingsChange(); refreshEffectiveSettings()',
+        [title]='"Agent mode on — click to turn off"')
+        | 🤖 Agent
+
+    // Compact inline warnings — only present when they matter.
+    span.header-warning(*ngIf='missingApiKey', title='This provider needs an API key — open settings to add one.')
+        | ⚠ API key missing
+    span.header-warning(*ngIf='agentForm.enabled && !agentModeSupported',
+        title='The current provider does not support the agent loop. Switch to OpenAI/Groq/Ollama.')
+        | ⚠ Agent unsupported here
+
     .actions
         .terminal-picker
             select.form-control.form-control-sm(
@@ -24,8 +43,14 @@
             )
                 option(*ngIf='!terminalTargets.length', [value]='') No terminal tabs available
                 option(*ngFor='let target of terminalTargets', [value]='target.id') {{ target.title }}
-        button.btn.btn-secondary.btn-sm(type='button', (click)='toggleSettings()') {{ showSettings ? 'Hide settings' : 'Settings' }}
-        button.btn.btn-secondary.btn-sm(type='button', (click)='clear()', [disabled]='!messages.length && !draft.length') Clear
+        button.btn.btn-icon(type='button', (click)='toggleSettings()',
+            [title]='showSettings ? "Hide settings" : "Open settings"',
+            [attr.aria-pressed]='showSettings')
+            i.fa.fa-cog
+        button.btn.btn-icon(type='button', (click)='clear()',
+            [disabled]='!messages.length && !draft.length',
+            title='Clear conversation')
+            i.fa.fa-trash
 
 .chat-pinned-actions(*ngIf='networkForm.enabled && pinnedQuickActions.length')
     .pinned-title Pinned actions
@@ -55,8 +80,8 @@
     .settings-columns
         .settings-card
             .section-heading
-                span Profile & model
-                span.section-hint Manage API keys and provider settings
+                span AI Provider
+                span.section-hint Which model to call and how — stored per profile
             .profile-bar
                 .field
                     label.form-label Active profile
@@ -79,7 +104,26 @@
                     .form-text {{ apiKeyHint }}
                 .field
                     label.form-label Model
-                    input.form-control(type='text', [(ngModel)]='profileForm.model', [placeholder]='envModel || providerDefaultsModel')
+                    input.form-control(
+                        type='text',
+                        [(ngModel)]='profileForm.model',
+                        [placeholder]='envModel || providerDefaultsModel',
+                        [attr.list]="profileForm.provider === 'ollama' && ollamaInstalledModels.length ? 'chatgpt-ollama-models' : null")
+                    datalist#chatgpt-ollama-models(*ngIf="profileForm.provider === 'ollama' && ollamaInstalledModels.length")
+                        option(*ngFor='let name of ollamaInstalledModels', [value]='name')
+                    // Model-not-installed warning for Ollama. Fires only when
+                    // /api/tags returned something (the list is populated) so
+                    // we don't false-warn on a cold ollama probe.
+                    .model-missing-warning(*ngIf='shouldShowOllamaModelMissing()')
+                        span
+                            i.fas.fa-exclamation-triangle(aria-hidden='true')
+                            |
+                            strong {{ profileForm.model }}
+                            |  is not installed on this Ollama server — chat will 404 until it's pulled.
+                        a(href='#',
+                            (click)='$event.preventDefault(); loadOllamaInstalledModels(true)')
+                            i.fa.fa-refresh(aria-hidden='true')
+                            |  Re-check
                 .field
                     label.form-label Base URL
                     input.form-control(type='text', [(ngModel)]='profileForm.baseUrl', [placeholder]='envBaseUrl || providerDefaultsBaseUrl')
@@ -89,43 +133,41 @@
                 .field
                     label.form-label Max tokens
                     input.form-control(type='number', min='1', [(ngModel)]='profileForm.maxTokens')
+                // Agent mode: the toggle is always visible so users can
+                // find it. The detail fields (max rounds / intent / auto-run)
+                // collapse away when the loop is off — reduces cognitive
+                // load for the 80% of chats that don't need the agent.
                 .field.full
-                    label.form-label System prompt
-                    textarea.form-control(rows='3', [(ngModel)]='profileForm.systemPrompt', [placeholder]='envSystemPromptPlaceholder')
-                .field
                     label.form-label Agent mode
                     .form-check
                         input.form-check-input(type='checkbox', [(ngModel)]='agentForm.enabled', (change)='onAgentSettingsChange()')
                         label.form-check-label Enable agent loop (tools)
                     .form-text Uses local tool calls for terminal and connection tasks.
-                .field
-                    label.form-label Agent max rounds
+                    .form-text.text-danger(*ngIf='agentForm.enabled && !agentModeSupported') Current provider does not support agent tools. Use OpenAI-compatible providers.
+                .field(*ngIf='agentForm.enabled')
+                    label.form-label Max rounds
                     input.form-control(
                         type='number',
                         min='1',
                         max='12',
                         [(ngModel)]='agentForm.maxRounds',
-                        (change)='onAgentSettingsChange()',
-                        [disabled]='!agentForm.enabled'
+                        (change)='onAgentSettingsChange()'
                     )
-                .field
+                .field(*ngIf='agentForm.enabled')
                     label.form-label Agent intent
                     select.form-control(
                         [(ngModel)]='agentForm.intent',
-                        (change)='onAgentSettingsChange()',
-                        [disabled]='!agentForm.enabled'
+                        (change)='onAgentSettingsChange()'
                     )
                         option(*ngFor='let option of agentIntentOptions', [value]='option.id') {{ option.label }}
                     .form-text(*ngIf='profileForm.provider === "tlink-agentic"') Sent as routing hint to Tlink Agentic.
-                    .form-text.text-danger(*ngIf='agentForm.enabled && !agentModeSupported') Current provider does not support agent tools. Use OpenAI-compatible providers.
-                .field
+                .field.full(*ngIf='agentForm.enabled')
                     label.form-label Auto-run safe commands
                     .form-check
                         input.form-check-input(
                             type='checkbox',
                             [(ngModel)]='agentForm.autoRunSafeCommands',
-                            (change)='onAgentSettingsChange()',
-                            [disabled]='!agentForm.enabled'
+                            (change)='onAgentSettingsChange()'
                         )
                         label.form-check-label Run allowlisted commands without prompt
                     .form-text Leave off to require confirmation for each command.
@@ -146,8 +188,8 @@
             ) {{ providerDiagnosticsMessage }}
         .settings-card
             .section-heading
-                span Network assistant
-                span.section-hint Tune safety, targeting, and output capture
+                span Network Context
+                span.section-hint Facts about the device you're working on — attached to every prompt
             .settings-grid
                 .field
                     label.form-label Enable
@@ -174,6 +216,13 @@
                 .field
                     label.form-label Role
                     input.form-control(type='text', [(ngModel)]='networkForm.role', placeholder='e.g. Spine')
+                // System prompt moved here from the AI Provider card — it's
+                // not technical config, it's part of the context attached to
+                // every message. Belongs with the vendor/OS/site/role facts.
+                .field.full
+                    label.form-label System prompt
+                    textarea.form-control(rows='3', [(ngModel)]='profileForm.systemPrompt', [placeholder]='envSystemPromptPlaceholder')
+                    .form-text Preamble for every request. Inherits per-profile.
                 .field
                     label.form-label Include raw output in prompt
                     .form-check
@@ -269,12 +318,26 @@
     .message(*ngFor='let message of messages', [class.user]="message.role === 'user'", [class.assistant]="message.role === 'assistant'", [class.error]="message.role === 'error'")
         .message-header
             .label {{ message.label }}
+            span(
+                *ngIf='getTrustChipText(message)',
+                [class]='getTrustChipClass(message)',
+                [title]='getTrustChipTooltip(message)'
+            ) {{ getTrustChipText(message) }}
             button.message-copy(
                 *ngIf='message.role !== "user"',
                 type='button',
                 (click)='copyMessage(message)'
             ) Copy
-        .content {{ message.content }}
+        // Assistant text runs through marked (markdown + fenced code
+        // wrappers via renderChatMarkdown). User + error messages stay
+        // plain so prompts aren't accidentally markdown-interpreted and
+        // errors can't HTML-inject.
+        .content.assistant-prose(
+            *ngIf='message.role === "assistant"',
+            [innerHTML]='renderMessageBody(message)',
+            (click)='handleAssistantClick($event)'
+        )
+        .content(*ngIf='message.role !== "assistant"') {{ message.content }}
     .message.assistant.thinking(*ngIf='sending')
         .label Assistant
         .content Thinking...
@@ -342,6 +405,27 @@
                 button.btn.btn-outline-danger.btn-sm(type='button', (click)='removeQuickQuestion(question)') Remove
             .terminal-actions
                 button.btn.btn-outline-primary.btn-sm(type='button', (click)='addQuickQuestion()') Add question
+    // Terminal-aware context chips. One-click prepends a short block
+    // describing the active terminal state into the draft so the user
+    // can tap something and type their question around it. Mirrors the
+    // sidebar's row — same handler name, same empty-state behavior.
+    .chat-context-chips(*ngIf='!sending')
+        button.context-chip(type='button',
+            (click)="attachContext('last-cmd')",
+            title='Attach the last command typed in the active terminal.')
+            i.fas.fa-terminal(aria-hidden='true')
+            |  Last cmd
+        button.context-chip(type='button',
+            (click)="attachContext('last-output')",
+            title='Attach the last ~80 lines of the active terminal — covers recent runs and errors.')
+            i.fas.fa-align-left(aria-hidden='true')
+            |  Output
+        button.context-chip(type='button',
+            (click)="attachContext('selection')",
+            title='Attach the currently selected text in the active terminal.')
+            i.fas.fa-i-cursor(aria-hidden='true')
+            |  Selection
+
     .chat-input-box
         textarea.form-control(
             #draftInput=''

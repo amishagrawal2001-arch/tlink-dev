@@ -129,6 +129,15 @@ jobs:
     - name: Fetch gnmic binary
       run: node scripts/fetch-gnmic.mjs
 
+    # Fetch the bundled Ollama server so the AI assistant works on first
+    # launch with no CLI steps. TLINK_BUNDLE_OLLAMA=1 below flips the
+    # extras-ollama/ dir into electron-builder's extraResources via
+    # scripts/bundle-ollama.mjs — artifact names gain a '-ollama' suffix.
+    - name: Fetch ollama binary
+      run: node scripts/fetch-ollama.mjs
+      env:
+        ARCH: ${{matrix.arch}}
+
     - run: sed -i '' 's/updateInfo = await/\/\/updateInfo = await/g' node_modules/app-builder-lib/out/targets/ArchiveTarget.js
 
     # Work around electron-builder beta bug
@@ -140,6 +149,7 @@ jobs:
       continue-on-error: true
       env:
         ARCH: ${{matrix.arch}}
+        TLINK_BUNDLE_OLLAMA: '1'
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         KEYGEN_TOKEN: ${{ secrets.KEYGEN_TOKEN }}
         CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -154,6 +164,7 @@ jobs:
       run: scripts/build-macos.mjs
       env:
         ARCH: ${{matrix.arch}}
+        TLINK_BUNDLE_OLLAMA: '1'
         # DEBUG: electron-builder,electron-builder:*
 
     - name: Upload symbols
@@ -307,6 +318,12 @@ jobs:
     - name: Fetch gnmic binary (${{matrix.arch}})
       run: node scripts/fetch-gnmic.mjs
 
+    # Fetch the bundled Ollama server. See the macOS leg's note for the
+    # TLINK_BUNDLE_OLLAMA=1 wiring. ARCH is already propagated via env:
+    # above; the fetch script honors it for the linux amd64/arm64 split.
+    - name: Fetch ollama binary (${{matrix.arch}})
+      run: node scripts/fetch-ollama.mjs
+
     - name: Build packages (${{matrix.arch}})
       run: scripts/build-linux.mjs
       env:
@@ -314,6 +331,7 @@ jobs:
         KEYGEN_TOKEN: ${{ secrets.KEYGEN_TOKEN }}
         USE_HARD_LINKS: false
         USE_SYSTEM_FPM: true
+        TLINK_BUNDLE_OLLAMA: '1'
         # DEBUG: electron-builder,electron-builder:*
 
     - name: Build web resources (amd64 only)
@@ -492,6 +510,12 @@ jobs:
       shell: bash
       run: node scripts/fetch-gnmic.mjs
 
+    - name: Fetch ollama binary
+      shell: bash
+      run: node scripts/fetch-ollama.mjs
+      env:
+        ARCH: ${{matrix.arch}}
+
     - name: Decode certificate
       if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags'))
       env:
@@ -523,6 +547,7 @@ jobs:
         node scripts/build-windows.mjs
       env:
         ARCH: ${{matrix.arch}}
+        TLINK_BUNDLE_OLLAMA: '1'
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         KEYGEN_TOKEN: ${{ secrets.KEYGEN_TOKEN }}
         SM_CLIENT_CERT_PASSWORD: ${{ secrets.SM_CLIENT_CERT_PASSWORD }}
@@ -538,6 +563,7 @@ jobs:
       run: node scripts/build-windows.mjs
       env:
         ARCH: ${{matrix.arch}}
+        TLINK_BUNDLE_OLLAMA: '1'
         WIN_CSC_LINK: ""
         WIN_CSC_KEY_PASSWORD: ""
         CSC_IDENTITY_AUTO_DISCOVERY: "false"

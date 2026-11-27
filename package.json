@@ -161,7 +161,8 @@
     "graph:svg": "depcruise tlink-*/src --include-only '^tlink-' --output-type dot | dot -T svg -o docs/code-graph.svg && echo 'wrote docs/code-graph.svg (requires: brew install graphviz)'",
     "graph:validate": "depcruise tlink-*/src --include-only '^tlink-'",
     "fetch:gnmic": "node scripts/fetch-gnmic.mjs",
-    "fetch:gnmic:all": "node scripts/fetch-gnmic.mjs --all"
+    "fetch:gnmic:all": "node scripts/fetch-gnmic.mjs --all",
+    "fetch:ollama": "node scripts/fetch-ollama.mjs"
   },
   "type": "module",
   "private": true,

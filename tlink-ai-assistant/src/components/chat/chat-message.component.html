@@ -24,6 +24,19 @@
     <!-- 消息内容 -->
     <div class="message-content">
         <div class="message-bubble">
+            <!-- #07 trust chip - provenance for assistant replies
+                 (local/cloud/custom + model) and scrubber state for
+                 user prompts (redacted / sent-unscrubbed). Appears
+                 only when there is something worth badging. -->
+            <div *ngIf="getTrustChipText()"
+                 class="trust-chip-wrap"
+                 [class.align-right]="isUserMessage()">
+                <span [class]="getTrustChipClass()"
+                      [title]="getTrustChipTooltip()">
+                    {{ getTrustChipText() }}
+                </span>
+            </div>
+
             <!-- 用户消息 -->
             <div *ngIf="isUserMessage()" class="message-text">
                 {{ message.content }}

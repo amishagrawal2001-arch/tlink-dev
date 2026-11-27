@@ -1,0 +1,308 @@
+.first-run-wizard {
+    background: var(--ai-bg-primary, #1e1f22);
+    color: var(--ai-text-primary, #f8f9fa);
+    padding: 28px 32px 32px;
+    min-width: 520px;
+    max-width: 640px;
+
+    .wiz-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 22px;
+    }
+
+    .wiz-step-dots {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+
+        .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--ai-bg-tertiary, #3d3d3d);
+            transition: background 0.2s, transform 0.2s;
+        }
+        .dot--done   { background: var(--ai-primary, #4dabf7); opacity: 0.6; }
+        .dot--active { background: var(--ai-primary, #4dabf7); transform: scale(1.35); }
+    }
+
+    .wiz-close {
+        padding: 0;
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--ai-text-secondary, #adb5bd);
+        border: none;
+        background: transparent;
+        border-radius: 6px;
+        cursor: pointer;
+
+        &:hover {
+            background: var(--ai-bg-tertiary, #3d3d3d);
+            color: var(--ai-text-primary, #f8f9fa);
+        }
+    }
+
+    .wiz-title {
+        font-size: 20px;
+        line-height: 1.25;
+        font-weight: 600;
+        margin: 0 0 8px;
+        letter-spacing: -0.01em;
+    }
+
+    .wiz-lede {
+        color: var(--ai-text-secondary, #adb5bd);
+        font-size: 13px;
+        line-height: 1.55;
+        margin: 0 0 20px;
+
+        code {
+            font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+            font-size: 12px;
+            background: var(--ai-bg-tertiary, #3d3d3d);
+            color: var(--ai-primary, #4dabf7);
+            padding: 1px 6px;
+            border-radius: 4px;
+        }
+    }
+
+    .wiz-points {
+        margin: 0 0 20px;
+        padding-left: 18px;
+        color: var(--ai-text-secondary, #adb5bd);
+        font-size: 13px;
+        line-height: 1.6;
+
+        li { margin-bottom: 4px; }
+        li::marker { color: var(--ai-primary, #4dabf7); }
+    }
+
+    .wiz-cards {
+        display: grid;
+        gap: 10px;
+    }
+
+    .wiz-card {
+        position: relative;
+        text-align: left;
+        background: var(--ai-bg-secondary, #2a2b2e);
+        border: 1px solid var(--ai-border, rgba(255, 255, 255, 0.08));
+        border-radius: 10px;
+        padding: 16px 18px;
+        color: inherit;
+        cursor: pointer;
+        transition: border-color 0.15s, background 0.15s, transform 0.08s;
+
+        &:hover {
+            border-color: var(--ai-primary, #4dabf7);
+            background: var(--ai-bg-tertiary, #3d3d3d);
+        }
+        &:active { transform: scale(0.995); }
+
+        .wiz-card-badge {
+            position: absolute;
+            top: 10px;
+            right: 12px;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #22c55e;
+            background: rgba(34, 197, 94, 0.14);
+            border: 1px solid rgba(34, 197, 94, 0.4);
+            padding: 2px 7px;
+            border-radius: 4px;
+        }
+
+        .wiz-card-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: var(--ai-text-primary, #f8f9fa);
+        }
+
+        .wiz-card-desc {
+            font-size: 13px;
+            line-height: 1.5;
+            color: var(--ai-text-secondary, #adb5bd);
+        }
+    }
+
+    .wiz-form {
+        display: grid;
+        gap: 6px;
+    }
+
+    .wiz-label {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--ai-text-secondary, #adb5bd);
+        margin-top: 10px;
+
+        small {
+            text-transform: none;
+            letter-spacing: 0;
+            font-weight: 400;
+            opacity: 0.7;
+            margin-left: 4px;
+        }
+    }
+
+    .wiz-input {
+        width: 100%;
+        background: var(--ai-bg-tertiary, #3d3d3d);
+        color: var(--ai-text-primary, #f8f9fa);
+        border: 1px solid var(--ai-border, rgba(255, 255, 255, 0.08));
+        border-radius: 6px;
+        padding: 9px 11px;
+        font-size: 13px;
+        font-family: inherit;
+        line-height: 1.4;
+
+        &:focus {
+            outline: none;
+            border-color: var(--ai-primary, #4dabf7);
+            box-shadow: 0 0 0 2px rgba(77, 171, 247, 0.2);
+        }
+
+        &::placeholder {
+            color: var(--ai-text-secondary, #adb5bd);
+            opacity: 0.55;
+        }
+    }
+
+    .wiz-pick {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 2px;
+    }
+
+    .wiz-pick-btn {
+        font-size: 12px;
+        padding: 7px 12px;
+        background: var(--ai-bg-tertiary, #3d3d3d);
+        border: 1px solid var(--ai-border, rgba(255, 255, 255, 0.08));
+        color: var(--ai-text-secondary, #adb5bd);
+        border-radius: 999px;
+        cursor: pointer;
+        transition: color 0.15s, background 0.15s, border-color 0.15s;
+
+        &:hover {
+            color: var(--ai-text-primary, #f8f9fa);
+            border-color: rgba(255, 255, 255, 0.18);
+        }
+    }
+    .wiz-pick-btn--active {
+        background: var(--ai-primary, #4dabf7);
+        color: #0d1117;
+        border-color: var(--ai-primary, #4dabf7);
+        &:hover {
+            background: var(--ai-primary, #4dabf7);
+            color: #0d1117;
+        }
+    }
+
+    .wiz-hint {
+        margin-top: 12px;
+        font-size: 12px;
+        color: var(--ai-text-secondary, #adb5bd);
+        opacity: 0.8;
+        line-height: 1.5;
+
+        code {
+            font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+            font-size: 11.5px;
+        }
+    }
+
+    .wiz-actions {
+        margin-top: 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+
+        &.wiz-actions--single {
+            justify-content: flex-end;
+        }
+    }
+
+    .wiz-back {
+        padding: 8px 14px;
+        color: var(--ai-text-secondary, #adb5bd);
+        background: transparent;
+        border: none;
+        cursor: pointer;
+
+        &:hover { color: var(--ai-text-primary, #f8f9fa); text-decoration: none; }
+    }
+
+    .wiz-next {
+        padding: 9px 20px;
+        background: var(--ai-primary, #4dabf7);
+        color: #0d1117;
+        font-weight: 600;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 13px;
+
+        &:disabled {
+            background: var(--ai-bg-tertiary, #3d3d3d);
+            color: var(--ai-text-secondary, #adb5bd);
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        &:not(:disabled):hover {
+            filter: brightness(1.08);
+        }
+    }
+
+    .wiz-verify {
+        text-align: center;
+        padding: 20px 10px 4px;
+
+        .wiz-title { margin-top: 14px; }
+        .wiz-lede  { margin: 8px auto 0; max-width: 42ch; }
+    }
+
+    .wiz-verify--ok .wiz-title { color: #22c55e; }
+    .wiz-verify--err .wiz-title { color: #ef4444; }
+
+    .wiz-check,
+    .wiz-x {
+        width: 48px;
+        height: 48px;
+        margin: 0 auto;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 22px;
+    }
+    .wiz-check { background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.5); }
+    .wiz-x     { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.5); }
+
+    .wiz-spinner {
+        width: 36px;
+        height: 36px;
+        margin: 8px auto 4px;
+        border: 3px solid var(--ai-bg-tertiary, #3d3d3d);
+        border-top-color: var(--ai-primary, #4dabf7);
+        border-radius: 50%;
+        animation: ai-wiz-spin 0.85s linear infinite;
+    }
+    @keyframes ai-wiz-spin {
+        to { transform: rotate(360deg); }
+    }
+}

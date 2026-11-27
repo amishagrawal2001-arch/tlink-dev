@@ -3,10 +3,17 @@
             <div class="ai-sidebar-header">
                 <div class="header-title">
                     <span>AI Assistant</span>
-                    <small class="provider-badge" [title]="getProviderDisplayText()">
-                        {{ currentProvider }}
+                    <button type="button"
+                        class="provider-badge provider-badge--button"
+                        [title]="getHealthTooltip()"
+                        [attr.aria-label]="getHealthTooltip()"
+                        (click)="switchProvider()">
+                        <span class="status-dot" [ngClass]="getHealthDotClass()" aria-hidden="true"></span>
+                        <span class="provider-name">{{ currentProvider }}</span>
                         <span *ngIf="currentModel" class="model-name">• {{ currentModel }}</span>
-                    </small>
+                        <span *ngIf="providerLatencyMs !== null && providerHealth !== 'unhealthy'"
+                            class="latency">{{ providerLatencyMs }}ms</span>
+                    </button>
                 </div>
                 <div class="header-actions">
                     <button class="btn btn-link btn-sm btn-close-sidebar" (click)="hideSidebar()" title="Close AI chat">
@@ -224,6 +231,36 @@
                         <button class="btn btn-sm btn-secondary" [disabled]="!pendingApproval" (click)="approvePending(false)">Reject</button>
                     </div>
                 </div>
+                <!-- Terminal-aware context chips. One click appends a block
+                     describing the active pane's state to the message. Chips
+                     auto-hide when their source yields nothing useful. -->
+                <div class="context-chips" *ngIf="!isLoading">
+                    <button type="button" class="context-chip"
+                        (click)="attachContext('last-command')"
+                        title="Attach the last command typed in the active terminal.">
+                        <i class="fa fa-terminal" aria-hidden="true"></i>
+                        <span>Last cmd</span>
+                    </button>
+                    <button type="button" class="context-chip"
+                        (click)="attachContext('last-output')"
+                        title="Attach the last ~80 lines of the active terminal — covers the error or recent run.">
+                        <i class="fa fa-align-left" aria-hidden="true"></i>
+                        <span>Output</span>
+                    </button>
+                    <button type="button" class="context-chip"
+                        (click)="attachContext('selection')"
+                        title="Attach the currently selected text in the active terminal.">
+                        <i class="fa fa-i-cursor" aria-hidden="true"></i>
+                        <span>Selection</span>
+                    </button>
+                    <button type="button" class="context-chip"
+                        (click)="attachContext('cwd')"
+                        title="Attach the working directory of the active terminal.">
+                        <i class="fa fa-folder-open-o" aria-hidden="true"></i>
+                        <span>Dir</span>
+                    </button>
+                </div>
+
                 <div class="input-container">
                     <textarea
                         #textInput
@@ -308,6 +345,20 @@
                                 {{ option.label }}
                             </option>
                         </select>
+                    </div>
+                    <!-- Auto-run safe shell commands without a confirmation
+                         card. Opt-in, off by default. The classifier in
+                         utils/shell-command-safety.ts denies by default;
+                         only read-only prefixes (ls/cat/git status/…) can
+                         bypass approval. Mutating commands (rm/sudo/npm
+                         install/…) still require a card. -->
+                    <div class="agent-autorun-toggle" [title]="'Allow the agent to run read-only shell commands (ls, cat, git status, …) without asking. Mutating commands still require confirmation.'">
+                        <label>
+                            <input type="checkbox"
+                                [checked]="agentAutoRunSafeCommands"
+                                (change)="toggleAutoRunSafeCommands($event)">
+                            <span>Auto-run safe</span>
+                        </label>
                     </div>
                     <div class="intent-switcher" *ngIf="intentOptions.length > 0">
                         <label for="intentSelect">Intent</label>

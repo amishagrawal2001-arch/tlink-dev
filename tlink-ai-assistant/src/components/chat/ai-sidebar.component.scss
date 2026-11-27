@@ -116,7 +116,7 @@
             color: var(--ai-text-secondary, #adb5bd);
             display: inline-flex;
             align-items: center;
-            gap: 4px;
+            gap: 5px;
             letter-spacing: 0.2px;
             min-width: 0;
             overflow: hidden;
@@ -131,7 +131,70 @@
                 font-weight: 500;
                 opacity: 0.9;
             }
+
+            .latency {
+                color: var(--ai-text-secondary, #adb5bd);
+                opacity: 0.55;
+                font-variant-numeric: tabular-nums;
+                margin-left: 2px;
+            }
+
+            .provider-name {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                min-width: 0;
+            }
+
+            .status-dot {
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+                flex-shrink: 0;
+                background: #6c757d;
+                box-shadow: 0 0 0 0 rgba(0, 0, 0, 0);
+                transition: background 0.2s, box-shadow 0.2s;
+
+                &.status-dot--healthy {
+                    background: #22c55e;
+                    box-shadow: 0 0 6px rgba(34, 197, 94, 0.55);
+                }
+                &.status-dot--degraded {
+                    background: #f59e0b;
+                    box-shadow: 0 0 6px rgba(245, 158, 11, 0.55);
+                    animation: ai-status-pulse 1.8s ease-in-out infinite;
+                }
+                &.status-dot--unhealthy {
+                    background: #ef4444;
+                    box-shadow: 0 0 6px rgba(239, 68, 68, 0.55);
+                }
+                &.status-dot--unknown {
+                    background: #6c757d;
+                }
+            }
         }
+
+        // Button variant — makes the pill clickable to open the provider picker.
+        .provider-badge--button {
+            cursor: pointer;
+            font-family: inherit;
+            line-height: 1.5;
+
+            &:hover {
+                color: var(--ai-text-primary, #f8f9fa);
+                border-color: rgba(255, 255, 255, 0.12);
+                background: var(--ai-bg-quaternary, #4a4a4a);
+            }
+
+            &:focus-visible {
+                outline: 2px solid var(--ai-primary, #4dabf7);
+                outline-offset: 1px;
+            }
+        }
+    }
+
+    @keyframes ai-status-pulse {
+        0%, 100% { opacity: 1; }
+        50%      { opacity: 0.45; }
     }
 
     .header-actions {
@@ -758,6 +821,51 @@
         }
     }
 
+    .context-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-bottom: 6px;
+        padding: 0 2px;
+
+        .context-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 9px;
+            font-size: 11px;
+            font-family: inherit;
+            font-weight: 500;
+            color: var(--ai-text-secondary, #adb5bd);
+            background: var(--ai-bg-tertiary, #3d3d3d);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 999px;
+            cursor: pointer;
+            transition: color 0.15s, background 0.15s, border-color 0.15s;
+            -webkit-app-region: no-drag;
+
+            i {
+                font-size: 10px;
+                opacity: 0.8;
+            }
+
+            &:hover {
+                color: var(--ai-text-primary, #f8f9fa);
+                background: var(--ai-bg-quaternary, #4a4a4a);
+                border-color: var(--ai-primary, #4dabf7);
+
+                i { opacity: 1; }
+            }
+            &:active {
+                transform: scale(0.97);
+            }
+            &:focus-visible {
+                outline: 2px solid var(--ai-primary, #4dabf7);
+                outline-offset: 1px;
+            }
+        }
+    }
+
     .input-container {
         display: flex;
         gap: 8px;
@@ -922,6 +1030,34 @@
                 font-size: 10px;
                 font-weight: 600;
                 white-space: nowrap;
+            }
+        }
+
+        .agent-autorun-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            color: var(--ai-text-secondary, #adb5bd);
+            flex-shrink: 0;
+
+            label {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                cursor: pointer;
+                margin: 0;
+                font-weight: 500;
+                padding: 2px 6px;
+                border-radius: 4px;
+                transition: background 0.12s;
+
+                &:hover { background: var(--ai-bg-tertiary, #3d3d3d); color: var(--ai-text-primary, #f8f9fa); }
+            }
+
+            input[type="checkbox"] {
+                margin: 0;
+                cursor: pointer;
             }
         }
 

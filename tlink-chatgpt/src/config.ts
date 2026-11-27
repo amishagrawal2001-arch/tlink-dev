@@ -1,6 +1,9 @@
 import { ConfigProvider } from 'tlink-core'
 
-const DEFAULT_MODEL = 'llama3.1:8b'
+// Keep this aligned with the AI Sidebar plugin's default (tlink-ai-assistant).
+// Users commonly run both plugins and are confused when each defaults to a
+// different model they then have to pull separately.
+const DEFAULT_MODEL = 'qwen2.5-coder:3b'
 const DEFAULT_MAX_TOKENS = 512
 const DEFAULT_TEMPERATURE = 0.2
 

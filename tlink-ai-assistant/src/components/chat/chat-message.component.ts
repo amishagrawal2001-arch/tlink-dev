@@ -233,6 +233,68 @@ export class ChatMessageComponent implements AfterViewChecked {
         return this.message.role === 'system';
     }
 
+    // ------------------------------------------------------------------
+    // #07 - trust chip. Reads message.metadata.trust stamped at send
+    // time by ai-sidebar.component.ts. Returns null/empty when there's
+    // nothing to badge (older messages without the field, local no-op).
+    // ------------------------------------------------------------------
+
+    private getTrust(): Record<string, any> | null {
+        return this.message?.metadata?.trust || null;
+    }
+
+    getTrustChipText(): string | null {
+        const t = this.getTrust();
+        if (!t) return null;
+        if (this.isUserMessage()) {
+            if (t.scrubbed) return `Scrubbed · ${t.scrubbedCount || 0} redacted`;
+            if (t.sentUnscrubbed) return `Secrets kept · ${t.scrubbedCount || 0} detected`;
+            return null;
+        }
+        if (this.isAssistantMessage()) {
+            const kindLabel = t.kind === 'local' ? 'Local' : t.kind === 'cloud' ? 'Cloud' : 'Custom';
+            const model = t.model ? ` · ${t.model}` : '';
+            return `${kindLabel}${model}`;
+        }
+        return null;
+    }
+
+    getTrustChipTooltip(): string {
+        const t = this.getTrust();
+        if (!t) return '';
+        if (this.isUserMessage() && t.scrubbed) {
+            return `${t.scrubbedCount} secret(s) were redacted before sending to ${t.providerLabel || t.provider || 'the provider'}.`;
+        }
+        if (this.isUserMessage() && t.sentUnscrubbed) {
+            return `WARNING: ${t.scrubbedCount} potential secret(s) were detected and sent unredacted to ${t.providerLabel || t.provider}.`;
+        }
+        if (this.isAssistantMessage()) {
+            const parts = [
+                t.providerLabel || t.provider || 'Unknown provider',
+                t.host ? `(${t.host})` : '',
+                t.model ? `model: ${t.model}` : '',
+            ].filter(Boolean);
+            return parts.join(' ');
+        }
+        return '';
+    }
+
+    getTrustChipClass(): string {
+        const t = this.getTrust();
+        if (!t) return '';
+        if (this.isUserMessage()) {
+            if (t.scrubbed) return 'trust-chip trust-chip-good';
+            if (t.sentUnscrubbed) return 'trust-chip trust-chip-warn';
+            return 'trust-chip';
+        }
+        if (this.isAssistantMessage()) {
+            if (t.kind === 'local') return 'trust-chip trust-chip-local';
+            if (t.kind === 'cloud') return 'trust-chip trust-chip-cloud';
+            return 'trust-chip trust-chip-custom';
+        }
+        return 'trust-chip';
+    }
+
     /**
      * Format the cost of this message's token usage as a short USD
      * string ("$0.0023" / "$1.45"). Returns empty when:

@@ -139,7 +139,13 @@ export class Window {
         // exfiltration to attacker-controlled hosts) is already limited by
         // the sandbox + input validation rather than relying on CSP alone.
         this.window.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-            const csp = 'default-src \'self\' \'unsafe-inline\' \'unsafe-eval\' data: blob:; connect-src \'self\' http://* https://* ws: wss:; img-src \'self\' data: blob: https: http:; font-src \'self\' data:; media-src \'self\' data: blob:;'
+            // connect-src uses scheme-only forms (`http:` / `https:` / `ws:` / `wss:`)
+            // so non-default ports match too. `http://*` and `https://*` are the
+            // host-source form, which per CSP spec only matches the scheme's
+            // default port (80 / 443) and silently blocks localhost:11434 (Ollama),
+            // localhost:8080 (Tabby), 8000 (vLLM), etc. — the exact use case the
+            // original comment promised to allow.
+            const csp = 'default-src \'self\' \'unsafe-inline\' \'unsafe-eval\' data: blob:; connect-src \'self\' http: https: ws: wss:; img-src \'self\' data: blob: https: http:; font-src \'self\' data:; media-src \'self\' data: blob:;'
             callback({
                 responseHeaders: {
                     ...details.responseHeaders,

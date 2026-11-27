@@ -68,6 +68,19 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
     newModelName = '';
     showModelManager = false;
 
+    // Curated short-list of models worth suggesting for terminal + code
+    // tasks on typical dev laptops. Sizes are approximate — meant to help
+    // users pick without opening a browser. Intentionally short: adding
+    // more degrades the signal; the free-text pull field below covers
+    // anything else.
+    readonly recommendedOllamaModels: { name: string; size: string; description: string }[] = [
+        { name: 'qwen2.5-coder:3b',  size: '~2 GB',  description: 'Small code/terminal assistant. App default — fast, good at shell commands.' },
+        { name: 'qwen2.5-coder:7b',  size: '~4.7 GB', description: 'Stronger reasoning. Still runs on 16 GB RAM machines.' },
+        { name: 'llama3.1:8b',       size: '~4.7 GB', description: 'General-purpose, strong at explanation. Good second model.' },
+        { name: 'mistral:7b',        size: '~4.1 GB', description: 'Balanced general model, popular baseline.' },
+        { name: 'phi3.5:3.8b',       size: '~2.2 GB', description: 'Tiny but sharp at Q&A and short-form tasks.' },
+    ];
+
     // OpenAI models cache
     openAiModels: string[] = [];
     openAiModelsLoading = false;
@@ -310,8 +323,8 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
             defaultURL: 'http://localhost:11434/v1',
             fields: [
                 { key: 'baseURL', label: 'Base URL', type: 'text', default: 'http://localhost:11434/v1', required: true, placeholder: 'e.g. http://localhost:11434/v1' },
-                { key: 'model', label: 'Model', type: 'text', default: 'llama3.1', required: false, placeholder: 'e.g. llama3.1, qwen2.5, mistral' },
-                { key: 'contextWindow', label: 'Context Window', type: 'number', default: 8192, required: false, placeholder: 'Llama 3.1: 8192' }
+                { key: 'model', label: 'Model', type: 'text', default: 'qwen2.5-coder:3b', required: false, placeholder: 'e.g. qwen2.5-coder:3b, llama3.1:8b, mistral:7b' },
+                { key: 'contextWindow', label: 'Context Window', type: 'number', default: 8192, required: false, placeholder: 'Qwen2.5-coder: 8192' }
             ]
         },
         'vllm': {
@@ -1674,53 +1687,135 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
             const fs = win?.require?.('fs');
             const platform = win?.process?.platform;
             const childProcess = win?.require?.('child_process');
-
-            if (!shell) {
+            if (!childProcess?.exec) {
                 this.toast.error('Unable to start Ollama from here. Please launch it manually.');
                 return;
             }
 
+            // Build a prioritized list of launch candidates per platform.
+            // The first command that exits non-zero gets re-tried with the
+            // next candidate; any 0-exit or "already running" response wins.
+            type Launcher = { kind: string; cmd: string; requires?: () => boolean }
+            const candidates: Launcher[] = []
+
             if (platform === 'darwin') {
-                const appPath = '/Applications/Ollama.app';
-                if (fs?.existsSync && !fs.existsSync(appPath)) {
-                    this.toast.error('Ollama app not found. Please install it from ollama.com/download.');
-                    return;
-                }
-                if (childProcess?.exec) {
-                    childProcess.exec('open -gj -a Ollama', (err: any) => {
-                        if (err) {
-                            this.logger.warn('Failed to start Ollama via open', { error: String(err) });
-                            this.toast.error('Unable to start Ollama. Please launch it manually.');
-                            return;
-                        }
-                        this.toast.success('Starting Ollama...');
-                        this.scheduleOllamaStatusRefresh();
-                    });
-                    return;
-                }
-                if (shell.openPath) {
-                    const result = await shell.openPath(appPath);
-                    if (!result) {
-                        this.toast.success('Starting Ollama...');
-                        this.scheduleOllamaStatusRefresh();
-                        return;
-                    }
-                    this.logger.warn('Failed to open Ollama app', { error: result });
-                }
-                if (shell.openExternal) {
-                    await shell.openExternal('https://ollama.com/download');
-                    this.toast.error('Unable to start Ollama. Please install or launch it manually.');
-                    return;
-                }
-            } else {
-                if (shell.openExternal) {
-                    await shell.openExternal('https://ollama.com/download');
-                }
-                this.toast.error('Unable to start Ollama automatically. Please start it manually.');
+                // 1. Homebrew service (most common for NexTerm devs). Use
+                //    `brew services start` for a persisted background run.
+                candidates.push({
+                    kind: 'brew services start ollama',
+                    cmd: '/opt/homebrew/bin/brew services start ollama 2>/dev/null || /usr/local/bin/brew services start ollama',
+                    requires: () => !!fs?.existsSync && (fs.existsSync('/opt/homebrew/bin/ollama') || fs.existsSync('/usr/local/bin/ollama')),
+                })
+                // 2. Bare Homebrew binary — start a background `ollama serve`.
+                candidates.push({
+                    kind: 'ollama serve (Homebrew)',
+                    cmd: 'nohup /opt/homebrew/bin/ollama serve >/tmp/ollama.log 2>&1 & disown',
+                    requires: () => !!fs?.existsSync && fs.existsSync('/opt/homebrew/bin/ollama'),
+                })
+                candidates.push({
+                    kind: 'ollama serve (/usr/local)',
+                    cmd: 'nohup /usr/local/bin/ollama serve >/tmp/ollama.log 2>&1 & disown',
+                    requires: () => !!fs?.existsSync && fs.existsSync('/usr/local/bin/ollama'),
+                })
+                // 3. /Applications/Ollama.app — the macOS app installer.
+                candidates.push({
+                    kind: '/Applications/Ollama.app',
+                    cmd: 'open -gj -a Ollama',
+                    requires: () => !!fs?.existsSync && fs.existsSync('/Applications/Ollama.app'),
+                })
+            } else if (platform === 'linux') {
+                candidates.push({
+                    kind: 'systemctl --user start ollama',
+                    cmd: 'systemctl --user start ollama 2>/dev/null || systemctl start ollama',
+                })
+                candidates.push({
+                    kind: 'ollama serve',
+                    cmd: 'nohup ollama serve >/tmp/ollama.log 2>&1 & disown',
+                })
+            } else if (platform === 'win32') {
+                // Ollama on Windows installs itself as a startup task; a bare
+                // launch of ollama.exe triggers the tray app which spawns
+                // the serve child.
+                candidates.push({
+                    kind: 'ollama (Windows)',
+                    cmd: 'start "" "ollama.exe"',
+                })
             }
+
+            const runnable = candidates.filter(c => !c.requires || c.requires())
+            if (runnable.length === 0) {
+                if (shell?.openExternal) {
+                    await shell.openExternal('https://ollama.com/download');
+                }
+                this.toast.error('Ollama is not installed. Opened ollama.com/download — install it, then come back and click Start again.');
+                return;
+            }
+
+            // Try each candidate in order; the first one that exits cleanly
+            // (or was already running, surfaced by the status refresh below) wins.
+            for (const launcher of runnable) {
+                const ok = await new Promise<boolean>(resolve => {
+                    childProcess.exec(launcher.cmd, { timeout: 8000 }, (err: any) => resolve(!err))
+                })
+                if (ok) {
+                    this.toast.success(`Starting Ollama (${launcher.kind})…`);
+                    this.scheduleOllamaStatusRefresh();
+                    return
+                }
+                this.logger.warn('Ollama start candidate failed', { kind: launcher.kind })
+            }
+
+            this.toast.error('None of the Ollama launch paths worked. Try starting it manually with `ollama serve` and check /tmp/ollama.log.');
         } catch (error) {
             this.logger.error('Failed to start Ollama', error);
             this.toast.error('Unable to start Ollama. Please launch it manually.');
+        }
+    }
+
+    async stopOllama(event?: Event): Promise<void> {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        try {
+            const win: any = window as any;
+            const platform = win?.process?.platform;
+            const childProcess = win?.require?.('child_process');
+            if (!childProcess?.exec) {
+                this.toast.error('Unable to stop Ollama from here. Please stop it manually.');
+                return;
+            }
+
+            // Prefer the supervisor (brew services / systemctl) if installed,
+            // so the process doesn't just respawn. Fall back to pkill for
+            // non-managed runs. Windows uses taskkill.
+            let cmd: string
+            if (platform === 'darwin') {
+                cmd = '/opt/homebrew/bin/brew services stop ollama 2>/dev/null || /usr/local/bin/brew services stop ollama 2>/dev/null || pkill -f "ollama serve"'
+            } else if (platform === 'linux') {
+                cmd = 'systemctl --user stop ollama 2>/dev/null || systemctl stop ollama 2>/dev/null || pkill -f "ollama serve"'
+            } else if (platform === 'win32') {
+                cmd = 'taskkill /IM ollama.exe /F'
+            } else {
+                this.toast.error('Unsupported platform for automated stop.');
+                return;
+            }
+
+            const ok = await new Promise<boolean>(resolve => {
+                childProcess.exec(cmd, { timeout: 8000 }, (err: any) => resolve(!err))
+            })
+            if (ok) {
+                this.toast.success('Stopped Ollama.');
+            } else {
+                // pkill returns non-zero when no process matched — treat as
+                // "already stopped" rather than an error.
+                this.toast.warning('Ollama was not running (or already stopped).');
+            }
+            this.scheduleOllamaStatusRefresh();
+        } catch (error) {
+            this.logger.error('Failed to stop Ollama', error);
+            this.toast.error('Unable to stop Ollama. Try `pkill -f "ollama serve"` in a terminal.');
         }
     }
 
@@ -3644,6 +3739,27 @@ export class ProviderConfigComponent implements OnInit, OnDestroy {
     /**
      * Pull a new Ollama model
      */
+    /** True when a model with this exact tag is already pulled locally. */
+    isOllamaModelInstalled(name: string): boolean {
+        return this.ollamaModels.some(m => m.name === name);
+    }
+
+    /**
+     * One-click pull from a recommended-chip. Wraps the free-text pull
+     * form so progress and dedupe behavior match (same `ollamaModelPulling`
+     * map, same `ollamaModelProgress` keys).
+     */
+    pullRecommendedOllamaModel(name: string): void {
+        if (!name) { return; }
+        if (this.isOllamaModelInstalled(name)) {
+            this.toast.success(`${name} is already installed.`);
+            return;
+        }
+        if (this.ollamaModelPulling[name]) { return; }
+        this.newModelName = name;
+        this.pullOllamaModel();
+    }
+
     async pullOllamaModel(): Promise<void> {
         if (!this.newModelName.trim()) {
             this.toast.error('Please enter a model name');

@@ -12,8 +12,14 @@ export function isOllamaBundleEnabled () {
     return ['1', 'true', 'yes', 'on'].includes(value)
 }
 
+/**
+ * '-ollama' only when we actually copied a binary into extraResources.
+ * Prevents the Linux armhf leg from stamping '-ollama' on an installer
+ * that ships without the embedded server.
+ */
 export function getArtifactSuffix (bundleOllama) {
-    return bundleOllama ? '-ollama' : ''
+    if (!bundleOllama) { return '' }
+    return hasAnyOllamaBinary(getOllamaSourceDir()) ? '-ollama' : ''
 }
 
 export function getOllamaSourceDir () {
@@ -30,14 +36,33 @@ function getDefaultExtraResources () {
     }
 }
 
+/**
+ * Does the ollama source dir hold at least one platform binary? Used
+ * to decide whether a build leg actually ships ollama — e.g. Linux
+ * armhf has no upstream Ollama binary, so fetch-ollama.mjs soft-skips,
+ * and this returns false so the installer ships without the embedded
+ * server rather than copying an empty resources dir and misleading
+ * app/lib/ollama.ts into trying to spawn a nonexistent binary.
+ */
+export function hasAnyOllamaBinary (ollamaDir) {
+    if (!fs.existsSync(ollamaDir)) { return false }
+    const candidates = [
+        path.join(ollamaDir, 'mac', 'ollama'),
+        path.join(ollamaDir, 'linux', 'ollama'),
+        path.join(ollamaDir, 'windows', 'ollama.exe'),
+    ]
+    return candidates.some(p => fs.existsSync(p))
+}
+
 export function getExtraResources (bundleOllama) {
     if (!bundleOllama) {
         return null
     }
 
     const ollamaDir = getOllamaSourceDir()
-    if (!fs.existsSync(ollamaDir)) {
-        throw new Error(`TLINK_BUNDLE_OLLAMA=1 requires ${ollamaDir} to exist`)
+    if (!hasAnyOllamaBinary(ollamaDir)) {
+        console.warn(`[bundle-ollama] TLINK_BUNDLE_OLLAMA=1 but no binary found under ${ollamaDir} — building without the embedded server. Run \`node scripts/fetch-ollama.mjs\` first to include it.`)
+        return null
     }
 
     const resources = getDefaultExtraResources()
