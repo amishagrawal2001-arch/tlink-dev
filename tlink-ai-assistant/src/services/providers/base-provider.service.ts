@@ -398,9 +398,39 @@ export abstract class BaseAiProvider implements IBaseAiProvider {
                     throw lastError;
                 }
 
-                // Real upstream failure (5xx, network, timeout, 429) —
-                // tell the breaker. Log only the first time the breaker
-                // trips, not on every subsequent failure.
+                // Non-retriable: connection refused / DNS failure / no
+                // listener. Retrying 1-2-4 seconds later won't resurrect a
+                // process that isn't running - it just fills the console
+                // with eight extra failed requests per send. Tell the
+                // breaker (this IS a liveness signal) and surface right
+                // away. Covers axios v1 ERR_NETWORK, the generic "Network
+                // Error" message, and node-side ECONNREFUSED / ENOTFOUND
+                // / EHOSTUNREACH / ETIMEDOUT when the connection itself
+                // never opened.
+                const errCode = (error as any)?.code;
+                const isConnFail = (
+                    errCode === 'ERR_NETWORK'
+                    || errCode === 'ECONNREFUSED'
+                    || errCode === 'ENOTFOUND'
+                    || errCode === 'EHOSTUNREACH'
+                    || errCode === 'ETIMEDOUT'
+                    || (status === undefined && lastError.message === 'Network Error')
+                );
+                if (isConnFail) {
+                    const tripped = this.breaker.recordFailure();
+                    if (tripped) {
+                        const snap = this.breaker.snapshot();
+                        this.logger.warn(
+                            `[${this.name}] circuit breaker OPEN — failing subsequent calls fast for ${Math.ceil(snap.remainingCooldownMs / 1000)}s`,
+                            { state: snap.state, consecutiveFailures: snap.consecutiveFailures }
+                        );
+                    }
+                    throw lastError;
+                }
+
+                // Real upstream failure (5xx, timeout, 429) — tell the
+                // breaker. Log only the first time the breaker trips,
+                // not on every subsequent failure.
                 const tripped = this.breaker.recordFailure();
                 if (tripped) {
                     const snap = this.breaker.snapshot();
