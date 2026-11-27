@@ -3958,9 +3958,35 @@ export class ChatTabComponent extends BaseTabComponent {
             if (context.length) {
                 parts.push(context)
             }
+        } else {
+            // Even outside Network Context mode, give the model a hint
+            // about what the user is looking at. Without this, chats like
+            // "what's this error?" or "explain the last output" just
+            // guess, since the model has no access to the terminal.
+            const snapshot = this.buildMinimalTerminalSnapshot(redactor)
+            if (snapshot.length) {
+                parts.push(snapshot)
+            }
         }
         const combined = parts.join('\n\n')
         return redactor ? redactor(combined) : combined
+    }
+
+    private buildMinimalTerminalSnapshot (redactor?: (value: string) => string): string {
+        const terminal = this.getTerminalForRun()
+        if (!terminal) { return '' }
+        const title = String(terminal.title || 'Terminal').trim()
+        const output = (this.terminalOutput || '').trim()
+        if (!output.length) { return `Current terminal: ${title} (no captured output yet).` }
+        // Last ~500 lines or ~6000 chars, whichever is smaller. Tail-cut
+        // because, as with the agent path, CLI output is informative at
+        // the end (actual data / error) not the head (banner).
+        const lines = output.split(/\r?\n/).slice(-500).join('\n')
+        const trimmed = lines.length > NETWORK_OUTPUT_MAX_CHARS
+            ? lines.slice(-NETWORK_OUTPUT_MAX_CHARS)
+            : lines
+        const block = `Current terminal: ${title}\nRecent terminal output (tail):\n${trimmed}`
+        return redactor ? redactor(block) : block
     }
 
     private buildNetworkSystemPrompt (): string {
