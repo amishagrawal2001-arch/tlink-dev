@@ -280,7 +280,7 @@ const AGENT_DEFAULTS: AgentSettings = {
 }
 
 const NETWORK_OUTPUT_MAX_CHARS = 6000
-const COMMAND_OUTPUT_MAX_CHARS = 3000
+const COMMAND_OUTPUT_MAX_CHARS = 8000
 const RUNBOOK_OUTPUT_MAX_CHARS = 4000
 const COMMAND_ANALYSIS_DEBOUNCE_MS = 800
 const COMMAND_ANALYSIS_MAX_WAIT_MS = 8000
@@ -291,7 +291,7 @@ const CHAT_REQUEST_MAX_RETRIES = 1
 const CHAT_HISTORY_MAX_MESSAGES = 200
 const CHAT_HISTORY_PERSIST_DEBOUNCE_MS = 250
 const AGENT_MAX_ROUNDS_LIMIT = 12
-const AGENT_TOOL_RESULT_MAX_CHARS = 4000
+const AGENT_TOOL_RESULT_MAX_CHARS = 12000
 
 const DEVICE_VENDORS: NetworkOption[] = [
     { id: 'juniper', label: 'Juniper' },
@@ -3126,21 +3126,46 @@ export class ChatTabComponent extends BaseTabComponent {
     }
 
     private serializeAgentToolResult (result: AgentToolExecutionResult): string {
-        let text = ''
-        try {
-            text = JSON.stringify(result)
-        } catch {
-            text = JSON.stringify({
-                ok: result.ok,
-                message: result.message,
-                terminate: !!result.terminate,
-                summary: result.summary ?? '',
-            })
+        const stringify = (obj: any): string => {
+            try {
+                return JSON.stringify(obj)
+            } catch {
+                return JSON.stringify({
+                    ok: obj?.ok,
+                    message: String(obj?.message ?? ''),
+                    terminate: !!obj?.terminate,
+                    summary: obj?.summary ?? '',
+                })
+            }
         }
-        if (text.length > AGENT_TOOL_RESULT_MAX_CHARS) {
-            return `${text.slice(0, AGENT_TOOL_RESULT_MAX_CHARS)}...(truncated)`
+        const text = stringify(result)
+        if (text.length <= AGENT_TOOL_RESULT_MAX_CHARS) {
+            return text
         }
-        return text
+        // Over the cap. CLI output is almost always more informative at
+        // the tail (actual rows, the final error) than the head (banner,
+        // column names), so trim the long string fields to their tails
+        // and re-serialize - that way the LLM still sees a valid JSON
+        // envelope with ok/message/data keys instead of a truncated
+        // head-cut like `{"ok":true,"data":"Local Inter...`.
+        const trimmed: any = { ...result }
+        const budget = AGENT_TOOL_RESULT_MAX_CHARS - 600
+        const tailTrim = (s: string): string =>
+            s.length <= budget ? s : `...(truncated ${s.length - budget} chars from head)\n${s.slice(-budget)}`
+        if (typeof trimmed.data === 'string') {
+            trimmed.data = tailTrim(trimmed.data)
+        }
+        if (typeof trimmed.message === 'string' && trimmed.message.length > budget) {
+            trimmed.message = tailTrim(trimmed.message)
+        }
+        const reserialized = stringify(trimmed)
+        if (reserialized.length <= AGENT_TOOL_RESULT_MAX_CHARS) {
+            return reserialized
+        }
+        // Last-resort head-cut (e.g. data is a huge nested object we
+        // can't easily trim). Keep the JSON envelope intact enough to
+        // signal truncation.
+        return `${reserialized.slice(0, AGENT_TOOL_RESULT_MAX_CHARS)}...(truncated)`
     }
 
     private async requestOpenAi (
