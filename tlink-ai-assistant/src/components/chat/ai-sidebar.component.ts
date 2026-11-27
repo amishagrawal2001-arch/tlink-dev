@@ -171,7 +171,13 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
                 if (!this.isSwitchingProvider) {
                     this.loadCurrentProvider();
                     this.buildModelOptions();
-                    this.refreshProviderHealth();
+                    // Health check is already primed at startup + polled on
+                    // interval below + refreshed on provider switch. Firing
+                    // it from every config-change event means every chat
+                    // send (which calls reloadConfigFromStorage under the
+                    // hood) triggers a redundant upstream probe - that was
+                    // one of the main sources of console noise on failing
+                    // providers.
                 }
                 this.workingDir = this.config.get<string>('agentWorkingDir', '') || '';
                 this.selectedAgentEngine = this.normalizeAgentEngine(
@@ -905,12 +911,64 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
     }
 
     /**
+     * Build a transient SYSTEM message that tells the model what NexTerm
+     * state the user is sitting in front of — open tabs, which one is
+     * active, their cwd. Without this, questions like "how many sessions
+     * are open" or "connect to la-q5130-05" get generic shell-command
+     * boilerplate (`pstree`, "I cannot assist") because the model has no
+     * handle to the app's own state.
+     *
+     * Synthesized fresh per send; NOT appended to this.messages (would
+     * stack up and the state would go stale on every exchange).
+     */
+    private buildNexTermContextMessage(): ChatMessage | null {
+        let infos: Array<{ id: string; title: string; isActive: boolean; cwd?: string }>
+        try {
+            infos = this.terminalManager.getAllTerminalInfo();
+        } catch {
+            return null;
+        }
+        if (!infos || !infos.length) {
+            return {
+                id: this.generateId(),
+                role: MessageRole.SYSTEM,
+                content: 'NexTerm context: no terminal tabs are open. If the user asks to connect to a device, treat that as a request to open a new tab from a saved profile.',
+                timestamp: new Date(),
+            };
+        }
+        const describe = (t: typeof infos[number]): string => {
+            const bits = [t.title];
+            if (t.cwd) { bits.push(`cwd=${t.cwd}`); }
+            if (t.isActive) { bits.push('ACTIVE'); }
+            return `- ${bits.join(' · ')}`;
+        };
+        const lines = [
+            `NexTerm context (${infos.length} open tab${infos.length === 1 ? '' : 's'}):`,
+            ...infos.map(describe),
+            '',
+            'When the user refers to "the terminal" / "this device" / "my session", they mean the ACTIVE tab above. Device names like `la-q5130-05` typically map to an existing open tab if listed, or a saved SSH profile if not. Do not answer with generic pstree/ssh advice when you can match a request to a concrete tab on this list.',
+        ];
+        return {
+            id: this.generateId(),
+            role: MessageRole.SYSTEM,
+            content: lines.join('\n'),
+            timestamp: new Date(),
+        };
+    }
+
+    /**
      * Build message list for Agent mode
      * Use ContextManager to get effective history, automatically filter compressed messages
      */
     private buildAgentMessages(userMessage: ChatMessage): ChatMessage[] {
-        // 1. Get system messages
-        const systemMessages = this.messages.filter(m => m.role === MessageRole.SYSTEM);
+        // 1. Get system messages (persisted SYSTEM entries + a fresh
+        //    NexTerm-state snapshot prepended so the model always knows
+        //    what tabs are open on THIS send, not 10 messages ago).
+        const nexTermCtx = this.buildNexTermContextMessage();
+        const systemMessages = [
+            ...(nexTermCtx ? [nexTermCtx] : []),
+            ...this.messages.filter(m => m.role === MessageRole.SYSTEM),
+        ];
 
         // 2. Use ContextManager to get effective history (automatically filter compressed messages)
         const effectiveHistory = this.contextManager.getEffectiveHistory(this.currentSessionId);
@@ -1278,8 +1336,13 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
 
         try {
             const intentHint = this.getIntentHint();
+            // Prepend a fresh NexTerm-context SYSTEM message so even the
+            // non-agent chat path knows which tabs are open and which is
+            // active. See buildNexTermContextMessage for rationale.
+            const nexTermCtx = this.buildNexTermContextMessage();
+            const baseMessages = this.messages.slice(0, -1); // 排除占位的 AI 消息
             const request: any = {
-                messages: this.messages.slice(0, -1), // 排除占位的 AI 消息
+                messages: nexTermCtx ? [nexTermCtx, ...baseMessages] : baseMessages,
                 temperature: 0.7,
                 intent: intentHint,
                 enableTools: false,
@@ -1303,9 +1366,9 @@ export class AiSidebarComponent implements OnInit, OnDestroy, AfterViewChecked, 
             this.saveChatHistory();
             this.shouldScrollToBottom = true;
         } catch (error) {
-            this.logger.error('Failed to send message', error);
-
-            // 添加错误消息
+            // Provider layer already logged the error with full context;
+            // don't duplicate. The user sees the failure in the chat
+            // bubble below.
             aiMessage.content = `Sorry, I encountered some issues: ${error instanceof Error ? error.message : 'Unknown error'}\n\nPlease try again later.`;
             this.isLoading = false;
             this.updateTokenUsage();

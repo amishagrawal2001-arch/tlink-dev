@@ -379,7 +379,9 @@ export class AiAssistantService {
             return response;
 
         } catch (error) {
-            this.logger.error('Chat request failed', error);
+            // Provider layer (base-provider.service.ts `logError`) already
+            // logged this with full context (provider name, status, stack).
+            // Don't re-log here; just rethrow so the UI can surface it.
             throw error;
         }
     }
